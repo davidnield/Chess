@@ -36,7 +36,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 SOURCE_ROOT = Path("D:/data/chess/standard-chess-games-compressed")
-DEFAULT_OUTPUT = Path("D:/data/chess/position-moves")
+DEFAULT_OUTPUT = Path("E:/chess/position-moves")
 
 ANNOT_RE = re.compile(r"\{[^}]*\}")
 VAR_RE = re.compile(r"\([^)]*\)")
@@ -130,11 +130,26 @@ def parse_partition_path(src: Path) -> dict:
 
 
 def stable_output_name(src: Path) -> str:
-    parent_dir = src.parent if src.is_file() else src
-    parts = [p for p in parent_dir.parts[-3:] if "=" in p]
-    if not parts:
-        parts = [parent_dir.name]
-    return "_".join(parts) + ".parquet"
+    """Generate a deterministic output filename from a partition path.
+
+    When `src` is a directory (partition-level dispatch), the name is derived
+    from the hive partition keys, e.g. ``year=2025_month=4_event=Blitz.parquet``.
+
+    When `src` is a file (file-level dispatch), the source file stem is
+    appended to avoid collisions among files in the same partition, e.g.
+    ``year=2025_month=4_event=Blitz_part-0.parquet``.
+    """
+    if src.is_file():
+        parent_dir = src.parent
+        parts = [p for p in parent_dir.parts[-3:] if "=" in p]
+        if not parts:
+            parts = [parent_dir.name]
+        return "_".join(parts) + "_" + src.stem + ".parquet"
+    else:
+        parts = [p for p in src.parts[-3:] if "=" in p]
+        if not parts:
+            parts = [src.name]
+        return "_".join(parts) + ".parquet"
 
 
 def resolve_source(partition_arg: str) -> Path:
@@ -175,15 +190,38 @@ def _flush_buffer(writer: pq.ParquetWriter, buf: dict, year, month, event):
         buf[col].clear()
 
 
-# Flush threshold: number of pending rows before writing a row group. 500K rows
-# at ~80 bytes/row in arrow ≈ 40 MB peak per worker, which keeps total memory
-# safely below the OOM line we hit with the old list-of-dicts accumulator.
+# Output flush threshold: pending rows before writing a row group. 500K rows
+# at ~80 bytes/row in arrow ≈ 40 MB peak per worker on the output side.
 FLUSH_ROWS = 500_000
+
+# Input batch size: games loaded into RAM at once per worker. With 5 columns
+# (movetext is the heavyweight string), 50K games is a few hundred MB
+# decompressed -- safe under 11 concurrent workers even on the 2025 Blitz/
+# Bullet partitions (40M+ games, 14-22 GB on disk).
+READ_BATCH_GAMES = 50_000
+
+INPUT_COLUMNS = ["game_id", "movetext", "white_score", "elo_band", "mean_elo"]
+
+
+def _iter_input_files(src: Path) -> list[Path]:
+    """Resolve `src` (file or partition directory) to a sorted list of parquet files."""
+    if src.is_file():
+        return [src]
+    files = sorted(src.glob("*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"No parquet files in {src}")
+    return files
 
 
 def process_partition(src: Path, output_dir: Path, max_ply: int = 30,
                       limit_games: int | None = None, overwrite: bool = False) -> dict:
-    """Process one partition; stream rows to parquet in row-group batches."""
+    """Process one partition; stream input AND output to bound peak memory.
+
+    Input is read in pyarrow row-group batches of `READ_BATCH_GAMES` games at a
+    time, so partition size no longer drives RAM usage. Output is flushed every
+    `FLUSH_ROWS` rows. Combined, peak memory per worker is ~hundreds of MB
+    regardless of whether the partition has 100K or 40M games.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / stable_output_name(src)
 
@@ -204,14 +242,9 @@ def process_partition(src: Path, output_dir: Path, max_ply: int = 30,
     event = partition_meta.get("event")
     schema = _output_schema(year, month, event)
 
-    df = pl.read_parquet(
-        src,
-        columns=["game_id", "movetext", "white_score", "elo_band", "mean_elo"],
-    )
-    if limit_games:
-        df = df.head(limit_games)
+    input_files = _iter_input_files(src)
 
-    n_games  = len(df)
+    n_games  = 0
     n_edges  = 0
     n_failed = 0
     t0 = time.time()
@@ -221,22 +254,34 @@ def process_partition(src: Path, output_dir: Path, max_ply: int = 30,
     if tmp_path.exists():
         tmp_path.unlink()
 
+    done = False
     with pq.ParquetWriter(tmp_path, schema, compression="zstd") as writer:
-        for record in df.iter_rows(named=True):
-            failed = extract_positions_into(
-                buf,
-                game_id=record["game_id"],
-                movetext=record["movetext"],
-                white_score=record["white_score"],
-                elo_band=record["elo_band"],
-                mean_elo=record["mean_elo"],
-                max_ply=max_ply,
-            )
-            if failed:
-                n_failed += 1
-            if len(buf["game_id"]) >= FLUSH_ROWS:
-                n_edges += len(buf["game_id"])
-                _flush_buffer(writer, buf, year, month, event)
+        for parquet_file in input_files:
+            if done:
+                break
+            pf = pq.ParquetFile(parquet_file)
+            for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=INPUT_COLUMNS):
+                for record in batch.to_pylist():
+                    if limit_games is not None and n_games >= limit_games:
+                        done = True
+                        break
+                    n_games += 1
+                    failed = extract_positions_into(
+                        buf,
+                        game_id=record["game_id"],
+                        movetext=record["movetext"],
+                        white_score=record["white_score"],
+                        elo_band=record["elo_band"],
+                        mean_elo=record["mean_elo"],
+                        max_ply=max_ply,
+                    )
+                    if failed:
+                        n_failed += 1
+                    if len(buf["game_id"]) >= FLUSH_ROWS:
+                        n_edges += len(buf["game_id"])
+                        _flush_buffer(writer, buf, year, month, event)
+                if done:
+                    break
 
         # Final flush
         if buf["game_id"]:

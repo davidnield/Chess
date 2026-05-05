@@ -53,10 +53,10 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-DEFAULT_REPERTOIRE = Path("D:/data/chess/repertoire/repertoire.parquet")
-DEFAULT_STATS      = Path("D:/data/chess/position-stats/position_stats.parquet")
-DEFAULT_OUTPUT     = Path("D:/data/chess/repertoire/repertoire_safe.parquet")
-DEFAULT_CACHE      = Path("D:/data/chess/engine-cache/evals.parquet")
+DEFAULT_REPERTOIRE = Path("E:/chess/repertoire/repertoire.parquet")
+DEFAULT_STATS      = Path("E:/chess/position-stats/position_stats.parquet")
+DEFAULT_OUTPUT     = Path("E:/chess/repertoire/repertoire_safe.parquet")
+DEFAULT_CACHE      = Path("E:/chess/engine-cache/evals.parquet")
 
 INT64_MAX   = 2**63 - 1
 INT64_RANGE = 2**64

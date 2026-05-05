@@ -6,3 +6,6 @@
 .quarto
 data/
 .claude/
+.venv/
+__pycache__/
+*.pyc
