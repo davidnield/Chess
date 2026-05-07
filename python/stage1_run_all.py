@@ -33,6 +33,7 @@ from stage1_extract_positions import (
 
 def discover_partitions(source_root: Path,
                         year_range: tuple[int, int] | None = None,
+                        months: list[int] | None = None,
                         events: list[str] | None = None) -> list[Path]:
     """Find all year=*/month=*/event=*/ partition directories, sorted."""
     out = []
@@ -44,6 +45,13 @@ def discover_partitions(source_root: Path,
         if year_range and not (year_range[0] <= year <= year_range[1]):
             continue
         for month_dir in sorted(year_dir.glob("month=*")):
+            if months:
+                try:
+                    m = int(month_dir.name.split("=", 1)[1])
+                except (ValueError, IndexError):
+                    continue
+                if m not in months:
+                    continue
             for event_dir in sorted(month_dir.glob("event=*")):
                 if not event_dir.is_dir():
                     continue
@@ -52,6 +60,23 @@ def discover_partitions(source_root: Path,
                     if event not in events:
                         continue
                 out.append(event_dir)
+    return out
+
+
+def discover_source_files(source_root: Path,
+                          year_range: tuple[int, int] | None = None,
+                          months: list[int] | None = None,
+                          events: list[str] | None = None) -> list[Path]:
+    """Find all individual .parquet source files under year=*/month=*/event=*.
+
+    Returns one path per source file instead of one per partition directory,
+    enabling finer-grained parallelism: the Blitz partition (20 files, 38.7M
+    games) is split into 20 independent tasks rather than one serial task.
+    """
+    out = []
+    for partition_dir in discover_partitions(source_root, year_range, months, events):
+        files = sorted(partition_dir.glob("*.parquet"))
+        out.extend(files)
     return out
 
 
@@ -98,8 +123,15 @@ def main():
                         help="Reprocess partitions even if output exists")
     parser.add_argument("--year-range", type=int, nargs=2, metavar=("START", "END"),
                         help="Inclusive year range filter, e.g. --year-range 2020 2025")
+    parser.add_argument("--months", type=int, nargs="+",
+                        help="Restrict to specific months (e.g. --months 1 4)")
     parser.add_argument("--events", nargs="+",
                         help="Restrict to specific events (e.g. --events Blitz Rapid)")
+    parser.add_argument("--file-level", action="store_true",
+                        help="Dispatch one task per source file instead of per "
+                             "partition directory. Keeps all workers busy when a "
+                             "few partitions contain many source files (e.g. "
+                             "Blitz has 20 files).")
     parser.add_argument("--dry-run", action="store_true",
                         help="List partitions that would be processed and exit")
     args = parser.parse_args()
@@ -109,8 +141,15 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     year_range = tuple(args.year_range) if args.year_range else None
-    partitions = discover_partitions(src_root, year_range=year_range, events=args.events)
-    print(f"Discovered {len(partitions)} partitions matching filters.")
+    if args.file_level:
+        partitions = discover_source_files(src_root, year_range=year_range,
+                                           months=args.months, events=args.events)
+        print(f"Discovered {len(partitions)} source files matching filters "
+              f"(file-level dispatch).")
+    else:
+        partitions = discover_partitions(src_root, year_range=year_range,
+                                         months=args.months, events=args.events)
+        print(f"Discovered {len(partitions)} partitions matching filters.")
 
     if not args.overwrite:
         before = len(partitions)
