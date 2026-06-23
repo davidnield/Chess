@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy this file to %USERPROFILE%/.chess_pipeline_notify.json and fill in real values. Do NOT commit the populated file. See python/notify.py for the full setup.",
+  "smtp_host":  "smtp.gmail.com",
+  "smtp_port":  587,
+  "username":   "you@gmail.com",
+  "password":   "xxxxxxxxxxxxxxxx",
+  "to_email":   "you@gmail.com",
+  "from_email": "you@gmail.com"
+}

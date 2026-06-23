@@ -9,3 +9,12 @@ data/
 .venv/
 __pycache__/
 *.pyc
+logs/
+
+# Notification credentials — never commit. Contains SMTP password + email.
+.chess_pipeline_notify.json
+chess_pipeline_notify.json
+python/notify_config.json
+python/notify_config.local.json
+.env
+.env.local

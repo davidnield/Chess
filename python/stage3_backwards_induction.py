@@ -2,65 +2,70 @@
 Stage 3: backwards induction on the position DAG.
 
 Takes the aggregated (event, elo_band, position, move) statistics from Stage 2
-and computes the best opening repertoire for the specified perspective using
-backwards induction:
+and computes the best opening repertoire for the specified perspective. The goal
+is a SHARP-but-SOUND blitz repertoire: fast wins where the data supports them,
+without lines that collapse if the opponent finds the refutation.
 
-  - At our turn:        pick the move that maximises (white) or minimises
-                        (black) the propagated expected white_score
-  - At opponent's turn: weight their moves by empirical game-count frequencies
+Each position is valued by backwards induction in topological order (Kahn's
+algorithm on the DAG), so transpositions are valued exactly once. TWO values
+propagate per position:
 
-Terminal leaves (edges whose child position has no children in our dataset)
-use a Beta-Binomial posterior mean instead of the raw empirical score:
+  - value (mean):    expected white_score vs the AVERAGE (empirical) opponent.
+                     The primary objective — this is what wins blitz games and
+                     keeps trap value (people fumble dangerous lines).
+  - value_robust:    expected white_score along the opponent's BEST reply (the
+                     critical line). Drives the refutation gate. At opponent
+                     nodes we follow their best reply (engine eval where the
+                     resulting position is covered, else the empirically
+                     best-for-them non-rare edge); at leaves it equals the mean.
 
-    smoothed = (k * mu_slice + score_avg * n) / (k + n)
+Terminal leaves use a Beta-Binomial posterior mean instead of the raw empirical
+score:  smoothed = (k * mu_slice + score_avg * n) / (k + n), with mu_slice the
+slice's start-position white-score and k = --prior-strength. This pulls noisy
+small-sample leaves toward the slice mean. Leaves optionally blend in a
+Stockfish eval (--eval-weight; may vary by sample size via --eval-weight-k).
 
-where mu_slice is the per-(event, elo_band) average white-score from the
-starting position and k is the prior strength (--prior-strength, default 100).
-This pulls noisy small-sample leaves toward the slice mean, preventing the max
-operator from cherry-picking lucky 10-game samples. Internal nodes inherit
-smoothing transitively through their children.
+SELECTION at our turn maximises (white) / minimises (black):
 
-Transpositions are handled correctly: positions are processed in topological
-order (Kahn's algorithm on the position DAG), so each position is valued once
-regardless of the number of paths leading to it.
+    score = sign * value + crush_weight   * crush_rate
+                         + decisiveness_weight * (1 - draw_rate)
+                         + error_weight   * opponent_error
+                         + forcing_weight * forcingness
 
-Selection optionally adds forcing and opponent-error bonuses when picking our move:
+restricted to a REFUTATION GATE: a move is eligible only if value_robust stays
+within --robustness-floor of the slice prior (white: >= prior - floor; black:
+<= prior + floor). This drops lines refuted by best defence (1...g5) while
+keeping lines that hold (Blackmar-Diemer). floor >= 1.0 disables the gate. If
+every candidate is gated, the gate is dropped for that node (sparse-tail fallback).
 
-    score = sign * value + forcing_weight * forcingness + error_weight * opponent_error
+  crush_rate   -- the PRIMARY sharpness driver: fraction of games through the
+                  edge where OUR side wins decisively (mate/resignation) by
+                  full-move --crush-horizon (flat, result-based). Empirical-Bayes
+                  shrunk toward the slice-mean crush with pseudocount --crush-prior,
+                  so thin-sample edges can't manufacture a crush bonus. Requires
+                  --crush-db (the crush_hist histogram) and --crush-weight > 0.
+  decisiveness -- 1 - draws/total of the edge (legacy knob; ~flat in blitz).
+  opponent_error -- expected score the opponent leaves on the table vs their
+                  Stockfish-best reply, frequency-weighted. Requires --eval-db.
+  forcingness  -- Simpson concentration of the opponent's replies (legacy; the
+                  crush term superseded it as the sharpness driver).
 
-forcingness is the Simpson concentration of the opponent's empirical reply
-distribution at the child position. forcing_weight=0 (default) reproduces
-pure value-maximising behaviour; small positive values bias selection toward
-moves that narrow the opponent's reasonable response set.
+--force-root-move commits OUR first move at the start position (e.g. e4/d4/Nf3),
+letting the rest of the tree (and crush) sharpen the continuations.
 
-opponent_error measures how much centipawn-equivalent loss opponents typically
-incur at the resulting position — the gap between their best reply (by
-Stockfish) and what they actually play, weighted by frequency. error_weight=0
-(default) disables it; positive values bias toward "tricky" positions where
-opponents blunder even when many replies are available.
+NOTE on opponent modelling: at opponent-turn positions the MEAN value uses their
+EMPIRICAL move distribution, not optimal play, so white- and black-perspective
+values do NOT sum to 1 -- each is "expected score IF I play optimally and my
+opponent plays like a typical player at this elo". The right framing for a
+human-vs-human repertoire; the robustness gate is what guards the worst case.
 
-The eval_weight for Stockfish leaf blending can optionally vary by sample
-size (--eval-weight-k > 0), trusting Stockfish more at sparse positions
-while flooring at --eval-weight-min at well-sampled positions.
-
-NOTE on opponent modelling: at opponent-turn positions the algorithm uses
-their EMPIRICAL move distribution, not optimal play. As a result the
-white-perspective and black-perspective values do NOT sum to 1 in general --
-each side's number is "expected score IF I play optimally and my opponent
-plays like a typical player at this elo". This is the right framing for a
-human-vs-human repertoire.
-
-Output columns per (event, elo_band, position):
-  value         -- expected white_score under backwards-induction play
-  best_move     -- our recommended move at our-turn positions; null at opp turn
-  forcingness   -- Simpson concentration of opp's reply distribution after
-                   our recommended move; null at opponent-turn positions
+Output columns per (event, elo_band, position): value, best_move (null at opp
+turn), value_robust, crush_rate, decisiveness, opponent_error, forcingness,
+eval_score.
 
 Usage:
-    .venv/Scripts/python.exe python/stage3_backwards_induction.py
     .venv/Scripts/python.exe python/stage3_backwards_induction.py --perspective black
-    .venv/Scripts/python.exe python/stage3_backwards_induction.py --prior-strength 60
-    .venv/Scripts/python.exe python/stage3_backwards_induction.py --forcing-weight 0.05
+    # The canonical pooled repertoires are built by python/build_pooled_reps.py.
 """
 
 from __future__ import annotations
@@ -214,6 +219,29 @@ def opponent_error(
     return (k_e * baseline + raw_error * n) / (k_e + n)
 
 
+def crush(our_crush_sum: float | None, n_games: int | None,
+          k_c: float = 20000.0, baseline: float = 0.0) -> float:
+    """Flat result-based rate at which OUR side wins fast (mate/resignation).
+
+    our_crush_sum is the count of OUR decisive wins (mate/resignation) through this
+    edge that land on or before full-move `--crush-horizon` — a FLAT cutoff, no
+    earliness decay — summed from the crush_hist histogram in main(). Dividing by
+    n_games (all games through the edge) gives crush_rate = "fraction of games we
+    crush by move H from here."
+
+    Empirical-Bayes shrunk toward `baseline` with pseudocount k_c. Callers pass
+    baseline = the SLICE-MEAN crush (compute_slice_mean_crush), NOT 0, so a
+    thin-sample edge defaults to the mean (no spurious bonus) and value decides
+    there; only well-sampled edges keep a real deviation. k_c large (default
+    20000) is deliberate — see compute_slice_mean_crush / the crush-metric-design
+    note. Returns `baseline` when the edge has no crush data (uncovered slice).
+    """
+    if not n_games or n_games <= 0 or our_crush_sum is None:
+        return baseline
+    raw = our_crush_sum / n_games
+    return (k_c * baseline + raw * n_games) / (k_c + n_games)
+
+
 def compute_slice_prior(edges: list[dict], start_hash: int, min_games: int = 100) -> float:
     """Average white_score across all games in this slice (from the starting position).
 
@@ -231,6 +259,30 @@ def compute_slice_prior(edges: list[dict], start_hash: int, min_games: int = 100
     return score_sum / game_sum
 
 
+def compute_slice_mean_crush(edges: list[dict], start_hash: int, perspective: str,
+                             min_games: int = 100, fallback: float = 0.02) -> float:
+    """Slice-wide OUR-crush rate (by-move-H decisive-win fraction), measured at the
+    starting position. This is the empirical-Bayes prior mean that per-edge crush
+    shrinks toward — analogous to compute_slice_prior for the win rate. Summing the
+    start-position edges is exact: every game passes through exactly one first move,
+    so Σ(our_crush_sum)/Σ(crush_games) = the slice's overall early-crush rate.
+
+    Falls back to `fallback` if the slice has no crush data at the start.
+    """
+    key = "white_crush_sum" if perspective == "white" else "black_crush_sum"
+    crush_sum = 0.0
+    game_sum  = 0
+    for e in edges:
+        if e["parent_hash"] == start_hash and e.get("crush_games"):
+            cs = e.get(key)
+            if cs is not None:
+                crush_sum += cs
+                game_sum  += e["crush_games"]
+    if game_sum < min_games:
+        return fallback
+    return crush_sum / game_sum
+
+
 def run_backwards_induction(
     edges: list[dict],
     perspective: str,  # "white" or "black"
@@ -245,9 +297,15 @@ def run_backwards_induction(
     eval_weight_k:    float = 0.0,
     error_weight:     float = 0.0,
     error_prior:      float = 200.0,
+    decisiveness_weight: float = 0.0,
+    robustness_floor: float = 1.0,
+    robust_eval_weight: float = 1.0,
+    crush_weight:     float = 0.0,
+    crush_prior:      float = 200.0,
+    force_root_move:  str | None = None,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
-           dict[int, float | None],
-           dict[int, str], dict[int, chess.Color], float]:
+           dict[int, float | None], dict[int, float | None], dict[int, float | None],
+           dict[int, float | None], dict[int, str], dict[int, chess.Color], float]:
     """
     Value every position reachable in `edges` and pick our best move at each.
 
@@ -265,19 +323,38 @@ def run_backwards_induction(
     This trusts Stockfish more at sparse positions and the empirical data
     more at well-sampled positions, with a floor at eval_weight_min.
 
-    **Selection** at our turn maximises (white) or minimises (black):
+    **Dual value.** Two values propagate per position:
+      - value (mean): expected white_score vs the AVERAGE opponent (empirical
+        reply distribution). Primary selection objective — wins games.
+      - value_robust: value along the opponent's BEST reply (critical line).
+        At opponent nodes we follow their best reply (Stockfish eval where the
+        resulting position is in eval_lookup, else the empirically best-for-them
+        edge among non-rare moves); at leaves value_robust == mean.
 
-        sign * value + forcing_weight * forcingness + error_weight * opponent_error
+    **Selection** at our turn maximises (white) / minimises (black):
 
-    forcingness: Simpson concentration of opponent's reply distribution.
+        sign * value + decisiveness_weight * (1 - draw_rate)
+                     + error_weight * opponent_error
+                     + forcing_weight * forcingness
+
+    restricted to a *refutation gate*: a move is eligible only if value_robust
+    is within `robustness_floor` of the slice prior (white: >= prior - floor;
+    black: <= prior + floor). Drops lines that collapse against best defence
+    (1...g5) while keeping lines that hold (Blackmar-Diemer). floor=1.0 disables
+    the gate (legacy). If every move is gated, the gate is dropped for that node.
+
+    decisiveness = 1 - draws/total (sharp, non-drawish → fast wins).
     opponent_error: expected score loss from opponent's typical replies vs
-    their best move (by Stockfish eval). Higher = opponents tend to blunder.
+    their best (Stockfish). forcingness: Simpson concentration (legacy).
 
     Returns:
-        values         -- position_hash -> expected white_score (blended at leaves)
+        values         -- position_hash -> expected white_score (mean, blended at leaves)
         best_moves     -- position_hash -> best move_san (None at opponent's turn)
         best_forcing   -- position_hash -> forcingness of chosen move (None at opp turn)
         best_error     -- position_hash -> opponent_error of chosen move (None at opp turn)
+        best_decis     -- position_hash -> decisiveness of chosen move (None at opp turn)
+        best_crush     -- position_hash -> crush_rate of chosen move (None at opp turn)
+        values_robust  -- position_hash -> value along opponent's best reply (all positions)
         position_epd   -- position_hash -> EPD string
         position_side  -- position_hash -> chess.WHITE or chess.BLACK
         slice_prior    -- empirical white_score from starting position
@@ -286,6 +363,9 @@ def run_backwards_induction(
     sign        = 1.0 if perspective == "white" else -1.0
     start_hash  = zobrist_int64(chess.Board())
     slice_prior = compute_slice_prior(edges, start_hash)
+    # Empirical-Bayes prior mean for crush: thin-sample edges shrink toward this
+    # slice-wide crush rate (not 0), so noise can't manufacture a crush bonus.
+    slice_mean_crush = compute_slice_mean_crush(edges, start_hash, perspective)
 
     # ── Build adjacency ───────────────────────────────────────────────────────
     # children[ph] holds every (move, child, empirical_score, game_count) edge.
@@ -303,6 +383,10 @@ def run_backwards_induction(
             "child_hash": e["child_hash"],
             "score_avg":  e["white_score_avg"],
             "total":      e["total"],
+            "draws":      e.get("draws", 0),
+            "white_crush_sum": e.get("white_crush_sum"),
+            "black_crush_sum": e.get("black_crush_sum"),
+            "crush_games":     e.get("crush_games"),
         })
         if ph not in position_epd:
             position_epd[ph]  = e["parent_epd"]
@@ -326,149 +410,142 @@ def run_backwards_induction(
     queue: deque[int] = deque(ph for ph in all_positions if not pending[ph])
 
     # ── Backwards induction ───────────────────────────────────────────────────
-    values:       dict[int, float]              = {}
-    best_moves:   dict[int, str | None]         = {}
-    best_forcing: dict[int, float | None]       = {}
-    best_error:   dict[int, float | None]       = {}
+    values:        dict[int, float]        = {}   # expected vs AVERAGE opponent
+    values_robust: dict[int, float]        = {}   # value along opponent's BEST reply
+    best_moves:    dict[int, str | None]   = {}
+    best_forcing:  dict[int, float | None] = {}
+    best_error:    dict[int, float | None] = {}
+    best_decis:    dict[int, float | None] = {}
+    best_crush:    dict[int, float | None] = {}
+    opp_is_white = (our_color == chess.BLACK)
 
-    while queue:
-        ph       = queue.popleft()
-        our_turn = (position_side[ph] == our_color)
-
-        # Build move tuples: (san, value, total, forcingness, opp_err, child_hash).
-        # Forcingness and opponent_error are properties of the CHILD position
-        # (where the opponent must reply after our move).
-        #
-        # LEAF BLENDING: when a child position has no backwards-induction
-        # value yet (i.e. it's a leaf), we blend the smoothed empirical
-        # score with the Stockfish expected score.  The blending weight is
-        # either fixed (eval_weight) or dynamic based on sample size.
-        move_vals = []
+    def build_move_vals(ph):
+        """One dict per child edge: mean value, robust value, decisiveness,
+        forcingness, opponent_error, and the opponent's preference for the reply."""
+        mvs = []
         for m in children[ph]:
             ch = m["child_hash"]
+            emp = smoothed_score(m["score_avg"], m["total"], slice_prior, prior_strength)
+            covered = bool(eval_lookup) and ch in eval_lookup
+            # MEAN value (vs average opponent — the trap-value objective):
+            # propagated where valued, else empirical + (low) eval leaf blend.
             if ch in values:
-                # Already valued (blended from below) — use as-is.
                 child_val = values[ch]
+            elif eval_weight > 0 and covered:
+                n_child = sum(m2["total"] for m2 in children.get(ch, []))
+                ew = effective_eval_weight(eval_weight, eval_weight_min,
+                                           eval_weight_k, n_child)
+                child_val = (1.0 - ew) * emp + ew * eval_lookup[ch]
             else:
-                # Leaf: blend empirical + Stockfish (with dynamic weight).
-                emp = smoothed_score(m["score_avg"], m["total"], slice_prior, prior_strength)
-                if eval_weight > 0 and eval_lookup and ch in eval_lookup:
-                    # n_games at child = total games across all moves at that position
-                    n_child = sum(m2["total"] for m2 in children.get(ch, []))
-                    ew = effective_eval_weight(eval_weight, eval_weight_min,
-                                              eval_weight_k, n_child)
-                    child_val = (1.0 - ew) * emp + ew * eval_lookup[ch]
-                else:
-                    child_val = emp
-            frc = forcingness(children.get(ch, []), forcing_prior, forcing_baseline)
+                child_val = emp
+            # ROBUST value (drives the refutation gate). The engine eval of the
+            # position THIS move reaches already assumes best play onward, so it
+            # IS the objective robustness measure — use it directly where covered
+            # (blended by robust_eval_weight). Only where uncovered do we fall
+            # back to the propagated critical line, then to empirical. This is
+            # what lets the gate see a line is lost vs best play even when it
+            # scores fine empirically (e.g. 1...g5 → eval +1.2 for White).
+            if covered:
+                child_robust = ((1.0 - robust_eval_weight) * emp
+                                + robust_eval_weight * eval_lookup[ch])
+            elif ch in values:
+                child_robust = values_robust.get(ch, child_val)
+            else:
+                child_robust = emp
             ch_moves = children.get(ch, [])
-            # Opponent at ch is the side NOT equal to our_color.
-            opp_err = opponent_error(
-                ch_moves, eval_lookup, opp_is_white=(our_color == chess.BLACK),
-                k_e=error_prior,
-            ) if error_weight > 0 else 0.0
-            move_vals.append((m["move_san"], child_val, m["total"], frc, opp_err, ch))
+            frc  = forcingness(ch_moves, forcing_prior, forcing_baseline)
+            oerr = opponent_error(ch_moves, eval_lookup, opp_is_white=opp_is_white,
+                                  k_e=error_prior) if error_weight > 0 else 0.0
+            tot  = m["total"]
+            dec  = 1.0 - (m.get("draws", 0) / tot) if tot else 0.0
+            # Crush rate: earliness-weighted rate at which WE win fast after this
+            # move (from crush_stats, joined into the edge by main()). 0 when no
+            # crush data. The PRIMARY sharpness driver.
+            our_crush_sum = (m.get("white_crush_sum") if our_color == chess.WHITE
+                             else m.get("black_crush_sum"))
+            cr = (crush(our_crush_sum, m.get("crush_games"), crush_prior, slice_mean_crush)
+                  if crush_weight > 0 else 0.0)
+            # Opponent's preference for THIS reply on the white-expected-score
+            # scale (eval where covered, else empirical edge score).
+            pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
+            mvs.append({"san": m["move_san"], "val": child_val, "robust": child_robust,
+                        "total": tot, "frc": frc, "opp_err": oerr, "dec": dec,
+                        "crush": cr, "pref": pref})
+        return mvs
 
-        if not move_vals:
-            values[ph]       = slice_prior
-            best_moves[ph]   = None
-            best_forcing[ph] = None
-            best_error[ph]   = None
-        elif our_turn:
-            # Maximise (white) / minimise (black) value with forcing + error bonus.
-            # Child values already incorporate Stockfish at the leaves, so no
-            # additional SF blending is needed here — it propagates naturally.
-            #
-            # Sample-size floor: restrict our pick to moves with at least
-            # `min_move_games` opponent games, so we don't recommend lines
-            # whose value rests on a noisy small sample. Fall back to the
-            # full move set if every candidate is below threshold (rare;
-            # only happens for sparse deep positions).
-            candidates = [mv for mv in move_vals if mv[2] >= min_move_games]
-            if not candidates:
-                candidates = move_vals
+    def passes_gate(mv):
+        # Within robustness_floor of the prior assuming the opponent's best reply.
+        if our_color == chess.WHITE:
+            return mv["robust"] >= slice_prior - robustness_floor
+        return mv["robust"] <= slice_prior + robustness_floor
 
-            key = (lambda x, s=sign, fw=forcing_weight, ew=error_weight:
-                   s * x[1] + fw * x[3] + ew * x[4])
-            best = max(candidates, key=key)
-            san, val, _, frc, oerr, _ = best
-            values[ph]       = val  # propagate blended value
-            best_moves[ph]   = san
-            best_forcing[ph] = frc
-            best_error[ph]   = oerr
+    def select_our(mvs):
+        base  = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
+        gated = [mv for mv in base if passes_gate(mv)]
+        cands = gated or base
+        keyf = lambda mv: (sign * mv["val"] + crush_weight * mv["crush"]
+                           + decisiveness_weight * mv["dec"]
+                           + error_weight * mv["opp_err"] + forcing_weight * mv["frc"])
+        return max(cands, key=keyf)
+
+    def opp_robust(mvs):
+        # Opponent plays their best reply (restricted to non-rare moves); we
+        # inherit the robust value of that critical line.
+        base = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
+        if not base:
+            return slice_prior
+        best = (max(base, key=lambda mv: mv["pref"]) if opp_is_white
+                else min(base, key=lambda mv: mv["pref"]))
+        return best["robust"]
+
+    def value_node(ph):
+        mvs = build_move_vals(ph)
+        if not mvs:
+            values[ph] = values_robust[ph] = slice_prior
+            best_moves[ph] = best_forcing[ph] = best_error[ph] = None
+            best_decis[ph] = best_crush[ph] = None
+            return
+        if position_side[ph] == our_color:
+            if force_root_move and ph == start_hash:
+                forced = [mv for mv in mvs if mv["san"] == force_root_move]
+                if not forced:
+                    raise ValueError(
+                        f"--force-root-move {force_root_move!r} is not a legal/known "
+                        f"edge at the start position for this slice.")
+                b = forced[0]
+            else:
+                b = select_our(mvs)
+            values[ph]        = b["val"]
+            values_robust[ph] = b["robust"]
+            best_moves[ph]    = b["san"]
+            best_forcing[ph]  = b["frc"]
+            best_error[ph]    = b["opp_err"]
+            best_decis[ph]    = b["dec"]
+            best_crush[ph]    = b["crush"]
         else:
-            # Opponent: weighted average over their empirical move distribution.
-            # No sample-size filter here -- we model the opponent's full
-            # observed distribution, including their rare moves.
-            total = sum(t for _, _, t, _, _, _ in move_vals)
-            val   = sum(v * t for _, v, t, _, _, _ in move_vals) / total if total else slice_prior
-            values[ph]       = val
-            best_moves[ph]   = None
-            best_forcing[ph] = None
-            best_error[ph]   = None
+            # Opponent: mean over their empirical distribution (value);
+            # critical-line follow for value_robust.
+            total = sum(mv["total"] for mv in mvs)
+            values[ph] = (sum(mv["val"] * mv["total"] for mv in mvs) / total
+                          if total else slice_prior)
+            values_robust[ph] = opp_robust(mvs)
+            best_moves[ph] = best_forcing[ph] = best_error[ph] = None
+            best_decis[ph] = best_crush[ph] = None
 
+    while queue:
+        ph = queue.popleft()
+        value_node(ph)
         for parent in parents_of[ph]:
             pending[parent].discard(ph)
             if not pending[parent] and parent not in values:
                 queue.append(parent)
 
-    # Fallback for positions in cycles or unreachable in the topological pass.
-    # Use smoothed empirical scores for child values (since propagated values may
-    # not exist for cycle-mates) and still pick a best move at our-turn positions.
+    # Fallback for positions in cycles / unreachable in the topological pass.
     for ph in all_positions - set(values):
-        mvs = children[ph]
-        if not mvs:
-            values[ph]       = slice_prior
-            best_moves[ph]   = None
-            best_forcing[ph] = None
-            best_error[ph]   = None
-            continue
+        value_node(ph)
 
-        move_vals = []
-        for m in mvs:
-            ch = m["child_hash"]
-            if ch in values:
-                child_val = values[ch]
-            else:
-                # Leaf: blend empirical + Stockfish (same as main loop).
-                emp = smoothed_score(m["score_avg"], m["total"], slice_prior, prior_strength)
-                if eval_weight > 0 and eval_lookup and ch in eval_lookup:
-                    n_child = sum(m2["total"] for m2 in children.get(ch, []))
-                    ew = effective_eval_weight(eval_weight, eval_weight_min,
-                                              eval_weight_k, n_child)
-                    child_val = (1.0 - ew) * emp + ew * eval_lookup[ch]
-                else:
-                    child_val = emp
-            frc = forcingness(children.get(ch, []), forcing_prior, forcing_baseline)
-            ch_moves = children.get(ch, [])
-            opp_err = opponent_error(
-                ch_moves, eval_lookup, opp_is_white=(our_color == chess.BLACK),
-                k_e=error_prior,
-            ) if error_weight > 0 else 0.0
-            move_vals.append((m["move_san"], child_val, m["total"], frc, opp_err, ch))
-
-        if position_side[ph] == our_color:
-            # Same sample-size floor as the main loop above (with fallback).
-            candidates = [mv for mv in move_vals if mv[2] >= min_move_games]
-            if not candidates:
-                candidates = move_vals
-
-            key = (lambda x, s=sign, fw=forcing_weight, ew=error_weight:
-                   s * x[1] + fw * x[3] + ew * x[4])
-            san, val, _, frc, oerr, _ = max(candidates, key=key)
-            values[ph]       = val
-            best_moves[ph]   = san
-            best_forcing[ph] = frc
-            best_error[ph]   = oerr
-        else:
-            total = sum(t for _, _, t, _, _, _ in move_vals)
-            val   = sum(v * t for _, v, t, _, _, _ in move_vals) / total if total else slice_prior
-            values[ph]       = val
-            best_moves[ph]   = None
-            best_forcing[ph] = None
-            best_error[ph]   = None
-
-    return values, best_moves, best_forcing, best_error, position_epd, position_side, slice_prior
+    return (values, best_moves, best_forcing, best_error,
+            best_decis, best_crush, values_robust, position_epd, position_side, slice_prior)
 
 
 def print_best_line(
@@ -549,9 +626,15 @@ def main():
                         help="Baseline forcingness to shrink low-sample positions toward. "
                              "0.30 is roughly typical for opening positions. Default: 0.30")
     parser.add_argument("--eval-db", default=None,
-                        help="Path to eval DB parquet from build_eval_db.py. When provided, "
-                             "Stockfish evals are used in move selection and written to the "
-                             "output's eval_score column.")
+                        help="Path to eval DB parquet from build_lichess_eval_db.py. When "
+                             "provided, Stockfish evals are used in move selection and written "
+                             "to the output's eval_score column.")
+    parser.add_argument("--eval-mate-cp", type=int, default=3000,
+                        help="Drop eval_db entries with |eval_cp| >= this at load. RETIRED "
+                             "safety: the old eval DB stamped +-10000 mate sentinels on quiet "
+                             "positions (1.e4 read +10000), which this dropped. The rebuilt "
+                             "build_lichess_eval_db.py caps decisive evals at +-2000, so nothing "
+                             "reaches 3000 and this guard is now inert. Kept as a cheap backstop.")
     parser.add_argument("--eval-weight", type=float, default=0.0,
                         help="Blending weight for Stockfish eval at leaf positions. "
                              "When --eval-weight-k > 0, this is the MAXIMUM weight "
@@ -577,6 +660,49 @@ def main():
                         help="Pseudocount for Bayesian smoothing of opponent error. "
                              "Higher = more shrinkage toward zero at small sample sizes. "
                              "Default: 200")
+    parser.add_argument("--decisiveness-weight", type=float, default=0.0,
+                        help="Sharpness bonus = weight * (1 - draw_rate) of the move. "
+                             "Rewards non-drawish, decisive lines (fast wins). "
+                             "0.0 = disabled (default).")
+    parser.add_argument("--robustness-floor", type=float, default=1.0,
+                        help="Refutation gate: a move is eligible only if its value "
+                             "against the opponent's BEST reply stays within this margin "
+                             "of the slice prior (white: >= prior - floor; black: <= "
+                             "prior + floor). Drops lines refuted by best defence (1...g5) "
+                             "while keeping lines that hold (Blackmar-Diemer). "
+                             "1.0 = gate disabled / legacy behaviour (default); 0.03 = tight.")
+    parser.add_argument("--robust-eval-weight", type=float, default=1.0,
+                        help="Eval weight used ONLY for the robust (critical-line) value "
+                             "that drives the refutation gate. Decoupled from --eval-weight "
+                             "so the mean objective can stay empirical (trap value) while the "
+                             "gate uses objective eval. 1.0 = pure eval where covered (default), "
+                             "empirical where not. Requires --eval-db for effect.")
+    parser.add_argument("--crush-db", default=None,
+                        help="Path to crush_stats parquet (from build_crush_stats.py). "
+                             "When set with --crush-weight>0, adds the crush term (rate of "
+                             "early decisive wins by mate/resignation) to move selection.")
+    parser.add_argument("--crush-weight", type=float, default=0.0,
+                        help="Weight on crush_rate in selection — the PRIMARY sharpness driver. "
+                             "Rewards moves that lead to fast opponent resignations/mates "
+                             "(earlier = higher). 0.0 = disabled (default). Try 0.3.")
+    parser.add_argument("--crush-prior", type=float, default=20000.0,
+                        help="Pseudocount (in games) for empirical-Bayes shrinkage of crush_rate "
+                             "toward the SLICE-MEAN crush rate. An edge needs ~this many games "
+                             "before its raw crush is trusted; thin-sample edges default to the "
+                             "mean (no spurious crush bonus). Default 20000 (tuned: keeps "
+                             "well-sampled gambits like the Danish/Smith-Morra while routing "
+                             "thin-sample lines onto sound mainlines).")
+    parser.add_argument("--crush-horizon", type=int, default=15,
+                        help="Crush = fraction of games through an edge where OUR side wins "
+                             "decisively (mate/resignation) by this FULL-MOVE number, flat (no "
+                             "earliness decay). Default 15. Computed from the crush_hist histogram "
+                             "by summing decisive-win buckets 1..horizon. (Ignored for legacy "
+                             "crush_stats files that store a pre-baked weight.)")
+    parser.add_argument("--force-root-move", default=None,
+                        help="Commit OUR first move at the start position to this SAN "
+                             "(e.g. 'e4' or 'd4'), letting the rest of the tree (and crush) "
+                             "sharpen the continuations. Only meaningful for --perspective white. "
+                             "Errors if the move isn't a known edge for a slice.")
     parser.add_argument("--event",       help="Filter to a single event")
     parser.add_argument("--elo-band",    type=int, help="Filter to a single elo band")
     args = parser.parse_args()
@@ -601,6 +727,13 @@ def main():
     print(f"Error weight:      {args.error_weight}")
     if args.error_weight > 0:
         print(f"Error prior:       {args.error_prior}")
+    print(f"Decisiveness wt:   {args.decisiveness_weight}")
+    print(f"Robustness floor:  {args.robustness_floor}"
+          f"{'  (gate disabled)' if args.robustness_floor >= 1.0 else ''}")
+    if args.robustness_floor < 1.0:
+        print(f"Robust eval wt:    {args.robust_eval_weight}")
+    print(f"Crush weight:      {args.crush_weight}"
+          f"{'  (crush DB: ' + str(args.crush_db) + ')' if args.crush_weight > 0 else ''}")
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
@@ -610,11 +743,23 @@ def main():
             print(f"WARNING: eval DB not found at {edb_path} — proceeding without evals.")
         else:
             edb_raw = pl.read_parquet(str(edb_path))
-            eval_lookup = {
-                r["position_hash"]: cp_to_expected_score(r["eval_cp"])
-                for r in edb_raw.iter_rows(named=True)
-            }
-            print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path}")
+            # Drop mate-class sentinels (|cp| >= eval_mate_cp, e.g. the +-10000 Lichess
+            # mate codes). These are corrupt for quiet opening positions (e.g. 1.e4 reads
+            # +10000) and would trivially pass the refutation gate / dominate the eval
+            # blend. Dropping them reverts those positions to empirical (real deep mates
+            # are ~winning empirically too). Full fix = rebuild eval_db with a correct
+            # mate->cp mapping (separate task).
+            n_raw = len(edb_raw)
+            edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < args.eval_mate_cp)
+            n_drop = n_raw - len(edb_raw)
+            # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
+            # iter_rows over ~300M entries.
+            edb_raw = edb_raw.with_columns(
+                (1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col("eval_cp")).exp())).alias("_es"))
+            eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
+                                   edb_raw["_es"].to_list()))
+            print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
+                  f"(dropped {n_drop:,} mate-class |cp|>={args.eval_mate_cp})")
             if args.eval_weight <= 0:
                 print("  (eval_weight=0 — evals will appear in output but not "
                       "influence move selection)")
@@ -637,6 +782,45 @@ def main():
             "with the updated stage2_aggregate.py to populate it."
         )
 
+    # ── Crush overlay: LEFT JOIN crush_stats so each edge carries the crush sums.
+    # Missing keys → nulls → crush_rate 0 (no effect). Only when --crush-weight>0.
+    if args.crush_weight > 0 and args.crush_db:
+        cdb_path = Path(args.crush_db)
+        if not cdb_path.exists():
+            print(f"WARNING: crush DB not found at {cdb_path} — proceeding without crush.")
+        else:
+            crush_df = pl.read_parquet(str(cdb_path))
+            keys = ["event", "elo_band", "parent_hash", "move_san"]
+            if "move_bucket" in crush_df.columns:
+                # Histogram → flat result-based crush@horizon: count OUR decisive wins
+                # (mate/resignation) landing on or before move `--crush-horizon`, with a
+                # flat weight (no earliness decay). bucket 0 is the non-decisive remainder
+                # and contributes only to the denominator (crush_games = total games).
+                H = args.crush_horizon
+                inwin = (pl.col("move_bucket") >= 1) & (pl.col("move_bucket") <= H)
+                crush_df = crush_df.group_by(keys).agg(
+                    pl.when(inwin).then(pl.col("white_wins")).otherwise(0)
+                      .sum().cast(pl.Float64).alias("white_crush_sum"),
+                    pl.when(inwin).then(pl.col("black_wins")).otherwise(0)
+                      .sum().cast(pl.Float64).alias("black_crush_sum"),
+                    pl.col("n").sum().alias("crush_games"))
+                print(f"Crush = fraction of games with a decisive win by move {H} "
+                      f"(flat, result-based) from {cdb_path}")
+            else:
+                crush_df = crush_df.select(
+                    keys + ["white_crush_sum", "black_crush_sum", "crush_games"])
+            stats = stats.join(crush_df, on=keys, how="left")
+            n_cov = stats.filter(pl.col("crush_games").is_not_null()).height
+            print(f"Joined crush data from {cdb_path}: "
+                  f"{n_cov:,}/{len(stats):,} edges have crush data")
+    if "white_crush_sum" not in stats.columns:
+        # Ensure columns exist so to_dicts() yields them (None) when crush is off.
+        stats = stats.with_columns(
+            pl.lit(None, dtype=pl.Float64).alias("white_crush_sum"),
+            pl.lit(None, dtype=pl.Float64).alias("black_crush_sum"),
+            pl.lit(None, dtype=pl.Int64).alias("crush_games"),
+        )
+
     slices   = stats.select(["event", "elo_band"]).unique().sort(["event", "elo_band"])
     all_rows: list[dict] = []
     t_total  = time.time()
@@ -647,7 +831,8 @@ def main():
         edges  = stats.filter(mask).to_dicts()
 
         t1 = time.time()
-        values, best_moves, best_forcing, best_err, pos_epd, pos_side, slice_prior = run_backwards_induction(
+        (values, best_moves, best_forcing, best_err, best_decis, best_crush, vals_robust,
+         pos_epd, pos_side, slice_prior) = run_backwards_induction(
             edges, args.perspective,
             prior_strength=args.prior_strength,
             forcing_weight=args.forcing_weight,
@@ -660,6 +845,12 @@ def main():
             eval_weight_k=args.eval_weight_k,
             error_weight=args.error_weight,
             error_prior=args.error_prior,
+            decisiveness_weight=args.decisiveness_weight,
+            robustness_floor=args.robustness_floor,
+            robust_eval_weight=args.robust_eval_weight,
+            crush_weight=args.crush_weight,
+            crush_prior=args.crush_prior,
+            force_root_move=args.force_root_move,
         )
         elapsed = time.time() - t1
 
@@ -678,6 +869,9 @@ def main():
                 "best_move":     best_moves.get(ph),
                 "forcingness":   best_forcing.get(ph),
                 "opponent_error": best_err.get(ph),
+                "decisiveness":  best_decis.get(ph),
+                "crush_rate":    best_crush.get(ph),
+                "value_robust":  vals_robust.get(ph),
                 "eval_score":    eval_lookup.get(ph),
             })
 
