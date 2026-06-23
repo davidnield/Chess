@@ -8,11 +8,20 @@ one analysis depth.  Multiple rows exist per position.
 
 This script:
   1. Downloads the parquet shards (skipping already-downloaded files).
-  2. Deduplicates to one evaluation per FEN: highest depth, first PV
-     (per the official Lichess recommendation).
-  3. Converts each FEN to a Polyglot Zobrist position_hash (signed Int64).
-  4. Writes the result as a compact parquet with the same schema that
-     Stage 3 already consumes: (position_hash: Int64, eval_cp: Int32).
+  2. Aggregates ALL rows to one ROBUST evaluation per FEN (DuckDB): eval_cp =
+     MEDIAN(cp) over the FEN's cp rows (immune to a single deep garbage/troll cp
+     outlier), or the sign of its net mate vote if it has no cp at all. It also
+     records n_rows (raw support per FEN). The naive old "single highest-depth
+     row" read the start as -10000 and 1.e4 as +10000 — both from junk rows that
+     the median / row-count now outvote.
+  3. Converts each FEN to a Polyglot Zobrist position_hash (signed Int64), then
+     collapses FENs that share a hash (encoding variants + the odd troll FEN that
+     collides with a real position) by keeping the best-supported (max n_rows).
+  4. Writes the result as a compact parquet with the same schema that Stage 3
+     already consumes: (position_hash: Int64, eval_cp: Int32). Decisive evals
+     (winning cp and genuine mates) are capped at +-EVAL_CAP rather than the old
+     +-10000 mate sentinel, so a "winning" eval no longer trivially passes
+     Stage 3's refutation gate or dominates the eval blend.
 
 Usage:
     .venv/Scripts/python.exe python/build_lichess_eval_db.py \\
@@ -30,12 +39,14 @@ from __future__ import annotations
 
 import argparse
 import multiprocessing
+import shutil
 import sys
 import time
 from pathlib import Path
 
 import chess
 import chess.polyglot
+import duckdb
 import polars as pl
 import requests
 
@@ -55,7 +66,12 @@ DEFAULT_CACHE  = Path("E:/chess/lichess-evals")
 
 INT64_MAX   = 2**63 - 1
 INT64_RANGE = 2**64
-MATE_CP     = 10_000
+MATE_CP     = 10_000   # legacy sentinel; only used by compare_eval_dbs() for old DBs
+# Cap magnitude for decisive evals (real cp and genuine mates). At +-2000cp the
+# Lichess sigmoid (LICHESS_CP_SCALE) gives ~0.9994 / 0.0006 expected score —
+# "decisively winning/losing" — without an unbreakable +-10000 mate sentinel
+# that defeats Stage 3's refutation gate or dominates the leaf eval blend.
+EVAL_CAP    = 2_000
 
 
 def zobrist_int64(board: chess.Board) -> int:
@@ -103,7 +119,7 @@ def download_shard(index: int, cache_dir: Path) -> Path:
                       f"  @ {rate:.0f} MB/s)", end="", flush=True)
     print()  # newline after progress
 
-    tmp.rename(dest)
+    tmp.replace(dest)  # .replace (not .rename) — overwrites a partial dest on Windows
     elapsed = time.time() - t0
     print(f"    Saved {dest.name}  ({dest.stat().st_size/1e9:.2f} GB in {elapsed:.0f}s)")
     return dest
@@ -120,24 +136,63 @@ def download_all_shards(
     return paths
 
 
-# ── Per-shard deduplication ──────────────────────────────────────────────────
+# ── Robust per-FEN aggregation ───────────────────────────────────────────────
 
-def dedup_shard(path: Path) -> pl.DataFrame:
-    """Read a shard and deduplicate to one eval per FEN (highest depth).
+def aggregate_fens_duckdb(shard_paths: list[Path], out_parquet: Path,
+                          tmp_dir: Path, memory_limit: str = "90GB",
+                          threads: int = 8) -> None:
+    """Aggregate ALL raw eval rows to one robust (fen, eval_cp, n_rows) per FEN.
 
-    Returns a DataFrame with columns [fen, depth, cp, mate] — one row per
-    unique FEN in this shard, with the highest-depth evaluation.
+    Two robustness properties the naive "highest-depth single row" lacked:
+
+      1. eval_cp = MEDIAN(cp) over the FEN's cp rows, capped at +-EVAL_CAP. The
+         median is immune to a single deep garbage/troll cp row — e.g. the start
+         position has 35 sane cp rows (median +6) but its single deepest row can
+         be junk; max-depth picked the junk, median picks +6. A FEN with NO cp
+         rows falls back to the SIGN of its net mate vote -> +-EVAL_CAP (so a
+         lone spurious mate PV can't flip a position that also has cp; that's
+         the prefer-cp rule, now via "cp rows decide whenever any exist").
+
+      2. n_rows (raw row support) is carried so the later position_hash collision
+         dedup can keep the WELL-SAMPLED real position over a thinly-sampled FEN
+         that hash-collides with it (non-capturable-ep / move-counter variants,
+         fabricated positions). The start's real FEN has ~160 rows; a colliding
+         troll FEN has ~1 — n_rows breaks the tie correctly where depth did not.
+
+    DuckDB with spill does the 845M-row -> ~342M-group aggregation without OOM
+    (mirrors the memory_limit + temp_directory pattern in stage2_aggregate.py).
+    Output parquet columns: [fen, eval_cp(Int32), n_rows(Int64), n_cp(Int64)].
     """
-    df = pl.read_parquet(
-        str(path),
-        columns=["fen", "depth", "cp", "mate"],
-    )
-    # Sort by depth descending so that group_by().first() picks the deepest
-    return (
-        df.sort("depth", descending=True)
-        .group_by("fen")
-        .first()
-    )
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    files = "[" + ", ".join("'" + str(p).replace("\\", "/") + "'"
+                            for p in shard_paths) + "]"
+    out = str(out_parquet).replace("\\", "/")
+    mate_vote = "SUM(CASE WHEN mate > 0 THEN 1 WHEN mate < 0 THEN -1 ELSE 0 END)"
+    con = duckdb.connect()
+    con.execute(f"SET memory_limit='{memory_limit}';")
+    con.execute(f"SET temp_directory='{str(tmp_dir).replace(chr(92), '/')}';")
+    con.execute(f"SET threads={threads};")
+    con.execute("SET preserve_insertion_order=false;")
+    con.execute("SET enable_progress_bar=false;")
+    con.execute(f"""
+        COPY (
+            SELECT
+                fen,
+                CAST(
+                  CASE
+                    WHEN COUNT(cp) > 0
+                      THEN GREATEST(-{EVAL_CAP}, LEAST({EVAL_CAP}, median(cp)))
+                    WHEN {mate_vote} > 0 THEN  {EVAL_CAP}
+                    WHEN {mate_vote} < 0 THEN -{EVAL_CAP}
+                    ELSE 0
+                  END AS INTEGER)   AS eval_cp,
+                COUNT(*)::BIGINT    AS n_rows,
+                COUNT(cp)::BIGINT   AS n_cp
+            FROM read_parquet({files})
+            GROUP BY fen
+        ) TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD)
+    """)
+    con.close()
 
 
 # ── FEN -> position_hash conversion (parallelisable) ────────────────────────
@@ -200,67 +255,19 @@ def build_lichess_eval_db(
     print(f"{'='*70}")
     shard_paths = download_all_shards(shard_indices, cache_dir)
 
-    # ── Step 2: Per-shard deduplication ──────────────────────────────────
+    # ── Steps 2-4: robust per-FEN aggregation (DuckDB; median cp + n_rows) ─
     print(f"\n{'='*70}")
-    print(f"Step 2: Deduplicate each shard (highest depth per FEN)")
-    print(f"{'='*70}")
-    deduped_frames: list[pl.DataFrame] = []
-    for i, path in enumerate(shard_paths):
-        t0 = time.time()
-        df = dedup_shard(path)
-        elapsed = time.time() - t0
-        print(f"  Shard {shard_indices[i]:>2}: {df.height:>12,} unique FENs  ({elapsed:.1f}s)")
-        deduped_frames.append(df)
-
-    # ── Step 3: Cross-shard deduplication ────────────────────────────────
-    print(f"\n{'='*70}")
-    print(f"Step 3: Cross-shard deduplication")
+    print(f"Steps 2-4: Robust per-FEN aggregation (median cp, capped, + n_rows)")
     print(f"{'='*70}")
     t0 = time.time()
-    combined = pl.concat(deduped_frames)
-    print(f"  Combined: {combined.height:,} rows")
-
-    # Free per-shard frames
-    del deduped_frames
-
-    # Final dedup: highest depth wins across shards
-    unique = (
-        combined.sort("depth", descending=True)
-        .group_by("fen")
-        .first()
-    )
-    del combined
-    print(f"  After final dedup: {unique.height:,} unique FENs  ({time.time()-t0:.1f}s)")
-
-    # ── Step 4: Handle mate scores ───────────────────────────────────────
-    print(f"\n{'='*70}")
-    print(f"Step 4: Resolve mate scores and compute eval_cp")
-    print(f"{'='*70}")
-    t0 = time.time()
-
-    # Where cp is null but mate is not null, compute cp from mate.
-    # mate > 0 -> white mates -> +MATE_CP
-    # mate < 0 -> black mates -> -MATE_CP
-    # The dataset uses cp values up to ±20000 for very lopsided positions;
-    # clamp to ±MATE_CP (10_000) for consistency with the rest of our pipeline.
-    unique = unique.with_columns(
-        pl.when(pl.col("cp").is_not_null())
-        .then(pl.col("cp").cast(pl.Int32).clip(-MATE_CP, MATE_CP))
-        .when(pl.col("mate") > 0)
-        .then(pl.lit(MATE_CP, dtype=pl.Int32))
-        .when(pl.col("mate") < 0)
-        .then(pl.lit(-MATE_CP, dtype=pl.Int32))
-        .otherwise(pl.lit(0, dtype=pl.Int32))
-        .alias("eval_cp")
-    )
-
-    n_cp   = unique.filter(pl.col("cp").is_not_null()).height
-    n_mate = unique.filter(pl.col("mate").is_not_null() & pl.col("cp").is_null()).height
-    n_null = unique.filter(pl.col("cp").is_null() & pl.col("mate").is_null()).height
-    print(f"  Positions with cp:   {n_cp:>12,}")
-    print(f"  Positions with mate: {n_mate:>12,}")
-    print(f"  Both null:           {n_null:>12,}")
-    print(f"  ({time.time()-t0:.1f}s)")
+    agg_parquet = output_path.with_name(output_path.stem + "._fenagg.parquet")
+    duckdb_tmp  = cache_dir / "_eval_duckdb_tmp"
+    aggregate_fens_duckdb(shard_paths, agg_parquet, duckdb_tmp, threads=n_workers)
+    unique = pl.read_parquet(agg_parquet)   # [fen, eval_cp, n_rows, n_cp]
+    n_cp_pos   = unique.filter(pl.col("n_cp") > 0).height
+    print(f"  Aggregated to {unique.height:,} unique FENs "
+          f"({n_cp_pos:,} with cp, {unique.height - n_cp_pos:,} mate-only) "
+          f"in {(time.time()-t0)/60:.1f} min")
 
     # ── Step 5: FEN -> position_hash ─────────────────────────────────────
     print(f"\n{'='*70}")
@@ -278,14 +285,19 @@ def build_lichess_eval_db(
     print(f"  Hashing complete: {elapsed:.1f}s "
           f"({len(fens)/elapsed:,.0f} FEN/s)")
 
-    # Check for hash collisions
+    # Collapse FENs that share a position_hash. These are overwhelmingly the
+    # SAME position under different encodings (move counters, non-capturable ep)
+    # plus the occasional fabricated/troll FEN that collides with a real one.
+    # Keep the BEST-SUPPORTED variant (max n_rows) — the real position dominates
+    # row count, so a 1-row troll FEN can no longer overwrite the start's eval
+    # the way the old depth-only pick did.
     n_unique_hashes = unique["position_hash"].n_unique()
     n_fens = unique.height
     if n_unique_hashes < n_fens:
-        print(f"  WARNING: {n_fens - n_unique_hashes:,} hash collisions detected!")
-        print(f"  Deduplicating by position_hash (keeping highest depth) ...")
+        print(f"  {n_fens - n_unique_hashes:,} FENs share a position_hash; "
+              f"keeping the best-supported (max n_rows) per hash ...")
         unique = (
-            unique.sort("depth", descending=True)
+            unique.sort("n_rows", descending=True)
             .group_by("position_hash")
             .first()
         )
@@ -304,9 +316,17 @@ def build_lichess_eval_db(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = output_path.with_suffix(".parquet.tmp")
     result.write_parquet(str(tmp), compression="zstd")
-    tmp.rename(output_path)
+    tmp.replace(output_path)  # .replace (not .rename) — overwrites on Windows too
     size_mb = output_path.stat().st_size / 1e6
     print(f"  Wrote {output_path}  ({size_mb:.1f} MB, {result.height:,} rows)")
+
+    # Drop the intermediate FEN-aggregation parquet + DuckDB spill dir.
+    try:
+        if agg_parquet.exists():
+            agg_parquet.unlink()
+        shutil.rmtree(duckdb_tmp, ignore_errors=True)
+    except OSError:
+        pass
 
     # ── Eval distribution summary ────────────────────────────────────────
     print(f"\n  Eval distribution (centipawns):")
@@ -314,8 +334,9 @@ def build_lichess_eval_db(
     print(f"    min={result['eval_cp'].min()}  "
           f"median={result['eval_cp'].median():.0f}  "
           f"max={result['eval_cp'].max()}")
-    mate_count = result.filter(pl.col("eval_cp").abs() >= MATE_CP).height
-    print(f"    Mate positions: {mate_count:,}")
+    decisive_count = result.filter(pl.col("eval_cp").abs() >= EVAL_CAP).height
+    print(f"    Decisive (|eval| >= {EVAL_CAP}cp, capped): {decisive_count:,} "
+          f"({decisive_count/result.height*100:.2f}%)")
 
     # ── Step 7: Compare against existing eval DB (if requested) ──────────
     if compare_path and compare_path.exists():
