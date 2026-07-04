@@ -2,18 +2,20 @@
 Build a position -> Stockfish eval lookup table from the official Lichess
 evaluations dataset (https://database.lichess.org/#evals).
 
-The dataset is hosted on HuggingFace as 17 parquet shards totalling ~40 GB
-and ~845M rows.  Each row is one principal variation (PV) for one position at
+The dataset is hosted on HuggingFace as parquet shards (20 as of the 2026-06
+refresh, ~46 GB) auto-partitioned by HF; the count grows as Lichess adds data, so
+NUM_SHARDS / the HF parquet API listing is the source of truth.  Each row is one
+principal variation (PV) for one position at
 one analysis depth.  Multiple rows exist per position.
 
 This script:
   1. Downloads the parquet shards (skipping already-downloaded files).
-  2. Aggregates ALL rows to one ROBUST evaluation per FEN (DuckDB): eval_cp =
-     MEDIAN(cp) over the FEN's cp rows (immune to a single deep garbage/troll cp
-     outlier), or the sign of its net mate vote if it has no cp at all. It also
-     records n_rows (raw support per FEN). The naive old "single highest-depth
-     row" read the start as -10000 and 1.e4 as +10000 — both from junk rows that
-     the median / row-count now outvote.
+  2. Aggregates the multiPV rows to one eval per FEN (DuckDB) with Lichess's
+     recommended logic: the PRINCIPAL PV at the HIGHEST depth — i.e. among the
+     deepest cp rows, the best cp for the side to move (max if White to move, min
+     if Black). prefer-cp (mate-only FENs fall back to the net mate-vote sign);
+     cap +-EVAL_CAP; carry n_rows. (A median over all PVs was wrong: it blended
+     the best move with the engine's inferior lines.)
   3. Converts each FEN to a Polyglot Zobrist position_hash (signed Int64), then
      collapses FENs that share a hash (encoding variants + the odd troll FEN that
      collides with a real position) by keeping the best-supported (max n_rows).
@@ -60,7 +62,7 @@ HF_SHARD_API = (
     "https://huggingface.co/api/datasets/"
     "Lichess/chess-position-evaluations/parquet/default/train"
 )
-NUM_SHARDS     = 17
+NUM_SHARDS     = 20
 DEFAULT_OUTPUT = Path("E:/chess/lichess_eval_db.parquet")
 DEFAULT_CACHE  = Path("E:/chess/lichess-evals")
 
@@ -141,26 +143,24 @@ def download_all_shards(
 def aggregate_fens_duckdb(shard_paths: list[Path], out_parquet: Path,
                           tmp_dir: Path, memory_limit: str = "90GB",
                           threads: int = 8) -> None:
-    """Aggregate ALL raw eval rows to one robust (fen, eval_cp, n_rows) per FEN.
+    """Aggregate ALL raw eval rows to one (fen, eval_cp, n_rows) per FEN using
+    Lichess's recommended logic: the PRINCIPAL PV at the HIGHEST depth.
 
-    Two robustness properties the naive "highest-depth single row" lacked:
+    The raw rows are multiPV — for one (fen, depth) analysis there are several
+    rows, one per candidate move (the engine's top-N lines). The position's eval
+    is pvs[0]: the BEST move for the side to move. So among the deepest cp rows we
+    take max(cp) if White is to move, min(cp) if Black is to move. (An earlier
+    median-over-all-PVs blended the best move with inferior ones — e.g. after
+    1.d4 e5 2.dxe5 Nc6 3.Nf3 Nxe5 the best PV is +377 (Nxe5 wins the knight) but
+    the median across PVs was +47, the eval of NOT taking it.)
 
-      1. eval_cp = MEDIAN(cp) over the FEN's cp rows, capped at +-EVAL_CAP. The
-         median is immune to a single deep garbage/troll cp row — e.g. the start
-         position has 35 sane cp rows (median +6) but its single deepest row can
-         be junk; max-depth picked the junk, median picks +6. A FEN with NO cp
-         rows falls back to the SIGN of its net mate vote -> +-EVAL_CAP (so a
-         lone spurious mate PV can't flip a position that also has cp; that's
-         the prefer-cp rule, now via "cp rows decide whenever any exist").
+    - prefer cp: cp rows decide whenever any exist; a FEN with only mate rows
+      falls back to the SIGN of its net mate vote -> +-EVAL_CAP.
+    - cap at +-EVAL_CAP.
+    - n_rows (raw row support) is carried so the later position_hash collision
+      dedup keeps the well-sampled real position over a thin colliding troll FEN.
 
-      2. n_rows (raw row support) is carried so the later position_hash collision
-         dedup can keep the WELL-SAMPLED real position over a thinly-sampled FEN
-         that hash-collides with it (non-capturable-ep / move-counter variants,
-         fabricated positions). The start's real FEN has ~160 rows; a colliding
-         troll FEN has ~1 — n_rows breaks the tie correctly where depth did not.
-
-    DuckDB with spill does the 845M-row -> ~342M-group aggregation without OOM
-    (mirrors the memory_limit + temp_directory pattern in stage2_aggregate.py).
+    DuckDB with spill does the 845M-row -> ~342M-group aggregation without OOM.
     Output parquet columns: [fen, eval_cp(Int32), n_rows(Int64), n_cp(Int64)].
     """
     tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -176,20 +176,42 @@ def aggregate_fens_duckdb(shard_paths: list[Path], out_parquet: Path,
     con.execute("SET enable_progress_bar=false;")
     con.execute(f"""
         COPY (
+            WITH src AS (
+                SELECT fen, depth, cp, mate,
+                       (split_part(fen, ' ', 2) = 'w') AS wtm
+                FROM read_parquet({files})
+            ),
+            per AS (
+                SELECT fen,
+                       COUNT(*)                          AS n_rows,
+                       COUNT(cp)                         AS n_cp,
+                       any_value(wtm)                    AS wtm,
+                       MAX(depth) FILTER (WHERE cp IS NOT NULL) AS md,
+                       {mate_vote}                       AS mate_net
+                FROM src GROUP BY fen
+            ),
+            -- principal PV at the deepest analysis: best cp for the side to move
+            -- among rows at that FEN's max cp-depth.
+            best AS (
+                SELECT s.fen,
+                       MAX(s.cp) AS max_cp, MIN(s.cp) AS min_cp
+                FROM src s JOIN per p
+                  ON s.fen = p.fen AND s.depth = p.md AND s.cp IS NOT NULL
+                GROUP BY s.fen
+            )
             SELECT
-                fen,
+                p.fen,
                 CAST(
                   CASE
-                    WHEN COUNT(cp) > 0
-                      THEN GREATEST(-{EVAL_CAP}, LEAST({EVAL_CAP}, median(cp)))
-                    WHEN {mate_vote} > 0 THEN  {EVAL_CAP}
-                    WHEN {mate_vote} < 0 THEN -{EVAL_CAP}
+                    WHEN p.n_cp > 0 THEN GREATEST(-{EVAL_CAP}, LEAST({EVAL_CAP},
+                         CASE WHEN p.wtm THEN b.max_cp ELSE b.min_cp END))
+                    WHEN p.mate_net > 0 THEN  {EVAL_CAP}
+                    WHEN p.mate_net < 0 THEN -{EVAL_CAP}
                     ELSE 0
-                  END AS INTEGER)   AS eval_cp,
-                COUNT(*)::BIGINT    AS n_rows,
-                COUNT(cp)::BIGINT   AS n_cp
-            FROM read_parquet({files})
-            GROUP BY fen
+                  END AS INTEGER)        AS eval_cp,
+                p.n_rows::BIGINT         AS n_rows,
+                p.n_cp::BIGINT           AS n_cp
+            FROM per p LEFT JOIN best b ON p.fen = b.fen
         ) TO '{out}' (FORMAT PARQUET, COMPRESSION ZSTD)
     """)
     con.close()
@@ -255,14 +277,22 @@ def build_lichess_eval_db(
     print(f"{'='*70}")
     shard_paths = download_all_shards(shard_indices, cache_dir)
 
-    # ── Steps 2-4: robust per-FEN aggregation (DuckDB; median cp + n_rows) ─
+    # ── Steps 2-4: robust per-FEN aggregation (DuckDB; deepest-best-PV cp + n_rows) ─
     print(f"\n{'='*70}")
-    print(f"Steps 2-4: Robust per-FEN aggregation (median cp, capped, + n_rows)")
+    print(f"Steps 2-4: Robust per-FEN aggregation (deepest-best-PV cp, capped, + n_rows)")
     print(f"{'='*70}")
     t0 = time.time()
     agg_parquet = output_path.with_name(output_path.stem + "._fenagg.parquet")
     duckdb_tmp  = cache_dir / "_eval_duckdb_tmp"
-    aggregate_fens_duckdb(shard_paths, agg_parquet, duckdb_tmp, threads=n_workers)
+    # Skip-gate: the aggregation is the expensive step (~2.5 h) and writes a durable
+    # intermediate that is only unlinked on full success (Step 6). If a later step
+    # (e.g. the Step 5 hashing) crashes, that intermediate survives — reuse it on the
+    # next run instead of re-aggregating from scratch.
+    if agg_parquet.exists():
+        print(f"  Reusing FEN-aggregation checkpoint {agg_parquet.name} "
+              f"({agg_parquet.stat().st_size/1e9:.1f} GB) — skipping re-aggregation.")
+    else:
+        aggregate_fens_duckdb(shard_paths, agg_parquet, duckdb_tmp, threads=n_workers)
     unique = pl.read_parquet(agg_parquet)   # [fen, eval_cp, n_rows, n_cp]
     n_cp_pos   = unique.filter(pl.col("n_cp") > 0).height
     print(f"  Aggregated to {unique.height:,} unique FENs "
@@ -408,10 +438,12 @@ def main():
         help=f"Directory to cache downloaded shards (default: {DEFAULT_CACHE})")
     parser.add_argument(
         "--shards", type=int, nargs="*", default=None,
-        help="Specific shard indices to process (0-16). Default: all 17 shards.")
+        help=f"Specific shard indices to process (0..{NUM_SHARDS - 1}). "
+             f"Default: all {NUM_SHARDS} shards.")
     parser.add_argument(
         "--workers", type=int, default=1,
-        help="Number of parallel workers for FEN->hash conversion (default: 1)")
+        help="Parallel workers for the FEN->hash conversion AND the DuckDB "
+             "aggregation thread count (default: 1; the full build uses 8).")
     parser.add_argument(
         "--compare", default=None,
         help="Path to existing eval DB parquet to compare against")

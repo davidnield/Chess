@@ -30,6 +30,7 @@ import argparse
 import json
 import sys
 import threading
+import time
 import webbrowser
 from collections import OrderedDict
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -48,8 +49,9 @@ INT64_MAX = 2**63 - 1
 INT64_RANGE = 2**64
 
 # Per-move metric columns we surface if present in the repertoire parquet.
-METRIC_COLS = ["value", "value_robust", "crush_rate", "decisiveness",
-               "opponent_error", "forcingness", "eval_score"]
+METRIC_COLS = ["value", "value_worst", "value_robust", "crush_rate", "crush_potential",
+               "memo_cost", "cover_eff", "decisiveness", "opponent_error", "forcingness",
+               "eval_score"]
 
 
 def zobrist_int64(board: chess.Board) -> int:
@@ -57,11 +59,29 @@ def zobrist_int64(board: chess.Board) -> int:
     return h - INT64_RANGE if h > INT64_MAX else h
 
 
+def _meta_crush_weight(rep_path) -> float | None:
+    """Recover the crush selection weight from a rep's provenance sidecar
+    ('<rep>.parquet.meta.json', written by build_sharp_reps.py). Returns None when the
+    sidecar is absent or unreadable, so the caller can fall back to a default."""
+    side = Path(rep_path).with_name(Path(rep_path).name + ".meta.json")
+    if not side.exists():
+        return None
+    try:
+        cw = json.loads(side.read_text(encoding="utf-8")).get("crush_weight")
+        return float(cw) if cw is not None else None
+    except (ValueError, OSError):
+        return None
+
+
 # ── Data layer ────────────────────────────────────────────────────────────
 
 class Explorer:
-    def __init__(self, rep_specs, stats_path, cache_slices=6):
+    def __init__(self, rep_specs, stats_path, cache_slices=6, crush_weight=25.0):
         # rep_specs: list of (label, perspective, path). label is the dropdown entry.
+        # crush_weight: the Stage-3 crush selection weight, used to reconstruct the
+        # selection key (sign*value + crush_weight*crush_potential) for ranking the
+        # alternative moves at our turn (gold/silver/bronze).
+        self.crush_weight = crush_weight
         self.reps: dict[str, pl.DataFrame] = {}
         self.persp: dict[str, str] = {}
         self.labels: list[str] = []
@@ -188,7 +208,7 @@ class Explorer:
             "side_to_move": "white" if board.turn == chess.WHITE else "black",
             "is_our_turn": is_our_turn,
             "our_best_move": None, "metrics": {},
-            "opp_top_moves": [], "in_repertoire": ri is not None,
+            "opp_top_moves": [], "our_moves": [], "in_repertoire": ri is not None,
         }
         if ri is not None:
             rc = sl["rep_cols"]
@@ -197,16 +217,89 @@ class Explorer:
 
         if not is_our_turn and group:
             sc = sl["st_cols"]
+            rc_val = sl["rep_cols"].get("value")  # propagated value column, if present
+            rc_eval = sl["rep_cols"].get("eval_score")        # engine eval of child
+            rc_crush = sl["rep_cols"].get("crush_potential")  # crush potential of child
             total_all = sum(sc["total"][i] for i in group) or 1
             for i in group[:12]:
                 child = sc["child_hash"][i]
+                # Propagated repertoire value of the position AFTER this opponent
+                # reply: the backwards-induction expected white-score assuming WE
+                # then follow the repertoire. None when the reply leaves our book.
+                child_ri = sl["rep_index"].get(child) if child is not None else None
+
+                def _child(col):
+                    return (float(col[child_ri])
+                            if (col is not None and child_ri is not None
+                                and col[child_ri] is not None) else None)
+
                 out["opp_top_moves"].append({
                     "san": sc["move_san"][i],
                     "total": int(sc["total"][i]),
                     "share": sc["total"][i] / total_all,
                     "white_score": float(sc["white_score_avg"][i]),
+                    "rep_value": _child(rc_val),
+                    # Engine eval + crush potential of the position THIS reply reaches:
+                    # surfaces which opponent replies are mistakes and how crushable.
+                    "eval_score": _child(rc_eval),
+                    "crush_potential": _child(rc_crush),
                     "in_book": (child in sl["pos_set"]) if child is not None else None,
                 })
+
+        if is_our_turn and group:
+            # ALL of our candidate moves with the metrics of the position each
+            # reaches, ranked by the Stage-3 selection key. This shows WHY the
+            # alternatives weren't chosen (lower key, or a worse value-vs-best-
+            # defense that the refutation gate would drop). Gold = the repertoire's
+            # actual pick (best_move); silver/bronze = the next two by key.
+            sc = sl["st_cols"]
+            rc_val   = sl["rep_cols"].get("value")           # propagated mean value
+            rc_worst = sl["rep_cols"].get("value_worst")     # OUR book vs best defense (<= rep value)
+            rc_rob   = sl["rep_cols"].get("value_robust")    # objective gate metric (best play both sides)
+            rc_eval  = sl["rep_cols"].get("eval_score")      # engine eval of child
+            rc_crush = sl["rep_cols"].get("crush_potential") # propagated crush of child
+            rc_memo  = sl["rep_cols"].get("memo_cost")       # propagated memo cost of child
+            sign = 1.0 if persp == "white" else -1.0
+            cw = self.crush_weight
+            total_all = sum(sc["total"][i] for i in group) or 1
+            best = out["our_best_move"]
+            moves = []
+            for i in group:
+                child = sc["child_hash"][i]
+                cri = sl["rep_index"].get(child) if child is not None else None
+
+                def _c(col, cri=cri):
+                    return (float(col[cri]) if (col is not None and cri is not None
+                            and col[cri] is not None) else None)
+
+                val = _c(rc_val); rob = _c(rc_rob); ev = _c(rc_eval); cr = _c(rc_crush)
+                mc = _c(rc_memo); worst = _c(rc_worst)
+                if val is not None and cr is not None:
+                    key = sign * val + cw * cr
+                elif val is not None:
+                    key = sign * val
+                else:
+                    key = None
+                moves.append({
+                    "san": sc["move_san"][i],
+                    "total": int(sc["total"][i]),
+                    "share": sc["total"][i] / total_all,
+                    "white_score": float(sc["white_score_avg"][i]),
+                    "value": val, "value_worst": worst, "value_robust": rob,
+                    "eval_score": ev, "crush_potential": cr, "memo_cost": mc,
+                    "key": key,
+                    "in_book": (child in sl["pos_set"]) if child is not None else None,
+                    "is_recommended": (sc["move_san"][i] == best),
+                    "rank": None,
+                })
+            # Gold = the actual repertoire pick; silver/bronze = next two by key.
+            by_key = sorted(moves, key=lambda m: (m["key"] is not None, m["key"]),
+                            reverse=True)
+            gold = next((m for m in moves if best is not None and m["san"] == best), None)
+            ordered = ([gold] if gold is not None else []) + [m for m in by_key if m is not gold]
+            for rank, m in enumerate(ordered[:3], 1):
+                m["rank"] = rank
+            out["our_moves"] = ordered
         return out
 
 
@@ -255,6 +348,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
   .badge { display: inline-block; padding: 0.05rem 0.45rem; border-radius: 10px;
            font-size: 0.78rem; background: #d7e9d9; color: #246b33; }
   .badge.off { background: #eee; color: #999; }
+  .badge.rec { background: #c6e0c9; color: #1f5e2c; }
+  td.medal { text-align: center; font-size: 1.05rem; padding: 0.2rem 0.3rem; }
+  tr.gold   td { background: #fcf2c0; }
+  tr.silver td { background: #e8ebee; }
+  tr.bronze td { background: #f2dfc8; }
+  tr.gold:hover td, tr.silver:hover td, tr.bronze:hover td { filter: brightness(0.97); }
 </style>
 </head>
 <body>
@@ -295,12 +394,17 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
 const SOURCE = "__SOURCE__";
+const CRUSH_W = __CRUSH_W__;   // Stage-3 crush selection weight (for the key column)
 document.getElementById("source").textContent = SOURCE;
 
 const METRIC_LABELS = {
   value: "value (white-score)",
-  value_robust: "value vs best defense",
-  crush_rate: "crush rate (fast wins)",
+  value_worst: "vs best defense (our book)",
+  value_robust: "gate eval (objective best play)",
+  crush_rate: "crush rate (local)",
+  crush_potential: "crush potential (propagated)",
+  memo_cost: "memorization cost (propagated)",
+  cover_eff: "coverage efficiency (depth / lines)",
   decisiveness: "decisiveness (1 - draws)",
   opponent_error: "opponent error",
   forcingness: "forcingness (Simpson)",
@@ -384,21 +488,59 @@ function fmtMetric(k, v) {
   return Number(v).toFixed(3);
 }
 function renderOurTurn(data) {
-  if (!data.our_best_move) {
-    return `<div class="info-box warn"><strong>No recommendation</strong> (position in book
-      but no best_move — likely a cycle fallback).</div>`;
-  }
-  let rows = "";
-  for (const k of Object.keys(METRIC_LABELS)) {
-    if (k in data.metrics) {
-      rows += `<div class="k">${METRIC_LABELS[k]}</div><div class="v">${fmtMetric(k, data.metrics[k])}</div>`;
+  if (!data.our_moves || !data.our_moves.length) {
+    if (!data.our_best_move) {
+      return `<div class="info-box warn"><strong>No recommendation</strong> (position in book
+        but no best_move — likely a cycle fallback).</div>`;
     }
+    return `<div class="info-box our"><strong>${currentPersp} plays:
+      <span class="move">${data.our_best_move}</span></strong> (no candidate data)
+      <button id="play-our-btn" data-san="${data.our_best_move}" style="margin-top:0.5rem;">
+        Play ${data.our_best_move}</button></div>`;
   }
+  const medal = r => r === 1 ? "🥇" : r === 2 ? "🥈" : r === 3 ? "🥉" : "";
+  const cls   = r => r === 1 ? "gold" : r === 2 ? "silver" : r === 3 ? "bronze" : "";
+  const fx = v => (v === null || v === undefined) ? "&mdash;" : Number(v).toFixed(3);
+  const rows = data.our_moves.map(m => {
+    let bk = m.in_book === true ? `<span class="badge">in book</span>`
+           : m.in_book === false ? `<span class="badge off">off</span>` : "";
+    const rec = m.is_recommended ? ` <span class="badge rec">rec</span>` : "";
+    return `<tr class="clickable ${cls(m.rank)}" data-san="${m.san}">
+      <td class="medal">${medal(m.rank)}</td>
+      <td class="move">${m.san}${rec}</td>
+      <td class="num">${m.total.toLocaleString()}</td>
+      <td class="num">${(m.share * 100).toFixed(1)}%</td>
+      <td class="num">${m.white_score.toFixed(3)}</td>
+      <td class="num">${fx(m.value)}</td>
+      <td class="num">${fx(m.value_worst)}</td>
+      <td class="num">${fx(m.value_robust)}</td>
+      <td class="num">${fx(m.eval_score)}</td>
+      <td class="num">${fx(m.crush_potential)}</td>
+      <td class="num">${fx(m.memo_cost)}</td>
+      <td class="num">${fx(m.key)}</td>
+      <td>${bk}</td></tr>`;
+  }).join("");
+  const playBtn = data.our_best_move
+    ? `<button id="play-our-btn" data-san="${data.our_best_move}" style="margin-top:0.5rem;">
+        Play ${data.our_best_move}</button>` : "";
   return `<div class="info-box our">
-    <strong>${currentPersp} plays: <span class="move">${data.our_best_move}</span></strong>
-    <div class="metrics">${rows}</div>
-    <button id="play-our-btn" data-san="${data.our_best_move}" style="margin-top:0.5rem;">
-      Play ${data.our_best_move}</button>
+    <strong>${currentPersp} to move — all options (🥇 = repertoire pick, 🥈🥉 = runner-ups by key)</strong>
+    <div class="small">click a row to play &middot; <b>emp score</b> = raw historical
+      white-score of this move &middot; <b>rep value</b> = propagated expected white-score if
+      you play this move and then follow the repertoire (opponent plays empirically; lower is
+      better for Black) &middot; <b>vs def</b> = our-book value if the opponent defends best at
+      every move (a true worst case, always &le; rep value in our favour) &middot; <b>gate</b> =
+      the objective engine eval of the line assuming best play by BOTH sides (what the
+      refutation gate uses; can exceed rep value when our book gambits) &middot; <b>eng eval</b>
+      = engine white-score of the position the move reaches &middot; <b>crush</b> = propagated
+      crush potential &middot; <b>memo</b> = propagated memorization cost of the subtree this
+      move enters (lower = cheaper to maintain) &middot;
+      <b>key</b> = selection score (sign&middot;rep value + ${CRUSH_W}&middot;crush; higher = preferred)</div>
+    <table><thead><tr><th></th><th>move</th><th class="num">games</th><th class="num">share</th>
+      <th class="num">emp score</th><th class="num">rep value</th><th class="num">vs def</th><th class="num">gate</th><th class="num">eng eval</th>
+      <th class="num">crush</th><th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    ${playBtn}
   </div>`;
 }
 function renderOpponentTurn(data) {
@@ -409,18 +551,29 @@ function renderOpponentTurn(data) {
     let bk = "";
     if (m.in_book === true) bk = `<span class="badge">in book</span>`;
     else if (m.in_book === false) bk = `<span class="badge off">off</span>`;
+    const fx = v => (v === null || v === undefined) ? "&mdash;" : v.toFixed(3);
     return `<tr class="clickable" data-san="${m.san}">
       <td class="move">${m.san}</td>
       <td class="num">${m.total.toLocaleString()}</td>
       <td class="num">${(m.share * 100).toFixed(1)}%</td>
       <td class="num">${m.white_score.toFixed(3)}</td>
+      <td class="num">${fx(m.rep_value)}</td>
+      <td class="num">${fx(m.eval_score)}</td>
+      <td class="num">${fx(m.crush_potential)}</td>
       <td>${bk}</td></tr>`;
   }).join("");
   return `<div class="info-box opp">
     <strong>Opponent (${data.side_to_move}) — top empirical replies</strong>
-    <div class="small">click a row to play it</div>
+    <div class="small">click a row to play it &middot; <b>emp score</b> = raw historical
+      white-score from that position &middot; <b>rep value</b> = our repertoire's
+      propagated expected white-score if we then follow the book &middot;
+      <b>eng eval</b> = engine expected white-score of the position this reply reaches
+      (lower = bigger White mistake) &middot; <b>crush</b> = propagated crush potential
+      of punishing it</div>
     <table><thead><tr><th>move</th><th class="num">games</th><th class="num">share</th>
-      <th class="num">white-score</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <th class="num">emp score</th><th class="num">rep value</th>
+      <th class="num">eng eval</th><th class="num">crush</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
   </div>`;
 }
 function renderPositionInfo(data) {
@@ -505,7 +658,10 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         path, params = url.path, parse_qs(url.query)
         if path in ("/", "/index.html"):
-            html = INDEX_HTML.replace("__SOURCE__", self.server.source_label).encode("utf-8")
+            html = (INDEX_HTML
+                    .replace("__SOURCE__", self.server.source_label)
+                    .replace("__CRUSH_W__", repr(self.server.explorer.crush_weight))
+                    .encode("utf-8"))
             self._send(html, "text/html; charset=utf-8")
             return
         if path == "/api/slices":
@@ -563,6 +719,11 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
+    ap.add_argument("--crush-weight", type=float, default=None,
+                    help="Stage-3 crush selection weight, used only to reconstruct the "
+                         "selection-key column / gold-silver-bronze ranking at our turn. "
+                         "Default: read from the rep's .parquet.meta.json provenance sidecar "
+                         "(written by build_sharp_reps.py); falls back to 25 if absent.")
     args = ap.parse_args()
 
     specs = []  # (label, perspective, path)
@@ -584,7 +745,33 @@ def main():
     if not Path(args.stats).exists():
         sys.exit(f"Stats not found: {args.stats}")
 
-    explorer = Explorer(specs, args.stats)
+    # Crush weight for the selection-key column: an explicit --crush-weight wins; else
+    # recover it from the first rep's provenance sidecar (build_sharp_reps writes it),
+    # else fall back to 25 (the canonical sharp build weight).
+    crush_weight = args.crush_weight
+    if crush_weight is None:
+        crush_weight = _meta_crush_weight(specs[0][2])
+        if crush_weight is None:
+            crush_weight = 25.0
+        else:
+            print(f"Crush weight {crush_weight:g} (from {Path(specs[0][2]).name}.meta.json)",
+                  flush=True)
+
+    explorer = Explorer(specs, args.stats, crush_weight=crush_weight)
+
+    # Pre-warm each rep's per-slice view. The first access to a slice materialises
+    # ~millions of rows into Python dicts (>10 s for the large pooled reps); doing it
+    # lazily on the first browser request stalls the page on a blank screen. Warm it
+    # up front (only a handful of (label, slice) pairs) so the UI is responsive
+    # immediately. Cap the LRU cache to fit every warmed slice.
+    warm_keys = [(lb, ev, eb) for lb in explorer.labels for (ev, eb) in explorer.slice_keys]
+    explorer._cache_max = max(explorer._cache_max, len(warm_keys))
+    print(f"Pre-warming {len(warm_keys)} slice view(s)…", flush=True)
+    for lb, ev, eb in warm_keys:
+        t0 = time.time()
+        explorer._slice(lb, ev, eb)
+        print(f"  warmed {lb} ({ev}, {eb}) in {time.time() - t0:.1f}s", flush=True)
+
     labels = [f"{lb}:{Path(p).name}" for (lb, _, p) in specs]
     labels.append(f"stats:{Path(args.stats).name}")
 

@@ -1,34 +1,38 @@
 """
-Build crush_hist: per-edge MOVE-COUNT HISTOGRAM of decisive wins, keyed like
-position_stats so Stage 3 can LEFT JOIN it.
+Build crush_hist_REL: per-edge RELATIVE-HORIZON histogram of decisive wins, keyed
+like position_stats so Stage 3 can LEFT JOIN it.
 
-For each position-moves file (E:/chess/position-moves-20{24,25}-all, has game_id):
+This is the RELATIVE variant of the crush histogram. The original crush_hist bucketed
+by the game's ABSOLUTE length (move_count), so a deep edge only got credit for games
+that ended by an absolute early move — the signal decayed to noise with depth. Here
+move_bucket is the number of full moves from THIS position to the decisive end:
+
+    move_bucket = least(greatest(move_count - (ply-1)//2, 1), 60)   for decisive wins
+                = 0                                                  for non-decisive games
+
+i.e. "how many more moves until we (or they) deliver the decisive result, measured
+FROM this edge." Because move_count sees the real game end (well past the ply-30 edge
+cap), a move-12 edge can be credited for a kill at move 25 — which the absolute metric
+structurally could not. Per-instance pm.ply makes this correct under transposition
+(the same position reached at different plies in different games buckets per instance).
+
+For each position-moves file (E:/chess/position-moves-20{24,25}-all, has game_id + ply):
   1. INNER JOIN to the surviving position_stats edge keys (event,elo_band,
-     parent_hash,move_san) — collapses the ~1.5B-key long tail to the survivors,
-     so no OOM-monster / no sharding.
+     parent_hash,move_san) — collapses the long tail to the survivors.
   2. JOIN the matching per-game crush facts (crush-per-game-v2) by game_id.
-  3. GROUP BY the 4 keys + move_bucket, where
-        move_bucket = least(greatest(move_count,1),60)  for decisive (Normal) wins,
-                    = 0                                   for every non-decisive game,
-     emitting n=COUNT(*), white_wins=SUM(white_win_normal), black_wins=SUM(black_win_normal).
+  3. GROUP BY the 4 keys + the RELATIVE move_bucket, emitting n / white_wins / black_wins.
 Partial per file (resumable); then a final group-sum across partials.
 
-Why a histogram (v2): storing the move-count distribution per edge (rather than a
-single pre-weighted crush sum) lets Stage 3 apply ANY earliness-decay shape
-(exponential half-life, horizon, linear) as a free re-weight at load time — retuning
-sharpness never requires re-running this multi-hour aggregation again.
+Storing the distribution (not a pre-weighted sum) keeps the discount/horizon shape a
+free re-weight at Stage 3 load time. Stage 3's relative-propagated crush mode consumes
+this: per edge it forms a discounted relative crush and an immediate-window crush, then
+propagates crush_potential through the DAG (see stage3_backwards_induction.py).
 
-Per edge, Stage 3 reconstructs:
-    total_games   = SUM(n)                               over all buckets (denominator)
-    white_crush   = SUM(white_wins * w(bucket))          over buckets >= 1 (numerator)
-    black_crush   = SUM(black_wins * w(bucket))          over buckets >= 1
-with w(bucket) the chosen decay weight.
+Parallel: large 2024 Blitz part-files run across a process pool; each worker builds the
+position_stats key table once (initializer).
 
-Parallel: the back-half 2024 Blitz part-files are large, so partitions run across
-a process pool. Each worker builds the position_stats key table once (initializer).
-
-Scope: Blitz + Rapid + Classical. position_stats is untouched.
-Output: E:/chess/position-stats/crush_hist_2024_2025.parquet
+Scope: Blitz + Rapid + Classical. position_stats and the absolute crush_hist are untouched.
+Output: E:/chess/position-stats/crush_hist_rel_2024_2025.parquet
 
 Usage: python build_crush_stats.py [--workers 8] [--threads 2]
 """
@@ -45,9 +49,12 @@ PM_DIRS = [Path("E:/chess/position-moves-2024-all"),
            Path("E:/chess/position-moves-2025-all")]
 CRUSH_PG_DIR = Path("E:/chess/crush-per-game-v2")
 POSITION_STATS = Path("E:/chess/position-stats/position_stats_2024_2025.parquet")
-OUT = Path("E:/chess/position-stats/crush_hist_2024_2025.parquet")
-INTER = Path("E:/chess/position-stats/crush_hist_2024_2025.intermediates")
-TMP_DIR = Path("E:/chess/position-stats/_crush_duckdb_tmp")
+# RELATIVE-horizon histogram: move_bucket = full moves from THIS position to the
+# game's decisive end (not the game's absolute length). Written to a new file so
+# the absolute crush_hist_2024_2025.parquet (crush@15 reps) stays reproducible.
+OUT = Path("E:/chess/position-stats/crush_hist_rel_2024_2025.parquet")
+INTER = Path("E:/chess/position-stats/crush_hist_rel_2024_2025.intermediates")
+TMP_DIR = Path("E:/chess/position-stats/_crush_rel_duckdb_tmp")
 EVENTS = ("Blitz", "Rapid", "Classical")
 FNAME_RE = re.compile(r"year=(\d+)_month=(\d+)_event=([A-Za-z]+)")
 
@@ -85,8 +92,13 @@ def _process_file(pmf_str: str, y: int, mo: int, ev: str) -> str:
     _CON.execute(f"""
         COPY (
             SELECT pm.event, pm.elo_band, pm.parent_hash, pm.move_san,
+                   -- RELATIVE moves-to-end: full moves from THIS position (reached
+                   -- at ply pm.ply, so (ply-1)//2 full moves already completed) to
+                   -- the decisive game end (c.move_count full moves). Per-instance
+                   -- ply handles transpositions correctly. 0 = non-decisive game.
                    CASE WHEN c.white_win_normal = 1 OR c.black_win_normal = 1
-                        THEN least(greatest(c.move_count, 1), 60) ELSE 0 END AS move_bucket,
+                        THEN least(greatest(c.move_count - ((pm.ply - 1) // 2), 1), 60)
+                        ELSE 0 END AS move_bucket,
                    COUNT(*)::BIGINT             AS n,
                    SUM(c.white_win_normal)::BIGINT AS white_wins,
                    SUM(c.black_win_normal)::BIGINT AS black_wins

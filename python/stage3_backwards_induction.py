@@ -31,12 +31,16 @@ SELECTION at our turn maximises (white) / minimises (black):
                          + decisiveness_weight * (1 - draw_rate)
                          + error_weight   * opponent_error
                          + forcing_weight * forcingness
+                         + cover_weight   * coverage_efficiency
+                         - memo_weight    * memorization_cost
 
-restricted to a REFUTATION GATE: a move is eligible only if value_robust stays
-within --robustness-floor of the slice prior (white: >= prior - floor; black:
-<= prior + floor). This drops lines refuted by best defence (1...g5) while
-keeping lines that hold (Blackmar-Diemer). floor >= 1.0 disables the gate. If
-every candidate is gated, the gate is dropped for that node (sparse-tail fallback).
+restricted to a REFUTATION GATE: a move is eligible only if its value along the
+opponent's BEST defence stays within --robustness-floor of the slice prior (white:
+>= prior - floor; black: <= prior + floor). The gate metric is value_worst by default
+(our PREPARED book vs best defence; --gate-metric worst) or value_robust (objective
+best-play-by-both-sides eval; --gate-metric robust). This drops lines refuted by best
+defence (1...g5) while keeping lines that hold (Blackmar-Diemer). floor >= 1.0 disables
+the gate. If every candidate is gated, the gate is dropped for that node (sparse-tail fallback).
 
   crush_rate   -- the PRIMARY sharpness driver: fraction of games through the
                   edge where OUR side wins decisively (mate/resignation) by
@@ -49,6 +53,16 @@ every candidate is gated, the gate is dropped for that node (sparse-tail fallbac
                   Stockfish-best reply, frequency-weighted. Requires --eval-db.
   forcingness  -- Simpson concentration of the opponent's replies (legacy; the
                   crush term superseded it as the sharpness driver).
+  coverage_efficiency -- covered opponent-decision DEPTH (reach-weighted) per
+                  memorized prepared BRANCH in the subtree a move enters. The propagated,
+                  mass-weighted generalization of forcingness: rewards forcing /
+                  consolidating lines that keep much of the opponent's mass on prepared
+                  rails with few lines to learn, and penalizes fan-out. A bare leaf scores
+                  0 (no coverage), so it can't be gamed by leaving book early. Prepared =
+                  replies with >= --cover-min-games. Requires --cover-weight > 0.
+  memorization_cost -- propagated value-at-stake-if-you-forget (criticality of the
+                  chosen move vs the natural move + downstream); --memo-weight penalty.
+                  Complements coverage_efficiency (criticality vs volume of lines).
 
 --force-root-move commits OUR first move at the start position (e.g. e4/d4/Nf3),
 letting the rest of the tree (and crush) sharpen the continuations.
@@ -60,8 +74,8 @@ opponent plays like a typical player at this elo". The right framing for a
 human-vs-human repertoire; the robustness gate is what guards the worst case.
 
 Output columns per (event, elo_band, position): value, best_move (null at opp
-turn), value_robust, crush_rate, decisiveness, opponent_error, forcingness,
-eval_score.
+turn), value_robust, value_worst, crush_rate, crush_potential, memo_cost, cover_eff,
+decisiveness, opponent_error, forcingness, eval_score.
 
 Usage:
     .venv/Scripts/python.exe python/stage3_backwards_induction.py --perspective black
@@ -259,22 +273,23 @@ def compute_slice_prior(edges: list[dict], start_hash: int, min_games: int = 100
     return score_sum / game_sum
 
 
-def compute_slice_mean_crush(edges: list[dict], start_hash: int, perspective: str,
+def compute_slice_mean_crush(edges: list[dict], start_hash: int, sum_col: str,
                              min_games: int = 100, fallback: float = 0.02) -> float:
-    """Slice-wide OUR-crush rate (by-move-H decisive-win fraction), measured at the
-    starting position. This is the empirical-Bayes prior mean that per-edge crush
-    shrinks toward — analogous to compute_slice_prior for the win rate. Summing the
-    start-position edges is exact: every game passes through exactly one first move,
-    so Σ(our_crush_sum)/Σ(crush_games) = the slice's overall early-crush rate.
+    """Slice-wide OUR-crush rate for the per-edge crush sum column `sum_col`,
+    measured at the starting position — the empirical-Bayes prior mean that the
+    per-edge crush shrinks toward (analogous to compute_slice_prior for the win
+    rate). Summing the start-position edges is exact: every game passes through
+    exactly one first move, so Σ(sum_col)/Σ(crush_games) = the slice's overall rate.
 
-    Falls back to `fallback` if the slice has no crush data at the start.
+    `sum_col` is e.g. "white_crush_sum" (absolute), "white_imm_sum" or
+    "white_dfull_sum" (relative-propagated). Falls back to `fallback` if the slice
+    has no crush data at the start.
     """
-    key = "white_crush_sum" if perspective == "white" else "black_crush_sum"
     crush_sum = 0.0
     game_sum  = 0
     for e in edges:
         if e["parent_hash"] == start_hash and e.get("crush_games"):
-            cs = e.get(key)
+            cs = e.get(sum_col)
             if cs is not None:
                 crush_sum += cs
                 game_sum  += e["crush_games"]
@@ -299,13 +314,27 @@ def run_backwards_induction(
     error_prior:      float = 200.0,
     decisiveness_weight: float = 0.0,
     robustness_floor: float = 1.0,
+    gate_metric:      str = "worst",
     robust_eval_weight: float = 1.0,
     crush_weight:     float = 0.0,
     crush_prior:      float = 200.0,
+    crush_mode:       str = "absolute",
+    crush_gamma:      float = 0.8,
+    crush_imm_window: int = 2,
+    crush_baseline:   str = "mean",
     force_root_move:  str | None = None,
+    require_eval:     bool = False,
+    memo_weight:      float = 0.0,
+    memo_prior:       float = 200.0,
+    memo_baseline:    float = 0.02,
+    memo_leave:       float = 0.0,
+    cover_weight:     float = 0.0,
+    cover_min_games:  int = 0,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
-           dict[int, float | None], dict[int, str], dict[int, chess.Color], float]:
+           dict[int, float], dict[int, float], dict[int, float],
+           dict[int, float], dict[int, float | None], dict[int, str],
+           dict[int, chess.Color], float]:
     """
     Value every position reachable in `edges` and pick our best move at each.
 
@@ -353,7 +382,25 @@ def run_backwards_induction(
         best_forcing   -- position_hash -> forcingness of chosen move (None at opp turn)
         best_error     -- position_hash -> opponent_error of chosen move (None at opp turn)
         best_decis     -- position_hash -> decisiveness of chosen move (None at opp turn)
-        best_crush     -- position_hash -> crush_rate of chosen move (None at opp turn)
+        best_crush     -- position_hash -> crush_rate of chosen move (None at opp turn).
+                          In relative-propagated mode this is the LOCAL relative crush
+                          (dfull) of the chosen move; in absolute mode the crush@H rate.
+        crush_pot      -- position_hash -> propagated crush_potential (relative mode only;
+                          empty dict in absolute mode). All positions (our + opp).
+        memo_pot       -- position_hash -> propagated memorization cost. Our nodes:
+                          shrunk deviation penalty of the chosen move + child's memo;
+                          opp nodes: reach (frequency) weighted expected child memo.
+                          memo_pot[start] telescopes to E[value-at-stake-from-forgetting
+                          per game] = the repertoire's total memorization burden.
+        cover_effs     -- position_hash -> coverage efficiency = covered opponent-decision
+                          DEPTH (reach-weighted) per memorized prepared BRANCH below here.
+                          High = forcing/consolidating (much opponent mass kept on rails with
+                          few lines to learn); low = fan-out. The cover_weight term rewards it.
+        value_worst    -- position_hash -> OUR-book value assuming the opponent plays the
+                          reply WORST for us at every node (among non-rare moves). Unlike
+                          values_robust (which substitutes the objective engine eval at
+                          covered nodes), this propagates OUR actual chosen moves, so it is
+                          a true worst-case of the repertoire and is <= value (sign-aware).
         values_robust  -- position_hash -> value along opponent's best reply (all positions)
         position_epd   -- position_hash -> EPD string
         position_side  -- position_hash -> chess.WHITE or chess.BLACK
@@ -363,9 +410,23 @@ def run_backwards_induction(
     sign        = 1.0 if perspective == "white" else -1.0
     start_hash  = zobrist_int64(chess.Board())
     slice_prior = compute_slice_prior(edges, start_hash)
-    # Empirical-Bayes prior mean for crush: thin-sample edges shrink toward this
-    # slice-wide crush rate (not 0), so noise can't manufacture a crush bonus.
-    slice_mean_crush = compute_slice_mean_crush(edges, start_hash, perspective)
+    gamma_hop = crush_gamma ** 0.5   # per-PLY discount (one propagation hop = one ply)
+    # Empirical-Bayes prior means for crush: thin-sample edges shrink toward the
+    # slice-wide rate (not 0), so noise can't manufacture a crush bonus. Absolute
+    # mode shrinks the crush@H rate; relative mode shrinks the immediate-window and
+    # discounted-full rates separately (different scales).
+    # crush_baseline="zero" shrinks each edge's crush toward 0 (assume NO crush until
+    # proven by many games), not toward the slice mean. This stops a thin-sample edge
+    # from defaulting to the average crush and out-pointing a well-sampled below-average
+    # move (the 9.f4-over-9.Qg6+ artifact). With baseline 0 the pseudocount must stay
+    # large or selection-biased thin lines slip through — hence crush_prior is swept.
+    col = "white" if our_color == chess.WHITE else "black"
+    if crush_baseline == "zero":
+        slice_mean_crush = slice_mean_imm = slice_mean_dfull = 0.0
+    else:
+        slice_mean_crush = compute_slice_mean_crush(edges, start_hash, f"{col}_crush_sum")
+        slice_mean_imm   = compute_slice_mean_crush(edges, start_hash, f"{col}_imm_sum")
+        slice_mean_dfull = compute_slice_mean_crush(edges, start_hash, f"{col}_dfull_sum")
 
     # ── Build adjacency ───────────────────────────────────────────────────────
     # children[ph] holds every (move, child, empirical_score, game_count) edge.
@@ -386,6 +447,10 @@ def run_backwards_induction(
             "draws":      e.get("draws", 0),
             "white_crush_sum": e.get("white_crush_sum"),
             "black_crush_sum": e.get("black_crush_sum"),
+            "white_imm_sum":   e.get("white_imm_sum"),
+            "black_imm_sum":   e.get("black_imm_sum"),
+            "white_dfull_sum": e.get("white_dfull_sum"),
+            "black_dfull_sum": e.get("black_dfull_sum"),
             "crush_games":     e.get("crush_games"),
         })
         if ph not in position_epd:
@@ -417,7 +482,23 @@ def run_backwards_induction(
     best_error:    dict[int, float | None] = {}
     best_decis:    dict[int, float | None] = {}
     best_crush:    dict[int, float | None] = {}
+    crush_pot:     dict[int, float]        = {}   # propagated crush_potential (relative mode)
+    memo_pot:      dict[int, float]        = {}   # propagated memorization cost (all positions)
+    value_worst:   dict[int, float]        = {}   # OUR-book value vs the opponent's BEST defence
+    cover_depth:   dict[int, float]        = {}   # reach-weighted covered opponent-decision depth
+    mem_nodes:     dict[int, float]        = {}   # unweighted count of prepared opponent branches
     opp_is_white = (our_color == chess.BLACK)
+    relative_crush = (crush_mode == "relative-propagated" and crush_weight > 0)
+
+    def shrunk_dev(mv_val, nat_val, n_p):
+        # Vertical memorization cost: value you'd lose by forgetting our book move
+        # and playing the most-played (natural) move instead — from OUR perspective
+        # (sign-corrected, floored at 0). Bayesian-shrunk toward a small baseline by
+        # the node's sample size, so a thin position can't look spuriously cheap (or
+        # expensive); same shrink pattern as crush()/forcingness().
+        d_raw = max(0.0, sign * (mv_val - nat_val))
+        return ((memo_prior * memo_baseline + d_raw * n_p) / (memo_prior + n_p)
+                if (memo_prior + n_p) > 0 else d_raw)
 
     def build_move_vals(ph):
         """One dict per child edge: mean value, robust value, decisiveness,
@@ -458,34 +539,90 @@ def run_backwards_induction(
                                   k_e=error_prior) if error_weight > 0 else 0.0
             tot  = m["total"]
             dec  = 1.0 - (m.get("draws", 0) / tot) if tot else 0.0
-            # Crush rate: earliness-weighted rate at which WE win fast after this
-            # move (from crush_stats, joined into the edge by main()). 0 when no
-            # crush data. The PRIMARY sharpness driver.
+            ng = m.get("crush_games")
+            # ABSOLUTE crush rate: flat decisive-win-by-move-H rate for this edge,
+            # shrunk toward the slice mean. A per-edge bonus, NOT propagated.
             our_crush_sum = (m.get("white_crush_sum") if our_color == chess.WHITE
                              else m.get("black_crush_sum"))
-            cr = (crush(our_crush_sum, m.get("crush_games"), crush_prior, slice_mean_crush)
-                  if crush_weight > 0 else 0.0)
+            cr = (crush(our_crush_sum, ng, crush_prior, slice_mean_crush)
+                  if (crush_weight > 0 and not relative_crush) else 0.0)
+            # RELATIVE-PROPAGATED crush: LineCrush = hazard of crushing within the
+            # immediate window + (1-hazard)·γ_hop·(child's propagated crush_potential);
+            # at the tree frontier (child not valued) fall back to the discounted
+            # empirical tail dfull, which captures kills beyond the ply-30 tree.
+            line_crush = 0.0
+            dfull = 0.0
+            if relative_crush:
+                imm_sum   = (m.get("white_imm_sum") if our_color == chess.WHITE
+                             else m.get("black_imm_sum"))
+                dfull_sum = (m.get("white_dfull_sum") if our_color == chess.WHITE
+                             else m.get("black_dfull_sum"))
+                imm   = crush(imm_sum,   ng, crush_prior, slice_mean_imm)
+                dfull = crush(dfull_sum, ng, crush_prior, slice_mean_dfull)
+                if ch in crush_pot:
+                    line_crush = imm + (1.0 - imm) * gamma_hop * crush_pot[ch]
+                else:
+                    line_crush = dfull   # frontier / leaf: empirical discounted tail
             # Opponent's preference for THIS reply on the white-expected-score
             # scale (eval where covered, else empirical edge score).
             pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
             mvs.append({"san": m["move_san"], "val": child_val, "robust": child_robust,
+                        "worst": value_worst.get(ch, child_val),
                         "total": tot, "frc": frc, "opp_err": oerr, "dec": dec,
-                        "crush": cr, "pref": pref})
+                        "crush": cr, "line_crush": line_crush, "dfull": dfull, "pref": pref,
+                        "covered": covered, "child": ch})
         return mvs
 
     def passes_gate(mv):
-        # Within robustness_floor of the prior assuming the opponent's best reply.
+        # Refutation gate: along the opponent's BEST defence, our line must stay within
+        # robustness_floor of the slice prior. gate_metric picks the robustness measure:
+        #   "worst"  = value_worst — OUR prepared book vs the opponent's best reply at
+        #              every node (conditioned on the moves we will actually play; the
+        #              decision-relevant worst case; DEFAULT).
+        #   "robust" = value_robust — objective engine eval assuming best play by BOTH
+        #              sides (legacy; optimistic — can pass lines that are only sound if
+        #              WE also play engine-perfect from here).
+        rv = mv["worst"] if gate_metric == "worst" else mv["robust"]
         if our_color == chess.WHITE:
-            return mv["robust"] >= slice_prior - robustness_floor
-        return mv["robust"] <= slice_prior + robustness_floor
+            return rv >= slice_prior - robustness_floor
+        return rv <= slice_prior + robustness_floor
+
+    def crush_term(mv):
+        # Selection crush contribution: the propagated LineCrush in relative mode,
+        # else the flat per-edge crush@H.
+        return mv["line_crush"] if relative_crush else mv["crush"]
+
+    def cover_eff(ch):
+        # Coverage efficiency of the subtree entered by playing into child `ch`: covered
+        # opponent-decision DEPTH (reach-weighted) per memorized BRANCH. High = forcing /
+        # consolidating (much of the opponent's mass kept on rails with few lines to learn);
+        # low = fan-out (many branches, mass leaks to the rare tail). A bare leaf / out-of-book
+        # child has depth 0 -> eff 0, so it can't be gamed by exiting book early.
+        return cover_depth.get(ch, 0.0) / (1.0 + mem_nodes.get(ch, 0.0))
 
     def select_our(mvs):
         base  = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
+        if require_eval:
+            # Only consider moves whose resulting position is in the eval DB.
+            # If none is, we're past the eval-DB frontier → no eligible move
+            # (the caller truncates our recommendation here).
+            cov = [mv for mv in base if mv["covered"]]
+            if not cov:
+                return None
+            base = cov
         gated = [mv for mv in base if passes_gate(mv)]
         cands = gated or base
-        keyf = lambda mv: (sign * mv["val"] + crush_weight * mv["crush"]
+        # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
+        # move (shrunk deviation vs the natural move) + the reach-weighted downstream
+        # cost already propagated into the child. memo_weight=0 → term vanishes.
+        n_p = sum(mv["total"] for mv in mvs) or 0
+        nat_val = max(mvs, key=lambda mv: mv["total"])["val"]
+        keyf = lambda mv: (sign * mv["val"] + crush_weight * crush_term(mv)
                            + decisiveness_weight * mv["dec"]
-                           + error_weight * mv["opp_err"] + forcing_weight * mv["frc"])
+                           + error_weight * mv["opp_err"] + forcing_weight * mv["frc"]
+                           + cover_weight * cover_eff(mv["child"])
+                           - memo_weight * (shrunk_dev(mv["val"], nat_val, n_p)
+                                            + memo_pot.get(mv["child"], memo_leave)))
         return max(cands, key=keyf)
 
     def opp_robust(mvs):
@@ -501,9 +638,15 @@ def run_backwards_induction(
     def value_node(ph):
         mvs = build_move_vals(ph)
         if not mvs:
-            values[ph] = values_robust[ph] = slice_prior
+            values[ph] = values_robust[ph] = value_worst[ph] = slice_prior
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
             best_decis[ph] = best_crush[ph] = None
+            if relative_crush:
+                crush_pot[ph] = 0.0
+            # A childless node at OUR turn = we've left book (no prepared continuation)
+            # → leaving-book penalty; at the opponent's turn it's a terminal (game over).
+            memo_pot[ph] = memo_leave if position_side[ph] == our_color else 0.0
+            cover_depth[ph] = mem_nodes[ph] = 0.0  # no opponent decisions below → 0 coverage, 0 lines
             return
         if position_side[ph] == our_color:
             if force_root_move and ph == start_hash:
@@ -515,13 +658,45 @@ def run_backwards_induction(
                 b = forced[0]
             else:
                 b = select_our(mvs)
+            if b is None:
+                # require_eval and no candidate reaches an evaluated position: we
+                # are past the eval-DB frontier. Truncate our recommendation here
+                # (no best_move) and value the node by its own eval if present,
+                # else the slice prior — a clean stop where engine knowledge ends.
+                own = eval_lookup.get(ph) if eval_lookup else None
+                v = own if own is not None else slice_prior
+                values[ph] = values_robust[ph] = value_worst[ph] = v
+                best_moves[ph] = best_forcing[ph] = best_error[ph] = None
+                best_decis[ph] = best_crush[ph] = None
+                if relative_crush:
+                    crush_pot[ph] = 0.0
+                # We are out of book here — assign the leaving-book penalty.
+                memo_pot[ph] = memo_leave
+                cover_depth[ph] = mem_nodes[ph] = 0.0  # truncated → nothing prepared below
+                return
             values[ph]        = b["val"]
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
             best_forcing[ph]  = b["frc"]
             best_error[ph]    = b["opp_err"]
             best_decis[ph]    = b["dec"]
-            best_crush[ph]    = b["crush"]
+            # crush_rate column: local relative crush (dfull) in relative mode, else crush@H.
+            best_crush[ph]    = b["dfull"] if relative_crush else b["crush"]
+            if relative_crush:
+                # crush_potential of THIS position = the line we actually play.
+                crush_pot[ph] = b["line_crush"]
+            # memo cost of THIS node = forgetting cost of the chosen move + child's memo
+            # (out-of-book child → leaving-book penalty).
+            n_p = sum(mv["total"] for mv in mvs) or 0
+            nat_val = max(mvs, key=lambda mv: mv["total"])["val"]
+            memo_pot[ph] = (shrunk_dev(b["val"], nat_val, n_p)
+                            + memo_pot.get(b["child"], memo_leave))
+            # worst-case value: we play our book move; inherit the child's worst-case
+            # (leaf/out-of-book child falls back to that edge's leaf value, like `value`).
+            value_worst[ph] = value_worst.get(b["child"], b["val"])
+            # coverage: our move adds no opponent branching — inherit the chosen child's.
+            cover_depth[ph] = cover_depth.get(b["child"], 0.0)
+            mem_nodes[ph]   = mem_nodes.get(b["child"], 0.0)
         else:
             # Opponent: mean over their empirical distribution (value);
             # critical-line follow for value_robust.
@@ -530,7 +705,30 @@ def run_backwards_induction(
                           if total else slice_prior)
             values_robust[ph] = opp_robust(mvs)
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
+            if relative_crush:
+                # crush_potential = EXPECTED LineCrush over their empirical replies.
+                crush_pot[ph] = (sum(mv["line_crush"] * mv["total"] for mv in mvs) / total
+                                 if total else 0.0)
             best_decis[ph] = best_crush[ph] = None
+            # memo cost = reach (frequency) weighted expected memo over their replies
+            # (an out-of-book child contributes the leaving-book penalty, not 0).
+            memo_pot[ph] = (sum(memo_pot.get(mv["child"], memo_leave) * mv["total"] for mv in mvs)
+                            / total if total else 0.0)
+            # worst-case value: opponent plays the reply WORST for us, among non-rare
+            # moves (so a 1-game freak can't define it); we then follow our book.
+            base_w = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
+            vws = [value_worst.get(mv["child"], mv["val"]) for mv in base_w]
+            value_worst[ph] = ((min(vws) if our_color == chess.WHITE else max(vws))
+                               if vws else slice_prior)
+            # coverage: covered opponent-decision DEPTH (reach-weighted) and the count of
+            # prepared reply-branches to memorize (unweighted). Replies below cover_min_games
+            # are not prepared → their mass is NOT covered (lowers cover_depth) and they add
+            # no branch. Denominator is ALL replies, so the rare tail genuinely leaks away.
+            prep = [mv for mv in mvs if mv["total"] >= cover_min_games]
+            cover_depth[ph] = (sum((mv["total"] / total) * (1.0 + cover_depth.get(mv["child"], 0.0))
+                                   for mv in prep) if total else 0.0)
+            mem_nodes[ph] = (sum(1.0 + (mv["total"] / total) * mem_nodes.get(mv["child"], 0.0)
+                                 for mv in prep) if total else 0.0)
 
     while queue:
         ph = queue.popleft()
@@ -544,8 +742,13 @@ def run_backwards_induction(
     for ph in all_positions - set(values):
         value_node(ph)
 
+    # Per-position coverage efficiency = covered opponent-decision depth per memorized
+    # branch (the quantity the selection key rewards). Surfaced for output/inspection.
+    cover_effs = {ph: cover_depth.get(ph, 0.0) / (1.0 + mem_nodes.get(ph, 0.0))
+                  for ph in all_positions}
     return (values, best_moves, best_forcing, best_error,
-            best_decis, best_crush, values_robust, position_epd, position_side, slice_prior)
+            best_decis, best_crush, crush_pot, memo_pot, cover_effs, value_worst,
+            values_robust, position_epd, position_side, slice_prior)
 
 
 def print_best_line(
@@ -671,6 +874,15 @@ def main():
                              "prior + floor). Drops lines refuted by best defence (1...g5) "
                              "while keeping lines that hold (Blackmar-Diemer). "
                              "1.0 = gate disabled / legacy behaviour (default); 0.03 = tight.")
+    parser.add_argument("--gate-metric", choices=["worst", "robust"], default="worst",
+                        help="Which robustness measure the refutation gate uses. 'worst' "
+                             "(DEFAULT): value_worst — our PREPARED book vs the opponent's "
+                             "best defence at every node (conditioned on the moves we will "
+                             "actually play). 'robust': value_robust — objective engine eval "
+                             "assuming best play by BOTH sides (legacy; can pass lines that are "
+                             "only sound if WE also play engine-perfect onward). value_worst is "
+                             "<= value_robust, so the same --robustness-floor binds tighter — "
+                             "re-tune the floor when switching.")
     parser.add_argument("--robust-eval-weight", type=float, default=1.0,
                         help="Eval weight used ONLY for the robust (critical-line) value "
                              "that drives the refutation gate. Decoupled from --eval-weight "
@@ -693,11 +905,78 @@ def main():
                              "well-sampled gambits like the Danish/Smith-Morra while routing "
                              "thin-sample lines onto sound mainlines).")
     parser.add_argument("--crush-horizon", type=int, default=15,
-                        help="Crush = fraction of games through an edge where OUR side wins "
-                             "decisively (mate/resignation) by this FULL-MOVE number, flat (no "
-                             "earliness decay). Default 15. Computed from the crush_hist histogram "
-                             "by summing decisive-win buckets 1..horizon. (Ignored for legacy "
-                             "crush_stats files that store a pre-baked weight.)")
+                        help="ABSOLUTE-mode only. Crush = fraction of games through an edge where "
+                             "OUR side wins decisively by this FULL-MOVE number, flat. Default 15. "
+                             "Summed from the crush_hist histogram buckets 1..horizon.")
+    parser.add_argument("--crush-mode", choices=["absolute", "relative-propagated"],
+                        default="absolute",
+                        help="absolute (default, back-compat): per-edge crush@--crush-horizon from "
+                             "the absolute crush_hist; used as a flat additive bonus, NOT propagated. "
+                             "relative-propagated: consume the RELATIVE crush_hist_rel (move_bucket = "
+                             "moves from THIS position to the decisive end) and propagate a "
+                             "crush_potential through the DAG (LineCrush/NodeCrush) so a move is "
+                             "rewarded for steering into crushing positions at any depth.")
+    parser.add_argument("--crush-gamma", type=float, default=0.8,
+                        help="relative-propagated only. Per-FULL-MOVE discount (earlier crush = "
+                             "better). Applied to relative buckets for the discounted edge crush and, "
+                             "as gamma**0.5 per ply, across propagation hops. Default 0.8.")
+    parser.add_argument("--crush-imm-window", type=int, default=2,
+                        help="relative-propagated only. Immediate-window W (full moves): the per-edge "
+                             "'we crush almost now' hazard = shrunk share of games decisive within W "
+                             "moves of the edge. Default 2.")
+    parser.add_argument("--crush-baseline", choices=["mean", "zero"], default="mean",
+                        help="What the per-edge crush shrinks toward. 'mean' (default, back-compat): "
+                             "the slice-mean crush — a thin edge defaults to AVERAGE crushiness, which "
+                             "can out-point a well-sampled below-average move (the 9.f4-over-9.Qg6+ "
+                             "artifact). 'zero': assume NO crush until proven by many games — thin "
+                             "edges contribute ~0 and value/sample decide. With 'zero' keep --crush-prior "
+                             "large or selection-biased thin lines slip through.")
+    parser.add_argument("--memo-weight", type=float, default=0.0,
+                        help="Penalty weight on propagated MEMORIZATION cost in selection. "
+                             "Memo cost of a move = its shrunk deviation penalty (value lost "
+                             "if you forget the book move and play the most-played natural "
+                             "move) + the reach-weighted downstream memo already propagated "
+                             "into the child. Acts as the Lagrange multiplier of a memo "
+                             "budget: 0 = disabled (default, back-compat); higher = steer "
+                             "toward forcing / forgiving low-maintenance lines. memo_cost is "
+                             "always written to the output column regardless.")
+    parser.add_argument("--memo-prior", type=float, default=200.0,
+                        help="Pseudocount (games) for Bayesian shrinkage of the per-node "
+                             "deviation penalty toward --memo-baseline. Thin nodes shrink "
+                             "toward the baseline so sparse data can't look spuriously cheap "
+                             "(few observed replies = falsely 'forcing'). Default 200.")
+    parser.add_argument("--memo-baseline", type=float, default=0.02,
+                        help="Baseline per-node deviation penalty (expected-score units) that "
+                             "thin nodes shrink toward. Default 0.02.")
+    parser.add_argument("--memo-leave-cost", type=float, default=0.0,
+                        help="Memorization cost charged when OUR recommendation LEAVES BOOK "
+                             "(require-eval truncation or a childless/out-of-book node). Without "
+                             "it, leaving prepared theory reads memo 0 — 'cheapest' — which is "
+                             "backwards. A positive value makes lines that dump you out of book "
+                             "early expensive (felt only when --memo-weight>0). 0.0 = disabled "
+                             "(default, back-compat). Try ~0.1 (≈ a full main line's memo).")
+    parser.add_argument("--cover-weight", type=float, default=0.0,
+                        help="Weight on COVERAGE EFFICIENCY in selection: covered opponent-"
+                             "decision depth (reach-weighted) per memorized prepared branch in "
+                             "the subtree a move enters. Steers toward forcing / consolidating "
+                             "lines that keep much of the opponent's mass on prepared rails with "
+                             "few lines to learn (the propagated, mass-weighted generalization of "
+                             "forcingness). A bare leaf scores 0, so it can't be gamed by leaving "
+                             "book early. 0.0 = disabled (default, back-compat); needs a sweep to "
+                             "tune (lives on a different scale than value/crush).")
+    parser.add_argument("--cover-min-games", type=int, default=0,
+                        help="Min games for an opponent reply to count as a PREPARED branch in "
+                             "the coverage metric (a 'line you must learn'). Replies below it are "
+                             "treated as un-prepared: their mass is not covered and they add no "
+                             "branch. With --min-move-games 0 (the sharp recipe) set this higher "
+                             "(~25-50) so 1-game freak replies aren't counted as memorization "
+                             "burden. Default 0.")
+    parser.add_argument("--require-eval", action="store_true",
+                        help="At our turn, consider ONLY candidate moves whose resulting "
+                             "position is present in the eval DB; if none is, truncate our "
+                             "recommendation at that node (no best_move). Pair with "
+                             "--eval-weight 1.0 for a purely engine-eval-driven repertoire "
+                             "that stops where the eval DB's coverage ends. Requires --eval-db.")
     parser.add_argument("--force-root-move", default=None,
                         help="Commit OUR first move at the start position to this SAN "
                              "(e.g. 'e4' or 'd4'), letting the rest of the tree (and crush) "
@@ -724,6 +1003,14 @@ def main():
     if args.eval_weight_k > 0:
         print(f"Eval weight min:   {args.eval_weight_min}")
         print(f"Eval weight k:     {args.eval_weight_k}")
+    if args.require_eval:
+        print(f"Require eval:      ON (candidates restricted to eval-covered positions)")
+    if args.memo_weight > 0:
+        print(f"Memo weight:       {args.memo_weight}  (prior={args.memo_prior}, "
+              f"baseline={args.memo_baseline}, leave-cost={args.memo_leave_cost})")
+    if args.cover_weight > 0:
+        print(f"Cover weight:      {args.cover_weight}  (min-games={args.cover_min_games}; "
+              f"coverage depth per memorized branch)")
     print(f"Error weight:      {args.error_weight}")
     if args.error_weight > 0:
         print(f"Error prior:       {args.error_prior}")
@@ -734,6 +1021,11 @@ def main():
         print(f"Robust eval wt:    {args.robust_eval_weight}")
     print(f"Crush weight:      {args.crush_weight}"
           f"{'  (crush DB: ' + str(args.crush_db) + ')' if args.crush_weight > 0 else ''}")
+    if args.crush_weight > 0:
+        print(f"Crush mode:        {args.crush_mode}"
+              + (f"  (γ={args.crush_gamma}, imm-window={args.crush_imm_window})"
+                 if args.crush_mode == "relative-propagated" else f"  (horizon={args.crush_horizon})"))
+        print(f"Crush prior:       {args.crush_prior}  (baseline={args.crush_baseline})")
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
@@ -752,6 +1044,17 @@ def main():
             n_raw = len(edb_raw)
             edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < args.eval_mate_cp)
             n_drop = n_raw - len(edb_raw)
+            # Keep only evals for positions that can appear in THIS run's DAG
+            # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
+            # DB costs ~40+ GB of python objects and starved run_backwards_induction
+            # into MemoryError once the input reached 23M edges (2019-2025 pool).
+            _h = pl.scan_parquet(str(input_path))
+            _need = pl.concat([
+                _h.select(pl.col("parent_hash").alias("position_hash")),
+                _h.select(pl.col("child_hash").alias("position_hash")).drop_nulls(),
+            ]).unique().collect()
+            n_prefilter = len(edb_raw)
+            edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
             # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
             # iter_rows over ~300M entries.
             edb_raw = edb_raw.with_columns(
@@ -759,7 +1062,8 @@ def main():
             eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
                                    edb_raw["_es"].to_list()))
             print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
-                  f"(dropped {n_drop:,} mate-class |cp|>={args.eval_mate_cp})")
+                  f"(dropped {n_drop:,} mate-class |cp|>={args.eval_mate_cp}; "
+                  f"{n_prefilter - len(edb_raw):,} outside the input DAG)")
             if args.eval_weight <= 0:
                 print("  (eval_weight=0 — evals will appear in output but not "
                       "influence move selection)")
@@ -782,44 +1086,78 @@ def main():
             "with the updated stage2_aggregate.py to populate it."
         )
 
-    # ── Crush overlay: LEFT JOIN crush_stats so each edge carries the crush sums.
-    # Missing keys → nulls → crush_rate 0 (no effect). Only when --crush-weight>0.
+    # ── Crush overlay: LEFT JOIN the crush histogram so each edge carries crush
+    # sums. Missing keys → nulls → no crush effect. Only when --crush-weight>0.
     if args.crush_weight > 0 and args.crush_db:
         cdb_path = Path(args.crush_db)
         if not cdb_path.exists():
             print(f"WARNING: crush DB not found at {cdb_path} — proceeding without crush.")
+        elif "move_bucket" not in pl.scan_parquet(str(cdb_path)).collect_schema().names():
+            # Legacy pre-baked crush_stats (no histogram): absolute mode only.
+            crush_df = pl.read_parquet(str(cdb_path)).select(
+                ["event", "elo_band", "parent_hash", "move_san",
+                 "white_crush_sum", "black_crush_sum", "crush_games"])
+            stats = stats.join(crush_df, on=["event", "elo_band", "parent_hash", "move_san"],
+                               how="left")
         else:
-            crush_df = pl.read_parquet(str(cdb_path))
+            # The histogram can be ~1B rows (10+ GB parquet); an eager polars
+            # read_parquet + group_by segfaults (0xC0000005) at that scale on Windows.
+            # Reduce per-edge in DuckDB (streaming scan, bounded memory) and hand
+            # polars only the ~one-row-per-edge result.
+            import duckdb
             keys = ["event", "elo_band", "parent_hash", "move_san"]
-            if "move_bucket" in crush_df.columns:
-                # Histogram → flat result-based crush@horizon: count OUR decisive wins
-                # (mate/resignation) landing on or before move `--crush-horizon`, with a
-                # flat weight (no earliness decay). bucket 0 is the non-decisive remainder
-                # and contributes only to the denominator (crush_games = total games).
-                H = args.crush_horizon
-                inwin = (pl.col("move_bucket") >= 1) & (pl.col("move_bucket") <= H)
-                crush_df = crush_df.group_by(keys).agg(
-                    pl.when(inwin).then(pl.col("white_wins")).otherwise(0)
-                      .sum().cast(pl.Float64).alias("white_crush_sum"),
-                    pl.when(inwin).then(pl.col("black_wins")).otherwise(0)
-                      .sum().cast(pl.Float64).alias("black_crush_sum"),
-                    pl.col("n").sum().alias("crush_games"))
-                print(f"Crush = fraction of games with a decisive win by move {H} "
-                      f"(flat, result-based) from {cdb_path}")
+            cdb_sql = str(cdb_path).replace("\\", "/")
+            con = duckdb.connect()
+            con.execute("SET preserve_insertion_order=false; SET memory_limit='40GB';")
+            if args.crush_mode == "relative-propagated":
+                # Relative histogram (move_bucket = full moves from THIS position to the
+                # decisive end). Per edge precompute, for both colours:
+                #   *_imm_sum  = decisive wins within W moves (the "crush almost now" hazard)
+                #   *_dfull_sum= Σ γ^bucket · decisive wins over all buckets (discounted tail)
+                # Stage 3 then shrinks these per edge and propagates crush_potential.
+                W = args.crush_imm_window
+                crush_df = pl.from_arrow(con.execute(f"""
+                    SELECT event, elo_band, parent_hash, move_san,
+                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(W)}
+                                    THEN white_wins ELSE 0 END) AS DOUBLE) AS white_imm_sum,
+                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(W)}
+                                    THEN black_wins ELSE 0 END) AS DOUBLE) AS black_imm_sum,
+                           SUM(CASE WHEN move_bucket >= 1 THEN white_wins
+                               * POW({args.crush_gamma}, move_bucket) ELSE 0 END) AS white_dfull_sum,
+                           SUM(CASE WHEN move_bucket >= 1 THEN black_wins
+                               * POW({args.crush_gamma}, move_bucket) ELSE 0 END) AS black_dfull_sum,
+                           CAST(SUM(n) AS BIGINT) AS crush_games
+                    FROM read_parquet('{cdb_sql}')
+                    GROUP BY event, elo_band, parent_hash, move_san
+                """).arrow())
+                print(f"Crush = RELATIVE-PROPAGATED (γ={args.crush_gamma}, imm-window="
+                      f"{W} moves) from {cdb_path}")
             else:
-                crush_df = crush_df.select(
-                    keys + ["white_crush_sum", "black_crush_sum", "crush_games"])
+                # Absolute crush@horizon: flat count of OUR decisive wins by move H.
+                H = args.crush_horizon
+                crush_df = pl.from_arrow(con.execute(f"""
+                    SELECT event, elo_band, parent_hash, move_san,
+                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(H)}
+                                    THEN white_wins ELSE 0 END) AS DOUBLE) AS white_crush_sum,
+                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(H)}
+                                    THEN black_wins ELSE 0 END) AS DOUBLE) AS black_crush_sum,
+                           CAST(SUM(n) AS BIGINT) AS crush_games
+                    FROM read_parquet('{cdb_sql}')
+                    GROUP BY event, elo_band, parent_hash, move_san
+                """).arrow())
+                print(f"Crush = absolute decisive-win rate by move {H} (flat) from {cdb_path}")
+            con.close()
             stats = stats.join(crush_df, on=keys, how="left")
             n_cov = stats.filter(pl.col("crush_games").is_not_null()).height
-            print(f"Joined crush data from {cdb_path}: "
-                  f"{n_cov:,}/{len(stats):,} edges have crush data")
-    if "white_crush_sum" not in stats.columns:
-        # Ensure columns exist so to_dicts() yields them (None) when crush is off.
-        stats = stats.with_columns(
-            pl.lit(None, dtype=pl.Float64).alias("white_crush_sum"),
-            pl.lit(None, dtype=pl.Float64).alias("black_crush_sum"),
-            pl.lit(None, dtype=pl.Int64).alias("crush_games"),
-        )
+            print(f"Joined crush data: {n_cov:,}/{len(stats):,} edges have crush data")
+    # Ensure every crush column the edge dict reads exists (None when absent), so
+    # to_dicts() yields them regardless of mode / whether crush is on.
+    for col, dt in [("white_crush_sum", pl.Float64), ("black_crush_sum", pl.Float64),
+                    ("white_imm_sum", pl.Float64), ("black_imm_sum", pl.Float64),
+                    ("white_dfull_sum", pl.Float64), ("black_dfull_sum", pl.Float64),
+                    ("crush_games", pl.Int64)]:
+        if col not in stats.columns:
+            stats = stats.with_columns(pl.lit(None, dtype=dt).alias(col))
 
     slices   = stats.select(["event", "elo_band"]).unique().sort(["event", "elo_band"])
     all_rows: list[dict] = []
@@ -831,8 +1169,8 @@ def main():
         edges  = stats.filter(mask).to_dicts()
 
         t1 = time.time()
-        (values, best_moves, best_forcing, best_err, best_decis, best_crush, vals_robust,
-         pos_epd, pos_side, slice_prior) = run_backwards_induction(
+        (values, best_moves, best_forcing, best_err, best_decis, best_crush, crushpot,
+         memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior) = run_backwards_induction(
             edges, args.perspective,
             prior_strength=args.prior_strength,
             forcing_weight=args.forcing_weight,
@@ -847,16 +1185,30 @@ def main():
             error_prior=args.error_prior,
             decisiveness_weight=args.decisiveness_weight,
             robustness_floor=args.robustness_floor,
+            gate_metric=args.gate_metric,
             robust_eval_weight=args.robust_eval_weight,
             crush_weight=args.crush_weight,
             crush_prior=args.crush_prior,
+            crush_mode=args.crush_mode,
+            crush_gamma=args.crush_gamma,
+            crush_imm_window=args.crush_imm_window,
+            crush_baseline=args.crush_baseline,
             force_root_move=args.force_root_move,
+            require_eval=args.require_eval,
+            memo_weight=args.memo_weight,
+            memo_prior=args.memo_prior,
+            memo_baseline=args.memo_baseline,
+            memo_leave=args.memo_leave_cost,
+            cover_weight=args.cover_weight,
+            cover_min_games=args.cover_min_games,
         )
         elapsed = time.time() - t1
 
         n_our = sum(1 for m in best_moves.values() if m is not None)
+        start_h = zobrist_int64(chess.Board())
         print(f"  {ev} / elo {eb:>6,}: {len(values):>5,} positions, "
-              f"{n_our:>4,} our-turn, prior={slice_prior:.3f} in {elapsed:.2f}s")
+              f"{n_our:>4,} our-turn, prior={slice_prior:.3f}, "
+              f"memo(start)={memopot.get(start_h, float('nan')):.4f} in {elapsed:.2f}s")
 
         for ph, val in values.items():
             all_rows.append({
@@ -871,6 +1223,10 @@ def main():
                 "opponent_error": best_err.get(ph),
                 "decisiveness":  best_decis.get(ph),
                 "crush_rate":    best_crush.get(ph),
+                "crush_potential": crushpot.get(ph),
+                "memo_cost":     memopot.get(ph),
+                "cover_eff":     covereff.get(ph),
+                "value_worst":   worstvals.get(ph),
                 "value_robust":  vals_robust.get(ph),
                 "eval_score":    eval_lookup.get(ph),
             })
