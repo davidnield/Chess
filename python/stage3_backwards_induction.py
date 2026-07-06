@@ -88,11 +88,12 @@ import argparse
 import math
 import sys
 import time
-from collections import defaultdict, deque
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 
 import chess
 import chess.polyglot
+import numpy as np
 import polars as pl
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -298,6 +299,60 @@ def compute_slice_mean_crush(edges: list[dict], start_hash: int, sum_col: str,
     return crush_sum / game_sum
 
 
+def _tarjan_sccs(nodes: set[int], succ: dict[int, list[int]]) -> list[list[int]]:
+    """Iterative Tarjan over the subgraph induced by `nodes` (successors already
+    restricted to `nodes` by the caller). Returns strongly connected components in
+    REVERSE TOPOLOGICAL order of the condensation — every SCC reachable from S is
+    emitted before S — which is exactly the children-first processing order the
+    backwards induction needs. Explicit (node, child_index) stack frames: the
+    input can be millions of nodes, so recursion is not an option."""
+    index: dict[int, int] = {}
+    low: dict[int, int] = {}
+    on_stack: set[int] = set()
+    stack: list[int] = []
+    sccs: list[list[int]] = []
+    counter = 0
+    for root in nodes:
+        if root in index:
+            continue
+        work = [(root, 0)]
+        while work:
+            node, ci = work[-1]
+            if ci == 0:
+                index[node] = low[node] = counter
+                counter += 1
+                stack.append(node)
+                on_stack.add(node)
+            kids = succ.get(node, ())
+            advanced = False
+            while ci < len(kids):
+                ch = kids[ci]
+                ci += 1
+                if ch not in index:
+                    work[-1] = (node, ci)
+                    work.append((ch, 0))
+                    advanced = True
+                    break
+                if ch in on_stack:
+                    low[node] = min(low[node], index[ch])
+            if advanced:
+                continue
+            work.pop()
+            if low[node] == index[node]:
+                scc = []
+                while True:
+                    w = stack.pop()
+                    on_stack.discard(w)
+                    scc.append(w)
+                    if w == node:
+                        break
+                sccs.append(scc)
+            if work:
+                parent = work[-1][0]
+                low[parent] = min(low[parent], low[node])
+    return sccs
+
+
 def run_backwards_induction(
     edges: list[dict],
     perspective: str,  # "white" or "black"
@@ -330,11 +385,14 @@ def run_backwards_induction(
     memo_leave:       float = 0.0,
     cover_weight:     float = 0.0,
     cover_min_games:  int = 0,
+    augment_engine:   bool = False,
+    full_eval_hashes: "np.ndarray | None" = None,
+    full_eval_es:     "np.ndarray | None" = None,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
            dict[int, float], dict[int, float], dict[int, float],
            dict[int, float], dict[int, float | None], dict[int, str],
-           dict[int, chess.Color], float]:
+           dict[int, chess.Color], float, dict[int, bool]]:
     """
     Value every position reachable in `edges` and pick our best move at each.
 
@@ -482,6 +540,7 @@ def run_backwards_induction(
     best_error:    dict[int, float | None] = {}
     best_decis:    dict[int, float | None] = {}
     best_crush:    dict[int, float | None] = {}
+    best_aug:      dict[int, bool]         = {}   # True where the chosen move came from engine augmentation
     crush_pot:     dict[int, float]        = {}   # propagated crush_potential (relative mode)
     memo_pot:      dict[int, float]        = {}   # propagated memorization cost (all positions)
     value_worst:   dict[int, float]        = {}   # OUR-book value vs the opponent's BEST defence
@@ -489,6 +548,11 @@ def run_backwards_induction(
     mem_nodes:     dict[int, float]        = {}   # unweighted count of prepared opponent branches
     opp_is_white = (our_color == chess.BLACK)
     relative_crush = (crush_mode == "relative-propagated" and crush_weight > 0)
+    # Engine-candidate augmentation is only live when the caller supplied the full
+    # (un-prefiltered) eval DB as sorted arrays — the prefiltered eval_lookup can't
+    # see legal-but-unplayed children (they're outside the input DAG).
+    _augment = bool(augment_engine) and full_eval_hashes is not None
+    _aug_cache: dict[int, list[dict]] = {}
 
     def shrunk_dev(mv_val, nat_val, n_p):
         # Vertical memorization cost: value you'd lose by forgetting our book move
@@ -574,15 +638,26 @@ def run_backwards_induction(
         return mvs
 
     def passes_gate(mv):
-        # Refutation gate: along the opponent's BEST defence, our line must stay within
-        # robustness_floor of the slice prior. gate_metric picks the robustness measure:
-        #   "worst"  = value_worst — OUR prepared book vs the opponent's best reply at
-        #              every node (conditioned on the moves we will actually play; the
-        #              decision-relevant worst case; DEFAULT).
-        #   "robust" = value_robust — objective engine eval assuming best play by BOTH
-        #              sides (legacy; optimistic — can pass lines that are only sound if
-        #              WE also play engine-perfect from here).
-        rv = mv["worst"] if gate_metric == "worst" else mv["robust"]
+        # Refutation gate: a candidate move is eligible only if its robustness measure
+        # stays within robustness_floor of the slice prior. gate_metric picks the measure:
+        #   "eval"   = the ENGINE EVAL of the position the move reaches (Lichess deep eval,
+        #              expected-score form). Rejects objectively-unsound moves EVEN WHEN NO
+        #              REFUTATION APPEARS IN THE DATA — the engine's best-play assessment is
+        #              independent of whether opponents actually punished the move. This is
+        #              the fix for the missing-refutation blind spot (e.g. 3.Bh6 hangs a
+        #              bishop: eval −4.3, but its only recorded reply declines it, so 'worst'
+        #              waves it through). Falls back to value_worst only where the position
+        #              is not eval-covered (engine blind → keep the empirical guard).
+        #   "worst"  = value_worst — OUR prepared book vs the opponent's best RECORDED reply.
+        #              Blind to refutations absent from the data (see 'eval').
+        #   "robust" = value_robust — propagated best-play-by-both (legacy; optimistic).
+        if gate_metric == "eval":
+            ev = eval_lookup.get(mv["child"]) if eval_lookup else None
+            rv = ev if ev is not None else mv["worst"]
+        elif gate_metric == "worst":
+            rv = mv["worst"]
+        else:
+            rv = mv["robust"]
         if our_color == chess.WHITE:
             return rv >= slice_prior - robustness_floor
         return rv <= slice_prior + robustness_floor
@@ -600,7 +675,52 @@ def run_backwards_induction(
         # child has depth 0 -> eff 0, so it can't be gamed by exiting book early.
         return cover_depth.get(ch, 0.0) / (1.0 + mem_nodes.get(ch, 0.0))
 
-    def select_our(mvs):
+    def augmented_candidates(ph):
+        """Engine-move rescue for a FORCED-LOSING node (used only when every recorded
+        move fails the gate). Offers legal — possibly never-played — moves whose
+        resulting position the FULL eval DB scores acceptably: a 1-ply lookahead over
+        the eval DB. Fixes the missing-improvement blind spot where the sole recorded
+        continuation is objectively lost but a better move exists unplayed (e.g. the
+        6...c6 rescue in a deep Englund line). Returns only gate-passing moves as
+        eval-only move-val dicts (no empirical stats, no crush). Memoized per node."""
+        cached = _aug_cache.get(ph)
+        if cached is not None:
+            return cached
+        board = chess.Board(position_epd[ph])
+        existing = {m["child_hash"] for m in children[ph]}   # dedup by child, not SAN
+        sans, child_hashes = [], []
+        for mv in board.legal_moves:
+            san = board.san(mv)          # SAN is computed at the pre-push position
+            board.push(mv)
+            ch = zobrist_int64(board)
+            board.pop()
+            if ch in existing:
+                continue
+            sans.append(san)
+            child_hashes.append(ch)
+        out: list[dict] = []
+        if child_hashes:
+            keys = np.asarray(child_hashes, dtype=np.int64)
+            idx = np.clip(np.searchsorted(full_eval_hashes, keys), 0,
+                          len(full_eval_hashes) - 1)
+            hit = full_eval_hashes[idx] == keys
+            for san, ch, i, ok in zip(sans, child_hashes, idx, hit):
+                if not ok:
+                    continue
+                es = float(full_eval_es[i])
+                # eval-only dict mirroring build_move_vals' shape. worst/robust=es so
+                # passes_gate (which falls back to mv["worst"] when the child isn't in
+                # the prefiltered eval_lookup) gates on the engine eval directly.
+                cand = {"san": san, "val": es, "robust": es, "worst": es,
+                        "total": 0, "frc": 0.0, "opp_err": 0.0, "dec": 0.0,
+                        "crush": 0.0, "line_crush": 0.0, "dfull": 0.0, "pref": es,
+                        "covered": True, "child": ch, "aug": True}
+                if passes_gate(cand):
+                    out.append(cand)
+        _aug_cache[ph] = out
+        return out
+
+    def select_our(ph, mvs):
         base  = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
         if require_eval:
             # Only consider moves whose resulting position is in the eval DB.
@@ -611,6 +731,13 @@ def run_backwards_induction(
                 return None
             base = cov
         gated = [mv for mv in base if passes_gate(mv)]
+        if not gated and _augment:
+            # Forced-losing node: no recorded move passes the gate. Try engine-move
+            # rescues (legal, possibly unplayed, eval-covered, gate-passing) before
+            # falling back to the least-bad recorded move.
+            aug = augmented_candidates(ph)
+            if aug:
+                gated = aug          # prefer gate-passing engine moves over gate-failing base
         cands = gated or base
         # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
         # move (shrunk deviation vs the natural move) + the reach-weighted downstream
@@ -657,7 +784,7 @@ def run_backwards_induction(
                         f"edge at the start position for this slice.")
                 b = forced[0]
             else:
-                b = select_our(mvs)
+                b = select_our(ph, mvs)
             if b is None:
                 # require_eval and no candidate reaches an evaluated position: we
                 # are past the eval-DB frontier. Truncate our recommendation here
@@ -677,6 +804,7 @@ def run_backwards_induction(
             values[ph]        = b["val"]
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
+            best_aug[ph]      = b.get("aug", False)
             best_forcing[ph]  = b["frc"]
             best_error[ph]    = b["opp_err"]
             best_decis[ph]    = b["dec"]
@@ -738,9 +866,104 @@ def run_backwards_induction(
             if not pending[parent] and parent not in values:
                 queue.append(parent)
 
-    # Fallback for positions in cycles / unreachable in the topological pass.
-    for ph in all_positions - set(values):
-        value_node(ph)
+    # ── Cycle handling ────────────────────────────────────────────────────────
+    # The queue drains without valuing exactly the positions from which a CYCLE is
+    # reachable (reversible piece-shuffle loops recorded with >= min_games break the
+    # DAG assumption — e.g. 1.Nf3 Nf6 2.Ng1 Ng8 returns to the exact start hash).
+    # The old code swept them once in arbitrary set order, silently substituting
+    # leaf values for unvalued children and freezing the results — measured to
+    # mis-select ~10k moves (incl. the root) on the 2019-25 pool. Instead: Tarjan
+    # SCCs over the leftover subgraph (emitted in reverse topological order of the
+    # condensation, i.e. children-first), value singleton SCCs exactly as the queue
+    # phase would, and fixpoint-iterate inside each multi-node SCC. memo_pot /
+    # cover_depth / mem_nodes are deliberately EXCLUDED from the convergence gate:
+    # memo_pot accumulates additively along the chosen chain, so a converged
+    # best-move chain that stays inside an SCC (repetition legitimately best)
+    # diverges there by construction — tracked separately, never gating.
+    leftover = all_positions - set(values)
+    if leftover:
+        print(f"  cycles: {len(leftover):,}/{len(all_positions):,} positions "
+              f"unreached by the topological queue (cycle members + ancestors)",
+              flush=True)
+        sub_succ = {ph: [m["child_hash"] for m in children[ph]
+                         if m["child_hash"] in leftover]
+                    for ph in leftover}
+        sccs = _tarjan_sccs(leftover, sub_succ)
+        multi = [s for s in sccs if len(s) > 1]
+        hist = Counter(len(s) for s in multi)
+        print(f"  cycles: {len(multi):,} true SCCs (size histogram "
+              f"{dict(sorted(hist.items()))}), "
+              f"{len(sccs) - len(multi):,} acyclic ancestors", flush=True)
+
+        # Gauss-Seidel value iteration over an SCC does not always converge: the
+        # max-selection (`value`) and the argmin coupling (`value_worst`) can chase
+        # each other into a bounded LIMIT CYCLE (observed amplitude up to ~0.07; more
+        # sweeps make it worse, not better). Nothing diverges — all quantities are in
+        # [0,1] — it just oscillates. The fix is DAMPING (successive under-relaxation):
+        # each update is blended with the prior value, V' = V + α(f(V) - V). This
+        # preserves the fixpoint (V = f(V) is unchanged) but collapses oscillation —
+        # a pure 2-cycle {x,y} damps to its midpoint in one step. Convergence sweeps
+        # are damped; a final UNDAMPED freeze sweep restores exact best_move /
+        # value_worst consistency once neighbours are settled.
+        # memo_pot / cover_depth / mem_nodes stay OUT of the gate: memo_pot grows
+        # additively along a chosen chain that stays in-cycle (repetition legit best),
+        # so it diverges there by construction — tracked, never gating.
+        # EPS is a PRACTICAL convergence threshold, not machine-zero: values live in
+        # [0,1] and repertoire decisions turn on differences of ~1e-2, so a residual
+        # below 1e-7 is settled for every purpose. It is only sound to stop early
+        # because DAMPING guarantees a monotone (non-oscillating) approach — a residual
+        # in this band is the slow-contraction tail of a high-repetition cycle, never
+        # a see-saw parked mid-swing. SWEEP_CAP is sized so even the slowest observed
+        # cycle (effective discount ~0.98 under damping) reaches EPS.
+        EPS, SWEEP_CAP, ALPHA = 1e-7, 1500, 0.5
+        gate_dicts = (values, values_robust, value_worst, crush_pot)
+
+        def _sweep(members: list[int], alpha: float = 1.0) -> float:
+            resid = 0.0
+            for ph in members:
+                before = [d.get(ph) for d in gate_dicts]
+                value_node(ph)
+                for old, d in zip(before, gate_dicts):
+                    new = d.get(ph)
+                    if old is None or new is None:
+                        if old is not new:
+                            resid = float("inf")
+                    else:
+                        if alpha < 1.0:
+                            new = old + alpha * (new - old)
+                            d[ph] = new
+                        resid = max(resid, abs(new - old))
+            return resid
+
+        total_sweeps = n_noncvg = 0
+        worst_resid = 0.0
+        for scc in sccs:
+            if len(scc) == 1:
+                value_node(scc[0])
+                continue
+            if len(scc) > 10_000:
+                print(f"  WARNING: unexpectedly large SCC ({len(scc):,} nodes) "
+                      f"near {position_epd.get(scc[0], '?')!r}", flush=True)
+            members = sorted(scc)          # deterministic sweep order
+            resid = float("inf")
+            for _ in range(SWEEP_CAP):
+                resid = _sweep(members, ALPHA)
+                total_sweeps += 1
+                if resid < EPS:
+                    break
+            if resid >= EPS:
+                n_noncvg += 1
+                print(f"  WARNING: SCC of {len(members)} did not converge "
+                      f"(residual {resid:.2e}) near "
+                      f"{position_epd.get(members[0], '?')!r}", flush=True)
+            worst_resid = max(worst_resid, min(resid, 1.0))
+            # Undamped freeze pass: re-derive every member's best_move and derived
+            # outputs from the (now settled) neighbour values in one consistent sweep.
+            _sweep(members)
+            total_sweeps += 1
+        print(f"  cycles: fixpoint done — {total_sweeps:,} sweeps, "
+              f"max residual {worst_resid:.2e}, "
+              f"{n_noncvg} non-converged SCC(s)", flush=True)
 
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
@@ -748,12 +971,12 @@ def run_backwards_induction(
                   for ph in all_positions}
     return (values, best_moves, best_forcing, best_error,
             best_decis, best_crush, crush_pot, memo_pot, cover_effs, value_worst,
-            values_robust, position_epd, position_side, slice_prior)
+            values_robust, position_epd, position_side, slice_prior, best_aug)
 
 
 def print_best_line(
-    result_index: dict[int, dict],
-    stats_index:  dict[int, list[dict]],  # position_hash -> list of {move_san, total}
+    result_index,        # dict-like: .get(hash) -> row dict (see _LazyIndex in main)
+    stats_index,         # dict-like: .get(hash, []) -> list of {move_san, total}
     start_hash:   int,
     perspective:  str,
     max_depth:    int = 12,
@@ -874,7 +1097,7 @@ def main():
                              "prior + floor). Drops lines refuted by best defence (1...g5) "
                              "while keeping lines that hold (Blackmar-Diemer). "
                              "1.0 = gate disabled / legacy behaviour (default); 0.03 = tight.")
-    parser.add_argument("--gate-metric", choices=["worst", "robust"], default="worst",
+    parser.add_argument("--gate-metric", choices=["eval", "worst", "robust"], default="worst",
                         help="Which robustness measure the refutation gate uses. 'worst' "
                              "(DEFAULT): value_worst — our PREPARED book vs the opponent's "
                              "best defence at every node (conditioned on the moves we will "
@@ -977,6 +1200,16 @@ def main():
                              "recommendation at that node (no best_move). Pair with "
                              "--eval-weight 1.0 for a purely engine-eval-driven repertoire "
                              "that stops where the eval DB's coverage ends. Requires --eval-db.")
+    parser.add_argument("--augment-engine", action=argparse.BooleanOptionalAction, default=True,
+                        help="At FORCED-LOSING nodes (every recorded move fails the eval "
+                             "gate), expand candidates with legal but possibly-unplayed moves "
+                             "whose resulting position the FULL eval DB scores acceptably "
+                             "(a 1-ply lookahead over the eval DB). Fixes the missing-"
+                             "improvement blind spot where the sole recorded continuation is "
+                             "objectively lost but a better move exists unplayed. DEFAULT ON; "
+                             "pass --no-augment-engine to disable. Needs --eval-db (the full DB "
+                             "is loaded as sorted arrays, ~4.8 GB); no-ops without it. "
+                             "Recommended with --gate-metric eval.")
     parser.add_argument("--force-root-move", default=None,
                         help="Commit OUR first move at the start position to this SAN "
                              "(e.g. 'e4' or 'd4'), letting the rest of the tree (and crush) "
@@ -1005,6 +1238,7 @@ def main():
         print(f"Eval weight k:     {args.eval_weight_k}")
     if args.require_eval:
         print(f"Require eval:      ON (candidates restricted to eval-covered positions)")
+    print(f"Augment engine:    {'ON (engine-move rescue at forced-losing nodes; full eval DB)' if args.augment_engine else 'OFF (--no-augment-engine)'}")
     if args.memo_weight > 0:
         print(f"Memo weight:       {args.memo_weight}  (prior={args.memo_prior}, "
               f"baseline={args.memo_baseline}, leave-cost={args.memo_leave_cost})")
@@ -1029,6 +1263,7 @@ def main():
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
+    full_eval_hashes = full_eval_es = None   # full DB as sorted arrays (engine augmentation)
     if args.eval_db:
         edb_path = Path(args.eval_db)
         if not edb_path.exists():
@@ -1044,6 +1279,23 @@ def main():
             n_raw = len(edb_raw)
             edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < args.eval_mate_cp)
             n_drop = n_raw - len(edb_raw)
+            # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
+            # iter_rows over ~300M entries.
+            edb_raw = edb_raw.with_columns(
+                (1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col("eval_cp")).exp())).alias("_es"))
+            # Engine augmentation needs the FULL (un-DAG-filtered) eval DB — its rescue
+            # moves reach positions OUTSIDE the input DAG, so the prefiltered eval_lookup
+            # can't see them. Snapshot the full mate-filtered DB as sorted numpy arrays
+            # (~4.8 GB: int64 hash + float32 es) BEFORE the DAG semi-join below prunes it.
+            if args.augment_engine:
+                fh = edb_raw["position_hash"].to_numpy()
+                fe = edb_raw["_es"].to_numpy().astype(np.float32)
+                order = np.argsort(fh)
+                full_eval_hashes = np.ascontiguousarray(fh[order])
+                full_eval_es = np.ascontiguousarray(fe[order])
+                print(f"Loaded {len(full_eval_hashes):,} evals as sorted arrays for engine "
+                      f"augmentation (full DB, "
+                      f"~{(full_eval_hashes.nbytes + full_eval_es.nbytes)/1e9:.1f} GB)")
             # Keep only evals for positions that can appear in THIS run's DAG
             # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
             # DB costs ~40+ GB of python objects and starved run_backwards_induction
@@ -1055,10 +1307,6 @@ def main():
             ]).unique().collect()
             n_prefilter = len(edb_raw)
             edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
-            # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
-            # iter_rows over ~300M entries.
-            edb_raw = edb_raw.with_columns(
-                (1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col("eval_cp")).exp())).alias("_es"))
             eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
                                    edb_raw["_es"].to_list()))
             print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
@@ -1067,6 +1315,10 @@ def main():
             if args.eval_weight <= 0:
                 print("  (eval_weight=0 — evals will appear in output but not "
                       "influence move selection)")
+
+    if args.augment_engine and full_eval_hashes is None:
+        print("WARNING: --augment-engine set but no usable --eval-db — augmentation "
+              "will no-op (needs the full eval DB).")
 
     stats = pl.read_parquet(input_path)
     stats = stats.filter(pl.col("elo_band").is_not_null())
@@ -1170,7 +1422,8 @@ def main():
 
         t1 = time.time()
         (values, best_moves, best_forcing, best_err, best_decis, best_crush, crushpot,
-         memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior) = run_backwards_induction(
+         memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior,
+         bestaug) = run_backwards_induction(
             edges, args.perspective,
             prior_strength=args.prior_strength,
             forcing_weight=args.forcing_weight,
@@ -1201,6 +1454,9 @@ def main():
             memo_leave=args.memo_leave_cost,
             cover_weight=args.cover_weight,
             cover_min_games=args.cover_min_games,
+            augment_engine=args.augment_engine,
+            full_eval_hashes=full_eval_hashes,
+            full_eval_es=full_eval_es,
         )
         elapsed = time.time() - t1
 
@@ -1209,6 +1465,11 @@ def main():
         print(f"  {ev} / elo {eb:>6,}: {len(values):>5,} positions, "
               f"{n_our:>4,} our-turn, prior={slice_prior:.3f}, "
               f"memo(start)={memopot.get(start_h, float('nan')):.4f} in {elapsed:.2f}s")
+        if args.augment_engine:
+            n_aug = sum(1 for v in bestaug.values() if v)
+            sample = next((pos_epd[ph] for ph, v in bestaug.items() if v), None)
+            print(f"    engine-augmented recommendations: {n_aug:,}"
+                  + (f"  (e.g. {sample})" if sample else ""))
 
         for ph, val in values.items():
             all_rows.append({
@@ -1229,6 +1490,7 @@ def main():
                 "value_worst":   worstvals.get(ph),
                 "value_robust":  vals_robust.get(ph),
                 "eval_score":    eval_lookup.get(ph),
+                "augmented":     bestaug.get(ph, False),
             })
 
     result = (
@@ -1264,19 +1526,28 @@ def main():
         .row(0, named=True)
     )
     ev0, eb0 = pop["event"], pop["elo_band"]
-    result_idx  = {
-        r["position_hash"]: r
-        for r in result.filter(
-            (pl.col("event") == ev0) & (pl.col("elo_band") == eb0)
-        ).iter_rows(named=True)
-    }
-    stats_idx: dict[int, list[dict]] = defaultdict(list)
-    for row in stats.filter(
-        (pl.col("event") == ev0) & (pl.col("elo_band") == eb0)
-    ).iter_rows(named=True):
-        stats_idx[row["parent_hash"]].append(
-            {"move_san": row["move_san"], "total": row["total"]}
-        )
+
+    # print_best_line only performs ~2x max_depth point lookups, so resolve each
+    # .get() with a targeted filter instead of materializing the whole slice as
+    # python dicts — the eager indexes MemoryError'd at 13M rows (2019-25 pool).
+    class _LazyIndex:
+        """Duck-types the dict the walker expects: .get(hash) -> row dict
+        (row_mode) or list of {move_san, total} (list mode)."""
+        def __init__(self, df: pl.DataFrame, key_col: str, row_mode: bool):
+            self.df, self.key_col, self.row_mode = df, key_col, row_mode
+            self.mask = (pl.col("event") == ev0) & (pl.col("elo_band") == eb0)
+
+        def get(self, ph, default=None):
+            sub = self.df.filter(self.mask & (pl.col(self.key_col) == ph))
+            if sub.height == 0:
+                return default
+            if self.row_mode:
+                return sub.row(0, named=True)
+            return [{"move_san": r["move_san"], "total": r["total"]}
+                    for r in sub.iter_rows(named=True)]
+
+    result_idx = _LazyIndex(result, "position_hash", row_mode=True)
+    stats_idx = _LazyIndex(stats, "parent_hash", row_mode=False)
 
     line = print_best_line(result_idx, stats_idx, start_hash, args.perspective)
     print(f"\nSample line ({ev0}, elo {eb0:,}, {args.perspective}):")
