@@ -74,9 +74,8 @@ position valued once despite transpositions). Move selection combines four ingre
 4. **Refutation gate** — a candidate is rejected if its worst-case/robust value against the
    opponent's best replies falls below threshold ("never outright losing against best play").
 
-The blessed flag set is not documented here — it lives in `build_sharp_reps.py` (and
-`build_pooled_reps.py` for the earlier pooled recipes), with provenance in each output's
-`.meta.json`.
+The blessed flag set is not documented here — it lives in `build_sharp_reps.py`, with
+provenance in each output's `.meta.json`.
 
 ### Crush metric — precise definition
 

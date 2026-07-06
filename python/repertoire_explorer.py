@@ -123,8 +123,8 @@ class Explorer:
                 f"FATAL: repertoire slice(s) missing from --stats "
                 f"({Path(stats_path).name}); opponent moves would be empty.\n"
                 + "\n".join(problems)
-                + "\n  Pass the matching --stats — e.g. the pooled "
-                  "position_stats_pooled_1900_2200_brc.parquet for pooled reps.")
+                + "\n  Pass the matching --stats — e.g. the canonical "
+                  "position_stats_pooled_ge1800_2019_2025_brc.parquet for pooled reps.")
 
         # Slices available = union of (event, elo_band) across the loaded reps.
         sl = (pl.concat([r.select(["event", "elo_band"]) for r in self.reps.values()])
@@ -712,10 +712,10 @@ def main():
                     help="Generic labeled repertoire, repeatable. e.g. "
                          "--rep 'White 1.e4=white=E:/.../rep.parquet'")
     ap.add_argument("--stats",
-                    default="E:/chess/position-stats/position_stats_pooled_1900_2200_brc.parquet",
+                    default="E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet",
                     help="Position-stats parquet supplying opponent replies. Must contain "
                          "every loaded rep's (event, elo_band) slice (checked at startup). "
-                         "Defaults to the pooled stats that the canonical pooled reps use.")
+                         "Defaults to the canonical ge1800/2019-2025 pooled stats.")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
