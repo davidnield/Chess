@@ -1027,30 +1027,40 @@ def run_backwards_induction(
         # so it diverges there by construction — tracked, never gating.
         # EPS is a PRACTICAL convergence threshold, not machine-zero: values live in
         # [0,1] and repertoire decisions turn on differences of ~1e-2, so a residual
-        # below 1e-7 is settled for every purpose. It is only sound to stop early
-        # because DAMPING guarantees a monotone (non-oscillating) approach — a residual
-        # in this band is the slow-contraction tail of a high-repetition cycle, never
-        # a see-saw parked mid-swing. SWEEP_CAP is sized so even the slowest observed
-        # cycle (effective discount ~0.98 under damping) reaches EPS.
+        # below 1e-7 is settled for every purpose. SWEEP_CAP is sized so even the
+        # slowest observed contracting cycle (effective discount ~0.98 under damping)
+        # reaches EPS. SCCs that plateau instead of contracting are parked limit
+        # cycles — the discrete gate/argmax feedback has no fixpoint there and no
+        # amount of sweeping (or heavier damping) resolves it; they are detected and
+        # abandoned early, values left mid-band by the damping. If a parked flip-flop
+        # ever involves a line that matters, the escalation path is policy iteration
+        # with a sticky argmax (freeze move choices, solve the affine value system
+        # exactly, improve with hysteresis) — deliberately not built for the ~80
+        # affected SCCs out of 13M positions.
         EPS, SWEEP_CAP, ALPHA = 1e-7, 1500, 0.5
         gate_dicts = (values, values_robust, value_worst, crush_pot)
+        gate_names = ("value", "value_robust", "value_worst", "crush_pot")
 
-        def _sweep(members: list[int], alpha: float = 1.0) -> float:
-            resid = 0.0
+        def _sweep(members: list[int], alpha: float = 1.0):
+            """One Gauss-Seidel sweep. Returns (residual, worst_node, worst_dict).
+            The residual is the UNDAMPED step |f(V)-V|: measuring after the alpha
+            blend would scale the reported disagreement by alpha — convergence by
+            measurement suppression — and hide parked limit cycles."""
+            resid, w_ph, w_dict = 0.0, None, ""
             for ph in members:
                 before = [d.get(ph) for d in gate_dicts]
                 value_node(ph)
-                for old, d in zip(before, gate_dicts):
+                for old, d, name in zip(before, gate_dicts, gate_names):
                     new = d.get(ph)
                     if old is None or new is None:
                         if old is not new:
-                            resid = float("inf")
+                            resid, w_ph, w_dict = float("inf"), ph, name
                     else:
+                        if abs(new - old) > resid:
+                            resid, w_ph, w_dict = abs(new - old), ph, name
                         if alpha < 1.0:
-                            new = old + alpha * (new - old)
-                            d[ph] = new
-                        resid = max(resid, abs(new - old))
-            return resid
+                            d[ph] = old + alpha * (new - old)
+            return resid, w_ph, w_dict
 
         total_sweeps = n_noncvg = 0
         worst_resid = 0.0
@@ -1062,17 +1072,28 @@ def run_backwards_induction(
                 print(f"  WARNING: unexpectedly large SCC ({len(scc):,} nodes) "
                       f"near {position_epd.get(scc[0], '?')!r}", flush=True)
             members = sorted(scc)          # deterministic sweep order
-            resid = float("inf")
-            for _ in range(SWEEP_CAP):
-                resid = _sweep(members, ALPHA)
+            resid, w_ph, w_dict = float("inf"), None, ""
+            parked = False
+            ckpt = float("inf")            # residual at the last plateau checkpoint
+            for i in range(1, SWEEP_CAP + 1):
+                resid, w_ph, w_dict = _sweep(members, ALPHA)
                 total_sweeps += 1
                 if resid < EPS:
                     break
+                if i % 100 == 0:
+                    # Plateau detection: a contracting SCC at damped rate ~0.99/sweep
+                    # improves ~2.7x per 100 sweeps; a parked limit cycle doesn't
+                    # improve at all. Bail instead of burning the rest of the cap.
+                    if resid > ckpt / 2.0:
+                        parked = True
+                        break
+                    ckpt = resid
             if resid >= EPS:
                 n_noncvg += 1
-                print(f"  WARNING: SCC of {len(members)} did not converge "
-                      f"(residual {resid:.2e}) near "
-                      f"{position_epd.get(members[0], '?')!r}", flush=True)
+                print(f"  WARNING: SCC of {len(members)} "
+                      f"{'parked in a limit cycle' if parked else 'still converging at the cap'} "
+                      f"(residual {resid:.2e} in {w_dict} near "
+                      f"{position_epd.get(w_ph, '?')!r})", flush=True)
             worst_resid = max(worst_resid, min(resid, 1.0))
             # Undamped freeze pass: re-derive every member's best_move and derived
             # outputs from the (now settled) neighbour values in one consistent sweep.
