@@ -27,7 +27,8 @@ trap lines.
 | `E:/chess/crush-per-game-v2/` | Per-game decisive-result facts (`extract_crush_per_game.py`): win flags, termination, move_count. Input to crush histogram builders. |
 | `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts) and `crush_hist_*.parquet` (crush histograms). `_pooled_partials_*/` are resumable working dirs for in-flight pooled builds. |
 | `E:/chess/repertoire/` | Stage-3 outputs, with `.meta.json` provenance sidecars recording the exact inputs/flags that built each one. |
-| `E:/chess/lichess_eval_db.parquet` | `position_hash → eval_cp` Stockfish eval DB (`build_lichess_eval_db.py`). Used by Stage-3 `--eval-db`, the winpos crush builder, and Stage 4. The raw `lichess-evals/` dump it was built from has been deleted — rebuilding requires re-downloading from database.lichess.org. |
+| `E:/chess/lichess_eval_db.parquet` | `position_hash → eval_cp` cloud-eval Stockfish DB (`build_lichess_eval_db.py`). The raw `lichess-evals/` dump it was built from has been deleted — rebuilding requires re-downloading from database.lichess.org. Superseded as the Stage-3 default by `unified_eval_db.parquet` below, but still a direct input to it. |
+| `E:/chess/unified_eval_db.parquet` | **Canonical eval DB.** `lichess_eval_db.parquet` unioned with the aggregated fishnet-evals dump (`build_fishnet_eval_db.py`, cloud-preferred, median-of-replicates per era tier) — broader position coverage than the cloud DB alone. This is the default `--eval-db` for Stage-3 and `build_sharp_reps.py`. |
 
 **Do not** reference `D:/data/chess/standard-chess-games/` (with no `-compressed`). It was a
 deprecated path that has been deleted; pipelines that pointed at it silently produced incomplete
@@ -43,10 +44,15 @@ D: source parquets
    │  build_pooled_stats.py --phase merge     (monthly consolidation → final GROUP BYs)
    ▼
 position_stats_pooled_<tag>.parquet + crush_hist_rel_pooled_<tag>.parquet
-   │  build_sharp_reps.py                     (locked Stage-3 recipe; wraps stage3_backwards_induction.py)
+   │  build_sharp_reps.py                     (locked Stage-3 recipe; TWO-PASS wrapper around
+   │                                           stage3_backwards_induction.py: pass-1 build →
+   │                                           plan_consistency_report.py --export-prefix →
+   │                                           pass-2 with the learnability plan prior)
    ▼
 repertoire_pooled_{white,black}_sharp.parquet
    │  score_repertoire.py                     (evaluation harness / objective function)
+   │  plan_consistency_report.py              (idea-consistency lens: % of games per idea-token,
+   │                                           split by opponent's first move)
    │  repertoire_explorer.py                  (browsing UI)
 ```
 
@@ -65,14 +71,22 @@ raising the memory limit.
 ### Stage 3 — the shared engine
 
 Backwards induction over the position DAG (zobrist int64 hashes, Kahn topological order — each
-position valued once despite transpositions). Move selection combines four ingredients:
+position valued once despite transpositions; residual cycles get Tarjan SCC condensation +
+damped fixpoint sweeps). Move selection combines five ingredients:
 
 1. **Empirical value** — smoothed propagated score (Beta-Binomial prior on leaves so lucky
    low-count lines don't win the max).
 2. **Crush bonus** — reward for lines that reach winning positions early (see metric below).
 3. **Memorization penalty** — cost per position the user must learn, plus a leaving-book cost.
 4. **Refutation gate** — a candidate is rejected if its worst-case/robust value against the
-   opponent's best replies falls below threshold ("never outright losing against best play").
+   opponent's best replies falls below threshold ("never outright losing against best play"),
+   plus a relative gate against conceding vs the best sibling candidate.
+5. **Learnability tiebreak** (two-pass only) — among candidates within a δ window of the best
+   selection key, prefer the move whose idea-token (piece destination / pawn break) the
+   repertoire plays most often in that opponent-first-move context (`--plan-prior` /
+   `--plan-reach`, exported by `plan_consistency_report.py` from the pass-1 rep). δ is loose
+   only at shallow-but-rare nodes; measurement and selection MUST share `idea_token()`
+   (defined in stage3, imported by the report).
 
 The blessed flag set is not documented here — it lives in `build_sharp_reps.py`, with
 provenance in each output's `.meta.json`.
@@ -85,10 +99,10 @@ provenance in each output's `.meta.json`.
 
 - **Resignation-proxy** (`build_crush_stats.py`): win = decisive result with `termination='Normal'`
   (mate or resignation). No eval component.
-- **Winpos** (`build_crush_winpos.py`): win event = the *earliest* of (first position strictly
-  after the edge with eval ≥ +300cp for our side, decisive-normal end). One event per game per
-  side — no double counting; a +3 advantage counts even if later thrown away; uncovered positions
-  fall back to normal terminations.
+- **Winpos** (`build_crush_winpos.py`, **canonical crush source for `build_sharp_reps.py`**): win
+  event = the *earliest* of (first position strictly after the edge with eval ≥ +300cp for our
+  side, decisive-normal end). One event per game per side — no double counting; a +3 advantage
+  counts even if later thrown away; uncovered positions fall back to normal terminations.
 
 The distinction matters: the original design intended the eval clause, and its absence went
 unnoticed for weeks because the definition wasn't written down.

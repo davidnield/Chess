@@ -112,6 +112,27 @@ def zobrist_int64(board: chess.Board) -> int:
     return h - INT64_RANGE if h > INT64_MAX else h
 
 
+# Context key for context-free plan-prior rows (must match plan_consistency_report).
+LEARN_GLOBAL_CTX = "(all games)"
+
+
+def idea_token(san: str) -> str:
+    """Normalize a SAN into an 'idea token' for the learnability plan prior.
+    Piece moves become piece + destination (captures and disambiguators
+    stripped — the idea is WHERE the piece goes); pawn pushes are the
+    destination square; pawn captures keep their source file (cxd5 and exd5
+    are different ideas); castling is kept verbatim; promotions keep the
+    promotion piece. Selection (this module) and measurement
+    (plan_consistency_report.py) MUST share this definition."""
+    s = san.rstrip("+#")
+    if s.startswith("O-O"):
+        return s
+    if s[0] in "NBRQK":
+        dest = s.split("=")[0][-2:]
+        return s[0] + dest
+    return s  # pawn move: "c5", "cxd5", "e8=Q"
+
+
 def smoothed_score(empirical: float, n: int, prior: float, k: float) -> float:
     """Beta-Binomial posterior mean: (k * prior + empirical * n) / (k + n)."""
     return (k * prior + empirical * n) / (k + n)
@@ -370,6 +391,7 @@ def run_backwards_induction(
     decisiveness_weight: float = 0.0,
     robustness_floor: float = 1.0,
     gate_metric:      str = "worst",
+    gate_rel_floor:   float = 1.0,
     robust_eval_weight: float = 1.0,
     crush_weight:     float = 0.0,
     crush_prior:      float = 200.0,
@@ -388,6 +410,16 @@ def run_backwards_induction(
     augment_engine:   bool = False,
     full_eval_hashes: "np.ndarray | None" = None,
     full_eval_es:     "np.ndarray | None" = None,
+    learn_prior:      dict[tuple[str, str], float] | None = None,
+    learn_ctx:        dict[int, str] | None = None,
+    learn_reach:      dict[int, float] | None = None,
+    learn_ctx_share:  dict[str, float] | None = None,
+    learn_depth:      dict[int, int] | None = None,
+    learn_delta_main: float = 0.005,
+    learn_delta_rare: float = 0.04,
+    learn_reach_pivot: float = 0.02,
+    learn_ctx_pivot:  float = 0.05,
+    learn_depth_horizon: int = 6,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
            dict[int, float], dict[int, float], dict[int, float],
@@ -553,6 +585,43 @@ def run_backwards_induction(
     # see legal-but-unplayed children (they're outside the input DAG).
     _augment = bool(augment_engine) and full_eval_hashes is not None
     _aug_cache: dict[int, list[dict]] = {}
+    rel_gated_nodes: set[int] = set()   # our-turn nodes where the relative gate pruned >=1 move
+                                        # (a set, not a counter: cycle fixpoint sweeps revisit nodes)
+    _learn = learn_prior is not None and learn_delta_rare > 0.0
+    learn_override_nodes: set[int] = set()  # nodes where the plan-prior tiebreak changed the pick
+
+    def learn_delta(ph):
+        # δ window for the learnability tiebreak: loose ONLY at SHALLOW-but-RARE
+        # nodes — the opponent's offbeat opening choices (1.b3, the King's Gambit)
+        # where habitual development should replace memorized nuance. Deep nodes
+        # and off-walk nodes stay at the tight δ: they are individually rare but
+        # collectively carry most of the tree's mass, and letting them all concede
+        # is what bled ~1.4%% effectiveness in the v1 calibration.
+        if learn_depth is not None:
+            d = learn_depth.get(ph)
+            if d is None or d >= learn_depth_horizon:
+                return learn_delta_main
+        r = (learn_reach or {}).get(ph, 0.0)
+        t = min(1.0, r / learn_reach_pivot) if learn_reach_pivot > 0 else 1.0
+        return learn_delta_rare + (learn_delta_main - learn_delta_rare) * t
+
+    def learn_freq(ph, san):
+        # Plan-prior frequency of this move's idea: the node's dominant-context
+        # habit shrunk toward the GLOBAL habit by context prevalence. A rare
+        # context (share << learn_ctx_pivot) mostly inherits the global habits —
+        # its own pass-1 oddities (a precise maneuver vs a 1% sideline) must NOT
+        # self-reinforce; a common context (vs 1.e4 / 1.d4) keeps its own plans.
+        tok = idea_token(san)
+        gf = learn_prior.get((LEARN_GLOBAL_CTX, tok), 0.0)
+        ctx = (learn_ctx or {}).get(ph)
+        if ctx is None:
+            return gf
+        cf = learn_prior.get((ctx, tok), 0.0)
+        if learn_ctx_share is None or learn_ctx_pivot <= 0:
+            lam = 1.0
+        else:
+            lam = min(1.0, learn_ctx_share.get(ctx, 0.0) / learn_ctx_pivot)
+        return lam * cf + (1.0 - lam) * gf
 
     def shrunk_dev(mv_val, nat_val, n_p):
         # Vertical memorization cost: value you'd lose by forgetting our book move
@@ -637,9 +706,8 @@ def run_backwards_induction(
                         "covered": covered, "child": ch})
         return mvs
 
-    def passes_gate(mv):
-        # Refutation gate: a candidate move is eligible only if its robustness measure
-        # stays within robustness_floor of the slice prior. gate_metric picks the measure:
+    def gate_rv(mv):
+        # The robustness measure the refutation gates compare. gate_metric picks it:
         #   "eval"   = the ENGINE EVAL of the position the move reaches (Lichess deep eval,
         #              expected-score form). Rejects objectively-unsound moves EVEN WHEN NO
         #              REFUTATION APPEARS IN THE DATA — the engine's best-play assessment is
@@ -653,14 +721,45 @@ def run_backwards_induction(
         #   "robust" = value_robust — propagated best-play-by-both (legacy; optimistic).
         if gate_metric == "eval":
             ev = eval_lookup.get(mv["child"]) if eval_lookup else None
-            rv = ev if ev is not None else mv["worst"]
-        elif gate_metric == "worst":
-            rv = mv["worst"]
-        else:
-            rv = mv["robust"]
+            return ev if ev is not None else mv["worst"]
+        return mv["worst"] if gate_metric == "worst" else mv["robust"]
+
+    def passes_gate(mv):
+        # ABSOLUTE refutation gate: a candidate move is eligible only if its
+        # robustness measure stays within robustness_floor of the slice prior.
+        rv = gate_rv(mv)
         if our_color == chess.WHITE:
             return rv >= slice_prior - robustness_floor
         return rv <= slice_prior + robustness_floor
+
+    def apply_rel_gate(ph, cands_list):
+        """RELATIVE refutation gate: drop candidates conceding more than
+        gate_rel_floor (expected-score units) vs the BEST candidate's gate value.
+        Catches advantage-squandering moves the absolute gate can't — moves that
+        stay above the absolute bar but give back a won position because opponents
+        usually misplay them (e.g. 8...Nd4 in the Bxf7+ Italian: empirically great,
+        but concedes −2.1 → +0.1 vs best play while 8...Qd7 keeps it all). The best
+        candidate always survives, so a non-empty list never empties. Moves without
+        a genuine eval (gate_metric='eval', uncovered child) are EXEMPT — their rv
+        is a propagated empirical value, not comparable to sibling engine evals."""
+        if gate_rel_floor >= 1.0 or len(cands_list) < 2:
+            return cands_list
+        rvs = [(gate_rv(mv), gate_metric != "eval" or mv["covered"])
+               for mv in cands_list]
+        elig = [rv for rv, ok in rvs if ok]
+        if not elig:
+            return cands_list
+        if our_color == chess.WHITE:
+            best = max(elig)
+            kept = [mv for mv, (rv, ok) in zip(cands_list, rvs)
+                    if not ok or rv >= best - gate_rel_floor]
+        else:
+            best = min(elig)
+            kept = [mv for mv, (rv, ok) in zip(cands_list, rvs)
+                    if not ok or rv <= best + gate_rel_floor]
+        if len(kept) < len(cands_list):
+            rel_gated_nodes.add(ph)
+        return kept
 
     def crush_term(mv):
         # Selection crush contribution: the propagated LineCrush in relative mode,
@@ -731,13 +830,16 @@ def run_backwards_induction(
                 return None
             base = cov
         gated = [mv for mv in base if passes_gate(mv)]
+        gated = apply_rel_gate(ph, gated)
         if not gated and _augment:
             # Forced-losing node: no recorded move passes the gate. Try engine-move
             # rescues (legal, possibly unplayed, eval-covered, gate-passing) before
             # falling back to the least-bad recorded move.
             aug = augmented_candidates(ph)
             if aug:
-                gated = aug          # prefer gate-passing engine moves over gate-failing base
+                # prefer gate-passing engine moves over gate-failing base; the
+                # relative gate applies among the rescues too
+                gated = apply_rel_gate(ph, aug)
         cands = gated or base
         # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
         # move (shrunk deviation vs the natural move) + the reach-weighted downstream
@@ -750,7 +852,22 @@ def run_backwards_induction(
                            + cover_weight * cover_eff(mv["child"])
                            - memo_weight * (shrunk_dev(mv["val"], nat_val, n_p)
                                             + memo_pot.get(mv["child"], memo_leave)))
-        return max(cands, key=keyf)
+        best = max(cands, key=keyf)
+        if _learn and len(cands) > 1:
+            # LEARNABILITY tiebreak: among candidates within δ of the best selection
+            # key (near-optimal by our own objective — gates already applied, so all
+            # are sound), prefer the move whose IDEA we play most often in this
+            # context. Bounded concession per node; δ scales with node rarity.
+            bk = keyf(best)
+            delta = learn_delta(ph)
+            elig = [mv for mv in cands if keyf(mv) >= bk - delta]
+            if len(elig) > 1:
+                pick = max(elig, key=lambda mv: (learn_freq(ph, mv["san"]), keyf(mv)))
+                if pick is not best and (learn_freq(ph, pick["san"])
+                                         > learn_freq(ph, best["san"])):
+                    learn_override_nodes.add(ph)
+                    best = pick
+        return best
 
     def opp_robust(mvs):
         # Opponent plays their best reply (restricted to non-rare moves); we
@@ -965,6 +1082,14 @@ def run_backwards_induction(
               f"max residual {worst_resid:.2e}, "
               f"{n_noncvg} non-converged SCC(s)", flush=True)
 
+    if gate_rel_floor < 1.0:
+        print(f"  relative gate (floor {gate_rel_floor}) pruned moves at "
+              f"{len(rel_gated_nodes):,} nodes", flush=True)
+    if _learn:
+        print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
+              f"pivot {learn_reach_pivot}) overrode the pick at "
+              f"{len(learn_override_nodes):,} nodes", flush=True)
+
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
     cover_effs = {ph: cover_depth.get(ph, 0.0) / (1.0 + mem_nodes.get(ph, 0.0))
@@ -1106,6 +1231,17 @@ def main():
                              "only sound if WE also play engine-perfect onward). value_worst is "
                              "<= value_robust, so the same --robustness-floor binds tighter — "
                              "re-tune the floor when switching.")
+    parser.add_argument("--gate-rel-floor", type=float, default=0.1,
+                        help="RELATIVE refutation gate: a candidate is dropped if its gate "
+                             "value (engine eval of the reached position, for --gate-metric "
+                             "eval) concedes more than this margin (expected-score units, "
+                             "~0.1 ≈ 110cp near equality) vs the BEST candidate at the same "
+                             "node. Stops booking moves that squander an advantage because "
+                             "opponents usually misplay them (e.g. 8...Nd4 giving back "
+                             "-2.1 → +0.1 in the Bxf7+ Italian trap line, where 8...Qd7 "
+                             "keeps it). Baseline = best recorded candidate (or best engine "
+                             "rescue when augmentation fires); moves without eval coverage "
+                             "are exempt. DEFAULT ON at 0.1; >= 1.0 disables.")
     parser.add_argument("--robust-eval-weight", type=float, default=1.0,
                         help="Eval weight used ONLY for the robust (critical-line) value "
                              "that drives the refutation gate. Decoupled from --eval-weight "
@@ -1210,6 +1346,47 @@ def main():
                              "pass --no-augment-engine to disable. Needs --eval-db (the full DB "
                              "is loaded as sorted arrays, ~4.8 GB); no-ops without it. "
                              "Recommended with --gate-metric eval.")
+    parser.add_argument("--plan-prior", default=None,
+                        help="LEARNABILITY plan-prior parquet (ctx, token, game_freq) from "
+                             "plan_consistency_report.py --export-prefix: the reach-weighted "
+                             "%% of games in which each idea-token (piece destination / pawn "
+                             "break) is played, per opponent-first-move context. Enables the "
+                             "learnability TIEBREAK: among candidates within a δ window of "
+                             "the best selection key (all sound — gates already applied), "
+                             "pick the most habitual idea instead of the raw argmax. "
+                             "Requires --plan-reach. Off by default.")
+    parser.add_argument("--plan-reach", default=None,
+                        help="Companion reach parquet (position_hash, ctx, reach) from the "
+                             "same --export-prefix run: per-node dominant context + fraction "
+                             "of games reaching the node. Drives the δ scaling below.")
+    parser.add_argument("--learn-delta-main", type=float, default=0.005,
+                        help="δ window (selection-key units ≈ expected score) at COMMON "
+                             "nodes (reach >= --learn-reach-pivot): main lines stay sharp. "
+                             "Default 0.005.")
+    parser.add_argument("--learn-delta-rare", type=float, default=0.04,
+                        help="δ window at zero-reach (RARE / unreached) nodes: rare lines "
+                             "collapse onto habitual ideas — precision demand proportional "
+                             "to how often you face the line (the 'stop memorizing King's "
+                             "Gambit nuance' knob). Linear interpolation in reach between "
+                             "the two δs. 0 disables the tiebreak. Default 0.04.")
+    parser.add_argument("--learn-reach-pivot", type=float, default=0.02,
+                        help="Reach fraction at/above which a node counts as fully COMMON "
+                             "(δ = --learn-delta-main). Default 0.02 (2%% of games).")
+    parser.add_argument("--learn-ctx-pivot", type=float, default=0.05,
+                        help="Context share (fraction of all games under the opponent's "
+                             "first move) at/above which a context's OWN habits fully "
+                             "define 'habitual'. Rarer contexts shrink linearly toward "
+                             "the GLOBAL habits, so a 1%% sideline (1.b3) is steered to "
+                             "your normal development instead of self-reinforcing its "
+                             "pass-1 oddities. Default 0.05.")
+    parser.add_argument("--learn-depth-horizon", type=int, default=6,
+                        help="The loose δ applies only within the first N of OUR moves "
+                             "(min_our_depth from the reach parquet). Deeper nodes — and "
+                             "nodes absent from the pass-1 walk — always use "
+                             "--learn-delta-main: the offbeat-openings problem is shallow, "
+                             "while deep nodes carry most of the tree's mass and "
+                             "compounding concessions there is what costs effectiveness. "
+                             "Default 6.")
     parser.add_argument("--force-root-move", default=None,
                         help="Commit OUR first move at the start position to this SAN "
                              "(e.g. 'e4' or 'd4'), letting the rest of the tree (and crush) "
@@ -1253,6 +1430,8 @@ def main():
           f"{'  (gate disabled)' if args.robustness_floor >= 1.0 else ''}")
     if args.robustness_floor < 1.0:
         print(f"Robust eval wt:    {args.robust_eval_weight}")
+    print(f"Rel gate floor:    {args.gate_rel_floor}"
+          f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
     print(f"Crush weight:      {args.crush_weight}"
           f"{'  (crush DB: ' + str(args.crush_db) + ')' if args.crush_weight > 0 else ''}")
     if args.crush_weight > 0:
@@ -1260,6 +1439,37 @@ def main():
               + (f"  (γ={args.crush_gamma}, imm-window={args.crush_imm_window})"
                  if args.crush_mode == "relative-propagated" else f"  (horizon={args.crush_horizon})"))
         print(f"Crush prior:       {args.crush_prior}  (baseline={args.crush_baseline})")
+
+    # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
+    learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
+    if args.plan_prior or args.plan_reach:
+        if not (args.plan_prior and args.plan_reach):
+            sys.exit("FATAL: --plan-prior and --plan-reach must be given together "
+                     "(both come from plan_consistency_report.py --export-prefix).")
+        pp, pr = Path(args.plan_prior), Path(args.plan_reach)
+        for p in (pp, pr):
+            if not p.exists():
+                sys.exit(f"FATAL: missing plan file {p}")
+        prior_df = pl.read_parquet(pp)
+        if "ctx_share" not in prior_df.columns:
+            sys.exit(f"FATAL: {pp.name} lacks the ctx_share column — regenerate it with "
+                     "the current plan_consistency_report.py --export-prefix.")
+        learn_prior = {(c, t): f for c, t, f in
+                       zip(prior_df["ctx"], prior_df["token"], prior_df["game_freq"])}
+        learn_ctx_share = dict(zip(prior_df["ctx"], prior_df["ctx_share"]))
+        reach_df = pl.read_parquet(pr)
+        if "min_our_depth" not in reach_df.columns:
+            sys.exit(f"FATAL: {pr.name} lacks the min_our_depth column — regenerate it "
+                     "with the current plan_consistency_report.py --export-prefix.")
+        learn_ctx = dict(zip(reach_df["position_hash"], reach_df["ctx"]))
+        learn_reach = dict(zip(reach_df["position_hash"], reach_df["reach"]))
+        learn_depth = dict(zip(reach_df["position_hash"], reach_df["min_our_depth"]))
+        print(f"Plan prior:        {len(learn_prior):,} (ctx, idea) frequencies "
+              f"({len(learn_ctx_share):,} contexts) from {pp.name}; "
+              f"reach for {len(learn_reach):,} nodes from {pr.name}")
+        print(f"Learn δ:           main {args.learn_delta_main} / rare {args.learn_delta_rare} "
+              f"(reach pivot {args.learn_reach_pivot}, ctx pivot {args.learn_ctx_pivot}, "
+              f"depth horizon {args.learn_depth_horizon})")
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
@@ -1439,6 +1649,7 @@ def main():
             decisiveness_weight=args.decisiveness_weight,
             robustness_floor=args.robustness_floor,
             gate_metric=args.gate_metric,
+            gate_rel_floor=args.gate_rel_floor,
             robust_eval_weight=args.robust_eval_weight,
             crush_weight=args.crush_weight,
             crush_prior=args.crush_prior,
@@ -1457,6 +1668,16 @@ def main():
             augment_engine=args.augment_engine,
             full_eval_hashes=full_eval_hashes,
             full_eval_es=full_eval_es,
+            learn_prior=learn_prior,
+            learn_ctx=learn_ctx,
+            learn_reach=learn_reach,
+            learn_ctx_share=learn_ctx_share,
+            learn_depth=learn_depth,
+            learn_delta_main=args.learn_delta_main,
+            learn_delta_rare=args.learn_delta_rare,
+            learn_reach_pivot=args.learn_reach_pivot,
+            learn_ctx_pivot=args.learn_ctx_pivot,
+            learn_depth_horizon=args.learn_depth_horizon,
         )
         elapsed = time.time() - t1
 
