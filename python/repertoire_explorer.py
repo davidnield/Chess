@@ -296,6 +296,42 @@ class Explorer:
             by_key = sorted(moves, key=lambda m: (m["key"] is not None, m["key"]),
                             reverse=True)
             gold = next((m for m in moves if best is not None and m["san"] == best), None)
+            if gold is None and best is not None:
+                # ENGINE-AUGMENTED pick: best_move has no stats edge (it was never
+                # played from here — stage3's rescue admitted it via the eval DB at
+                # a forced-losing node). Without this synthesized row the gold badge
+                # silently fell on the top RECORDED candidate, displaying a gated
+                # (often losing) move as the recommendation.
+                try:
+                    child_board = board.copy()
+                    child_board.push_san(best)
+                    ch = zobrist_int64(child_board)
+                except Exception:
+                    ch = None
+                cri = sl["rep_index"].get(ch) if ch is not None else None
+
+                def _c(col, cri=cri):
+                    return (float(col[cri]) if (col is not None and cri is not None
+                            and col[cri] is not None) else None)
+
+                val = _c(rc_val); cr = _c(rc_crush)
+                worst, rob, ev = _c(rc_worst), _c(rc_rob), _c(rc_eval)
+                if val is None and out["metrics"]:
+                    # Terminal rescue: the child is off-book (no rep row), but the
+                    # NODE's own propagated metrics ARE the pick's values.
+                    mt = out["metrics"]
+                    val = mt.get("value"); worst = mt.get("value_worst")
+                    rob = mt.get("value_robust")
+                gold = {
+                    "san": best, "total": 0, "share": 0.0, "white_score": None,
+                    "value": val, "value_worst": worst,
+                    "value_robust": rob, "eval_score": ev,
+                    "crush_potential": cr, "memo_cost": _c(rc_memo),
+                    "key": (sign * val + cw * cr) if (val is not None and cr is not None)
+                           else (sign * val if val is not None else None),
+                    "in_book": (ch in sl["pos_set"]) if ch is not None else None,
+                    "is_recommended": True, "augmented": True, "rank": None,
+                }
             ordered = ([gold] if gold is not None else []) + [m for m in by_key if m is not gold]
             for rank, m in enumerate(ordered[:3], 1):
                 m["rank"] = rank
@@ -349,6 +385,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
            font-size: 0.78rem; background: #d7e9d9; color: #246b33; }
   .badge.off { background: #eee; color: #999; }
   .badge.rec { background: #c6e0c9; color: #1f5e2c; }
+  .badge.aug { background: #e1d5f5; color: #5e35b1; }
   td.medal { text-align: center; font-size: 1.05rem; padding: 0.2rem 0.3rem; }
   tr.gold   td { background: #fcf2c0; }
   tr.silver td { background: #e8ebee; }
@@ -505,12 +542,13 @@ function renderOurTurn(data) {
     let bk = m.in_book === true ? `<span class="badge">in book</span>`
            : m.in_book === false ? `<span class="badge off">off</span>` : "";
     const rec = m.is_recommended ? ` <span class="badge rec">rec</span>` : "";
+    const eng = m.augmented ? ` <span class="badge aug">engine</span>` : "";
     return `<tr class="clickable ${cls(m.rank)}" data-san="${m.san}">
       <td class="medal">${medal(m.rank)}</td>
-      <td class="move">${m.san}${rec}</td>
+      <td class="move">${m.san}${rec}${eng}</td>
       <td class="num">${m.total.toLocaleString()}</td>
       <td class="num">${(m.share * 100).toFixed(1)}%</td>
-      <td class="num">${m.white_score.toFixed(3)}</td>
+      <td class="num">${fx(m.white_score)}</td>
       <td class="num">${fx(m.value)}</td>
       <td class="num">${fx(m.value_worst)}</td>
       <td class="num">${fx(m.value_robust)}</td>
