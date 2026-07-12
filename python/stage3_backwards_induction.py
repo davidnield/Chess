@@ -392,6 +392,8 @@ def run_backwards_induction(
     robustness_floor: float = 1.0,
     gate_metric:      str = "worst",
     gate_rel_floor:   float = 1.0,
+    gate_rel_baseline: str = "candidates",
+    gate_rel_own_margin: float = 0.02,
     robust_eval_weight: float = 1.0,
     crush_weight:     float = 0.0,
     crush_prior:      float = 200.0,
@@ -588,6 +590,8 @@ def run_backwards_induction(
     _aug_cache: dict[int, list[dict]] = {}
     rel_gated_nodes: set[int] = set()   # our-turn nodes where the relative gate pruned >=1 move
                                         # (a set, not a counter: cycle fixpoint sweeps revisit nodes)
+    _rel_own_eval = gate_rel_baseline == "own-eval"
+    rel_own_nodes: set[int] = set()     # nodes where the OWN-EVAL raise was part of the cut
     _learn = learn_prior is not None and learn_delta_rare > 0.0
     learn_override_nodes: set[int] = set()  # nodes where the plan-prior tiebreak changed the pick
     clamp_nodes: set[int] = set()           # opponent nodes the eval clamp actually capped
@@ -735,17 +739,39 @@ def run_backwards_induction(
             return rv >= slice_prior - robustness_floor
         return rv <= slice_prior + robustness_floor
 
-    def apply_rel_gate(ph, cands_list):
+    def apply_rel_gate(ph, cands_list, own_eval=True):
         """RELATIVE refutation gate: drop candidates conceding more than
-        gate_rel_floor (expected-score units) vs the BEST candidate's gate value.
+        gate_rel_floor (expected-score units) vs the baseline gate value.
         Catches advantage-squandering moves the absolute gate can't — moves that
         stay above the absolute bar but give back a won position because opponents
         usually misplay them (e.g. 8...Nd4 in the Bxf7+ Italian: empirically great,
-        but concedes −2.1 → +0.1 vs best play while 8...Qd7 keeps it all). The best
-        candidate always survives, so a non-empty list never empties. Moves without
-        a genuine eval (gate_metric='eval', uncovered child) are EXEMPT — their rv
-        is a propagated empirical value, not comparable to sibling engine evals."""
-        if gate_rel_floor >= 1.0 or len(cands_list) < 2:
+        but concedes −2.1 → +0.1 vs best play while 8...Qd7 keeps it all).
+
+        Baseline (gate_rel_baseline):
+          "candidates" — the best candidate in the list. It always survives, so a
+              non-empty list never empties.
+          "own-eval"  — additionally raised to the NODE'S OWN engine eval minus
+              gate_rel_own_margin (with us to move, the node eval IS the engine's
+              best-legal-move assessment — a 0-ply full-legal-move baseline). This
+              CAN empty the list when every recorded move concedes vs an unplayed
+              engine move; the emptied set then flows into the engine-augmentation
+              rescue at the call site. The margin absorbs parent/child eval-depth
+              inconsistency in the DB. Not applied to the rescue set itself
+              (own_eval=False there): rescues realize the legal-move baseline
+              directly, and gating them against an inconsistent parent eval could
+              only push selection back to a worse recorded move.
+
+        Moves without a genuine eval (gate_metric='eval', uncovered child) are
+        EXEMPT — their rv is a propagated empirical value, not comparable."""
+        if gate_rel_floor >= 1.0 or not cands_list:
+            return cands_list
+        base_rv = None
+        if own_eval and _rel_own_eval and eval_lookup:
+            e = eval_lookup.get(ph)
+            if e is not None:
+                base_rv = (e - gate_rel_own_margin if our_color == chess.WHITE
+                           else e + gate_rel_own_margin)
+        if base_rv is None and len(cands_list) < 2:
             return cands_list
         rvs = [(gate_rv(mv), gate_metric != "eval" or mv["covered"])
                for mv in cands_list]
@@ -754,14 +780,20 @@ def run_backwards_induction(
             return cands_list
         if our_color == chess.WHITE:
             best = max(elig)
+            raised = base_rv is not None and base_rv > best
+            best = max(best, base_rv) if base_rv is not None else best
             kept = [mv for mv, (rv, ok) in zip(cands_list, rvs)
                     if not ok or rv >= best - gate_rel_floor]
         else:
             best = min(elig)
+            raised = base_rv is not None and base_rv < best
+            best = min(best, base_rv) if base_rv is not None else best
             kept = [mv for mv, (rv, ok) in zip(cands_list, rvs)
                     if not ok or rv <= best + gate_rel_floor]
         if len(kept) < len(cands_list):
             rel_gated_nodes.add(ph)
+            if raised:
+                rel_own_nodes.add(ph)   # the own-eval raise was (part of) the cut
         return kept
 
     def crush_term(mv):
@@ -841,8 +873,9 @@ def run_backwards_induction(
             aug = augmented_candidates(ph)
             if aug:
                 # prefer gate-passing engine moves over gate-failing base; the
-                # relative gate applies among the rescues too
-                gated = apply_rel_gate(ph, aug)
+                # relative gate applies among the rescues too (sibling baseline
+                # only — see apply_rel_gate's own-eval note)
+                gated = apply_rel_gate(ph, aug, own_eval=False)
         cands = gated or base
         # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
         # move (shrunk deviation vs the natural move) + the reach-weighted downstream
@@ -1129,6 +1162,9 @@ def run_backwards_induction(
     if gate_rel_floor < 1.0:
         print(f"  relative gate (floor {gate_rel_floor}) pruned moves at "
               f"{len(rel_gated_nodes):,} nodes", flush=True)
+        if _rel_own_eval:
+            print(f"  own-eval baseline (margin {gate_rel_own_margin}) raised the "
+                  f"cut at {len(rel_own_nodes):,} of them", flush=True)
     if _learn:
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
@@ -1289,6 +1325,23 @@ def main():
                              "keeps it). Baseline = best recorded candidate (or best engine "
                              "rescue when augmentation fires); moves without eval coverage "
                              "are exempt. DEFAULT ON at 0.1; >= 1.0 disables.")
+    parser.add_argument("--gate-rel-baseline", choices=["candidates", "own-eval"],
+                        default="candidates",
+                        help="What the relative gate measures concession AGAINST. "
+                             "'candidates' (default): the best candidate in the set — can "
+                             "never empty it. 'own-eval': additionally raised to the node's "
+                             "OWN engine eval minus --gate-rel-own-margin — with us to move "
+                             "that eval already prices the best LEGAL move, so a sole "
+                             "recorded move conceding vs an unplayed engine move gets gated "
+                             "and the engine-augmentation rescue supplies the improvement "
+                             "(fixes e.g. keeping a mediocre recorded move while Stockfish's "
+                             "choice was simply never played). Needs --augment-engine to "
+                             "realize the rescue.")
+    parser.add_argument("--gate-rel-own-margin", type=float, default=0.02,
+                        help="Slack subtracted from the node's own eval before it raises "
+                             "the relative-gate baseline (own-eval mode only). Absorbs "
+                             "parent/child eval-depth inconsistency in the eval DB. "
+                             "Default 0.02.")
     parser.add_argument("--robust-eval-weight", type=float, default=1.0,
                         help="Eval weight used ONLY for the robust (critical-line) value "
                              "that drives the refutation gate. Decoupled from --eval-weight "
@@ -1489,6 +1542,8 @@ def main():
         print(f"Robust eval wt:    {args.robust_eval_weight}")
     print(f"Rel gate floor:    {args.gate_rel_floor}"
           f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
+    if args.gate_rel_floor < 1.0 and args.gate_rel_baseline == "own-eval":
+        print(f"Rel gate baseline: own-eval (margin {args.gate_rel_own_margin})")
     if args.opp_eval_clamp is not None:
         print(f"Opp eval clamp:    {args.opp_eval_clamp}")
     print(f"Crush weight:      {args.crush_weight}"
@@ -1709,6 +1764,8 @@ def main():
             robustness_floor=args.robustness_floor,
             gate_metric=args.gate_metric,
             gate_rel_floor=args.gate_rel_floor,
+            gate_rel_baseline=args.gate_rel_baseline,
+            gate_rel_own_margin=args.gate_rel_own_margin,
             robust_eval_weight=args.robust_eval_weight,
             crush_weight=args.crush_weight,
             crush_prior=args.crush_prior,
