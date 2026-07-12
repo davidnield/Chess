@@ -438,12 +438,13 @@ def run_backwards_induction(
         leaf_value = (1 - ew) * empirical + ew * stockfish
 
     The blending weight `ew` is either a fixed scalar (eval_weight) or varies
-    dynamically by position sample size when eval_weight_k > 0:
+    dynamically by leaf sample size when eval_weight_k > 0:
 
         ew = eval_weight_min + (eval_weight - eval_weight_min) * k / (k + n)
 
-    This trusts Stockfish more at sparse positions and the empirical data
-    more at well-sampled positions, with a floor at eval_weight_min.
+    with n = games on the leaf edge (the sample size behind the empirical
+    estimate). This trusts Stockfish more at sparse leaves and the empirical
+    data more at well-sampled ones, with a floor at eval_weight_min.
 
     **Dual value.** Two values propagate per position:
       - value (mean): expected white_score vs the AVERAGE opponent (empirical
@@ -653,9 +654,13 @@ def run_backwards_induction(
             if ch in values:
                 child_val = values[ch]
             elif eval_weight > 0 and covered:
-                n_child = sum(m2["total"] for m2 in children.get(ch, []))
+                # Sample size of the empirical estimate = games on THIS edge
+                # (what smoothed_score saw). The old sum over children.get(ch)
+                # was always 0 here — this branch only fires for out-of-DAG
+                # leaves, which by definition have no outgoing edges — so
+                # dynamic mode silently degenerated to the fixed max weight.
                 ew = effective_eval_weight(eval_weight, eval_weight_min,
-                                           eval_weight_k, n_child)
+                                           eval_weight_k, m["total"])
                 child_val = (1.0 - ew) * emp + ew * eval_lookup[ch]
             else:
                 child_val = emp

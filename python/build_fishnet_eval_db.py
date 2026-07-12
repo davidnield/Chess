@@ -25,6 +25,12 @@ the era tier — replication across independent fishnet runs is the robustness m
 (contrast build_lichess_eval_db.py's deepest-best-PV, correct there because cloud rows
 are different PVs, not repeated measurements).
 
+Union policy (amended 2026-07-12): cloud-preferred, EXCEPT where the fishnet median is
+saturated at +-EVAL_CAP with n >= 5 and the cloud value has the opposite sign — those
+cloud rows are mate-blind prefer-cp artifacts (the cloud aggregation kept the best
+non-mating PV's cp when the principal line was a mate), concentrated on exactly the
+trap positions a sharp repertoire cares about (source='fishnet-decisive').
+
 Era tiers: NNUE = 2021-01+ (fishnet 2.0 switched to SF12 NNUE on 2020-12-17; the mixed
 2020_12 file is conservatively classical). A position uses the NNUE median when it has
 any NNUE rows; otherwise falls back to the classical median, flagged via `era`.
@@ -341,8 +347,22 @@ def build_unified(threads: int, mem: str) -> None:
     try:
         con.execute(f"""
             COPY (
-                SELECT c.position_hash, c.eval_cp,
-                       'cloud' AS source, f.n AS fishnet_n, f.era AS fishnet_era
+                -- Cloud-preferred, EXCEPT where the fishnet median is decisive
+                -- (saturated at +-EVAL_CAP, i.e. mate/decisive) with >=5 replicates
+                -- and the cloud eval sits on the OTHER side of 0. The cloud
+                -- aggregation is mate-blind (prefer-cp keeps the runner-up PV's cp
+                -- when the principal line is a mate row), which scored e.g. the
+                -- Scholar's-mate-in-1 position at -128 and a mate-in-1-against at
+                -- +143 — exactly the positions the Stage-3 refutation gate exists
+                -- for. 1,177 in-DAG sign-flips measured 2026-07-12.
+                SELECT c.position_hash,
+                       CASE WHEN abs(f.eval_cp) = {EVAL_CAP} AND f.n >= 5
+                                 AND sign(f.eval_cp) != sign(c.eval_cp)
+                            THEN f.eval_cp ELSE c.eval_cp END AS eval_cp,
+                       CASE WHEN abs(f.eval_cp) = {EVAL_CAP} AND f.n >= 5
+                                 AND sign(f.eval_cp) != sign(c.eval_cp)
+                            THEN 'fishnet-decisive' ELSE 'cloud' END AS source,
+                       f.n AS fishnet_n, f.era AS fishnet_era
                 FROM read_parquet('{_sql_path(CLOUD_DB)}') c
                 LEFT JOIN read_parquet('{_sql_path(OUT_AGG)}') f USING (position_hash)
                 UNION ALL

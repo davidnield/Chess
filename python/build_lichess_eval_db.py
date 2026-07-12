@@ -12,9 +12,11 @@ This script:
   1. Downloads the parquet shards (skipping already-downloaded files).
   2. Aggregates the multiPV rows to one eval per FEN (DuckDB) with Lichess's
      recommended logic: the PRINCIPAL PV at the HIGHEST depth — i.e. among the
-     deepest cp rows, the best cp for the side to move (max if White to move, min
-     if Black). prefer-cp (mate-only FENs fall back to the net mate-vote sign);
-     cap +-EVAL_CAP; carry n_rows. (A median over all PVs was wrong: it blended
+     deepest rows, the best line for the side to move (max if White to move, min
+     if Black), with MATE PVs ranked above/below every cp so a position whose
+     best line is a forced mate scores +-EVAL_CAP, not the runner-up PV's cp
+     (the old prefer-cp logic was mate-blind — see aggregate_evals). Cap
+     +-EVAL_CAP; carry n_rows. (A median over all PVs was wrong: it blended
      the best move with the engine's inferior lines.)
   3. Converts each FEN to a Polyglot Zobrist position_hash (signed Int64), then
      collapses FENs that share a hash (encoding variants + the odd troll FEN that
@@ -178,7 +180,23 @@ def aggregate_fens_duckdb(shard_paths: list[Path], out_parquet: Path,
         COPY (
             WITH src AS (
                 SELECT fen, depth, cp, mate,
-                       (split_part(fen, ' ', 2) = 'w') AS wtm
+                       (split_part(fen, ' ', 2) = 'w') AS wtm,
+                       -- Order key making mate PVs comparable with cp PVs (white
+                       -- POV): a mate FOR white outranks any cp (shorter mates
+                       -- higher), a mate AGAINST white underranks any cp. The old
+                       -- prefer-cp logic ('cp rows decide whenever any exist')
+                       -- kept the best NON-mating PV's cp at positions whose
+                       -- principal line is a mate — e.g. the Scholar's-mate-in-1
+                       -- node scored -128, a mate-in-1-against scored +143 —
+                       -- systematically defeating Stage 3's refutation gate at
+                       -- exactly the mate-adjacent trap positions it exists for
+                       -- (1,177 in-DAG sign-flips vs the fishnet median, found
+                       -- 2026-07-12). mate=0 = side to move already mated.
+                       CASE WHEN mate > 0 THEN  1000000 - mate
+                            WHEN mate < 0 THEN -1000000 - mate
+                            WHEN mate = 0 THEN CASE WHEN (split_part(fen, ' ', 2) = 'w')
+                                                    THEN -1000000 ELSE 1000000 END
+                            ELSE cp END AS ord
                 FROM read_parquet({files})
             ),
             per AS (
@@ -186,25 +204,25 @@ def aggregate_fens_duckdb(shard_paths: list[Path], out_parquet: Path,
                        COUNT(*)                          AS n_rows,
                        COUNT(cp)                         AS n_cp,
                        any_value(wtm)                    AS wtm,
-                       MAX(depth) FILTER (WHERE cp IS NOT NULL) AS md,
+                       MAX(depth) FILTER (WHERE ord IS NOT NULL) AS md,
                        {mate_vote}                       AS mate_net
                 FROM src GROUP BY fen
             ),
-            -- principal PV at the deepest analysis: best cp for the side to move
-            -- among rows at that FEN's max cp-depth.
+            -- principal PV at the deepest analysis: best line for the side to
+            -- move among rows at that FEN's max depth, mates included.
             best AS (
                 SELECT s.fen,
-                       MAX(s.cp) AS max_cp, MIN(s.cp) AS min_cp
+                       MAX(s.ord) AS max_o, MIN(s.ord) AS min_o
                 FROM src s JOIN per p
-                  ON s.fen = p.fen AND s.depth = p.md AND s.cp IS NOT NULL
+                  ON s.fen = p.fen AND s.depth = p.md AND s.ord IS NOT NULL
                 GROUP BY s.fen
             )
             SELECT
                 p.fen,
                 CAST(
                   CASE
-                    WHEN p.n_cp > 0 THEN GREATEST(-{EVAL_CAP}, LEAST({EVAL_CAP},
-                         CASE WHEN p.wtm THEN b.max_cp ELSE b.min_cp END))
+                    WHEN b.fen IS NOT NULL THEN GREATEST(-{EVAL_CAP}, LEAST({EVAL_CAP},
+                         CASE WHEN p.wtm THEN b.max_o ELSE b.min_o END))
                     WHEN p.mate_net > 0 THEN  {EVAL_CAP}
                     WHEN p.mate_net < 0 THEN -{EVAL_CAP}
                     ELSE 0
