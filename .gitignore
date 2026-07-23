@@ -18,3 +18,5 @@ python/notify_config.json
 python/notify_config.local.json
 .env
 .env.local
+# Opening-training app user data (FSRS history, imported games, training pack)
+trainer_data/

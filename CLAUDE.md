@@ -22,7 +22,7 @@ trap lines.
 | Path | Role |
 |------|------|
 | `D:/data/chess/standard-chess-games-compressed/year=Y/month=M/event=E/` | **Canonical source.** Hive-partitioned parquets (2013–present). Every extraction starts here. |
-| `F:/chess/standard-chess-games/data/` | Pre-compression archive only — **never a pipeline input.** F: is a USB spinning disk — never point DuckDB spill/temp at it either. |
+| `F:/chess/standard-chess-games/data/` | Pre-compression archive only — **never a pipeline input.** F: is a USB spinning disk — never point DuckDB spill/temp at it either. Also the **only** copy retaining `[%clk]`/`[%eval]` movetext comments (recipe v3 strips them from `D:` at ingest). |
 | `E:/chess/position-moves-*` | Legacy Stage-1 edge extracts (2024/2025 only). The `-all` dirs are NTFS-hardlinked unions of the per-month dirs — same physical bytes, so deleting per-month dirs frees nothing; space is only freed when the `-all` links go too. |
 | `E:/chess/crush-per-game-v2/` | Per-game decisive-result facts (`extract_crush_per_game.py`): win flags, termination, move_count. Input to crush histogram builders. |
 | `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts) and `crush_hist_*.parquet` (crush histograms). `_pooled_partials_*/` are resumable working dirs for in-flight pooled builds. |
@@ -126,9 +126,12 @@ with its exact CLI — read it before running; don't trust remembered flags.
 .venv\Scripts\python.exe python\repertoire_explorer.py
 ```
 
-There is no formal test suite, lint config, or build step. Validation is via direct script runs on
-small slices and inspection of output parquets. Emerging convention: synthetic tests import the
-production query/logic rather than copying it (`_test_winpos.py` is the template).
+There is no lint config or build step, and validation still leans on direct script runs on small
+slices plus inspection of output parquets. But there is now a lightweight test suite: every
+`python/_test_*.py` is a standalone pass/fail script (exit 0/1), and `python/run_tests.py`
+subprocess-runs all of them with a summary — `.venv/Scripts/python.exe python/run_tests.py` is the
+one-command "did I break anything" check. Convention: synthetic tests import the production
+query/logic rather than copying it (`_test_winpos.py` is the template).
 
 ## Resumability conventions
 
@@ -192,10 +195,24 @@ cheap. Windows Task Scheduler has been unreliable for this; don't build on it.
 
 ## Compression and storage standards
 
-New month ingestion (2025-05+, 2026+) uses `python/process_pgn_parquets.py`: zstd level 6
-(benchmarked knee in `benchmark_zstd_levels.py`) and 1M-row row groups (~0% metadata overhead,
-~50× faster reads than the archived R script's tiny groups). Schema is a drop-in match for the
-existing `D:` partitions. The original R script lives in `archive/` — don't use it.
+New month ingestion (2025-05+, 2026+) uses `python/process_pgn_parquets.py` with **recipe v3**
+(locked by the `parquet_recipe_202607` benchmark; see
+`E:/bench/parquet_recipe_202607/fullmonth_results.csv`): **zstd-19**, **1M-row row groups**, and
+**M1 movetext comment-stripping**. Two earlier claims here were wrong and are corrected: the level
+was zstd-6, not the tuned optimum, and the "1M-row groups" were aspirational — the old
+`write_dataset` streaming path emitted ~one group per tiny scan batch (~300 rows/group,
+4,776 groups/file). The row-group size is now **actually enforced** by a per-event buffered
+`pq.write_table(row_group_size=1M)` (raises peak RAM — keep `--workers` low for big recent months).
+The elo-sort tested in the benchmark was **not** adopted: the one heavy consumer
+(`build_pooled_stats` extract) is replay-bound, so row-group pruning bought nothing (−4.8%).
+
+**Movetext invariant (LOSSY):** canonical `D:` movetext is **comment-stripped** — `[%clk]`/`[%eval]`
+brace annotations are removed at ingest. The comments survive **only** in the `F:` raw archive.
+This changes no downstream aggregate: the strip removes exactly what `iter_san_moves` discards at
+parse time, and `has_eval` is computed on the original movetext *before* stripping (verified:
+176k comment-era games, identical extracted moves stripped vs raw). Every non-movetext column is
+byte-identical to the R schema, so output stays a drop-in match for the existing `D:` partitions.
+The original R script lives in `archive/` — don't use it.
 
 ## Notifications
 
