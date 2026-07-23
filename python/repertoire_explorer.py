@@ -39,24 +39,19 @@ from urllib.parse import parse_qs, urlparse
 
 import chess
 import chess.polyglot
+import numpy as np
 import polars as pl
+
+from zobrist import zobrist_int64
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-INT64_MAX = 2**63 - 1
-INT64_RANGE = 2**64
-
 # Per-move metric columns we surface if present in the repertoire parquet.
 METRIC_COLS = ["value", "value_worst", "value_robust", "crush_rate", "crush_potential",
                "memo_cost", "cover_eff", "decisiveness", "opponent_error", "forcingness",
                "eval_score"]
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(board)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 def _meta_crush_weight(rep_path) -> float | None:
@@ -76,12 +71,26 @@ def _meta_crush_weight(rep_path) -> float | None:
 # ── Data layer ────────────────────────────────────────────────────────────
 
 class Explorer:
-    def __init__(self, rep_specs, stats_path, cache_slices=6, crush_weight=25.0):
+    def __init__(self, rep_specs, stats_path, cache_slices=6, crush_weight=25.0,
+                 crush_totals=None):
         # rep_specs: list of (label, perspective, path). label is the dropdown entry.
         # crush_weight: the Stage-3 crush selection weight, used to reconstruct the
         # selection key (sign*value + crush_weight*crush_potential) for ranking the
         # alternative moves at our turn (gold/silver/bronze).
+        # crush_totals: optional per-edge winpos totals parquet (parent_hash, move_san,
+        # n, {white,black}_we[5]) — the UNSHRUNK win-event rate + sample size, shown
+        # next to the prior-shrunk crush so thin-line shrinkage is visible at a glance.
         self.crush_weight = crush_weight
+        self._ct = None
+        if crush_totals and Path(crush_totals).exists():
+            ct = pl.read_parquet(crush_totals).sort("parent_hash")
+            self._ct_ph = ct["parent_hash"].to_numpy()
+            self._ct_san = ct["move_san"].to_list()
+            self._ct = {c: ct[c].to_numpy()
+                        for c in ("n", "white_we", "white_we5", "black_we", "black_we5")}
+            print(f"Loaded crush edge totals: {ct.height:,} edges from {Path(crush_totals).name}")
+        elif crush_totals:
+            print(f"NOTE: crush totals not found ({crush_totals}) — raw-crush column off.")
         self.reps: dict[str, pl.DataFrame] = {}
         self.persp: dict[str, str] = {}
         self.labels: list[str] = []
@@ -177,6 +186,23 @@ class Explorer:
             self._cache.popitem(last=False)
         return entry
 
+    def _raw_crush(self, ph: int, san: str, persp: str, ev: str, eb: int) -> dict | None:
+        """Unshrunk winpos win-event rate + histogram n for edge (ph, san), from the
+        offline per-edge totals. Pooled-slice only (the totals were aggregated there)."""
+        if self._ct is None or ev != "Pooled" or eb != 0:
+            return None
+        lo = int(np.searchsorted(self._ct_ph, ph, "left"))
+        hi = int(np.searchsorted(self._ct_ph, ph, "right"))
+        side = "white" if persp == "white" else "black"
+        for i in range(lo, hi):
+            if self._ct_san[i] == san:
+                n = int(self._ct["n"][i])
+                if n == 0:
+                    return None
+                return {"n": n, "raw": int(self._ct[f"{side}_we"][i]) / n,
+                        "raw5": int(self._ct[f"{side}_we5"][i]) / n}
+        return None
+
     def list_slices(self) -> dict:
         return {
             "reps": [{"label": lb, "perspective": self.persp[lb]} for lb in self.labels],
@@ -243,6 +269,7 @@ class Explorer:
                     # surfaces which opponent replies are mistakes and how crushable.
                     "eval_score": _child(rc_eval),
                     "crush_potential": _child(rc_crush),
+                    "crush_raw": self._raw_crush(ph, sc["move_san"][i], persp, ev, eb),
                     "in_book": (child in sl["pos_set"]) if child is not None else None,
                 })
 
@@ -287,6 +314,7 @@ class Explorer:
                     "white_score": float(sc["white_score_avg"][i]),
                     "value": val, "value_worst": worst, "value_robust": rob,
                     "eval_score": ev, "crush_potential": cr, "memo_cost": mc,
+                    "crush_raw": self._raw_crush(ph, sc["move_san"][i], persp, ev, eb),
                     "key": key,
                     "in_book": (child in sl["pos_set"]) if child is not None else None,
                     "is_recommended": (sc["move_san"][i] == best),
@@ -327,6 +355,7 @@ class Explorer:
                     "value": val, "value_worst": worst,
                     "value_robust": rob, "eval_score": ev,
                     "crush_potential": cr, "memo_cost": _c(rc_memo),
+                    "crush_raw": None,   # unplayed engine move: no histogram edge
                     "key": (sign * val + cw * cr) if (val is not None and cr is not None)
                            else (sign * val if val is not None else None),
                     "in_book": (ch in sl["pos_set"]) if ch is not None else None,
@@ -411,6 +440,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   <span class="small" id="slice-info"></span>
   <button id="reset-btn">Reset</button>
   <button id="back-btn">Take back</button>
+  <button id="lichess-btn" title="Open the current line on the Lichess analysis board (new tab)">Lichess ↗</button>
   <label><input type="checkbox" id="autoplay" checked> Auto-play our move</label>
   <label><input type="checkbox" id="flip"> Flip</label>
 </div>
@@ -432,6 +462,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <script>
 const SOURCE = "__SOURCE__";
 const CRUSH_W = __CRUSH_W__;   // Stage-3 crush selection weight (for the key column)
+// "raw · n" cell: unshrunk win-event rate + histogram sample size for an edge.
+const fmtN = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"k" : String(n);
+const crushRawCell = cr => (cr === null || cr === undefined)
+  ? "&mdash;" : `${(cr.raw*100).toFixed(0)}% &middot; ${fmtN(cr.n)}`;
 document.getElementById("source").textContent = SOURCE;
 
 const METRIC_LABELS = {
@@ -461,14 +495,25 @@ function updateBoard() {
   document.getElementById("pgn").innerHTML = renderPgn();
   fetchPosition();
 }
-function renderPgn() {
-  if (moveStack.length === 0) return "&nbsp;";
+function pgnText() {
   let out = [];
   for (let i = 0; i < moveStack.length; i++) {
     if (i % 2 === 0) out.push(`${(i / 2) + 1}.`);
     out.push(moveStack[i]);
   }
   return out.join(" ");
+}
+function renderPgn() {
+  return moveStack.length === 0 ? "&nbsp;" : pgnText();
+}
+function openLichess() {
+  // Analysis board seeded with the WHOLE line (not just the position), so you can
+  // step back through the book moves and keep analyzing past where the book ends.
+  const color = currentPersp === "black" ? "black" : "white";
+  const url = moveStack.length === 0
+    ? `https://lichess.org/analysis?color=${color}`
+    : `https://lichess.org/analysis/pgn/${encodeURIComponent(pgnText())}?color=${color}`;
+  window.open(url, "_blank", "noopener");
 }
 function tryMove(san) {
   const m = game.move(san, { sloppy: true });
@@ -539,6 +584,7 @@ function renderOurTurn(data) {
   const cls   = r => r === 1 ? "gold" : r === 2 ? "silver" : r === 3 ? "bronze" : "";
   const fx = v => (v === null || v === undefined) ? "&mdash;" : Number(v).toFixed(3);
   const rows = data.our_moves.map(m => {
+    const raw = crushRawCell(m.crush_raw);
     let bk = m.in_book === true ? `<span class="badge">in book</span>`
            : m.in_book === false ? `<span class="badge off">off</span>` : "";
     const rec = m.is_recommended ? ` <span class="badge rec">rec</span>` : "";
@@ -554,6 +600,7 @@ function renderOurTurn(data) {
       <td class="num">${fx(m.value_robust)}</td>
       <td class="num">${fx(m.eval_score)}</td>
       <td class="num">${fx(m.crush_potential)}</td>
+      <td class="num">${raw}</td>
       <td class="num">${fx(m.memo_cost)}</td>
       <td class="num">${fx(m.key)}</td>
       <td>${bk}</td></tr>`;
@@ -573,10 +620,13 @@ function renderOurTurn(data) {
       = engine white-score of the position the move reaches &middot; <b>crush</b> = propagated
       crush potential &middot; <b>memo</b> = propagated memorization cost of the subtree this
       move enters (lower = cheaper to maintain) &middot;
-      <b>key</b> = selection score (sign&middot;rep value + ${CRUSH_W}&middot;crush; higher = preferred)</div>
+      <b>key</b> = selection score (sign&middot;rep value + ${CRUSH_W}&middot;crush; higher = preferred)
+      &middot; <b>raw &middot; n</b> = UNSHRUNK win-event rate of this edge (winpos histogram) and its
+      sample size — the crush column is this shrunk toward 0 by a 5,000-game prior
+      (&asymp; raw&times;n/(n+5000)), so thin already-won lines show low crush despite raw &asymp; 100%</div>
     <table><thead><tr><th></th><th>move</th><th class="num">games</th><th class="num">share</th>
       <th class="num">emp score</th><th class="num">rep value</th><th class="num">vs def</th><th class="num">gate</th><th class="num">eng eval</th>
-      <th class="num">crush</th><th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
+      <th class="num">crush</th><th class="num">raw &middot; n</th><th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
     ${playBtn}
   </div>`;
@@ -598,6 +648,7 @@ function renderOpponentTurn(data) {
       <td class="num">${fx(m.rep_value)}</td>
       <td class="num">${fx(m.eval_score)}</td>
       <td class="num">${fx(m.crush_potential)}</td>
+      <td class="num">${crushRawCell(m.crush_raw)}</td>
       <td>${bk}</td></tr>`;
   }).join("");
   return `<div class="info-box opp">
@@ -607,10 +658,11 @@ function renderOpponentTurn(data) {
       propagated expected white-score if we then follow the book &middot;
       <b>eng eval</b> = engine expected white-score of the position this reply reaches
       (lower = bigger White mistake) &middot; <b>crush</b> = propagated crush potential
-      of punishing it</div>
+      of punishing it &middot; <b>raw &middot; n</b> = unshrunk win-event rate of this reply's
+      edge and its histogram sample size (crush = this shrunk by the 5,000-game prior)</div>
     <table><thead><tr><th>move</th><th class="num">games</th><th class="num">share</th>
       <th class="num">emp score</th><th class="num">rep value</th>
-      <th class="num">eng eval</th><th class="num">crush</th><th></th></tr></thead>
+      <th class="num">eng eval</th><th class="num">crush</th><th class="num">raw &middot; n</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
   </div>`;
 }
@@ -674,6 +726,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.getElementById("reset-btn").addEventListener("click", reset);
   document.getElementById("back-btn").addEventListener("click", takeBack);
+  document.getElementById("lichess-btn").addEventListener("click", openLichess);
   document.getElementById("rep-select").addEventListener("change", applySlice);
   document.getElementById("event-select").addEventListener("change", updateEloOptions);
   document.getElementById("elo-select").addEventListener("change", applySlice);
@@ -762,6 +815,11 @@ def main():
                          "selection-key column / gold-silver-bronze ranking at our turn. "
                          "Default: read from the rep's .parquet.meta.json provenance sidecar "
                          "(written by build_sharp_reps.py); falls back to 25 if absent.")
+    ap.add_argument("--crush-totals",
+                    default="E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2019_2025_brc.parquet",
+                    help="Per-edge winpos totals parquet (parent_hash, move_san, n, "
+                         "{white,black}_we[5]) for the raw-crush column. Built by collapsing "
+                         "the winpos histogram (Pooled slice). Missing file = column off.")
     args = ap.parse_args()
 
     specs = []  # (label, perspective, path)
@@ -795,7 +853,8 @@ def main():
             print(f"Crush weight {crush_weight:g} (from {Path(specs[0][2]).name}.meta.json)",
                   flush=True)
 
-    explorer = Explorer(specs, args.stats, crush_weight=crush_weight)
+    explorer = Explorer(specs, args.stats, crush_weight=crush_weight,
+                        crush_totals=args.crush_totals)
 
     # Pre-warm each rep's per-slice view. The first access to a slice materialises
     # ~millions of rows into Python dicts (>10 s for the large pooled reps); doing it

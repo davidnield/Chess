@@ -2,16 +2,27 @@
 build over the winpos-crush + relative-eval-gate recipe (2026-07).
 
 Recipe (single pooled slice, event='Pooled', elo_band=0):
-  - eval-only objective:   --eval-weight 1.0 --require-eval   (pure engine eval at leaves;
-                           the line truncates where the eval DB's coverage ends)
+  - eval/empirical blend:  --eval-weight 0.5 --require-eval   (leaf value blends engine eval
+                           with the Beta-Binomial-shrunk empirical score; swept 2026-07 —
+                           0.5 Pareto-dominated 1.0/0.75/0.25 and a dynamic n-weighted
+                           variant on empirical pick quality, eval steering, AND ply-16
+                           coverage simultaneously, both colors. The line still truncates
+                           where the eval DB's coverage ends)
   - refutation gate:       --robustness-floor 0.1 --gate-metric eval   (gate on the engine
                            eval of the reached position)
-  - relative gate:         --gate-rel-floor 0.1   (also reject a candidate that concedes
-                           > 0.1 expected-score vs the BEST recorded/augmented candidate at
-                           the node, even if it clears the absolute floor — stops booking
-                           moves that squander an advantage because opponents usually
-                           misplay them, e.g. 8...Nd4 giving back -2.1 -> +0.1 in the
-                           Bxf7+ Italian trap line)
+  - relative gate:         --gate-rel-floor 0.1 --gate-rel-baseline own-eval
+                           --gate-rel-own-margin 0.02   (reject a candidate that concedes
+                           > 0.1 expected-score vs the baseline, even if it clears the
+                           absolute floor — stops booking moves that squander an advantage
+                           because opponents usually misplay them, e.g. 8...Nd4 giving back
+                           -2.1 -> +0.1 in the Bxf7+ Italian trap line. own-eval baseline
+                           (2026-07): the baseline is raised to the node's OWN engine eval
+                           minus the margin whenever that exceeds the best candidate — so a
+                           node whose only recorded replies all concede too much vs the
+                           position's true value gets gated even with no non-conceding
+                           sibling, falling through to engine augmentation. Uniform A/B
+                           improvement both colors — see .meta.json for the swept
+                           alternative)
   - no traffic floor:      --min-move-games 0
   - crush (sharpness):     relative-propagated over the WINPOS histogram (mate/resignation
                            OR eval >= +300cp achieved — see CLAUDE.md's crush-metric
@@ -97,10 +108,11 @@ def common_flags(stats: Path, crush_db: Path, eval_db: Path) -> list[str]:
     input paths."""
     return [
         "--input", str(stats),
-        "--eval-db", str(eval_db), "--eval-weight", "1.0",
+        "--eval-db", str(eval_db), "--eval-weight", "0.5",
         "--require-eval",
         "--robustness-floor", "0.1", "--gate-metric", "eval",
         "--gate-rel-floor", "0.1",
+        "--gate-rel-baseline", "own-eval", "--gate-rel-own-margin", "0.02",
         "--min-move-games", "0",
         "--crush-mode", "relative-propagated",
         "--crush-db", str(crush_db),
@@ -147,6 +159,7 @@ def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str) 
     inputs) without the user re-specifying --crush-weight."""
     prior, reach = plan_paths(tag)
     meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": "relative-propagated",
+            "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
             "input": str(stats), "crush_db": str(crush_db), "eval_db": str(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
