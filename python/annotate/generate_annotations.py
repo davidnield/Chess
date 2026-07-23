@@ -56,6 +56,12 @@ class UsageLimit(Exception):
     pass
 
 
+class ClaudeUnavailable(Exception):
+    """The `claude` CLI itself is missing/unusable — fatal for the whole run
+    (every chunk would fail identically), unlike a transient per-chunk error."""
+    pass
+
+
 def run_claude(prompt: str, model: str, timeout: int = 900) -> str:
     """Invoke `claude -p` reading the prompt from stdin; return the model text.
     Raises UsageLimit on a limit/quota signal, RuntimeError on other failure.
@@ -68,7 +74,7 @@ def run_claude(prompt: str, model: str, timeout: int = 900) -> str:
         proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True,
                               timeout=timeout, encoding="utf-8")
     except FileNotFoundError:
-        raise RuntimeError("`claude` CLI not found on PATH")
+        raise ClaudeUnavailable("`claude` CLI not found on PATH")
     out = (proc.stdout or "") + (proc.stderr or "")
     low = out.lower()
     if proc.returncode != 0 and any(m in low for m in USAGE_LIMIT_MARKERS):
@@ -197,6 +203,18 @@ def main() -> None:
                       flush=True)
                 save_store(store, store_path)
                 sys.exit(2)
+            except ClaudeUnavailable as e:
+                print(f"  claude unavailable ({e}); saving and stopping", flush=True)
+                save_store(store, store_path)
+                sys.exit(1)
+            except RuntimeError as e:
+                # Transient per-chunk failure (claude exit code / unparseable envelope /
+                # network). Don't poison the store with a permanent flag — leave the
+                # chunk un-generated so a rerun retries it, and move on rather than
+                # aborting the whole (resumable) batch.
+                print(f"  [{ci}/{len(eligible)}] {ch.chunk_id}: claude error, skipping "
+                      f"(retried next run) — {e}", flush=True)
+                continue
             (runs_dir / f"{ch.chunk_id}.txt").write_text(text, encoding="utf-8")
             parsed = extract_json(text)
             if not parsed or "annotations" not in parsed:
@@ -238,8 +256,8 @@ def main() -> None:
                                 results[pid] = (a, validate(
                                     a.get("annotation", ""), a.get("memory_rule"),
                                     a.get("themes", []), f))
-                except (UsageLimit, RuntimeError):
-                    pass
+                except (UsageLimit, RuntimeError, ClaudeUnavailable):
+                    pass  # best-effort retry; keep the first-pass results on failure
 
             n_flagged = 0
             for pid, f in positions:
