@@ -58,17 +58,10 @@ import chess
 import chess.polyglot
 import polars as pl
 
+from zobrist import zobrist_int64
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
-
-
-INT64_MAX   = 2**63 - 1
-INT64_RANGE = 2**64
-
-
-def zobrist_int64(b: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(b)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 def to_us(x: float | None, white: bool) -> float | None:

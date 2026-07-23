@@ -54,6 +54,8 @@ import duckdb
 import polars as pl
 import requests
 
+from zobrist import zobrist_int64
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -68,20 +70,12 @@ NUM_SHARDS     = 20
 DEFAULT_OUTPUT = Path("E:/chess/lichess_eval_db.parquet")
 DEFAULT_CACHE  = Path("E:/chess/lichess-evals")
 
-INT64_MAX   = 2**63 - 1
-INT64_RANGE = 2**64
 MATE_CP     = 10_000   # legacy sentinel; only used by compare_eval_dbs() for old DBs
 # Cap magnitude for decisive evals (real cp and genuine mates). At +-2000cp the
 # Lichess sigmoid (LICHESS_CP_SCALE) gives ~0.9994 / 0.0006 expected score —
 # "decisively winning/losing" — without an unbreakable +-10000 mate sentinel
 # that defeats Stage 3's refutation gate or dominates the leaf eval blend.
 EVAL_CAP    = 2_000
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    """Polyglot Zobrist hash cast to signed int64 (parquet/polars compatible)."""
-    h = chess.polyglot.zobrist_hash(board)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 # ── Download ─────────────────────────────────────────────────────────────────

@@ -49,6 +49,8 @@ import chess.engine
 import chess.polyglot
 import polars as pl
 
+from zobrist import zobrist_int64
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -58,14 +60,7 @@ DEFAULT_STATS      = Path("E:/chess/position-stats/position_stats.parquet")
 DEFAULT_OUTPUT     = Path("E:/chess/repertoire/repertoire_safe.parquet")
 DEFAULT_CACHE      = Path("E:/chess/engine-cache/evals.parquet")
 
-INT64_MAX   = 2**63 - 1
-INT64_RANGE = 2**64
 MATE_SCORE  = 10000  # cp equivalent used to flatten forced-mate scores
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(board)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 # ── Cache I/O ─────────────────────────────────────────────────────────────

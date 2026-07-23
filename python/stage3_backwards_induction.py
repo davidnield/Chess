@@ -79,7 +79,7 @@ decisiveness, opponent_error, forcingness, eval_score.
 
 Usage:
     .venv/Scripts/python.exe python/stage3_backwards_induction.py --perspective black
-    # The canonical pooled repertoires are built by python/build_pooled_reps.py.
+    # The canonical pooled repertoires are built by python/build_sharp_reps.py.
 """
 
 from __future__ import annotations
@@ -96,20 +96,14 @@ import chess.polyglot
 import numpy as np
 import polars as pl
 
+from zobrist import zobrist_int64
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
 DEFAULT_INPUT  = Path("E:/chess/position-stats/position_stats.parquet")
 DEFAULT_OUTPUT = Path("E:/chess/repertoire/repertoire.parquet")
-
-INT64_MAX   = 2**63 - 1
-INT64_RANGE = 2**64
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(board)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 # Context key for context-free plan-prior rows (must match plan_consistency_report).
@@ -422,7 +416,6 @@ def run_backwards_induction(
     learn_reach_pivot: float = 0.02,
     learn_ctx_pivot:  float = 0.05,
     learn_depth_horizon: int = 6,
-    opp_eval_clamp:   float | None = None,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
            dict[int, float], dict[int, float], dict[int, float],
@@ -595,8 +588,6 @@ def run_backwards_induction(
     rel_own_nodes: set[int] = set()     # nodes where the OWN-EVAL raise was part of the cut
     _learn = learn_prior is not None and learn_delta_rare > 0.0
     learn_override_nodes: set[int] = set()  # nodes where the plan-prior tiebreak changed the pick
-    clamp_nodes: set[int] = set()           # opponent nodes the eval clamp actually capped
-                                            # (a set, not a counter: cycle sweeps revisit nodes)
 
     def learn_delta(ph):
         # δ window for the learnability tiebreak: loose ONLY at SHALLOW-but-RARE
@@ -989,26 +980,6 @@ def run_backwards_induction(
             total = sum(mv["total"] for mv in mvs)
             values[ph] = (sum(mv["val"] * mv["total"] for mv in mvs) / total
                           if total else slice_prior)
-            if opp_eval_clamp is not None and eval_lookup:
-                # Missing-refutation guard: the empirical mean over RECORDED replies is
-                # optimistic for us when the refutation was never played. Cap ranking
-                # optimism at the node's own engine assessment ± the margin — empirical
-                # edge from opponents misplaying survives up to the margin; equity from
-                # stacked future blunders beyond it does not. Monotone + non-expansive,
-                # so safe inside the cycle sweeps; soundness gates are untouched (they
-                # were already eval-based one ply above).
-                e = eval_lookup.get(ph)
-                if e is not None:
-                    if our_color == chess.WHITE:
-                        cap = e + opp_eval_clamp
-                        if values[ph] > cap:
-                            values[ph] = cap
-                            clamp_nodes.add(ph)
-                    else:
-                        cap = e - opp_eval_clamp
-                        if values[ph] < cap:
-                            values[ph] = cap
-                            clamp_nodes.add(ph)
             values_robust[ph] = opp_robust(mvs)
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
             if relative_crush:
@@ -1174,10 +1145,6 @@ def run_backwards_induction(
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
               f"{len(learn_override_nodes):,} nodes", flush=True)
-    if opp_eval_clamp is not None:
-        print(f"  opponent-node eval clamp (margin {opp_eval_clamp}) capped "
-              f"{len(clamp_nodes):,} nodes", flush=True)
-
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
     cover_effs = {ph: cover_depth.get(ph, 0.0) / (1.0 + mem_nodes.get(ph, 0.0))
@@ -1484,16 +1451,6 @@ def main():
                              "the GLOBAL habits, so a 1%% sideline (1.b3) is steered to "
                              "your normal development instead of self-reinforcing its "
                              "pass-1 oddities. Default 0.05.")
-    parser.add_argument("--opp-eval-clamp", type=float, default=None,
-                        help="Missing-refutation guard: at OPPONENT nodes whose own position "
-                             "is in the eval DB, cap the empirical mean value at the engine "
-                             "assessment plus this margin (expected-score units; mirrored for "
-                             "black). The empirical mean over RECORDED replies is optimistic "
-                             "when the refutation was never played; the engine eval (min over "
-                             "their replies under best play) prices it in. Deliberately also "
-                             "caps equity from STACKED future opponent mistakes at the margin "
-                             "per node — close to the product premise, so OFF by default. "
-                             "Try 0.2. Ranking only; the soundness gates are unchanged.")
     parser.add_argument("--learn-depth-horizon", type=int, default=6,
                         help="The loose δ applies only within the first N of OUR moves "
                              "(min_our_depth from the reach parquet). Deeper nodes — and "
@@ -1549,8 +1506,6 @@ def main():
           f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
     if args.gate_rel_floor < 1.0 and args.gate_rel_baseline == "own-eval":
         print(f"Rel gate baseline: own-eval (margin {args.gate_rel_own_margin})")
-    if args.opp_eval_clamp is not None:
-        print(f"Opp eval clamp:    {args.opp_eval_clamp}")
     print(f"Crush weight:      {args.crush_weight}"
           f"{'  (crush DB: ' + str(args.crush_db) + ')' if args.crush_weight > 0 else ''}")
     if args.crush_weight > 0:
@@ -1799,7 +1754,6 @@ def main():
             learn_reach_pivot=args.learn_reach_pivot,
             learn_ctx_pivot=args.learn_ctx_pivot,
             learn_depth_horizon=args.learn_depth_horizon,
-            opp_eval_clamp=args.opp_eval_clamp,
         )
         elapsed = time.time() - t1
 

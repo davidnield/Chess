@@ -37,6 +37,8 @@ import chess
 import chess.polyglot
 import polars as pl
 
+from zobrist import INT64_MAX, INT64_RANGE, zobrist_int64
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -59,16 +61,6 @@ DEFAULT_OUTPUT = Path("E:/chess/position-stats/position_stats.parquet")
 #   >=2000       18.8%   labelled 2200
 DEFAULT_ELO_BOUNDARIES = [1300, 1500, 1800, 2000]
 DEFAULT_ELO_LABELS     = [1100, 1400, 1650, 1900, 2200]
-
-INT64_MAX = 2**63 - 1
-INT64_RANGE = 2**64
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(board)
-    if h > INT64_MAX:
-        h -= INT64_RANGE
-    return h
 
 
 def make_band_expr(boundaries: list[int], labels: list[int]) -> pl.Expr:

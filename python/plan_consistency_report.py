@@ -69,6 +69,8 @@ import chess.polyglot
 import numpy as np
 import polars as pl
 
+from zobrist import zobrist_int64
+
 # Single source of truth for the idea vocabulary: selection (stage 3's
 # learnability tiebreak) and measurement (this report) MUST tokenize alike.
 from stage3_backwards_induction import LEARN_GLOBAL_CTX as GLOBAL_CTX
@@ -76,14 +78,6 @@ from stage3_backwards_induction import idea_token  # noqa: F401  (re-export for 
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
-
-INT64_MAX   = 2**63 - 1
-INT64_RANGE = 2**64
-
-
-def zobrist_int64(b: chess.Board) -> int:
-    h = chess.polyglot.zobrist_hash(b)
-    return h - INT64_RANGE if h > INT64_MAX else h
 
 
 # ── Walk ───────────────────────────────────────────────────────────────────

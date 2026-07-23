@@ -31,6 +31,8 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from zobrist import zobrist_int64  # noqa: F401  (re-export for callers importing from here)
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -43,17 +45,6 @@ VAR_RE = re.compile(r"\([^)]*\)")
 NAG_RE = re.compile(r"\$\d+")
 MOVE_NUM_RE = re.compile(r"^\d+\.+$")
 RESULT_TOKENS = {"1-0", "0-1", "1/2-1/2", "*"}
-
-INT64_MAX = 2**63 - 1
-INT64_RANGE = 2**64
-
-
-def zobrist_int64(board: chess.Board) -> int:
-    """Polyglot Zobrist hash cast to signed int64 (parquet/polars compatible)."""
-    h = chess.polyglot.zobrist_hash(board)
-    if h > INT64_MAX:
-        h -= INT64_RANGE
-    return h
 
 
 def iter_san_moves(movetext: str):
