@@ -1,19 +1,27 @@
 """
 process_pgn_parquets.py — Clean, enrich, and compress PGN-derived parquet files.
 
-Port of archive/01_processing_pgn_files.R with significantly improved compression:
-  • Row group size: 1,000,000 rows (R produced ~400/group due to small Arrow batches)
-  • Compression: zstd level 9 (R used level 3)
-  • Streaming I/O via PyArrow dataset scanner (constant memory)
-  • Optional parallel processing across monthly partitions
+Port of archive/01_processing_pgn_files.R, now carrying recipe v3 (locked by the
+parquet_recipe_202607 benchmark):
+  • Compression: zstd level 19 (R used 3; the prior port used 6) → ~65% smaller.
+  • Row groups: 1,000,000 rows, ACTUALLY enforced — a per-event buffer flushes whole
+    files via pq.write_table(row_group_size=1M). The old write_dataset stream emitted
+    ~one row group per tiny scan batch (4,776 groups/file, ~300 rows each); the fix
+    makes warm/consumer reads much faster.
+  • movetext: M1 comment-stripped ({[%clk ...]}/{[%eval ...]} removed) — LOSSY vs the
+    F: raw archive, which retains the comments. has_eval is computed pre-strip.
+  • Per-event buffering trades the old constant-memory stream for higher peak RAM
+    (≤ one 2M-row file per event in flight) — keep --workers low for big recent months.
 
-These changes typically reduce on-disk size by 40-60% for movetext-heavy workloads
-while remaining drop-in compatible with the existing pipeline (stage1+).
+These changes reduce on-disk size ~65% for movetext-heavy workloads while remaining
+drop-in compatible with the existing pipeline (stage1+): the strip only removes what
+iter_san_moves already discards at parse time, so no downstream aggregate changes.
 
 Reads:   <source>/year=*/month=*/         raw PGN-derived Hive-partitioned parquets
 Writes:  <output>/year=*/month=*/event=*/ cleaned, compressed, 3-level partitioned
 
-All 27 output columns match the R version exactly:
+All 27 output columns match the R version's schema exactly (movetext CONTENT now
+comment-stripped; every other column byte-identical):
   site, white, black, result, white_title, black_title, white_elo, black_elo,
   white_rating_diff, black_rating_diff, utc_date, utc_time, eco, opening,
   termination, time_control, movetext, game_id, mean_elo, elo_band,
@@ -35,9 +43,11 @@ from __future__ import annotations
 
 import argparse
 import gc
+import shutil
 import sys
 import time
 import traceback
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -45,6 +55,7 @@ import polars as pl
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as pads
+import pyarrow.parquet as pq
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -69,11 +80,21 @@ EVENT_MAP = {
 # ── compression settings ────────────────────────────────────────────────────
 
 MAX_ROWS_PER_FILE  = 2_000_000   # same as R version
-ROW_GROUP_SIZE     = 1_000_000   # was ~400 in R output → 2,500x larger groups
-ZSTD_LEVEL         = 6           # See benchmark_zstd_levels.py: best ratio in
-                                 # the "flat-time" tier (1-8 all run ~67-74s).
-                                 # zstd-9 costs +15% time for +0.6% smaller
-                                 # files, levels 11+ are worse on every axis.
+ROW_GROUP_SIZE     = 1_000_000   # ACTUALLY enforced now via per-event buffered
+                                 # pq.write_table (see process_partition). The old
+                                 # write_dataset streaming path emitted ~one group
+                                 # per tiny scan batch (333/233/241/4 rows/group,
+                                 # 4,776 groups/file) — max_rows_per_group is only
+                                 # an upper bound, never a target.
+ZSTD_LEVEL         = 19          # Recipe v3 (parquet_recipe_202607 benchmark):
+                                 # zstd-19 + M1 comment-strip → ~65% smaller than
+                                 # the old zstd-6 (37.9→13.1 GB on m2025_03) while
+                                 # warm reads stay > raw-scan and write throughput
+                                 # (parallelised across months) clears the 1-month
+                                 # re-ingest bar. Heavier codecs/pages didn't beat
+                                 # it; the elo-sort was dropped (the one heavy
+                                 # consumer — build_pooled_stats extract — is
+                                 # replay-bound, so pruning bought nothing: -4.8%).
 SCANNER_BATCH_SIZE = 500_000     # rows per source-scan batch (memory governor)
 
 # ── output schema (matches R output exactly) ────────────────────────────────
@@ -150,14 +171,14 @@ def discover_partitions(source: Path) -> list[tuple[int, int, Path]]:
 
 
 def output_already_exists(output: Path, year: int, month: int) -> bool:
-    """True if any event subdirectory under year=Y/month=M has parquet files."""
-    base = output / f"year={year}" / f"month={month}"
-    if not base.exists():
-        return False
-    for event_dir in base.iterdir():
-        if event_dir.is_dir() and any(event_dir.glob("*.parquet")):
-            return True
-    return False
+    """True only if the partition's _SUCCESS sentinel exists (written after the
+    row-group verification passes). Parquet files WITHOUT the sentinel mean a prior
+    run died mid-partition — reprocess it (process_partition clears stale files
+    first). Pre-sentinel partitions (the R-era D: tree) read as 'needs processing',
+    which is fine: ingest sources only ever contain months not yet in the output.
+    The leading underscore keeps the sentinel invisible to pyarrow dataset discovery
+    (default ignore_prefixes) and to *.parquet globs."""
+    return (output / f"year={year}" / f"month={month}" / "_SUCCESS").exists()
 
 
 # ── transform ───────────────────────────────────────────────────────────────
@@ -218,7 +239,19 @@ def transform(df: pl.DataFrame, year: int, month: int) -> pl.DataFrame:
         pl.col("Opening").alias("opening"),
         pl.col("Termination").alias("termination"),
         pl.col("TimeControl").alias("time_control"),
-        pl.col("movetext"),
+
+        # movetext — M1 comment strip (recipe v3, LOSSY vs the F: raw archive):
+        # drop brace comments ({[%clk ...]}, {[%eval ...]}), the "1..." black-move
+        # renumbering they force, then collapse space runs. This is exactly what
+        # iter_san_moves discards at parse time today, so it changes no downstream
+        # aggregate. has_eval below is computed on the ORIGINAL movetext (pre-strip),
+        # and move_count counts white "N. " tokens which the strip never touches.
+        pl.col("movetext")
+          .str.replace_all(r"\s*\{[^}]*\}", "")
+          .str.replace_all(r"\d+\.\.\.\s*", "")
+          .str.replace_all(r"\s{2,}", " ")
+          .str.strip_chars()
+          .alias("movetext"),
 
         # ── Computed fields ──
         pl.col("Site").str.replace("https://lichess.org/", "", literal=True).alias("game_id"),
@@ -292,50 +325,91 @@ def process_partition(year: int, month: int,
             batch_size=SCANNER_BATCH_SIZE,
         )
 
-        # Generator: read source batch → Polars transform → Arrow batch (cast to schema)
-        def transformed_batches():
-            for batch in scanner.to_batches():
-                if batch.num_rows == 0:
-                    continue
-                df = pl.from_arrow(batch)
-                df = transform(df, year, month)
-                tbl = df.to_arrow().cast(WRITE_SCHEMA)
-                yield from tbl.to_batches()
-
-        # Wrap as RecordBatchReader so write_dataset knows the schema upfront
-        reader = pa.RecordBatchReader.from_batches(WRITE_SCHEMA, transformed_batches())
-
-        write_options = pads.ParquetFileFormat().make_write_options(
-            compression="zstd",
-            compression_level=ZSTD_LEVEL,
-            version="2.6",
-            write_statistics=True,
-        )
-
-        pads.write_dataset(
-            reader,
-            base_dir=str(output),
-            format="parquet",
-            partitioning=pads.partitioning(PARTITION_SCHEMA, flavor="hive"),
-            max_rows_per_file=MAX_ROWS_PER_FILE,
-            max_rows_per_group=ROW_GROUP_SIZE,
-            # No min_rows_per_group — measurements show setting it forces extra
-            # row group splits and inflates output by ~30%. Letting the writer
-            # consolidate up to max gives the best size and read speed.
-            file_options=write_options,
-            existing_data_behavior="delete_matching",
-            basename_template="part-{i}.parquet",
-            use_threads=True,
-        )
-
-        # Tally what got written
+        # delete_matching semantics: clear any prior output for this partition so a
+        # reprocess (--force) never mixes old + new files and part-{i} restarts at 0.
         out_base = output / f"year={year}" / f"month={month}"
         if out_base.exists():
-            n_files = sum(1 for _ in out_base.rglob("*.parquet"))
-            n_bytes = sum(p.stat().st_size for p in out_base.rglob("*.parquet"))
-            size_str = f"{n_files} files, {n_bytes/1e9:.1f} GB"
+            shutil.rmtree(out_base)
+
+        write_kw = dict(compression="zstd", compression_level=ZSTD_LEVEL,
+                        version="2.6", write_statistics=True,
+                        row_group_size=ROW_GROUP_SIZE)
+
+        # Per-event buffered writer (recipe v3). We buffer transformed rows per event
+        # and flush a whole file via pq.write_table(row_group_size=1M) whenever the
+        # buffer fills, so row groups ACTUALLY reach ~1M rows. The prior write_dataset
+        # stream fed the writer tiny scan-sized batches and emitted ~one row group per
+        # batch (4,776 groups/file, ~300 rows each) — max_rows_per_group is only a
+        # ceiling. Buffering costs peak RAM (≤ one 2M-row file per event in flight,
+        # ~tens of GB on a 60 GB month), so keep --workers low for big recent months.
+        buf: dict[str, list] = defaultdict(list)
+        rows: dict[str, int] = defaultdict(int)
+        fidx: dict[str, int] = defaultdict(int)
+
+        def flush(ev: str, whole: bool) -> None:
+            if not buf[ev]:
+                return
+            merged = pa.concat_tables(buf[ev]).combine_chunks()
+            while merged.num_rows >= MAX_ROWS_PER_FILE or (whole and merged.num_rows > 0):
+                take = min(MAX_ROWS_PER_FILE, merged.num_rows)
+                piece = merged.slice(0, take)
+                ev_dir = out_base / f"event={ev}"
+                ev_dir.mkdir(parents=True, exist_ok=True)
+                dst = ev_dir / f"part-{fidx[ev]}.parquet"
+                tmp = dst.with_suffix(".parquet.tmp")
+                pq.write_table(piece, tmp, **write_kw)   # atomic: tmp → replace
+                tmp.replace(dst)
+                fidx[ev] += 1
+                merged = merged.slice(take)
+                if not whole and merged.num_rows < MAX_ROWS_PER_FILE:
+                    break
+            buf[ev] = [merged] if merged.num_rows else []
+            rows[ev] = merged.num_rows
+
+        for batch in scanner.to_batches():
+            if batch.num_rows == 0:
+                continue
+            df = pl.from_arrow(batch)
+            df = transform(df, year, month)
+            tbl = df.to_arrow().cast(WRITE_SCHEMA)
+            for ev in tbl["event"].unique().to_pylist():
+                if ev is None:
+                    continue
+                # year/month/event are encoded in the Hive path → strip from the file
+                sub = (tbl.filter(pc.equal(tbl["event"], ev))
+                          .drop_columns(["year", "month", "event"]))
+                buf[ev].append(sub)
+                rows[ev] += sub.num_rows
+                if rows[ev] >= MAX_ROWS_PER_FILE:
+                    flush(ev, whole=False)
+        for ev in list(buf):
+            flush(ev, whole=True)
+
+        # Verify the row-group fix held: pq.write_table(row_group_size=1M) on a
+        # ≤2M-row piece must yield exactly ceil(rows/1M) groups. If a file shows
+        # more, the tiny-group pathology is back — fail loudly rather than ship it.
+        if out_base.exists():
+            files = sorted(out_base.rglob("*.parquet"))
+            n_bytes = 0
+            bad = []
+            for f in files:
+                md = pq.ParquetFile(f).metadata
+                n_bytes += f.stat().st_size
+                exp = max(1, -(-md.num_rows // ROW_GROUP_SIZE))  # ceil
+                if md.num_row_groups > exp:
+                    bad.append(f"{f.parent.name}/{f.name}: {md.num_rows} rows in "
+                               f"{md.num_row_groups} groups (expected {exp})")
+            if bad:
+                raise AssertionError("row-group verification FAILED:\n  " +
+                                     "\n  ".join(bad[:8]))
+            size_str = f"{len(files)} files, {n_bytes/1e9:.1f} GB"
         else:
             size_str = "no output (empty source?)"
+
+        # Completion sentinel — the skip-gate keys on this, not on file presence,
+        # so a partition killed mid-write is redone on restart.
+        out_base.mkdir(parents=True, exist_ok=True)
+        (out_base / "_SUCCESS").touch()
 
         elapsed = (time.time() - t0) / 60
         return True, f"{elapsed:.1f} min | {size_str}"
@@ -368,6 +442,10 @@ def main():
                         help=f"Output root (default: {DEFAULT_OUTPUT})")
     parser.add_argument("--year", type=int, default=None,
                         help="Restrict to a specific year (otherwise: all years)")
+    parser.add_argument("--start-year", type=int, default=None,
+                        help="Restrict to years >= this")
+    parser.add_argument("--end-year", type=int, default=None,
+                        help="Restrict to years <= this")
     parser.add_argument("--months", type=int, nargs="+", default=None,
                         help="Restrict to specific months (1-12); requires --year "
                              "or applies across all years")
@@ -393,6 +471,10 @@ def main():
     partitions = discover_partitions(source)
     if args.year is not None:
         partitions = [p for p in partitions if p[0] == args.year]
+    if args.start_year is not None:
+        partitions = [p for p in partitions if p[0] >= args.start_year]
+    if args.end_year is not None:
+        partitions = [p for p in partitions if p[0] <= args.end_year]
     if args.months is not None:
         wanted = set(args.months)
         partitions = [p for p in partitions if p[1] in wanted]
@@ -449,7 +531,11 @@ def main():
     else:
         # Parallel — useful when source and output are on separate spindles
         tasks = [(y, m, str(d), str(output)) for y, m, d in partitions]
-        with ProcessPoolExecutor(max_workers=args.workers) as ex:
+        # max_tasks_per_child=1: fresh process per partition — long-lived workers
+        # doing repeated multi-GB pyarrow alloc/free cycles eventually hit the
+        # Windows native-allocator degradation (0xC0000005, no traceback).
+        with ProcessPoolExecutor(max_workers=args.workers,
+                                 max_tasks_per_child=1) as ex:
             futures = {ex.submit(_worker, t): (t[0], t[1]) for t in tasks}
             for fut in as_completed(futures):
                 year, month = futures[fut]
