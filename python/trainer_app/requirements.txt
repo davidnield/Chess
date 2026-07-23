@@ -1,0 +1,12 @@
+# Opening-training app runtime deps (install into the repo .venv with:
+#   uv pip install -r python/trainer_app/requirements.txt
+# ). The big pipeline deps (polars, numpy, python-chess, requests) are shared
+# with the rest of the repo but pinned here too so a fresh PC install works
+# from this one file.
+fastapi>=0.110,<1
+uvicorn>=0.29,<1
+fsrs>=5,<6
+polars>=1.30
+numpy>=2
+chess>=1.10,<2
+requests>=2.31

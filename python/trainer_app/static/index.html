@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Opening Trainer</title>
+<link rel="stylesheet" href="/static/vendor/chessboard-1.0.0.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>Opening Trainer</h1>
+  <nav id="tabs">
+    <button data-tab="trainer" class="active">Trainer</button>
+    <button data-tab="explorer">Explorer</button>
+    <button data-tab="deviations">Deviations</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+
+<main>
+  <section id="tab-trainer" class="tab active">
+    <div id="trainerBoardWrap">
+      <div id="trainerBoard" style="width: 480px"></div>
+      <div id="trainerPanel">
+        <div id="trainerControls">
+          <select id="repSelect">
+            <option value="white">White repertoire</option>
+            <option value="black">Black repertoire</option>
+          </select>
+          <button id="startSession">Start session</button>
+          <button id="endSession" disabled>End session</button>
+        </div>
+        <p id="trainerStatus" class="muted">loading…</p>
+        <div id="drillInfo"></div>
+        <div id="feedback"></div>
+        <div id="annotation"></div>
+        <div id="drillLine" class="muted"></div>
+        <details id="statsBox"><summary>Stats</summary>
+          <div id="statsContent" class="muted">–</div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-explorer" class="tab">
+    <div id="explorerGate">
+      <p class="muted" id="explorerStatus">Explorer loads the full repertoire +
+      stats parquets (~a few GB RAM, ~1 min).</p>
+      <button id="explorerLoadBtn">Load explorer</button>
+    </div>
+    <iframe id="explorerFrame" style="display:none"></iframe>
+  </section>
+
+  <section id="tab-deviations" class="tab">
+    <div id="devControls">
+      <button id="devImportBtn">Import Lichess games</button>
+      <select id="devRepFilter">
+        <option value="">both colors</option>
+        <option value="white">white</option>
+        <option value="black">black</option>
+      </select>
+      <span id="devImportStatus" class="muted"></span>
+    </div>
+    <div id="devLayout">
+      <div id="devTableWrap"><table id="devTable"></table></div>
+      <div id="devPreview">
+        <div id="devBoard" style="width: 360px"></div>
+        <div id="devNav">
+          <button id="devPrev">◀</button>
+          <button id="devNext">▶</button>
+          <span id="devMoveNo" class="muted"></span>
+          <a id="devLichess" target="_blank">lichess ↗</a>
+          <a id="devExplorer" target="_blank">explorer ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-settings" class="tab">
+    <h2>Settings</h2>
+    <div id="settingsForm"></div>
+    <button id="saveSettings">Save</button>
+    <span id="settingsMsg" class="muted"></span>
+    <h2>Training pack</h2>
+    <pre id="packInfo" class="muted">loading…</pre>
+  </section>
+</main>
+
+<script src="/static/vendor/jquery-3.6.0.min.js"></script>
+<script src="/static/vendor/chessboard-1.0.0.min.js"></script>
+<script src="/static/vendor/chess-0.10.3.min.js"></script>
+<script src="/static/common.js"></script>
+<script src="/static/trainer.js"></script>
+<script src="/static/deviations.js"></script>
+</body>
+</html>
