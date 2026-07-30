@@ -86,6 +86,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sys
 import time
 from collections import Counter, defaultdict, deque
@@ -100,6 +101,23 @@ from zobrist import zobrist_int64
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+
+
+# Env-gated phase-boundary memory ledger (STAGE3_MEM_PROFILE=1). Prints current
+# process RSS at each pipeline phase so the columnar refactor can be checked
+# against the pre-refactor dict/list-of-dict footprint. No-ops when unset.
+_MEM_PROFILE = os.environ.get("STAGE3_MEM_PROFILE") == "1"
+
+
+def _memlog(label: str) -> None:
+    if not _MEM_PROFILE:
+        return
+    try:
+        import psutil
+        rss = psutil.Process().memory_info().rss / 1e9
+        print(f"  [mem] {label}: RSS={rss:.1f} GB", flush=True)
+    except Exception:
+        pass
 
 
 DEFAULT_INPUT  = Path("E:/chess/position-stats/position_stats.parquet")
@@ -368,8 +386,255 @@ def _tarjan_sccs(nodes: set[int], succ: dict[int, list[int]]) -> list[list[int]]
     return sccs
 
 
+# ── Columnar backing store (memory refactor) ────────────────────────────────────
+# The backwards induction is held over dense node ids (a sorted int64 hash array +
+# a hash->id dict) with per-node values in numpy arrays and the edge list in CSR
+# form, instead of the old dict-of-list-of-dicts `children` and ~13 dict[int,float]
+# value maps (which peaked ~100 GB on the 2019-25 pool). These thin adapters expose
+# exactly the dict semantics the induction body relies on, so that body is unchanged
+# — only construction / topology / output touch the arrays directly.
+class _NodeSpace:
+    __slots__ = ("hash", "idx")
+
+    def __init__(self, hash_arr: "np.ndarray", idx: dict[int, int]):
+        self.hash = hash_arr     # int64[N], id -> position_hash (sorted ascending)
+        self.idx = idx           # position_hash -> id (dense [0, N))
+
+
+class _ArrMap:
+    """dict[int, float] view over a float64 array indexed by node id. NaN sentinel
+    marks an unset key (a position not yet valued / not internal)."""
+    __slots__ = ("sp", "arr")
+
+    def __init__(self, sp: _NodeSpace, arr: "np.ndarray"):
+        self.sp = sp
+        self.arr = arr
+
+    def __getitem__(self, h):
+        return float(self.arr[self.sp.idx[h]])
+
+    def __setitem__(self, h, v):
+        self.arr[self.sp.idx[h]] = v
+
+    def get(self, h, default=None):
+        i = self.sp.idx.get(h)
+        if i is None:
+            return default
+        v = self.arr[i]
+        return default if v != v else float(v)   # v != v  → NaN → unset
+
+    def __contains__(self, h):
+        i = self.sp.idx.get(h)
+        if i is None:
+            return False
+        v = self.arr[i]
+        return v == v
+
+    def __iter__(self):
+        arr, hs = self.arr, self.sp.hash
+        for i in range(arr.shape[0]):
+            if arr[i] == arr[i]:
+                yield int(hs[i])
+
+    def items(self):
+        arr, hs = self.arr, self.sp.hash
+        for i in range(arr.shape[0]):
+            v = arr[i]
+            if v == v:
+                yield int(hs[i]), float(v)
+
+    def values(self):
+        arr = self.arr
+        for i in range(arr.shape[0]):
+            v = arr[i]
+            if v == v:
+                yield float(v)
+
+    def __len__(self):
+        return int(np.count_nonzero(~np.isnan(self.arr)))
+
+
+class _ObjMap:
+    """dict[int, object] view over a Python list indexed by node id (EPD strings,
+    side-to-move, chosen SAN). A missing hash -> default; a stored None stays None."""
+    __slots__ = ("sp", "lst")
+
+    def __init__(self, sp: _NodeSpace, lst: list):
+        self.sp = sp
+        self.lst = lst
+
+    def __getitem__(self, h):
+        return self.lst[self.sp.idx[h]]
+
+    def __setitem__(self, h, v):
+        self.lst[self.sp.idx[h]] = v
+
+    def get(self, h, default=None):
+        i = self.sp.idx.get(h)
+        return self.lst[i] if i is not None else default
+
+    def values(self):
+        return iter(self.lst)
+
+
+class _BoolMap:
+    """dict[int, bool] view over a bool array indexed by node id (best_aug)."""
+    __slots__ = ("sp", "arr")
+
+    def __init__(self, sp: _NodeSpace, arr: "np.ndarray"):
+        self.sp = sp
+        self.arr = arr
+
+    def __setitem__(self, h, v):
+        self.arr[self.sp.idx[h]] = v
+
+    def get(self, h, default=False):
+        i = self.sp.idx.get(h)
+        return bool(self.arr[i]) if i is not None else default
+
+    def values(self):
+        return (bool(x) for x in self.arr)
+
+    def items(self):
+        hs = self.sp.hash
+        return ((int(hs[i]), bool(self.arr[i])) for i in range(self.arr.shape[0]))
+
+
+class _CSRChildren:
+    """dict[int, list[dict]] view: children[parent_hash] -> the parent's edge dicts
+    (same keys the old build produced), materialized on demand from CSR arrays. A
+    leaf / unknown hash -> [] (matches the old defaultdict(list))."""
+    __slots__ = ("sp", "off", "e_child_hash", "e_san", "e_score", "e_total",
+                 "e_draws", "e_wcs", "e_bcs", "e_wimm", "e_bimm", "e_wdf", "e_bdf",
+                 "e_cg")
+
+    def __init__(self, sp, off, e_child_hash, e_san, e_score, e_total, e_draws,
+                 e_wcs, e_bcs, e_wimm, e_bimm, e_wdf, e_bdf, e_cg):
+        self.sp = sp
+        self.off = off
+        self.e_child_hash = e_child_hash
+        self.e_san = e_san
+        self.e_score = e_score
+        self.e_total = e_total
+        self.e_draws = e_draws
+        self.e_wcs, self.e_bcs = e_wcs, e_bcs
+        self.e_wimm, self.e_bimm = e_wimm, e_bimm
+        self.e_wdf, self.e_bdf = e_wdf, e_bdf
+        self.e_cg = e_cg
+
+    def _rows(self, i):
+        lo, hi = int(self.off[i]), int(self.off[i + 1])
+        san, ch = self.e_san, self.e_child_hash
+        sc, tot, dr = self.e_score, self.e_total, self.e_draws
+        wcs, bcs, wimm, bimm = self.e_wcs, self.e_bcs, self.e_wimm, self.e_bimm
+        wdf, bdf, cg = self.e_wdf, self.e_bdf, self.e_cg
+        out = []
+        for j in range(lo, hi):
+            a, b, c, d = wcs[j], bcs[j], wimm[j], bimm[j]
+            e, f, g = wdf[j], bdf[j], cg[j]
+            out.append({
+                "move_san":  san[j],
+                "child_hash": int(ch[j]),
+                "score_avg": float(sc[j]),
+                "total":     int(tot[j]),
+                "draws":     int(dr[j]),
+                "white_crush_sum": None if a != a else float(a),
+                "black_crush_sum": None if b != b else float(b),
+                "white_imm_sum":   None if c != c else float(c),
+                "black_imm_sum":   None if d != d else float(d),
+                "white_dfull_sum": None if e != e else float(e),
+                "black_dfull_sum": None if f != f else float(f),
+                "crush_games":     None if g != g else int(g),
+            })
+        return out
+
+    def __getitem__(self, h):
+        i = self.sp.idx.get(h)
+        return self._rows(i) if i is not None else []
+
+    def get(self, h, default=None):
+        i = self.sp.idx.get(h)
+        if i is not None:
+            return self._rows(i)
+        return [] if default is None else default
+
+
+# Edge columns the induction needs, with their dtypes. Missing columns (tests may
+# omit the crush overlay) are added as null so the CSR build sees a uniform schema.
+_EDGE_COLS = {
+    "parent_hash": pl.Int64, "move_san": pl.Utf8, "child_hash": pl.Int64,
+    "white_score_avg": pl.Float64, "total": pl.Int64, "draws": pl.Int64,
+    "parent_epd": pl.Utf8,
+    "white_crush_sum": pl.Float64, "black_crush_sum": pl.Float64,
+    "white_imm_sum": pl.Float64, "black_imm_sum": pl.Float64,
+    "white_dfull_sum": pl.Float64, "black_dfull_sum": pl.Float64,
+    "crush_games": pl.Float64,
+}
+
+
+def _as_edges_df(edges) -> "pl.DataFrame":
+    """Accept the caller's polars slice OR a list[dict] (synthetic test callers) and
+    return a frame with every edge column present (missing → null, draws null → 0)."""
+    if isinstance(edges, pl.DataFrame):
+        df = edges
+    else:
+        df = pl.from_dicts(list(edges)) if edges else pl.DataFrame()
+    add = [pl.lit(None, dtype=dt).alias(c)
+           for c, dt in _EDGE_COLS.items() if c not in df.columns]
+    if add:
+        df = df.with_columns(add)
+    return df.with_columns(pl.col("draws").fill_null(0))
+
+
+# Columns that carry None in the old per-row dicts (opponent-turn / no-move nodes,
+# uncovered eval) and so must serialize as null, not NaN. All other float columns are
+# always set for a valued node.
+_NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "crush_rate",
+                 "crush_potential", "eval_score"]
+
+
+def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_decis,
+                 best_crush, crush_pot, memo_pot, cover_eff, value_worst,
+                 values_robust, position_epd, position_side, best_aug, eval_lookup):
+    """Build one slice's output rows straight from the numpy-backed value arrays
+    (memory refactor Step 5 — replaces the 13M-row list[dict] + pl.from_dicts). Emits
+    the exact legacy schema: NaN sentinels in the nullable diagnostic columns become
+    null, and unvalued nodes (value NaN) are dropped, matching `values.items()`."""
+    hashes = values.sp.hash
+    n = int(hashes.shape[0])
+    side = np.where(np.asarray(position_side.lst, dtype=bool), "white", "black")
+    if eval_lookup:
+        get = eval_lookup.get
+        eval_arr = np.fromiter((get(int(h), np.nan) for h in hashes.tolist()),
+                               dtype=np.float64, count=n)
+    else:
+        eval_arr = np.full(n, np.nan, dtype=np.float64)
+    df = pl.DataFrame({
+        "event":           np.full(n, ev),
+        "elo_band":        np.full(n, eb, dtype=np.int64),
+        "position_hash":   hashes,
+        "position_epd":    position_epd.lst,
+        "side_to_move":    side,
+        "value":           values.arr,
+        "best_move":       best_moves.lst,
+        "forcingness":     best_forcing.arr,
+        "opponent_error":  best_error.arr,
+        "decisiveness":    best_decis.arr,
+        "crush_rate":      best_crush.arr,
+        "crush_potential": crush_pot.arr,
+        "memo_cost":       memo_pot.arr,
+        "cover_eff":       cover_eff.arr,
+        "value_worst":     value_worst.arr,
+        "value_robust":    values_robust.arr,
+        "eval_score":      eval_arr,
+        "augmented":       best_aug.arr,
+    })
+    df = df.with_columns([pl.col(c).fill_nan(None) for c in _NULLABLE_OUT])
+    return df.filter(pl.col("value").is_not_nan())
+
+
 def run_backwards_induction(
-    edges: list[dict],
+    edges,                        # polars DataFrame slice, or list[dict] (tests)
     perspective: str,  # "white" or "black"
     prior_strength:   float = 500.0,
     forcing_weight:   float = 0.0,
@@ -385,11 +650,13 @@ def run_backwards_induction(
     decisiveness_weight: float = 0.0,
     robustness_floor: float = 1.0,
     gate_metric:      str = "worst",
+    gate_anchor:      str = "slice-prior",
     gate_rel_floor:   float = 1.0,
     gate_rel_baseline: str = "candidates",
     gate_rel_own_margin: float = 0.02,
     robust_eval_weight: float = 1.0,
     crush_weight:     float = 0.0,
+    crush_penalty:    float = 0.0,
     crush_prior:      float = 200.0,
     crush_mode:       str = "absolute",
     crush_gamma:      float = 0.8,
@@ -403,6 +670,7 @@ def run_backwards_induction(
     memo_leave:       float = 0.0,
     cover_weight:     float = 0.0,
     cover_min_games:  int = 0,
+    self_error_weight: float = 0.0,
     augment_engine:   bool = False,
     full_eval_hashes: "np.ndarray | None" = None,
     full_eval_es:     "np.ndarray | None" = None,
@@ -496,7 +764,9 @@ def run_backwards_induction(
     our_color   = chess.WHITE if perspective == "white" else chess.BLACK
     sign        = 1.0 if perspective == "white" else -1.0
     start_hash  = zobrist_int64(chess.Board())
-    slice_prior = compute_slice_prior(edges, start_hash)
+    df = _as_edges_df(edges)
+    start_rows = df.filter(pl.col("parent_hash") == start_hash).to_dicts()
+    slice_prior = compute_slice_prior(start_rows, start_hash)
     gamma_hop = crush_gamma ** 0.5   # per-PLY discount (one propagation hop = one ply)
     # Empirical-Bayes prior means for crush: thin-sample edges shrink toward the
     # slice-wide rate (not 0), so noise can't manufacture a crush bonus. Absolute
@@ -508,75 +778,128 @@ def run_backwards_induction(
     # move (the 9.f4-over-9.Qg6+ artifact). With baseline 0 the pseudocount must stay
     # large or selection-biased thin lines slip through — hence crush_prior is swept.
     col = "white" if our_color == chess.WHITE else "black"
+    opp_col = "black" if our_color == chess.WHITE else "white"
     if crush_baseline == "zero":
         slice_mean_crush = slice_mean_imm = slice_mean_dfull = 0.0
+        slice_mean_opp_imm = slice_mean_opp_dfull = 0.0
     else:
-        slice_mean_crush = compute_slice_mean_crush(edges, start_hash, f"{col}_crush_sum")
-        slice_mean_imm   = compute_slice_mean_crush(edges, start_hash, f"{col}_imm_sum")
-        slice_mean_dfull = compute_slice_mean_crush(edges, start_hash, f"{col}_dfull_sum")
+        slice_mean_crush = compute_slice_mean_crush(start_rows, start_hash, f"{col}_crush_sum")
+        slice_mean_imm   = compute_slice_mean_crush(start_rows, start_hash, f"{col}_imm_sum")
+        slice_mean_dfull = compute_slice_mean_crush(start_rows, start_hash, f"{col}_dfull_sum")
+        # Mirror images for the COUNTER-crush term (--crush-penalty). These columns
+        # have always been computed, joined and carried in the CSR arrays; until now
+        # nothing read them, so the sharpness term saw only the half of the position
+        # where WE win fast and was blind to the half where we get mated.
+        slice_mean_opp_imm   = compute_slice_mean_crush(start_rows, start_hash,
+                                                        f"{opp_col}_imm_sum")
+        slice_mean_opp_dfull = compute_slice_mean_crush(start_rows, start_hash,
+                                                        f"{opp_col}_dfull_sum")
 
-    # ── Build adjacency ───────────────────────────────────────────────────────
-    # children[ph] holds every (move, child, empirical_score, game_count) edge.
-    # position_meta caches EPD and side-to-move to avoid repeated Board() calls.
-    children:      dict[int, list[dict]]        = defaultdict(list)
-    position_epd:  dict[int, str]               = {}
-    position_side: dict[int, chess.Color]       = {}
+    # ── Build the columnar graph (CSR) + id-indexed value arrays ───────────────
+    # Internal nodes = positions with >=1 resolved-child edge (child_hash NOT NULL,
+    # matching the old skip); leaves (children that are never a parent) get id -1 and
+    # flow through the empirical/eval leaf path exactly as before. Edge order within a
+    # parent is preserved (stable sort) so move-selection tie-breaks are unchanged.
+    df2 = df.filter(pl.col("child_hash").is_not_null())
+    parent_h = df2["parent_hash"].to_numpy()
+    child_h  = df2["child_hash"].to_numpy().astype(np.int64)
+    E = int(parent_h.shape[0])
+    node_hash = np.unique(parent_h).astype(np.int64)      # sorted internal-node hashes
+    N = int(node_hash.shape[0])
+    idx = {int(h): i for i, h in enumerate(node_hash.tolist())}
+    sp = _NodeSpace(node_hash, idx)
 
-    for e in edges:
-        if e["child_hash"] is None:
-            continue
-        ph = e["parent_hash"]
-        children[ph].append({
-            "move_san":  e["move_san"],
-            "child_hash": e["child_hash"],
-            "score_avg":  e["white_score_avg"],
-            "total":      e["total"],
-            "draws":      e.get("draws", 0),
-            "white_crush_sum": e.get("white_crush_sum"),
-            "black_crush_sum": e.get("black_crush_sum"),
-            "white_imm_sum":   e.get("white_imm_sum"),
-            "black_imm_sum":   e.get("black_imm_sum"),
-            "white_dfull_sum": e.get("white_dfull_sum"),
-            "black_dfull_sum": e.get("black_dfull_sum"),
-            "crush_games":     e.get("crush_games"),
-        })
-        if ph not in position_epd:
-            position_epd[ph]  = e["parent_epd"]
-            position_side[ph] = chess.Board(e["parent_epd"]).turn
+    if N and E:
+        parent_id = np.searchsorted(node_hash, parent_h).astype(np.int64)
+        cpos = np.clip(np.searchsorted(node_hash, child_h), 0, N - 1)
+        child_id = np.where(node_hash[cpos] == child_h, cpos, -1).astype(np.int64)
+        order = np.argsort(parent_id, kind="stable")
+    else:
+        parent_id = np.zeros(0, np.int64)
+        child_id = np.zeros(0, np.int64)
+        order = np.zeros(0, np.int64)
 
-    all_positions = set(position_epd)
+    def _col(name):
+        return df2[name].to_numpy().astype(np.float64)[order]
 
-    # ── Topological sort (Kahn's) ─────────────────────────────────────────────
-    # pending[ph] = child hashes (inside our dataset) not yet valued
-    pending: dict[int, set[int]] = {
-        ph: {m["child_hash"] for m in children[ph] if m["child_hash"] in all_positions}
-        for ph in all_positions
-    }
-    parents_of: dict[int, set[int]] = defaultdict(set)
-    for ph in all_positions:
-        for m in children[ph]:
-            ch = m["child_hash"]
-            if ch in all_positions:
-                parents_of[ch].add(ph)
+    e_child_hash = child_h[order]
+    e_child_id   = child_id[order]
+    _san         = df2["move_san"].to_list()
+    e_san        = [_san[k] for k in order.tolist()]
+    e_score      = df2["white_score_avg"].to_numpy().astype(np.float64)[order]
+    e_total      = df2["total"].to_numpy().astype(np.int64)[order]
+    e_draws      = df2["draws"].to_numpy().astype(np.int64)[order]
+    e_wcs, e_bcs   = _col("white_crush_sum"), _col("black_crush_sum")
+    e_wimm, e_bimm = _col("white_imm_sum"), _col("black_imm_sum")
+    e_wdf, e_bdf   = _col("white_dfull_sum"), _col("black_dfull_sum")
+    e_cg           = _col("crush_games")
 
-    queue: deque[int] = deque(ph for ph in all_positions if not pending[ph])
+    p_sorted = parent_id[order]
+    child_off = np.zeros(N + 1, np.int64)
+    if N:
+        np.cumsum(np.bincount(p_sorted, minlength=N), out=child_off[1:])
+    children = _CSRChildren(sp, child_off, e_child_hash, e_san, e_score, e_total,
+                            e_draws, e_wcs, e_bcs, e_wimm, e_bimm, e_wdf, e_bdf, e_cg)
 
-    # ── Backwards induction ───────────────────────────────────────────────────
-    values:        dict[int, float]        = {}   # expected vs AVERAGE opponent
-    values_robust: dict[int, float]        = {}   # value along opponent's BEST reply
-    best_moves:    dict[int, str | None]   = {}
-    best_forcing:  dict[int, float | None] = {}
-    best_error:    dict[int, float | None] = {}
-    best_decis:    dict[int, float | None] = {}
-    best_crush:    dict[int, float | None] = {}
-    best_aug:      dict[int, bool]         = {}   # True where the chosen move came from engine augmentation
-    crush_pot:     dict[int, float]        = {}   # propagated crush_potential (relative mode)
-    memo_pot:      dict[int, float]        = {}   # propagated memorization cost (all positions)
-    value_worst:   dict[int, float]        = {}   # OUR-book value vs the opponent's BEST defence
-    cover_depth:   dict[int, float]        = {}   # reach-weighted covered opponent-decision depth
-    mem_nodes:     dict[int, float]        = {}   # unweighted count of prepared opponent branches
+    # EPD + side per internal node (any edge of the node — all share the parent
+    # position). Side read from the EPD field == chess.Board(epd).turn, no board build.
+    epd_all = df2["parent_epd"].to_list()
+    position_epd_lst: list = [None] * N
+    position_side_lst: list = [None] * N
+    for i in range(N):
+        epd = epd_all[int(order[int(child_off[i])])]
+        position_epd_lst[i] = epd
+        position_side_lst[i] = chess.WHITE if epd.split(" ", 2)[1] == "w" else chess.BLACK
+    position_epd  = _ObjMap(sp, position_epd_lst)
+    position_side = _ObjMap(sp, position_side_lst)
+
+    # Per-node value stores: numpy arrays (NaN = unset) behind dict-compatible views,
+    # so the induction body below is unchanged.
+    values        = _ArrMap(sp, np.full(N, np.nan))   # expected vs AVERAGE opponent
+    values_robust = _ArrMap(sp, np.full(N, np.nan))   # value along opponent's BEST reply
+    value_worst   = _ArrMap(sp, np.full(N, np.nan))   # OUR-book value vs opponent's BEST defence
+    crush_pot     = _ArrMap(sp, np.full(N, np.nan))   # propagated crush_potential (relative mode)
+    crush_pot_opp = _ArrMap(sp, np.full(N, np.nan))   # ...the OPPONENT's (--crush-penalty)
+    self_err_pot  = _ArrMap(sp, np.full(N, np.nan))   # propagated OUR-error cost (--self-error-weight)
+    memo_pot      = _ArrMap(sp, np.full(N, np.nan))   # propagated memorization cost
+    cover_depth   = _ArrMap(sp, np.full(N, np.nan))   # reach-weighted covered opp-decision depth
+    mem_nodes     = _ArrMap(sp, np.full(N, np.nan))   # count of prepared opponent branches
+    best_forcing  = _ArrMap(sp, np.full(N, np.nan))
+    best_error    = _ArrMap(sp, np.full(N, np.nan))
+    best_decis    = _ArrMap(sp, np.full(N, np.nan))
+    best_crush    = _ArrMap(sp, np.full(N, np.nan))
+    best_aug      = _BoolMap(sp, np.zeros(N, dtype=bool))
+    best_moves    = _ObjMap(sp, [None] * N)
+    values_arr = values.arr    # direct handle for the topological drain / cycle phase
+
+    # ── Topological sort (Kahn's) over node ids ────────────────────────────────
+    # pending_count[i] = out-edges of node i whose child is itself internal. Each
+    # (parent, child) pair is unique (distinct legal moves reach distinct zobrist
+    # positions), so a count equals the old set of in-DAG child hashes. Reverse CSR
+    # (par_off/par_idx) yields a valued child's parents for the drain.
+    internal_edge = e_child_id >= 0
+    pending_count = (np.bincount(p_sorted[internal_edge], minlength=N).astype(np.int64)
+                     if N else np.zeros(0, np.int64))
+    rc_child = e_child_id[internal_edge]
+    rc_parent = p_sorted[internal_edge]
+    rorder = np.argsort(rc_child, kind="stable")
+    par_off = np.zeros(N + 1, np.int64)
+    if N:
+        np.cumsum(np.bincount(rc_child[rorder], minlength=N), out=par_off[1:])
+    par_idx = rc_parent[rorder].astype(np.int64)
+
+    queue: deque[int] = deque(int(node_hash[i]) for i in np.nonzero(pending_count == 0)[0])
+    _memlog("post graph-build (CSR + value arrays)")
+
+    # ── Backwards induction (value stores are the numpy-backed views built above) ─
     opp_is_white = (our_color == chess.BLACK)
-    relative_crush = (crush_mode == "relative-propagated" and crush_weight > 0)
+    # Counter-crush and self-error are OFF by default, and every site that touches
+    # them is gated on these flags, so the default recipe computes and pays for
+    # nothing new — that is what makes the no-op equivalence check exact.
+    _counter_crush = crush_penalty > 0
+    _self_err = self_error_weight > 0 and bool(eval_lookup)
+    relative_crush = (crush_mode == "relative-propagated"
+                      and (crush_weight > 0 or _counter_crush))
     # Engine-candidate augmentation is only live when the caller supplied the full
     # (un-prefiltered) eval DB as sorted arrays — the prefiltered eval_lookup can't
     # see legal-but-unplayed children (they're outside the input DAG).
@@ -688,6 +1011,7 @@ def run_backwards_induction(
             # empirical tail dfull, which captures kills beyond the ply-30 tree.
             line_crush = 0.0
             dfull = 0.0
+            opp_line_crush = 0.0
             if relative_crush:
                 imm_sum   = (m.get("white_imm_sum") if our_color == chess.WHITE
                              else m.get("black_imm_sum"))
@@ -699,6 +1023,22 @@ def run_backwards_induction(
                     line_crush = imm + (1.0 - imm) * gamma_hop * crush_pot[ch]
                 else:
                     line_crush = dfull   # frontier / leaf: empirical discounted tail
+                if _counter_crush:
+                    # COUNTER-crush: identical construction on the opponent's colour.
+                    # `value` already absorbs our losses in expectation, but the crush
+                    # BONUS was added on top with no symmetric penalty, so selection
+                    # was paid to enter double-edged positions: winning fast 30% /
+                    # losing fast 30% scored the same as winning fast 30% / drawing 70%.
+                    o_imm_sum   = (m.get("black_imm_sum") if our_color == chess.WHITE
+                                   else m.get("white_imm_sum"))
+                    o_dfull_sum = (m.get("black_dfull_sum") if our_color == chess.WHITE
+                                   else m.get("white_dfull_sum"))
+                    o_imm   = crush(o_imm_sum,   ng, crush_prior, slice_mean_opp_imm)
+                    o_dfull = crush(o_dfull_sum, ng, crush_prior, slice_mean_opp_dfull)
+                    if ch in crush_pot_opp:
+                        opp_line_crush = o_imm + (1.0 - o_imm) * gamma_hop * crush_pot_opp[ch]
+                    else:
+                        opp_line_crush = o_dfull
             # Opponent's preference for THIS reply on the white-expected-score
             # scale (eval where covered, else empirical edge score).
             pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
@@ -706,6 +1046,7 @@ def run_backwards_induction(
                         "worst": value_worst.get(ch, child_val),
                         "total": tot, "frc": frc, "opp_err": oerr, "dec": dec,
                         "crush": cr, "line_crush": line_crush, "dfull": dfull, "pref": pref,
+                        "opp_line_crush": opp_line_crush,
                         "covered": covered, "child": ch})
         return mvs
 
@@ -727,13 +1068,21 @@ def run_backwards_induction(
             return ev if ev is not None else mv["worst"]
         return mv["worst"] if gate_metric == "worst" else mv["robust"]
 
+    # Anchor the ABSOLUTE gate sits on. "slice-prior" (default, legacy) uses the
+    # slice's empirical white score — measured 0.5183 on the 2019-25 pool, which
+    # makes the gate ASYMMETRIC BY COLOUR: White is held to >= -89.5 cp while
+    # Black is allowed up to +131.0 cp, i.e. Black's repertoire may book positions
+    # 41.5 cp worse than White's may. "even" anchors both at 0.5 (a symmetric
+    # +-110.1 cp at floor 0.1). See _test_stage3_gate_anchor.py.
+    gate_anchor_val = slice_prior if gate_anchor == "slice-prior" else 0.5
+
     def passes_gate(mv):
         # ABSOLUTE refutation gate: a candidate move is eligible only if its
-        # robustness measure stays within robustness_floor of the slice prior.
+        # robustness measure stays within robustness_floor of the anchor.
         rv = gate_rv(mv)
         if our_color == chess.WHITE:
-            return rv >= slice_prior - robustness_floor
-        return rv <= slice_prior + robustness_floor
+            return rv >= gate_anchor_val - robustness_floor
+        return rv <= gate_anchor_val + robustness_floor
 
     def apply_rel_gate(ph, cands_list, own_eval=True):
         """RELATIVE refutation gate: drop candidates conceding more than
@@ -844,6 +1193,9 @@ def run_backwards_induction(
                 cand = {"san": san, "val": es, "robust": es, "worst": es,
                         "total": 0, "frc": 0.0, "opp_err": 0.0, "dec": 0.0,
                         "crush": 0.0, "line_crush": 0.0, "dfull": 0.0, "pref": es,
+                        # An engine rescue has NO games behind it, so neither side's
+                        # empirical crush exists — 0 like the other crush fields.
+                        "opp_line_crush": 0.0,
                         "covered": True, "child": ch, "aug": True}
                 if passes_gate(cand):
                     out.append(cand)
@@ -879,9 +1231,15 @@ def run_backwards_induction(
         n_p = sum(mv["total"] for mv in mvs) or 0
         nat_val = max(mvs, key=lambda mv: mv["total"])["val"]
         keyf = lambda mv: (sign * mv["val"] + crush_weight * crush_term(mv)
+                           - crush_penalty * mv["opp_line_crush"]
                            + decisiveness_weight * mv["dec"]
                            + error_weight * mv["opp_err"] + forcing_weight * mv["frc"]
                            + cover_weight * cover_eff(mv["child"])
+                           # Self-error is a property of the POSITION, so the local
+                           # term at ph is identical for every candidate and cannot
+                           # affect this argmax; what discriminates is the error cost
+                           # the move leads INTO. Same shape as memo_pot above.
+                           - self_error_weight * self_err_pot.get(mv["child"], 0.0)
                            - memo_weight * (shrunk_dev(mv["val"], nat_val, n_p)
                                             + memo_pot.get(mv["child"], memo_leave)))
         best = max(cands, key=keyf)
@@ -911,6 +1269,14 @@ def run_backwards_induction(
                 else min(base, key=lambda mv: mv["pref"]))
         return best["robust"]
 
+    def local_self_error(ph):
+        # OUR expected eval loss at this position: the SAME computation as
+        # opponent_error, applied to our own move list with us as the side to
+        # move. The repertoire has always rewarded positions where the opponent
+        # errs; this is the missing symmetric term for where WE do.
+        return opponent_error(children[ph], eval_lookup,
+                              opp_is_white=(our_color == chess.WHITE), k_e=error_prior)
+
     def value_node(ph):
         mvs = build_move_vals(ph)
         if not mvs:
@@ -919,6 +1285,10 @@ def run_backwards_induction(
             best_decis[ph] = best_crush[ph] = None
             if relative_crush:
                 crush_pot[ph] = 0.0
+            if _counter_crush:
+                crush_pot_opp[ph] = 0.0
+            if _self_err:
+                self_err_pot[ph] = 0.0
             # A childless node at OUR turn = we've left book (no prepared continuation)
             # → leaving-book penalty; at the opponent's turn it's a terminal (game over).
             memo_pot[ph] = memo_leave if position_side[ph] == our_color else 0.0
@@ -946,6 +1316,10 @@ def run_backwards_induction(
                 best_decis[ph] = best_crush[ph] = None
                 if relative_crush:
                     crush_pot[ph] = 0.0
+                if _counter_crush:
+                    crush_pot_opp[ph] = 0.0
+                if _self_err:
+                    self_err_pot[ph] = 0.0
                 # We are out of book here — assign the leaving-book penalty.
                 memo_pot[ph] = memo_leave
                 cover_depth[ph] = mem_nodes[ph] = 0.0  # truncated → nothing prepared below
@@ -962,6 +1336,11 @@ def run_backwards_induction(
             if relative_crush:
                 # crush_potential of THIS position = the line we actually play.
                 crush_pot[ph] = b["line_crush"]
+            if _counter_crush:
+                crush_pot_opp[ph] = b["opp_line_crush"]
+            if _self_err:
+                # Additive along the chosen chain, exactly like memo_pot.
+                self_err_pot[ph] = local_self_error(ph) + self_err_pot.get(b["child"], 0.0)
             # memo cost of THIS node = forgetting cost of the chosen move + child's memo
             # (out-of-book child → leaving-book penalty).
             n_p = sum(mv["total"] for mv in mvs) or 0
@@ -986,6 +1365,13 @@ def run_backwards_induction(
                 # crush_potential = EXPECTED LineCrush over their empirical replies.
                 crush_pot[ph] = (sum(mv["line_crush"] * mv["total"] for mv in mvs) / total
                                  if total else 0.0)
+            if _counter_crush:
+                crush_pot_opp[ph] = (sum(mv["opp_line_crush"] * mv["total"] for mv in mvs)
+                                     / total if total else 0.0)
+            if _self_err:
+                # Reach-weighted expectation over their replies (mirrors memo_pot).
+                self_err_pot[ph] = (sum(self_err_pot.get(mv["child"], 0.0) * mv["total"]
+                                        for mv in mvs) / total if total else 0.0)
             best_decis[ph] = best_crush[ph] = None
             # memo cost = reach (frequency) weighted expected memo over their replies
             # (an out-of-book child contributes the leaving-book penalty, not 0).
@@ -1010,10 +1396,11 @@ def run_backwards_induction(
     while queue:
         ph = queue.popleft()
         value_node(ph)
-        for parent in parents_of[ph]:
-            pending[parent].discard(ph)
-            if not pending[parent] and parent not in values:
-                queue.append(parent)
+        cid = idx[ph]
+        for pid in par_idx[par_off[cid]:par_off[cid + 1]]:
+            pending_count[pid] -= 1
+            if pending_count[pid] == 0 and values_arr[pid] != values_arr[pid]:
+                queue.append(int(node_hash[pid]))
 
     # ── Cycle handling ────────────────────────────────────────────────────────
     # The queue drains without valuing exactly the positions from which a CYCLE is
@@ -1029,9 +1416,9 @@ def run_backwards_induction(
     # memo_pot accumulates additively along the chosen chain, so a converged
     # best-move chain that stays inside an SCC (repetition legitimately best)
     # diverges there by construction — tracked separately, never gating.
-    leftover = all_positions - set(values)
+    leftover = {int(node_hash[i]) for i in np.nonzero(np.isnan(values_arr))[0]}
     if leftover:
-        print(f"  cycles: {len(leftover):,}/{len(all_positions):,} positions "
+        print(f"  cycles: {len(leftover):,}/{N:,} positions "
               f"unreached by the topological queue (cycle members + ancestors)",
               flush=True)
         sub_succ = {ph: [m["child_hash"] for m in children[ph]
@@ -1070,8 +1457,18 @@ def run_backwards_induction(
         # exactly, improve with hysteresis) — deliberately not built for the ~80
         # affected SCCs out of 13M positions.
         EPS, SWEEP_CAP, ALPHA = 1e-7, 1500, 0.5
-        gate_dicts = (values, values_robust, value_worst, crush_pot)
-        gate_names = ("value", "value_robust", "value_worst", "crush_pot")
+        gate_dicts = [values, values_robust, value_worst, crush_pot]
+        gate_names = ["value", "value_robust", "value_worst", "crush_pot"]
+        # crush_pot_opp is bounded in [0,1] and propagates MULTIPLICATIVELY (same
+        # recurrence as crush_pot), so it converges and belongs in the gate.
+        # self_err_pot deliberately does NOT: like memo_pot it accumulates
+        # ADDITIVELY along the chosen chain, so a converged best-move chain that
+        # stays inside an SCC diverges there by construction — gating on it would
+        # report false non-convergence forever.
+        if _counter_crush:
+            gate_dicts.append(crush_pot_opp)
+            gate_names.append("crush_pot_opp")
+        gate_dicts, gate_names = tuple(gate_dicts), tuple(gate_names)
 
         def _sweep(members: list[int], alpha: float = 1.0):
             """One Gauss-Seidel sweep. Returns (residual, worst_node, worst_dict).
@@ -1147,8 +1544,8 @@ def run_backwards_induction(
               f"{len(learn_override_nodes):,} nodes", flush=True)
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
-    cover_effs = {ph: cover_depth.get(ph, 0.0) / (1.0 + mem_nodes.get(ph, 0.0))
-                  for ph in all_positions}
+    cover_effs = _ArrMap(sp, np.nan_to_num(cover_depth.arr, nan=0.0)
+                         / (1.0 + np.nan_to_num(mem_nodes.arr, nan=0.0)))
     return (values, best_moves, best_forcing, best_error,
             best_decis, best_crush, crush_pot, memo_pot, cover_effs, value_worst,
             values_robust, position_epd, position_side, slice_prior, best_aug)
@@ -1286,6 +1683,16 @@ def main():
                              "only sound if WE also play engine-perfect onward). value_worst is "
                              "<= value_robust, so the same --robustness-floor binds tighter — "
                              "re-tune the floor when switching.")
+    parser.add_argument("--gate-anchor", choices=["slice-prior", "even"], default="slice-prior",
+                        help="Reference point the ABSOLUTE gate is measured from. "
+                             "'slice-prior' (DEFAULT, legacy): the slice's empirical white "
+                             "score. Measured 0.5183 on the 2019-25 pool, which makes the "
+                             "gate ASYMMETRIC BY COLOUR — at floor 0.1 White is held to "
+                             ">= -89.5cp while Black is allowed up to +131.0cp, so Black may "
+                             "book positions 41.5cp worse than White may. 'even': anchor both "
+                             "colours at 0.5 (symmetric +-110.1cp at floor 0.1). Needs an A/B "
+                             "before adopting — the asymmetry may be doing useful work for "
+                             "Black, who really does start worse.")
     parser.add_argument("--gate-rel-floor", type=float, default=0.1,
                         help="RELATIVE refutation gate: a candidate is dropped if its gate "
                              "value (engine eval of the reached position, for --gate-metric "
@@ -1395,6 +1802,24 @@ def main():
                              "forcingness). A bare leaf scores 0, so it can't be gamed by leaving "
                              "book early. 0.0 = disabled (default, back-compat); needs a sweep to "
                              "tune (lives on a different scale than value/crush).")
+    parser.add_argument("--crush-penalty", type=float, default=0.0,
+                        help="COUNTER-CRUSH weight: subtract the propagated rate at which the "
+                             "OPPONENT reaches a winning position early through this move — the "
+                             "exact mirror of --crush-weight, built from the histogram's "
+                             "opposite-colour columns (computed and carried all along, never "
+                             "read until now). Without it the sharpness term is one-sided: a "
+                             "line that wins fast 30%% and LOSES fast 30%% scores the same crush "
+                             "bonus as one that wins fast 30%% and draws 70%%, so selection is "
+                             "paid to enter double-edged positions. 0.0 = disabled (default, "
+                             "exact back-compat). Needs a sweep — same scale as --crush-weight.")
+    parser.add_argument("--self-error-weight", type=float, default=0.0,
+                        help="Penalty on OUR propagated expected eval loss down the line a move "
+                             "enters — the symmetric counterpart to --error-weight, which "
+                             "rewards positions where the OPPONENT errs. Without it a +2.0 line "
+                             "needing six only-moves outranks a +0.8 line that plays itself. "
+                             "Propagates additively along the chosen chain (like memo_cost) and "
+                             "is deliberately excluded from the SCC convergence gate for the "
+                             "same reason. Requires --eval-db. 0.0 = disabled (default).")
     parser.add_argument("--cover-min-games", type=int, default=0,
                         help="Min games for an opponent reply to count as a PREPARED branch in "
                              "the coverage metric (a 'line you must learn'). Replies below it are "
@@ -1501,6 +1926,15 @@ def main():
     print(f"Robustness floor:  {args.robustness_floor}"
           f"{'  (gate disabled)' if args.robustness_floor >= 1.0 else ''}")
     if args.robustness_floor < 1.0:
+        print(f"Gate anchor:       {args.gate_anchor}"
+              f"{'  (symmetric across colours)' if args.gate_anchor == 'even' else ''}")
+    if args.crush_penalty > 0:
+        print(f"Crush penalty:     {args.crush_penalty}  (counter-crush: opponent's "
+              f"propagated early-win rate)")
+    if args.self_error_weight > 0:
+        print(f"Self-error weight: {args.self_error_weight}  (our propagated expected "
+              f"eval loss down the line)")
+    if args.robustness_floor < 1.0:
         print(f"Robust eval wt:    {args.robust_eval_weight}")
     print(f"Rel gate floor:    {args.gate_rel_floor}"
           f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
@@ -1606,6 +2040,7 @@ def main():
 
     stats = pl.read_parquet(input_path)
     stats = stats.filter(pl.col("elo_band").is_not_null())
+    _memlog("post stats-load")
 
     if args.event:
         stats = stats.filter(pl.col("event") == args.event)
@@ -1644,7 +2079,7 @@ def main():
             keys = ["event", "elo_band", "parent_hash", "move_san"]
             cdb_sql = str(cdb_path).replace("\\", "/")
             con = duckdb.connect()
-            con.execute("SET preserve_insertion_order=false; SET memory_limit='40GB';")
+            con.execute("SET preserve_insertion_order=false; SET memory_limit='16GB';")
             if args.crush_mode == "relative-propagated":
                 # Relative histogram (move_bucket = full moves from THIS position to the
                 # decisive end). Per edge precompute, for both colours:
@@ -1695,14 +2130,16 @@ def main():
         if col not in stats.columns:
             stats = stats.with_columns(pl.lit(None, dtype=dt).alias(col))
 
+    _memlog("post crush-join / pre-slice")
     slices   = stats.select(["event", "elo_band"]).unique().sort(["event", "elo_band"])
-    all_rows: list[dict] = []
+    frames: list = []
     t_total  = time.time()
 
     for sr in slices.iter_rows(named=True):
         ev, eb = sr["event"], sr["elo_band"]
         mask   = (pl.col("event") == ev) & (pl.col("elo_band") == eb)
-        edges  = stats.filter(mask).to_dicts()
+        edges  = stats.filter(mask)
+        _memlog(f"post edge-slice ({ev}/{eb}, {edges.height:,} edges)")
 
         t1 = time.time()
         (values, best_moves, best_forcing, best_err, best_decis, best_crush, crushpot,
@@ -1723,11 +2160,13 @@ def main():
             decisiveness_weight=args.decisiveness_weight,
             robustness_floor=args.robustness_floor,
             gate_metric=args.gate_metric,
+            gate_anchor=args.gate_anchor,
             gate_rel_floor=args.gate_rel_floor,
             gate_rel_baseline=args.gate_rel_baseline,
             gate_rel_own_margin=args.gate_rel_own_margin,
             robust_eval_weight=args.robust_eval_weight,
             crush_weight=args.crush_weight,
+            crush_penalty=args.crush_penalty,
             crush_prior=args.crush_prior,
             crush_mode=args.crush_mode,
             crush_gamma=args.crush_gamma,
@@ -1741,6 +2180,7 @@ def main():
             memo_leave=args.memo_leave_cost,
             cover_weight=args.cover_weight,
             cover_min_games=args.cover_min_games,
+            self_error_weight=args.self_error_weight,
             augment_engine=args.augment_engine,
             full_eval_hashes=full_eval_hashes,
             full_eval_es=full_eval_es,
@@ -1768,32 +2208,14 @@ def main():
             print(f"    engine-augmented recommendations: {n_aug:,}"
                   + (f"  (e.g. {sample})" if sample else ""))
 
-        for ph, val in values.items():
-            all_rows.append({
-                "event":         ev,
-                "elo_band":      eb,
-                "position_hash": ph,
-                "position_epd":  pos_epd[ph],
-                "side_to_move":  "white" if pos_side[ph] == chess.WHITE else "black",
-                "value":         val,
-                "best_move":     best_moves.get(ph),
-                "forcingness":   best_forcing.get(ph),
-                "opponent_error": best_err.get(ph),
-                "decisiveness":  best_decis.get(ph),
-                "crush_rate":    best_crush.get(ph),
-                "crush_potential": crushpot.get(ph),
-                "memo_cost":     memopot.get(ph),
-                "cover_eff":     covereff.get(ph),
-                "value_worst":   worstvals.get(ph),
-                "value_robust":  vals_robust.get(ph),
-                "eval_score":    eval_lookup.get(ph),
-                "augmented":     bestaug.get(ph, False),
-            })
+        frames.append(_slice_frame(
+            ev, eb, values, best_moves, best_forcing, best_err, best_decis,
+            best_crush, crushpot, memopot, covereff, worstvals, vals_robust,
+            pos_epd, pos_side, bestaug, eval_lookup))
 
-    result = (
-        pl.from_dicts(all_rows)
-        .sort(["event", "elo_band", "position_hash"])
-    )
+    _memlog(f"pre-output-build ({len(frames)} slice frame(s))")
+    result = pl.concat(frames).sort(["event", "elo_band", "position_hash"])
+    _memlog("post-output-build")
     result.write_parquet(str(output_path), compression="zstd")
 
     size_mb      = output_path.stat().st_size / 1e6
