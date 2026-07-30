@@ -1,0 +1,24 @@
+# Chess opening repertoire builder — pipeline dependencies (Python 3.11).
+#
+#   uv venv
+#   uv pip install -r requirements.txt
+#
+# The trainer app's extra runtime deps (fastapi/uvicorn/fsrs) are included below
+# so one install covers the whole repo; python/trainer_app/requirements.txt is
+# kept as the standalone subset for installing just the app on another machine.
+#
+# Lower bounds are the versions this has actually been run against, not guesses.
+
+# --- core pipeline ---
+chess>=1.11,<2          # position replay, SAN parsing, polyglot Zobrist hashing
+polars>=1.40            # dataframe layer for stats/repertoire parquets
+pyarrow>=24             # parquet read/write, batched scanning
+duckdb>=1.5             # out-of-core GROUP BYs over the multi-billion-row merges
+numpy>=2.4              # CSR graph + value arrays in the backwards induction
+psutil>=7               # memory profiling / worker priority on long runs
+requests>=2.31          # Lichess API (eval DB fetch, game import)
+
+# --- trainer app ---
+fastapi>=0.139,<1
+uvicorn>=0.51,<1
+fsrs>=5,<6

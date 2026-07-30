@@ -17,6 +17,24 @@ pooled data: find moves most likely to reach a winning position as early as poss
 outright losing against best play. A Stockfish eval overlay gates out empirically-good-but-losing
 trap lines.
 
+## Repo layout
+
+`README.md` is the public front door (what the project is, how the stages chain, how to run
+them); this file is the deep technical companion. Keep them consistent when entry points move.
+
+- `python/` — the pipeline, the analysis tools, `annotate/`, `trainer_app/`, and the test suite
+  (`run_tests.py` + `_test_*.py`, fixtures in `python/_test_fixtures/`).
+- `archive/` — the original R implementation this replaced. Reference only, never run.
+- `scratch/` — **gitignored.** Ad-hoc one-off scripts: benchmark harnesses whose result is
+  already baked into the code, drivers for runs that have completed, throwaway probes. Put
+  new one-offs here rather than in `python/`, so a fresh checkout shows only things that are
+  actually part of the pipeline or the tests. Scripts there still import first-party modules
+  from `python/`, so running one needs `PYTHONPATH=<repo>/python`. The directory and its own
+  `README.md` are local-only and will not be present in a fresh clone — that is intentional.
+
+Anything in `python/` is implicitly a claim that it is a maintained part of the pipeline,
+the analysis surface, or the tests. If that stops being true, move it to `scratch/`.
+
 ## Data paths — critical
 
 | Path | Role |
@@ -43,7 +61,12 @@ D: source parquets
    │  build_pooled_stats.py --phase extract   (fused extract+aggregate; per-file partials)
    │  build_pooled_stats.py --phase merge     (monthly consolidation → final GROUP BYs)
    ▼
-position_stats_pooled_<tag>.parquet + crush_hist_rel_pooled_<tag>.parquet
+position_stats_pooled_<tag>.parquet
+   │  build_crush_winpos_phase2.py            (SECOND replay from D: — the crush histogram the
+   │                                           locked recipe actually consumes; needs the
+   │                                           finished position_stats as its `keys` universe)
+   ▼
+crush_hist_relwin_pooled_<tag>.parquet
    │  build_sharp_reps.py                     (locked Stage-3 recipe; TWO-PASS wrapper around
    │                                           stage3_backwards_induction.py: pass-1 build →
    │                                           plan_consistency_report.py --export-prefix →
@@ -58,7 +81,19 @@ repertoire_pooled_{white,black}_sharp.parquet
 
 Pooled outputs are stamped `event='Pooled', elo_band=0` — a synthetic slice, so Stage 3 consumes
 them unchanged. Skipped corrupt source months are encoded in `SKIP_PARTITIONS` in
-`build_pooled_stats.py` (and `MONTHS_2024_SKIP` in the legacy `run_2025_combined.py`).
+`build_pooled_stats.py` (and `MONTHS_2024_SKIP` in the legacy
+`scratch/python/run_2025_combined.py`).
+
+**The resignation-proxy crush histogram is retired.** `build_pooled_stats.py` no longer merges
+`crush_hist_rel_pooled_*` unless `--crush-hist` is passed: nothing consumes it, and consolidating
+its partials was the largest avoidable cost in the merge. The extract still writes
+`.crush.parquet` partials, so it can be merged later without re-extracting.
+
+**TODO for the next full rebuild — fuse winpos into the extract.** The second replay above is
+avoidable; it costs ~1.5-3 days at 6 workers for nothing that the extract's own replay could not
+produce. Design and sequencing are in the plan file
+`~/.claude/plans/fused-winpos-extract.md`. Do this AFTER the winpos run on the current pool, and
+before ingesting 2025-10 … 2026-07.
 
 ### Legacy sliced path (per-(event, elo_band) stats)
 
@@ -196,7 +231,8 @@ cheap. Windows Task Scheduler has been unreliable for this; don't build on it.
 ## Compression and storage standards
 
 New month ingestion (2025-05+, 2026+) uses `python/process_pgn_parquets.py` with **recipe v3**
-(locked by the `parquet_recipe_202607` benchmark; see
+(locked by the `parquet_recipe_202607` benchmark — harness now in
+`scratch/python/benchmark_*.py`; results at
 `E:/bench/parquet_recipe_202607/fullmonth_results.csv`): **zstd-19**, **1M-row row groups**, and
 **M1 movetext comment-stripping**. Two earlier claims here were wrong and are corrected: the level
 was zstd-6, not the tuned optimum, and the "1M-row groups" were aspirational — the old
@@ -219,8 +255,8 @@ The original R script lives in `archive/` — don't use it.
 `python/notify.py`: stdlib-only SMTP. Creds in `%USERPROFILE%/.chess_pipeline_notify.json`
 (outside the repo, gitignored pattern; `notify_config.example.json` is the template) or
 `CHESS_NOTIFY_*` env vars. Silently no-ops if unconfigured — pipelines run identically without it.
-`pipeline_watchdog.py` was a one-off babysitter for the completed 2024/2025 run (self-deleting
-scheduled task); historical, but a useful template if a future run needs one.
+`scratch/python/pipeline_watchdog.py` was a one-off babysitter for the completed 2024/2025 run
+(self-deleting scheduled task); historical, but a useful template if a future run needs one.
 
 ## Working principles
 

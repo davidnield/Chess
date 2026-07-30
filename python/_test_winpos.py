@@ -27,7 +27,7 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).parent))
 from build_crush_winpos import winpos_sql
 
-SCRATCH = Path(__file__).parent.parent / "_winpos_test_fixtures"
+SCRATCH = Path(__file__).parent / "_test_fixtures" / "winpos"
 SCRATCH.mkdir(exist_ok=True)
 
 

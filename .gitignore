@@ -20,3 +20,9 @@ python/notify_config.local.json
 .env.local
 # Opening-training app user data (FSRS history, imported games, training pack)
 trainer_data/
+
+# Ad-hoc one-off scripts: benchmark harnesses, drivers for runs that have already
+# completed, throwaway probes. Kept on disk because they document how a past result
+# was produced, but deliberately not pushed — they are not part of the pipeline or
+# the test suite and would only be noise in a fresh checkout. See scratch/README.md.
+scratch/
