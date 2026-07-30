@@ -56,6 +56,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 sys.path.insert(0, str(Path(__file__).parent))
 from stage1_extract_positions import iter_san_moves, zobrist_int64
+from zobrist import IncrementalZobrist
 from build_crush_winpos import winpos_sql
 from build_pooled_stats import (discover_source_files, _duck, _sql_path,
                                 _bucket_expr, _run_copy_query, N_MERGE_BUCKETS)
@@ -77,9 +78,15 @@ THRESH_CP = 300
 
 # ── per-file fused extraction + winpos aggregation ──────────────────────────
 
-def _walk_game_winpos(pm_buf: dict, game_id, movetext, elo_band, max_ply: int) -> bool:
+def _walk_game_winpos(pm_buf: dict, game_id, movetext, elo_band, max_ply: int,
+                      hasher=None) -> bool:
     """Same replay shape as build_pooled_stats._walk_game, but no crush-bucket
-    computation here — that happens in winpos_sql from the crush-fact table."""
+    computation here — that happens in winpos_sql from the crush-fact table.
+
+    `hasher` is an optional reused IncrementalZobrist (see build_pooled_stats.
+    _walk_game); omitting it reproduces the original full-rescan path exactly.
+    No EPD memo here — this walk never materializes EPDs.
+    """
     if not movetext:
         return False
     toks = list(iter_san_moves(movetext))
@@ -87,9 +94,16 @@ def _walk_game_winpos(pm_buf: dict, game_id, movetext, elo_band, max_ply: int) -
         return False
     maxply = min(max_ply, len(toks))
     board = chess.Board()
+    if hasher is None:
+        get_hash = lambda: zobrist_int64(board)
+        push = board.push
+    else:
+        hasher.reset(board)
+        get_hash = lambda: hasher.current(board)
+        push = lambda mv: hasher.push_move(board, mv)
     for ply in range(1, maxply + 1):
         san = toks[ply - 1]
-        ph = zobrist_int64(board)
+        ph = get_hash()
         try:
             move = board.parse_san(san)
         except (ValueError, AssertionError):
@@ -99,7 +113,7 @@ def _walk_game_winpos(pm_buf: dict, game_id, movetext, elo_band, max_ply: int) -
         pm_buf["parent_hash"].append(ph)
         pm_buf["move_san"].append(san)
         pm_buf["elo_band"].append(elo_band)
-        board.push(move)
+        push(move)
     return False
 
 
@@ -130,6 +144,7 @@ def _process_file(task: tuple) -> str:
     crush_rows = {"game_id": [], "white_win_normal": [], "black_win_normal": [],
                  "move_count": []}
     n_games = n_kept = 0
+    hasher = IncrementalZobrist(chess.Board())   # reused across every game in the file
     pf = pq.ParquetFile(src)
     for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=SRC_COLUMNS):
         for rec in batch.to_pylist():
@@ -148,7 +163,8 @@ def _process_file(task: tuple) -> str:
             crush_rows["white_win_normal"].append(1 if (normal and ws == 1.0) else 0)
             crush_rows["black_win_normal"].append(1 if (normal and ws == 0.0) else 0)
             crush_rows["move_count"].append(rec["move_count"])
-            _walk_game_winpos(pm_buf, gid, rec["movetext"], rec["elo_band"], MAX_PLY)
+            _walk_game_winpos(pm_buf, gid, rec["movetext"], rec["elo_band"], MAX_PLY,
+                              hasher)
 
     SCRATCH.mkdir(parents=True, exist_ok=True)
     pm_tmp = SCRATCH / f"{label}.pm.parquet"
