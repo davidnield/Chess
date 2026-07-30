@@ -1,19 +1,18 @@
 # Chess opening repertoire builder
 
-Builds a chess opening repertoire from empirical evidence rather than theory: it
-ingests Lichess's monthly game dumps, extracts every position-move edge from about
-a billion games, aggregates them into per-position statistics, then runs backwards
-induction over the position graph to pick a move at every position you can reach.
+This builds a chess opening repertoire out of Lichess game data. It ingests the
+monthly game dumps, extracts every position-move edge from about a billion games,
+aggregates those into per-position statistics, then runs backwards induction over
+the position graph to pick a move at every position you can reach.
 
-The current product is a **memorization-efficient "sharp" repertoire** for pooled
-≥1800 Blitz/Rapid/Classical play: find the moves most likely to reach a winning
-position *early*, without booking anything that loses to best play. A Stockfish
-eval overlay gates out lines that score well empirically only because opponents
-keep falling for them.
+What it currently produces is a sharp repertoire for pooled ≥1800 Blitz, Rapid and
+Classical: moves that tend to reach a winning position quickly, while staying
+sound enough not to lose against best play. A Stockfish eval overlay throws out
+lines that score well only because opponents keep falling for them.
 
-Scale, for the current build: **1.03 billion games** → 23.45M position-move edges
-→ 13.28M distinct positions, cross-referenced against a **397.6M-position** eval
-database.
+The current build covers 1.03 billion games, which give 23.45M position-move edges
+across 13.28M distinct positions, checked against an eval database of 397.6M
+positions.
 
 ## How it works
 
@@ -38,32 +37,35 @@ repertoire_{white,black}_sharp.parquet
    └─ trainer_app/                 local web app: drills, explorer, deviations
 ```
 
-### The interesting part: how a move gets chosen
+### How a move gets chosen
 
-`stage3_backwards_induction.py` values every position exactly once in topological
-order (Zobrist-hashed, so transpositions collapse automatically; residual cycles
-from reversible shuffles get Tarjan SCC condensation and a damped fixpoint). At
-positions where *you* move, it maximizes a weighted sum of:
+`stage3_backwards_induction.py` values every position once, in topological order.
+Positions are keyed by Zobrist hash, so transpositions collapse into a single
+node. Cycles created by reversible piece shuffles get Tarjan SCC condensation and
+a damped fixpoint.
 
-- **empirical value** — expected score against the *average* opponent at this
-  rating, propagated up the tree, with Beta-Binomial shrinkage at the leaves so
-  lucky small samples can't win the argmax;
-- **crush** — how often the line reaches a winning position early (mate,
-  resignation, or crossing +300cp), discounted by how long it takes;
-- **coverage efficiency** — how much of the opponent's traffic stays on prepared
-  rails per line you have to memorize;
-- **memorization cost** — what you lose if you forget and play the natural move.
+At positions where you move, it maximises a weighted sum of four terms:
 
-…subject to two **refutation gates**: a move is rejected if the engine says the
-position it reaches is losing against best play (absolute), or if it concedes too
-much versus the best alternative (relative). Finally, a **learnability tiebreak**
-collapses near-equal candidates onto whichever idea the rest of the repertoire
-already plays most often — so rare sidelines reuse your habits instead of
-demanding fresh memorization.
+- Empirical value: expected score against the average opponent at this rating,
+  propagated up the tree. Leaves get Beta-Binomial shrinkage, so a lucky
+  three-game line can't win the argmax.
+- Crush: how often the line reaches a winning position early, counting mate,
+  resignation, or the eval crossing +300cp, discounted by how long it takes.
+- Coverage efficiency: how much opponent traffic stays on prepared lines, per
+  position you have to memorise.
+- Memorization cost: what you give up when you forget a line and play the natural
+  move instead.
 
-Opponent nodes average over the *empirical* move distribution, not best play. That
-is deliberate: this is a repertoire for playing humans, and the gates are what
-guard the worst case.
+Two gates then veto candidates. The absolute gate rejects a move if the engine
+says the position it reaches is losing against best play. The relative gate
+rejects it if it concedes too much compared with the best alternative. When
+several candidates are still close after all that, a tiebreak prefers whichever
+idea the rest of the repertoire already plays most often, so rare sidelines reuse
+habits you have instead of adding new ones.
+
+Opponent nodes average over the empirical move distribution instead of assuming
+best play, because the repertoire is for playing humans. The gates are what cover
+the worst case.
 
 ## Repo layout
 
@@ -74,8 +76,8 @@ python/
   build_pooled_stats.py          canonical extract + aggregate
   build_crush_winpos*.py         "winning position reached early" histogram
   build_{lichess,fishnet}_eval_db.py   Stockfish eval databases
-  stage3_backwards_induction.py  the valuation engine (the core of the project)
-  build_sharp_reps.py            the locked recipe — two-pass driver
+  stage3_backwards_induction.py  the valuation engine
+  build_sharp_reps.py            the locked recipe, as a two-pass driver
   stage1..stage4_*.py            legacy per-(event, elo band) sliced path
   score_repertoire.py            scorecard
   plan_consistency_report.py     idea-consistency measurement
@@ -86,14 +88,14 @@ python/
   trainer_app/                   local web app (FSRS drills, explorer, deviations)
   run_tests.py, _test_*.py       the test suite
 archive/                         the original R implementation this replaced
-CLAUDE.md                        deep technical notes: invariants, contracts,
-                                 failure modes, and the painful lessons
+CLAUDE.md                        technical notes: invariants, contracts, and
+                                 known failure modes
 ```
 
-**The data is not in this repo.** Inputs and outputs live on local drives and run
-to several terabytes; paths are constants at the top of each script (see the data
-table in `CLAUDE.md`). Nothing here will run end-to-end without them, but every
-script's header docstring documents its exact CLI.
+The data isn't in this repo. Inputs and outputs live on local drives and run to
+several terabytes; paths are constants at the top of each script, and CLAUDE.md
+has a table of them. Nothing here will run end to end without that data, but each
+script's header docstring documents its own CLI.
 
 ## Setup
 
@@ -106,8 +108,7 @@ uv pip install -r requirements.txt
 
 ## Running it
 
-Every script carries an authoritative header docstring with its exact CLI — read
-that rather than trusting remembered flags.
+Each script's header docstring has its current CLI. Check there before running.
 
 ```powershell
 # Aggregate stats from the source parquets (both phases are resumable)
@@ -122,9 +123,10 @@ that rather than trusting remembered flags.
 .venv\Scripts\python.exe python\repertoire_explorer.py
 ```
 
-Long runs assume they can die: every stage writes atomically (`.tmp` then rename),
-skip-gates on its own output, and checkpoints anything expensive, so restarting is
-always cheap. That is a load-bearing design property at this scale, not a nicety.
+Long runs are assumed to die partway through. Every stage writes its output
+atomically (`.tmp`, then rename), skips work whose output already exists, and
+checkpoints the expensive intermediate steps, so restarting picks up where it
+stopped.
 
 ### Trainer app
 
@@ -138,13 +140,12 @@ shows where your real games left the book. See `python/trainer_app/README.md`.
 .venv/Scripts/python.exe python/run_tests.py
 ```
 
-Every `python/_test_*.py` is a standalone pass/fail script; `run_tests.py` runs
-them all and prints a summary. They import the production code rather than
-reimplementing it, and several assert *exact* equivalence — e.g. the optimized
-extract must produce byte-for-byte identical aggregates to the original replay
-path, and the incremental Zobrist hash is differentially tested against
-python-chess over millions of plies. Tests that need the local datasets skip
-cleanly when those aren't present.
+Every `python/_test_*.py` is a standalone pass/fail script, and `run_tests.py`
+runs them all and prints a summary. They import the production code instead of
+reimplementing it. Several check exact equivalence: the optimised extract has to
+produce identical aggregates to the original replay path, and the incremental
+Zobrist hash is differentially tested against python-chess over millions of plies.
+Tests that need the local datasets skip when those aren't present.
 
 ## License
 
