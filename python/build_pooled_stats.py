@@ -24,6 +24,14 @@ merge, whose tier/shard/fragment machinery was ~OOM-defensive scaffolding for th
   edge files). Two final single-pass DuckDB GROUP BYs merge the partials. No
   tiers — filtering + pooling keep cardinality bounded.
 
+RETIRED OUTPUT: the resignation-proxy crush histogram is no longer merged unless
+--crush-hist is passed. Nothing consumes it — build_sharp_reps.py reads the winpos
+histogram (crush_hist_relwin_*, build_crush_winpos_phase2.py), whose win event is
+the earliest of (eval >= +300cp, decisive-normal end) rather than terminations
+alone. The extract still writes .crush.parquet partials, so it can be merged later
+without re-extracting. The next full rebuild should fuse winpos into THIS script's
+replay instead of running a second pass — see the task note in CLAUDE.md.
+
 Reusable: parameterized by --start-year/--end-year/--months, --min-elo, --events,
 --min-games, --max-ply. Resumable: per-chunk partial skip-gate + atomic .tmp
 writes; re-run for a new month or a different filter = another invocation.
@@ -56,6 +64,7 @@ import pyarrow.parquet as pq
 
 # Reuse the proven SAN tokenizer + signed-int64 Zobrist from Stage 1 (sibling module).
 from stage1_extract_positions import iter_san_moves, zobrist_int64
+from zobrist import IncrementalZobrist
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -148,12 +157,26 @@ def classify_maxply(tiers: dict | None, w1: str | None, b1: str | None,
 
 
 def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
-               move_count, tiers, max_ply_cap) -> bool:
+               move_count, tiers, max_ply_cap, hasher=None, epd_memo=None) -> bool:
     """Append one game's per-ply rows into the columnar buffer, capping depth by the
     asymmetric tier (classified from the first two SAN moves). Returns True on parse error.
 
     NOTE: move_bucket still uses the game's REAL move_count (full length from source),
     so the relative-crush horizon is unaffected by where we truncate extraction.
+
+    `hasher` / `epd_memo` are the two extract-speed optimizations (2026-07 profiling:
+    the position hash and board.epd() were 29% and 52% of replay time, against 19%
+    for the actual parse_san+push).  Both are OPTIONAL — passing neither reproduces
+    the original code path exactly, which is what _test_extract_equivalence.py
+    diffs against:
+      hasher    — an IncrementalZobrist reused across games (reset per game).
+      epd_memo  — dict[position_hash -> EPD], owned by the caller and cleared per
+                  read batch.  Sound because polyglot hashes the ep file on mere
+                  pawn ADJACENCY while board.epd() uses a legal-only rule, so the
+                  hash discriminates at least as finely as the EPD on every field:
+                  hash -> EPD is a function (the reverse is NOT — see
+                  _test_epd_memo.py).  Measured hit rate 35.1%, identical per-batch
+                  and whole-file, so clearing per batch costs nothing.
     """
     if not movetext:
         return False
@@ -165,10 +188,23 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
     maxply = min(classify_maxply(tiers, w1, b1, max_ply_cap), max_ply_cap, len(toks))
     decisive = white_norm or black_norm
     board = chess.Board()
+    if hasher is None:
+        get_hash = lambda: zobrist_int64(board)
+        push = board.push
+    else:
+        hasher.reset(board)
+        get_hash = lambda: hasher.current(board)
+        push = lambda mv: hasher.push_move(board, mv)
     for ply in range(1, maxply + 1):
         san = toks[ply - 1]
-        ph = zobrist_int64(board)
-        epd = board.epd()
+        ph = get_hash()
+        if epd_memo is None:
+            epd = board.epd()
+        else:
+            epd = epd_memo.get(ph)
+            if epd is None:
+                epd = board.epd()
+                epd_memo[ph] = epd
         try:
             move = board.parse_san(san)
         except (ValueError, AssertionError):
@@ -186,7 +222,7 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
         buf["wn"].append(1 if white_norm else 0)
         buf["bn"].append(1 if black_norm else 0)
         buf["move_bucket"].append(b)
-        board.push(move)
+        push(move)
     return False
 
 
@@ -199,8 +235,13 @@ _BUF_SCHEMA = {
 
 def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
                  min_elo: int, max_ply: int, tiers: dict | None,
-                 limit_games: int | None = None) -> dict:
-    """Fused per-file extractor: filter -> replay once -> pre-aggregated ps + crush partials."""
+                 limit_games: int | None = None, optimize: bool = True) -> dict:
+    """Fused per-file extractor: filter -> replay once -> pre-aggregated ps + crush partials.
+
+    `optimize=False` disables the incremental hasher + EPD memo, restoring the
+    pre-2026-07 replay path byte-for-byte. Only _test_extract_equivalence.py and
+    _bench_extract.py pass it; production always runs optimized.
+    """
     if ps_out.exists() and crush_out.exists():
         return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
 
@@ -209,6 +250,9 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
     ps_parts: list[pl.DataFrame] = []
     crush_parts: list[pl.DataFrame] = []
     buf = _new_buf()
+    # Reused across every game in the file; the memo is cleared per read batch.
+    hasher = IncrementalZobrist(chess.Board()) if optimize else None
+    epd_memo: dict[int, str] | None = {} if optimize else None
 
     def flush_batch():
         if not buf["parent_hash"]:
@@ -247,9 +291,13 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
             white_norm = normal and ws == 1.0
             black_norm = normal and ws == 0.0
             if _walk_game(buf, rec["movetext"], ws, white_norm, black_norm,
-                          rec["move_count"], tiers, max_ply):
+                          rec["move_count"], tiers, max_ply, hasher, epd_memo):
                 n_failed += 1
         flush_batch()
+        # Bound the memo: the 35.1% hit rate is entirely intra-batch, so clearing
+        # here costs no hits and keeps the dict at ~one batch's distinct positions.
+        if epd_memo is not None:
+            epd_memo.clear()
         batch_i += 1
         if batch_i % COMPACT_EVERY == 0:
             compact()
@@ -497,7 +545,8 @@ def _consolidate_one_month(task: tuple) -> tuple:
 
 
 def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
-                        tmp_base: Path | None = None) -> Path:
+                        tmp_base: Path | None = None,
+                        kinds: tuple[str, ...] = ("ps", "crush")) -> Path:
     """SUM-only per-(year,month) consolidation of the per-file partials.
 
     NO min_games filter here — pure summation, so a position split across files/
@@ -505,13 +554,18 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
     file-partials to ~80 monthly partials (within-month dedup), making the final
     GROUP BY tractable and crash-safe. Resumable: skip-gated per month, atomic write.
     Returns the monthly directory.
+
+    `kinds` selects which partial families to consolidate. The default merge path
+    passes ("ps",) only — the resignation-proxy crush histogram is retired (see
+    --crush-hist), and consolidating its partials is the largest avoidable cost in
+    the merge.
     """
     mdir = partial_dir / "_monthly"
     mdir.mkdir(parents=True, exist_ok=True)
     tmp_dir = (tmp_base or partial_dir) / "_merge_duckdb_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    for kind, grp, sums in (
+    for kind, grp, sums in [kg for kg in (
         ("ps", "parent_hash, move_san",
          "any_value(parent_epd) AS parent_epd, any_value(ply) AS ply, "
          "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
@@ -519,7 +573,7 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
         ("crush", "parent_hash, move_san, move_bucket",
          "SUM(n)::BIGINT AS n, SUM(white_wins)::BIGINT AS white_wins, "
          "SUM(black_wins)::BIGINT AS black_wins"),
-    ):
+    ) if kg[0] in kinds]:
         months: dict[tuple[int, int], list[Path]] = {}
         for f in partial_dir.glob(f"*.{kind}.parquet"):
             m = _MONTH_RE.search(f.name)
@@ -612,23 +666,24 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
         shutil.rmtree(pdir, ignore_errors=True)  # ~E: footprint of the inputs; free before crush
         print(f"  ps GROUP BY done in {(time.time()-t0)/60:.1f} min; adding child_hash...", flush=True)
 
-    # child_hash via python-chess (cached over unique (epd, san)) + final stamping.
+    # child_hash via python-chess + final stamping.
+    # NOT cached on (parent_epd, move_san): the GROUP BY above already made
+    # (parent_hash, move_san) unique, and parent_epd is a function of parent_hash,
+    # so every key here is distinct. The cache this replaced was measured on the
+    # real 23,450,758-row output at 23,450,740 distinct (epd, san) pairs — an
+    # 0.0001% hit rate (18 hits total) for a ~3 GB dict, in the single-threaded
+    # tail of the merge. See _test_merge_child_hash.py.
     df = pl.read_parquet(agg_ckpt)
     INT64_MAX, INT64_RANGE = 2**63 - 1, 2**64
-    cache: dict[tuple[str, str], int | None] = {}
     child = []
     for epd, san in zip(df["parent_epd"].to_list(), df["move_san"].to_list()):
-        key = (epd, san)
-        h = cache.get(key, "miss")
-        if h == "miss":
-            try:
-                b = chess.Board(epd)
-                b.push(b.parse_san(san))
-                hh = chess.polyglot.zobrist_hash(b)
-                h = hh - INT64_RANGE if hh > INT64_MAX else hh
-            except Exception:
-                h = None
-            cache[key] = h
+        try:
+            b = chess.Board(epd)
+            b.push(b.parse_san(san))
+            hh = chess.polyglot.zobrist_hash(b)
+            h = hh - INT64_RANGE if hh > INT64_MAX else hh
+        except Exception:
+            h = None
         child.append(h)
     df = df.with_columns(
         pl.Series("child_hash", child, dtype=pl.Int64),
@@ -723,6 +778,13 @@ def main() -> None:
     ap.add_argument("--events", nargs="+", default=["Blitz", "Rapid", "Classical"])
     ap.add_argument("--min-games", type=int, default=50)
     ap.add_argument("--max-ply", type=int, default=30)
+    ap.add_argument("--crush-hist", action="store_true",
+                    help="Also merge the resignation-proxy crush histogram. OFF by "
+                         "default: no consumer reads it (build_sharp_reps.py uses the "
+                         "winpos histogram crush_hist_relwin_*), and consolidating its "
+                         "partials is the largest avoidable cost in the merge. The "
+                         "extract still writes .crush.parquet partials, so this can be "
+                         "turned back on later without re-extracting.")
     ap.add_argument("--workers", type=int, default=11)
     ap.add_argument("--threads", type=int, default=8, help="DuckDB threads for the merge phase.")
     ap.add_argument("--mem", default="48GB", help="DuckDB memory_limit for the merge phase.")
@@ -762,7 +824,10 @@ def main() -> None:
     print(f"Target: events={args.events} mean_elo>={args.min_elo} "
           f"years {args.start_year}-{args.end_year} months={args.months or 'all'}")
     print(f"Partials: {partial_dir}")
-    print(f"Outputs:  {ps_out.name} | {crush_out.name}", flush=True)
+    print(f"Outputs:  {ps_out.name}"
+          + (f" | {crush_out.name}" if args.crush_hist
+             else "  (resignation-proxy crush histogram SKIPPED; --crush-hist to build)"),
+          flush=True)
 
     # Build the asymmetric-depth tier tables (unless disabled).
     tiers = None
@@ -823,15 +888,18 @@ def main() -> None:
     if args.phase in ("merge", "all"):
         tmp_base = Path(args.tmp_dir) if args.tmp_dir else None
         # Stage 1: SUM-only per-month consolidation (NO min_games filter).
+        kinds = ("ps", "crush") if args.crush_hist else ("ps",)
         print("Consolidating per-month (sum only, no filter)...", flush=True)
-        monthly_dir = consolidate_monthly(partial_dir, args.threads, args.mem, tmp_base)
+        monthly_dir = consolidate_monthly(partial_dir, args.threads, args.mem, tmp_base,
+                                          kinds)
         # Stage 2: final global merge — min_games applied here ONCE, over all months.
         print("Final merge: position-stats (min_games applied here)...", flush=True)
         merge_position_stats(monthly_dir, partial_dir, ps_out, args.min_games,
                              args.threads, args.mem, tmp_base)
-        print("Final merge: crush histogram...", flush=True)
-        merge_crush(monthly_dir, partial_dir, ps_out, crush_out, args.threads, args.mem,
-                   tmp_base)
+        if args.crush_hist:
+            print("Final merge: crush histogram...", flush=True)
+            merge_crush(monthly_dir, partial_dir, ps_out, crush_out, args.threads, args.mem,
+                       tmp_base)
         shutil.rmtree((tmp_base or partial_dir) / "_merge_duckdb_tmp", ignore_errors=True)
         print("\nDone.", flush=True)
 
