@@ -54,6 +54,10 @@ import chess.polyglot
 import polars as pl
 
 from zobrist import zobrist_int64
+# Reuse the trainer's forced-move parser rather than reimplementing it, so the PGN
+# and the training pack are guaranteed to force identical moves.
+from trainer_app.build_training_pack import load_overrides
+from trainer_app.config import resolve_data_dir
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -206,7 +210,28 @@ def main() -> None:
     ap.add_argument("--annotations", default=None,
                     help="annotations.parquet — attach study notes as PGN comments "
                          "on our moves (e.g. trainer_data/annotations/annotations.parquet).")
+    ap.add_argument("--forced-moves", default=None,
+                    help="forced_moves.json — replace OUR move at specific nodes "
+                         "(entries {line, move[, note]}). Default: the trainer's "
+                         "forced_moves.json, so the PGN and the training pack force "
+                         "the SAME moves. Pass an explicit path to override, or "
+                         "--no-forced-moves to export the unmodified repertoire.")
+    ap.add_argument("--no-forced-moves", action="store_true",
+                    help="Ignore forced_moves.json entirely.")
     args = ap.parse_args()
+
+    # Forced moves. The subtree below a forced node already carries the repertoire's
+    # own backwards-induced best_moves, so overriding the branch node is enough — the
+    # walk follows the book from there. Loaded via the trainer's own parser so the two
+    # exports cannot disagree about what is forced.
+    overrides: dict[str, dict[int, tuple[str, str, str]]] = {"white": {}, "black": {}}
+    if not args.no_forced_moves:
+        fm = Path(args.forced_moves) if args.forced_moves else resolve_data_dir(None)
+        overrides = load_overrides(fm)
+        n_ov = sum(len(v) for v in overrides.values())
+        src = fm if fm.is_file() else fm / "forced_moves.json"
+        print(f"Forced moves: {n_ov} loaded from {src}"
+              if n_ov else f"Forced moves: none ({src} absent or empty)", flush=True)
 
     annots_by_color: dict[str, dict] = {}
     if args.annotations and Path(args.annotations).exists():
@@ -232,6 +257,14 @@ def main() -> None:
         out = Path(args.output) if args.output else DEFAULT_OUT_DIR / f"chessbook_{persp}.pgn"
         print(f"\n{persp}: {rep_path.name}", flush=True)
         rep = load_rep(rep_path)
+        for h, (mv, line, note) in overrides.get(persp, {}).items():
+            prev = rep.get(h)
+            if prev is None:
+                print(f"  WARNING: forced node not in repertoire, skipping: {line} -> {mv}")
+                continue
+            rep[h] = (prev[0], mv)
+            print(f"  FORCED: {line} -> {mv} (repertoire had {prev[1]})"
+                  + (f"  [{note}]" if note else ""))
         label = f"Sharp {persp} repertoire ({rep_path.stem})"
         game, st = build_game(rep, edges, persp, args.min_reach,
                               args.max_branches, args.max_ply, label,

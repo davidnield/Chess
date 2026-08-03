@@ -87,12 +87,20 @@ def _line_to_sans(line: str) -> list[str]:
 
 
 def load_overrides(data_dir: Path) -> dict[str, dict[int, tuple[str, str, str]]]:
-    """Read forced_moves.json from the data dir. Each entry {line, move[, note]}
-    forces OUR move at the position that `line` reaches, overriding the
-    repertoire's best_move there. Color is derived from whose turn it is at that
-    position. Returns {color -> {position_hash -> (move_san, line, note)}}.
-    Invalid entries are reported and skipped, never fatal."""
-    path = data_dir / "forced_moves.json"
+    """Read forced_moves.json. Accepts either the data dir (the file is looked up
+    inside it) or a direct path to the json — export_chessbook.py reads the same
+    file so the PGN and the training pack cannot drift apart.
+
+    Each entry {line, move[, note]} forces OUR move at the position that `line`
+    reaches, overriding the repertoire's best_move there. Color is derived from
+    whose turn it is at that position. Returns
+    {color -> {position_hash -> (move_san, line, note)}}.
+
+    Invalid entries are reported and skipped, never fatal — so a typo'd SAN
+    yields a book WITHOUT that forced move rather than a failed build. Callers
+    that depend on a specific count should check it (see the caller in
+    export_chessbook.py, which reports how many loaded)."""
+    path = data_dir / "forced_moves.json" if data_dir.is_dir() else data_dir
     out: dict[str, dict[int, tuple[str, str, str]]] = {"white": {}, "black": {}}
     if not path.exists():
         return out
