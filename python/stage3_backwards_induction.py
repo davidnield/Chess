@@ -671,6 +671,7 @@ def run_backwards_induction(
     cover_weight:     float = 0.0,
     cover_min_games:  int = 0,
     self_error_weight: float = 0.0,
+    reply_shrink:     float = 0.0,
     augment_engine:   bool = False,
     full_eval_hashes: "np.ndarray | None" = None,
     full_eval_es:     "np.ndarray | None" = None,
@@ -888,6 +889,18 @@ def run_backwards_induction(
         np.cumsum(np.bincount(rc_child[rorder], minlength=N), out=par_off[1:])
     par_idx = rc_parent[rorder].astype(np.int64)
 
+    # In-edge game mass per node: how many games actually REACHED this position.
+    # The opponent-node average below divides by the sum of the node's SURVIVING
+    # replies, so replies that fragmented below the pool's min_games are silently
+    # renormalised onto the ones that lived. reached_mass supplies the honest
+    # denominator, and (out_mass / reached_mass) is the fraction of the real reply
+    # distribution the model can actually see. Only edges to internal nodes carry
+    # in-mass; roots have none (guarded at the use site).
+    reached_mass = (np.bincount(e_child_id[internal_edge],
+                                weights=e_total[internal_edge].astype(np.float64),
+                                minlength=N)
+                    if N else np.zeros(0, np.float64))
+
     queue: deque[int] = deque(int(node_hash[i]) for i in np.nonzero(pending_count == 0)[0])
     _memlog("post graph-build (CSR + value arrays)")
 
@@ -898,6 +911,7 @@ def run_backwards_induction(
     # nothing new — that is what makes the no-op equivalence check exact.
     _counter_crush = crush_penalty > 0
     _self_err = self_error_weight > 0 and bool(eval_lookup)
+    _reply_shrink = reply_shrink > 0 and bool(eval_lookup)
     relative_crush = (crush_mode == "relative-propagated"
                       and (crush_weight > 0 or _counter_crush))
     # Engine-candidate augmentation is only live when the caller supplied the full
@@ -1359,6 +1373,29 @@ def run_backwards_induction(
             total = sum(mv["total"] for mv in mvs)
             values[ph] = (sum(mv["val"] * mv["total"] for mv in mvs) / total
                           if total else slice_prior)
+            # --reply-shrink: the mean above renormalises over the replies that
+            # SURVIVED min_games, so a node whose alternatives fragmented below the
+            # floor asserts its one survivor with probability 1. Measured case:
+            # 1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Ng5 h6 5.Nf3 — 124 games reached it, only
+            # ...Nxe4 (50) survived, so a 40% blunder was modelled at 100% and its
+            # +294cp eval propagated three plies undiluted (value 0.7470 == the leaf
+            # eval to 6 dp), beating 4.Be2 despite Ng5 being 60cp worse.
+            #
+            # Coverage c = surviving mass / mass that reached the node. Blend the
+            # mean toward the node's OWN engine eval by the missing fraction: the
+            # unobserved replies are assumed to lead to what the engine says about
+            # the position, rather than to whatever the survivors happened to do.
+            # strength 0 -> w == 1.0 exactly -> bit-identical to legacy.
+            if _reply_shrink and total:
+                es = eval_lookup.get(ph)
+                if es is not None:
+                    reached = float(reached_mass[idx[ph]])
+                    if reached > 0.0:
+                        c = total / reached
+                        if c > 1.0:      # transpositions: several in-edges, or a
+                            c = 1.0      # child counted once per parent
+                        w = 1.0 - reply_shrink * (1.0 - c)
+                        values[ph] = w * values[ph] + (1.0 - w) * es
             values_robust[ph] = opp_robust(mvs)
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
             if relative_crush:
@@ -1820,6 +1857,23 @@ def main():
                              "Propagates additively along the chosen chain (like memo_cost) and "
                              "is deliberately excluded from the SCC convergence gate for the "
                              "same reason. Requires --eval-db. 0.0 = disabled (default).")
+    parser.add_argument("--reply-shrink", type=float, default=0.0,
+                        help="Shrink an opponent node's mean value toward that "
+                             "position's OWN engine eval, in proportion to how much "
+                             "of its real reply distribution the pool actually "
+                             "contains. The mean normally divides by the SURVIVING "
+                             "replies, so alternatives that fragmented below the "
+                             "pool's min_games get renormalised onto the survivors — "
+                             "a node where one 50-game reply lived and 74 games' "
+                             "worth of others died asserts that reply at 100%%. "
+                             "Coverage c = surviving mass / mass that reached the "
+                             "node; weight w = 1 - strength*(1-c). 0.0 (DEFAULT) is "
+                             "w==1.0, bit-identical to legacy. 1.0 blends by the full "
+                             "missing fraction. Needs --eval-db; nodes with no eval "
+                             "are left alone. NOTE c also dips where games simply "
+                             "ENDED (decisive result, or the ply-30 extract cap), not "
+                             "only where replies were pruned, so deep nodes shrink "
+                             "somewhat more than the pruning alone justifies.")
     parser.add_argument("--cover-min-games", type=int, default=0,
                         help="Min games for an opponent reply to count as a PREPARED branch in "
                              "the coverage metric (a 'line you must learn'). Replies below it are "
@@ -1934,6 +1988,9 @@ def main():
     if args.self_error_weight > 0:
         print(f"Self-error weight: {args.self_error_weight}  (our propagated expected "
               f"eval loss down the line)")
+    if args.reply_shrink > 0:
+        print(f"Reply shrink:      {args.reply_shrink}  (opponent-node mean blended "
+              f"toward the position's own eval by its missing reply mass)")
     if args.robustness_floor < 1.0:
         print(f"Robust eval wt:    {args.robust_eval_weight}")
     print(f"Rel gate floor:    {args.gate_rel_floor}"
@@ -2181,6 +2238,7 @@ def main():
             cover_weight=args.cover_weight,
             cover_min_games=args.cover_min_games,
             self_error_weight=args.self_error_weight,
+            reply_shrink=args.reply_shrink,
             augment_engine=args.augment_engine,
             full_eval_hashes=full_eval_hashes,
             full_eval_es=full_eval_es,

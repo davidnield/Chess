@@ -809,6 +809,16 @@ def main():
                          "Defaults to the canonical ge1800/2013-2025 --no-prune pooled stats; "
                          "point it at the pool a rep was BUILT on, or the reply frequencies "
                          "and the rep will disagree.")
+    ap.add_argument("--cache-slices", type=int, default=None,
+                    help="Max (label, slice) views held in the LRU, and the max "
+                         "pre-warmed at startup. DEFAULT: hold every loaded view, so "
+                         "switching rep/event/elo is instant. A view materializes Python "
+                         "lists/dicts/sets over every rep and stats row: measured at "
+                         "~18 GB and ~76 s to build on the 2013-2025 pool, so the default "
+                         "only fits for a handful of views. Set this explicitly (1-2) for "
+                         "a many-label comparison session — 14 views would need ~250 GB. "
+                         "The cost of capping is a ~76 s rebuild every time you switch to "
+                         "an uncached label.")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
@@ -858,17 +868,31 @@ def main():
             print(f"Crush weight {crush_weight:g} (from {Path(specs[0][2]).name}.meta.json)",
                   flush=True)
 
-    explorer = Explorer(specs, args.stats, crush_weight=crush_weight,
-                        crush_totals=args.crush_totals)
+    explorer = Explorer(specs, args.stats, cache_slices=args.cache_slices or 1,
+                        crush_weight=crush_weight, crush_totals=args.crush_totals)
 
-    # Pre-warm each rep's per-slice view. The first access to a slice materialises
-    # ~millions of rows into Python dicts (>10 s for the large pooled reps); doing it
-    # lazily on the first browser request stalls the page on a blank screen. Warm it
-    # up front (only a handful of (label, slice) pairs) so the UI is responsive
-    # immediately. Cap the LRU cache to fit every warmed slice.
+    # Pre-warm per-slice views. The first access to a slice materialises millions of
+    # rows into Python dicts (~76 s on the 2013-2025 pool); doing that lazily on the
+    # first browser request stalls the page on a blank screen — and every later switch
+    # to an uncached label pays it again, which is what makes a capped session feel
+    # broken rather than merely slow.
+    #
+    # DEFAULT is to hold every (label, slice) pair, so switching is instant. That is
+    # the right trade for the usual 2-4 label session. It is NOT safe for a many-label
+    # comparison: each view measures ~18 GB, so 14 would demand ~250 GB — pass
+    # --cache-slices 1-2 there and accept the rebuild on each switch.
     warm_keys = [(lb, ev, eb) for lb in explorer.labels for (ev, eb) in explorer.slice_keys]
-    explorer._cache_max = max(explorer._cache_max, len(warm_keys))
-    print(f"Pre-warming {len(warm_keys)} slice view(s)…", flush=True)
+    if args.cache_slices is None:
+        explorer._cache_max = len(warm_keys)
+    deferred = max(0, len(warm_keys) - explorer._cache_max)
+    warm_keys = warm_keys[:explorer._cache_max]
+    est = 18.2 * len(warm_keys)
+    print(f"Pre-warming {len(warm_keys)} slice view(s) (~{est:.0f} GB resident)"
+          + (f"; {deferred} more build on demand (~76 s each, LRU cap "
+             f"{explorer._cache_max})" if deferred else "") + "…", flush=True)
+    if deferred == 0 and len(warm_keys) > 4:
+        print(f"  NOTE: {len(warm_keys)} views cached with no cap. If this does not fit "
+              f"in RAM, rerun with --cache-slices 2.", flush=True)
     for lb, ev, eb in warm_keys:
         t0 = time.time()
         explorer._slice(lb, ev, eb)

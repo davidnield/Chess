@@ -32,6 +32,25 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                             rates sit on a different scale than the resignation-proxy
                             histogram, hence the lower weight)
   - no memorization cost:  --memo-weight 0
+  - reply-mass shrinkage:  --reply-shrink 1.0   (adopted 2026-08-03. An opponent node's
+                           value is the mean over the replies that CLEAR the pool's
+                           min_games, renormalised to 100% — so when the alternatives
+                           fragment below the threshold the survivors get modelled as
+                           certainties. Measured: after 1.e4 c5 2.Nf3 d6 3.c3 Nf6 4.Ng5
+                           h6 5.Nf3, 124 games reached the node but only 5...Nxe4 (50
+                           games, +294cp) survived, so a reply played ~40% of the time
+                           carried the whole subtree and its leaf eval propagated three
+                           plies undiluted — the line's value equalled that leaf to six
+                           decimals, beating 4.Be2 despite Ng5 being 60cp worse. The fix
+                           blends the mean toward the node's OWN engine eval by the
+                           fraction of reply mass that is missing: coverage
+                           c = surviving mass / mass that reached the node (clamped to
+                           1.0 for transpositions), weight w = 1 - strength*(1-c). At
+                           strength 1 this is exactly one pseudo-reply carrying the
+                           missing games at the position's own eval. Symmetric — it
+                           raises a node's value as readily as it lowers one. Moves
+                           6.2%/6.3% of White's and 8.5%/10.7% of Black's pass-1/pass-2
+                           decisions, ~90% of it decisive rather than re-broken ties)
   - learnability tiebreak: TWO-PASS build (v3 calibration, LEARN below). Pass 1 builds the
                            recipe above; plan_consistency_report.py measures the idea-token
                            plan prior + per-node reach/context/depth from it; pass 2
@@ -94,6 +113,11 @@ DEFAULT_EVAL_DB   = Path("E:/chess/unified_eval_db.parquet")
 # the --crush-weight passed in common_flags().
 CRUSH_WEIGHT = 0.1
 
+# Reply-mass shrinkage strength (adopted 2026-08-03, see the recipe note above). 1.0 =
+# assign the entire missing reply mass the node's own engine eval; 0.0 = the legacy
+# renormalise-over-survivors behaviour. Recorded in .meta.json for provenance.
+REPLY_SHRINK = 1.0
+
 # Learnability tiebreak calibration ("v3", adopted 2026-07): loose δ only at nodes that are
 # both SHALLOW (within our first depth_horizon moves) and RARE (reach below reach_pivot);
 # everything deep/off-walk stays at delta_main. Contexts rarer than ctx_pivot shrink toward
@@ -120,6 +144,7 @@ def common_flags(stats: Path, crush_db: Path, eval_db: Path) -> list[str]:
         "--crush-gamma", "0.99", "--crush-imm-window", "2",
         "--crush-weight", str(CRUSH_WEIGHT), "--crush-prior", "5000", "--crush-baseline", "zero",
         "--memo-weight", "0",
+        "--reply-shrink", str(REPLY_SHRINK),
     ]
 
 
@@ -161,6 +186,7 @@ def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str) 
     prior, reach = plan_paths(tag)
     meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": "relative-propagated",
             "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
+            "reply_shrink": REPLY_SHRINK,
             "input": str(stats), "crush_db": str(crush_db), "eval_db": str(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
