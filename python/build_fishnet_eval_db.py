@@ -10,9 +10,15 @@ Inputs
   per analyzed game (NOT deduplicated); FENs are 6-field with the en-passant square
   present only when a legal ep capture exists (python-chess `epd()` convention, so
   epd == first 4 FEN fields verbatim).
-- E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet — defines
+- --stats (default position_stats_pooled_ge1800_2013_2025_brc.parquet) — defines
   the position UNIVERSE (parents + children of every repertoire edge). Fishnet rows
   outside the universe are dropped at scan time; nothing else is ever aggregated.
+  This therefore sets the eval COVERAGE of the output, and must be re-pointed at the
+  canonical pool whenever that changes: positions added by a newer pool would
+  otherwise get cloud coverage only. Measured on the 2019-2025 universe, that is the
+  difference between ~51% and 100% coverage — the fishnet half contributed 9.73M
+  positions the cloud DB does not have. A universe already on disk that was built
+  from a different --stats is a fatal error, not a skip (see build_universe).
 - E:/chess/lichess_eval_db.parquet — the deep cloud-eval DB (build_lichess_eval_db.py).
 
 Aggregation policy (locked 2026-07-02)
@@ -61,6 +67,11 @@ Usage
     .venv/Scripts/python.exe python/build_fishnet_eval_db.py            # all steps, resumable
     .venv/Scripts/python.exe python/build_fishnet_eval_db.py --months 2016_01   # smoke test
     .venv/Scripts/python.exe python/build_fishnet_eval_db.py --threads 8 --mem 45GB
+    .venv/Scripts/python.exe python/build_fishnet_eval_db.py --stats <pooled stats>
+
+Rebuilding for a new pool: every step is skip-gated on its own output, so clearing
+E:/chess/_fishnet_agg_work/ alone is not enough — fishnet_eval_agg.parquet gates
+Phase A/B and unified_eval_db.parquet gates the union step. All of them have to go.
 """
 from __future__ import annotations
 
@@ -76,7 +87,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 FISHNET_DIR = Path("F:/chess/fishnet-evals")
-STATS = Path("E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet")
+DEFAULT_STATS = Path("E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet")
 CLOUD_DB = Path("E:/chess/lichess_eval_db.parquet")
 OUT_AGG = Path("E:/chess/fishnet_eval_agg.parquet")
 OUT_UNIFIED = Path("E:/chess/unified_eval_db.parquet")
@@ -108,19 +119,32 @@ def _bucket_expr(col: str) -> str:
 
 # ── Step 0: position universe (epd -> position_hash) ───────────────────────────
 
-def build_universe(threads: int, mem: str) -> Path:
+def build_universe(stats: Path, threads: int, mem: str) -> Path:
     """Parents come straight from the stats; child EPDs are derived by replaying each
     stats row once (child_hash is already in the stats — no re-hashing). Resumable via
-    the output skip-gate; ~24M replays, single process, ~30-60 min."""
+    the output skip-gate; ~24M replays, single process, ~30-60 min.
+
+    The universe is a pure function of `stats`, and everything downstream is filtered
+    to it — so a skip-gate hit against a universe built from a DIFFERENT pool would
+    silently produce an eval DB with the wrong coverage, which is the exact failure
+    --stats exists to prevent. A stamp file records the source, and a mismatch is
+    fatal rather than skipped."""
     out = WORK / "universe_epd_hash.parquet"
+    stamp = WORK / "universe_epd_hash.source.txt"
     if out.exists():
-        print(f"SKIP universe: {out.name} exists", flush=True)
+        prev = stamp.read_text(encoding="utf-8").strip() if stamp.exists() else "<unrecorded>"
+        if prev != str(stats):
+            sys.exit(f"FATAL: {out.name} was built from {prev},\n"
+                     f"       but --stats is {stats}.\n"
+                     f"       To rebuild for the new pool, remove {WORK} and the\n"
+                     f"       downstream aggregates ({OUT_AGG.name}, {OUT_UNIFIED.name}).")
+        print(f"SKIP universe: {out.name} exists (built from {prev})", flush=True)
         return out
     WORK.mkdir(parents=True, exist_ok=True)
     import chess
     import polars as pl
     t0 = time.time()
-    df = pl.read_parquet(STATS, columns=["parent_epd", "parent_hash", "move_san", "child_hash"])
+    df = pl.read_parquet(stats, columns=["parent_epd", "parent_hash", "move_san", "child_hash"])
     parents = (df.select(pl.col("parent_epd").alias("epd"),
                          pl.col("parent_hash").alias("position_hash"))
                  .unique(subset=["position_hash"]))
@@ -150,6 +174,7 @@ def build_universe(threads: int, mem: str) -> Path:
     tmp = out.with_suffix(".parquet.tmp")
     uni.write_parquet(tmp, compression="zstd")
     tmp.replace(out)
+    stamp.write_text(str(stats), encoding="utf-8")
     print(f"  universe: {uni.height:,} positions -> {out.name} "
           f"({(time.time()-t0)/60:.1f} min total)", flush=True)
     return out
@@ -393,7 +418,18 @@ def main() -> None:
                     help="Restrict to these dump months, e.g. 2016_01 2024_12 (smoke test).")
     ap.add_argument("--keep-work", action="store_true",
                     help="Keep the Phase A/B work dirs after success (default: delete).")
+    ap.add_argument("--stats", default=str(DEFAULT_STATS),
+                    help=f"Pooled position-stats parquet defining the position UNIVERSE "
+                         f"(parents + children of every edge). Fishnet rows outside it "
+                         f"are dropped at scan time, so this sets the eval COVERAGE of "
+                         f"the output — re-point it whenever the canonical pool changes "
+                         f"(default: {DEFAULT_STATS.name}).")
     args = ap.parse_args()
+
+    stats = Path(args.stats)
+    if not stats.exists():
+        sys.exit(f"--stats not found: {stats}")
+    print(f"universe from: {stats.name}", flush=True)
 
     months = []
     for f in sorted(FISHNET_DIR.glob("standard_rated_*.parquet")):
@@ -409,7 +445,7 @@ def main() -> None:
     print(f"Months: {len(months)} ({months[0][0]}-{months[0][1]:02d} .. "
           f"{months[-1][0]}-{months[-1][1]:02d})", flush=True)
 
-    uni = build_universe(args.threads, args.mem)
+    uni = build_universe(stats, args.threads, args.mem)
     if OUT_AGG.exists():
         # Phase A partitions exist only to feed Phase B; once the aggregate is
         # checkpointed (and parts possibly cleaned), don't re-partition 415 GB

@@ -1,15 +1,20 @@
-"""Full 7-year winpos crush histogram (task #27 phase 2).
+"""Winpos crush histogram over a pooled edge universe (task #27 phase 2).
 
-Extends crush_hist_relwin from 2024-2025-only to the FULL 2019-2025 pooled edge
-universe. Rebuilds ALL seven years (not just 2019-2023) via one uniform fused
-replay path, rather than reusing the existing 2024/2025 pm-dir-based partials —
-those were built against the small 2024/25-only edge "keys" set
-(position_stats_pooled_1900_2200_brc.parquet, 4.7M edges); the canonical universe
-is now position_stats_pooled_ge1800_2019_2025_brc.parquet (23.45M edges), and
-winpos_sql's `keys` JOIN is an INNER join that determines which edges get ANY
-histogram row at all — mixing partials built against different `keys` sets would
-under-count edges present in the full universe but absent from the small one.
-Redoing 2024/2025 (~2 extra years of replay) is cheap next to getting this right.
+The pool is selected by --stats / --out / --start-year / --end-year; defaults
+track the current canonical pool. ALWAYS rebuild every year of a pool in one
+uniform run, and never mix partials produced against different --stats files:
+winpos_sql's `keys` JOIN is an INNER join that decides which edges get ANY
+histogram row at all, so partials built against a smaller edge set under-count
+edges present in the larger one — silently, since the output is still valid
+parquet. This is not hypothetical: the original 2024/25 partials were keyed to
+position_stats_pooled_1900_2200_brc.parquet (4.7M edges) and had to be discarded
+when the canonical universe grew, rather than be reused. Re-replaying the
+overlapping years is cheap next to getting this wrong.
+
+The .intermediates partials are named after the SOURCE FILE only, so they carry
+no record of which --stats they were built against. Treat an .intermediates dir
+as belonging to exactly one pool; to retarget, point --out somewhere new (which
+moves .intermediates with it) rather than reusing an existing dir.
 
 Per-file worker (fused, mirrors build_pooled_stats.py's extract_file): read a
 source parquet in batches, filter mean_elo >= 1800 BEFORE any move parsing (the
@@ -32,11 +37,22 @@ _run_copy_query/N_MERGE_BUCKETS), since a monolithic GROUP BY over the combined
 7-year partials is expected to face the same ~6B-key wall the position-stats
 merge did.
 
-Output: E:/chess/position-stats/crush_hist_relwin_pooled_ge1800_2019_2025_brc.parquet
+Output: --out (default crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet),
+plus <out-stem>.intermediates/ (resumable per-source-file partials) and
+<out-stem>_scratch/ (deleted on completion).
 
 Usage:
+    # one month against the default pool — prints the per-file rate, no merge
     .venv/Scripts/python.exe python/build_crush_winpos_phase2.py --smoke-test 2019 1
+
+    # full run against the defaults
     .venv/Scripts/python.exe python/build_crush_winpos_phase2.py --workers 10 --threads 1
+
+    # explicit pool (what the defaults above expand to)
+    .venv/Scripts/python.exe python/build_crush_winpos_phase2.py \
+        --start-year 2013 --end-year 2025 \
+        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet \
+        --out   E:/chess/position-stats/crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet
 """
 from __future__ import annotations
 
@@ -61,11 +77,16 @@ from build_crush_winpos import winpos_sql
 from build_pooled_stats import (discover_source_files, _duck, _sql_path,
                                 _bucket_expr, _run_copy_query, N_MERGE_BUCKETS)
 
-STATS = Path("E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet")
-EVAL_DB = Path("E:/chess/unified_eval_db.parquet")
-OUT = Path("E:/chess/position-stats/crush_hist_relwin_pooled_ge1800_2019_2025_brc.parquet")
-INTER = OUT.with_name(OUT.stem + ".intermediates")
-SCRATCH = OUT.with_name(OUT.stem + "_scratch")
+SD = Path("E:/chess/position-stats")
+DEFAULT_STATS = SD / "position_stats_pooled_ge1800_2013_2025_brc.parquet"
+DEFAULT_OUT = SD / "crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet"
+DEFAULT_EVAL_DB = Path("E:/chess/unified_eval_db.parquet")
+DEFAULT_START_YEAR, DEFAULT_END_YEAR = 2013, 2025
+# Derived from --out in main(), and re-derived inside every worker by
+# _init_worker: on Windows the pool spawns, so workers re-import this module and
+# see these defaults — an assignment made in main() does NOT reach them.
+INTER = DEFAULT_OUT.with_name(DEFAULT_OUT.stem + ".intermediates")
+SCRATCH = DEFAULT_OUT.with_name(DEFAULT_OUT.stem + "_scratch")
 TMP_DIR = Path("D:/chess_duckdb_tmp")
 MIN_ELO = 1800
 MAX_PLY = 30
@@ -120,9 +141,14 @@ def _walk_game_winpos(pm_buf: dict, game_id, movetext, elo_band, max_ply: int,
 _CON = None
 
 
-def _init_worker(threads: int, keys_pq: str, winw_pq: str, winb_pq: str) -> None:
+def _init_worker(threads: int, keys_pq: str, winw_pq: str, winb_pq: str,
+                 inter: str, scratch: str) -> None:
     import duckdb
-    global _CON
+    global _CON, INTER, SCRATCH
+    # Spawned workers re-imported this module and hold the module-level defaults;
+    # take the run's real directories from initargs (same reason keys/win_* are
+    # passed rather than recomputed).
+    INTER, SCRATCH = Path(inter), Path(scratch)
     _CON = duckdb.connect()
     _CON.execute(f"SET threads={threads};")
     _CON.execute("SET enable_progress_bar=false;")
@@ -193,13 +219,13 @@ def _process_file(task: tuple) -> str:
 
 # ── final two-phase merge ───────────────────────────────────────────────────
 
-def final_merge(threads: int, mem: str) -> None:
-    if OUT.exists():
-        print(f"SKIP final merge: {OUT.name} exists", flush=True)
+def final_merge(out: Path, inter: Path, threads: int, mem: str) -> None:
+    if out.exists():
+        print(f"SKIP final merge: {out.name} exists", flush=True)
         return
-    bdir = OUT.with_name(OUT.stem + "_buckets")
+    bdir = out.with_name(out.stem + "_buckets")
     bdir.mkdir(parents=True, exist_ok=True)
-    glob = _sql_path(INTER) + "/*.winpos.parquet"
+    glob = _sql_path(inter) + "/*.winpos.parquet"
     tasks = []
     for i in range(N_MERGE_BUCKETS):
         bout = bdir / f"bucket_{i}.parquet"
@@ -224,7 +250,7 @@ def final_merge(threads: int, mem: str) -> None:
         for fut in as_completed([ex.submit(_run_copy_query, t) for t in tasks]):
             label, size, secs = fut.result()
             print(f"  {label}: {size/1e6:.0f} MB ({secs/60:.1f} min)", flush=True)
-    out_tmp = OUT.with_suffix(".parquet.tmp")
+    out_tmp = out.with_suffix(".parquet.tmp")
     out_tmp.unlink(missing_ok=True)
     con = _duck(threads, mem, TMP_DIR)
     try:
@@ -234,9 +260,9 @@ def final_merge(threads: int, mem: str) -> None:
         """)
     finally:
         con.close()
-    out_tmp.replace(OUT)
+    out_tmp.replace(out)
     shutil.rmtree(bdir, ignore_errors=True)
-    print(f"Wrote {OUT.name} ({OUT.stat().st_size/1e6:.0f} MB)", flush=True)
+    print(f"Wrote {out.name} ({out.stat().st_size/1e6:.0f} MB)", flush=True)
 
 
 def main() -> None:
@@ -249,7 +275,34 @@ def main() -> None:
     ap.add_argument("--merge-mem", default="45GB")
     ap.add_argument("--smoke-test", nargs=2, metavar=("YEAR", "MONTH"), type=int,
                     default=None, help="Restrict to one (year, month) for a quick test.")
+    ap.add_argument("--start-year", type=int, default=DEFAULT_START_YEAR)
+    ap.add_argument("--end-year", type=int, default=DEFAULT_END_YEAR)
+    ap.add_argument("--stats", default=str(DEFAULT_STATS),
+                    help=f"Pooled position-stats parquet whose (parent_hash, move_san) "
+                         f"pairs form the `keys` universe. This is an INNER join: an "
+                         f"edge absent here gets NO histogram row, so pointing this at "
+                         f"a different pool than --out silently under-covers rather "
+                         f"than failing (default: {DEFAULT_STATS.name}).")
+    ap.add_argument("--out", default=str(DEFAULT_OUT),
+                    help=f"Output histogram; its stem also names the .intermediates "
+                         f"and _scratch dirs (default: {DEFAULT_OUT.name}).")
+    ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
+                    help=f"Stockfish eval DB for the >= +{THRESH_CP}cp win event "
+                         f"(default: {DEFAULT_EVAL_DB.name}).")
     args = ap.parse_args()
+
+    global INTER, SCRATCH
+    stats, out, eval_db = Path(args.stats), Path(args.out), Path(args.eval_db)
+    INTER = out.with_name(out.stem + ".intermediates")
+    SCRATCH = out.with_name(out.stem + "_scratch")
+    for label, p in (("--stats", stats), ("--eval-db", eval_db)):
+        if not p.exists():
+            sys.exit(f"{label} not found: {p}")
+    # Log the resolved pool: partials are keyed only by source file, so a run
+    # aimed at the wrong --stats leaves no trace in the filenames.
+    print(f"stats:   {stats.name}\nout:     {out.name}\neval-db: {eval_db.name}\n"
+          f"years:   {args.start_year}-{args.end_year}  ply<={MAX_PLY}  "
+          f"elo>={MIN_ELO}  thresh={THRESH_CP}cp\n", flush=True)
 
     INTER.mkdir(parents=True, exist_ok=True)
     prep = INTER / "_prep"
@@ -260,10 +313,10 @@ def main() -> None:
     con = duckdb.connect()
     con.execute("SET threads=4; SET enable_progress_bar=false;")
     for out_pq, sql in (
-        (keys_pq, f"SELECT DISTINCT parent_hash, move_san FROM read_parquet('{_sql_path(STATS)}')"),
-        (winw_pq, f"SELECT position_hash FROM read_parquet('{_sql_path(EVAL_DB)}') "
+        (keys_pq, f"SELECT DISTINCT parent_hash, move_san FROM read_parquet('{_sql_path(stats)}')"),
+        (winw_pq, f"SELECT position_hash FROM read_parquet('{_sql_path(eval_db)}') "
                   f"WHERE eval_cp >= {THRESH_CP}"),
-        (winb_pq, f"SELECT position_hash FROM read_parquet('{_sql_path(EVAL_DB)}') "
+        (winb_pq, f"SELECT position_hash FROM read_parquet('{_sql_path(eval_db)}') "
                   f"WHERE eval_cp <= -{THRESH_CP}"),
     ):
         if not out_pq.exists():
@@ -278,7 +331,7 @@ def main() -> None:
         y, mo = args.smoke_test
         files = discover_source_files(y, y, [mo], EVENTS)
     else:
-        files = discover_source_files(2019, 2025, None, EVENTS)
+        files = discover_source_files(args.start_year, args.end_year, None, EVENTS)
     tasks = [(str(f), f"year={y}_month={mo}_event={ev}_{f.stem}")
             for (f, y, mo, ev) in files]
     todo = [t for t in tasks if not (INTER / f"{t[1]}.winpos.parquet").exists()]
@@ -290,7 +343,7 @@ def main() -> None:
     if todo:
         with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker,
                                  initargs=(args.threads, str(keys_pq), str(winw_pq),
-                                           str(winb_pq))) as ex:
+                                           str(winb_pq), str(INTER), str(SCRATCH))) as ex:
             futs = [ex.submit(_process_file, t) for t in todo]
             for fut in as_completed(futs):
                 done += 1
@@ -301,7 +354,7 @@ def main() -> None:
     shutil.rmtree(SCRATCH, ignore_errors=True)
 
     if not args.smoke_test:
-        final_merge(args.merge_threads, args.merge_mem)
+        final_merge(out, INTER, args.merge_threads, args.merge_mem)
     print("\nDone.", flush=True)
 
 
