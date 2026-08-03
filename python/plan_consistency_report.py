@@ -48,7 +48,7 @@ Usage:
     .venv/Scripts/python.exe python/plan_consistency_report.py \\
         --repertoire E:/chess/repertoire/repertoire_pooled_black_sharp.parquet \\
         --perspective black \\
-        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet \\
+        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet \\
         [--max-our-moves 12] [--epsilon 1e-6] [--min-pct 2.0] [--top 30] \\
         [--output report.txt] [--export-prefix E:/chess/repertoire/_plan/black]
 

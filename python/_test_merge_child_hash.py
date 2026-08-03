@@ -25,7 +25,7 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).parent))
 
 DEFAULT_STATS = Path("E:/chess/position-stats/"
-                     "position_stats_pooled_ge1800_2019_2025_brc.parquet")
+                     "position_stats_pooled_ge1800_2013_2025_brc.parquet")
 
 _checks: list[tuple[bool, str]] = []
 

@@ -133,7 +133,7 @@ class Explorer:
                 f"({Path(stats_path).name}); opponent moves would be empty.\n"
                 + "\n".join(problems)
                 + "\n  Pass the matching --stats — e.g. the canonical "
-                  "position_stats_pooled_ge1800_2019_2025_brc.parquet for pooled reps.")
+                  "position_stats_pooled_ge1800_2013_2025_brc.parquet for pooled reps.")
 
         # Slices available = union of (event, elo_band) across the loaded reps.
         sl = (pl.concat([r.select(["event", "elo_band"]) for r in self.reps.values()])
@@ -803,10 +803,12 @@ def main():
                     help="Generic labeled repertoire, repeatable. e.g. "
                          "--rep 'White 1.e4=white=E:/.../rep.parquet'")
     ap.add_argument("--stats",
-                    default="E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet",
+                    default="E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet",
                     help="Position-stats parquet supplying opponent replies. Must contain "
                          "every loaded rep's (event, elo_band) slice (checked at startup). "
-                         "Defaults to the canonical ge1800/2019-2025 pooled stats.")
+                         "Defaults to the canonical ge1800/2013-2025 --no-prune pooled stats; "
+                         "point it at the pool a rep was BUILT on, or the reply frequencies "
+                         "and the rep will disagree.")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
@@ -816,10 +818,13 @@ def main():
                          "Default: read from the rep's .parquet.meta.json provenance sidecar "
                          "(written by build_sharp_reps.py); falls back to 25 if absent.")
     ap.add_argument("--crush-totals",
-                    default="E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2019_2025_brc.parquet",
+                    default="E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2013_2025_brc.parquet",
                     help="Per-edge winpos totals parquet (parent_hash, move_san, n, "
                          "{white,black}_we[5]) for the raw-crush column. Built by collapsing "
-                         "the winpos histogram (Pooled slice). Missing file = column off.")
+                         "the winpos histogram (Pooled slice). Missing file = column off. "
+                         "NOTE: no 2013-2025 file has been built yet, so this default "
+                         "currently turns the column OFF by design — that is deliberate, "
+                         "because the 2019-2025 file would show rates from a different pool.")
     args = ap.parse_args()
 
     specs = []  # (label, perspective, path)

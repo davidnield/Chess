@@ -58,7 +58,7 @@ from zobrist import zobrist_int64
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-DEFAULT_STATS = Path("E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet")
+DEFAULT_STATS = Path("E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet")
 DEFAULT_REPS = [
     ("white", Path("E:/chess/repertoire/repertoire_pooled_white_sharp.parquet")),
     ("black", Path("E:/chess/repertoire/repertoire_pooled_black_sharp.parquet")),

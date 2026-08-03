@@ -33,8 +33,11 @@ DEFAULTS: dict[str, object] = {
     # a satellite PC — the Explorer tab degrades gracefully, see plan).
     "white_rep": "E:/chess/repertoire/repertoire_pooled_white_sharp.parquet",
     "black_rep": "E:/chess/repertoire/repertoire_pooled_black_sharp.parquet",
-    "stats": "E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet",
-    "crush_totals": "E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2019_2025_brc.parquet",
+    # Must match the pool the reps above were built on (2013-2025 --no-prune).
+    # No 2013-2025 crush_edge_totals has been built, so the raw-crush column is
+    # off by design rather than showing another pool's rates.
+    "stats": "E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet",
+    "crush_totals": "E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2013_2025_brc.parquet",
 }
 
 PRIORITY_PRESETS = {

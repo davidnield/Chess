@@ -41,7 +41,7 @@ Usage:
     .venv/Scripts/python.exe python/score_repertoire.py \\
         --repertoire E:/chess/repertoire/repertoire_pooled_white_sharp.parquet \\
         --perspective white \\
-        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2019_2025_brc.parquet
+        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet
 
     # Capture to a file and tag the machine-readable SUMMARY line:
     .venv/Scripts/python.exe python/score_repertoire.py ... --label A_cw0 --output card.txt

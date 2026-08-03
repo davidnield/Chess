@@ -51,10 +51,11 @@ _plan/{tag}_pass1_{prior,reach}.parquet, final rep -> repertoire_pooled_{tag}_sh
 Each step has its own existence skip gate; once a step actually runs, every later step in
 the chain reruns too (its inputs changed). --force reruns the whole chain.
 
-Prerequisites (defaults): position_stats_pooled_ge1800_2019_2025_brc.parquet
-(build_pooled_stats.py --phase merge), crush_hist_relwin_pooled_ge1800_2019_2025_brc.parquet
-(build_crush_winpos.py phase 2), unified_eval_db.parquet (build_fishnet_eval_db.py — cloud
-eval DB unioned with the fishnet-evals dump). Override the inputs with
+Prerequisites (defaults): position_stats_pooled_ge1800_2013_2025_brc.parquet
+(build_pooled_stats.py --phase merge --no-prune), crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet
+(build_crush_winpos_phase2.py), unified_eval_db.parquet (build_fishnet_eval_db.py — cloud
+eval DB unioned with the fishnet-evals dump, keyed to the SAME pool via its --stats).
+Override the inputs with
 --input / --crush-db / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
 crush weight, learnability settings and inputs (the explorer reads it back).
@@ -81,11 +82,11 @@ REP_DIR = Path("E:/chess/repertoire")
 PLAN_DIR = REP_DIR / "_plan"          # pass-1 reps + plan-prior/reach exports
 LOG_DIR = PROJECT / "logs" / "sharp_reps"
 
-# Canonical inputs default to the combined 2019-2025 mean_elo>=1800 pooled build
-# (build_pooled_stats.py) with the winpos crush histogram and the unified (cloud+fishnet)
-# eval DB. Override with --input / --crush-db / --eval-db.
-DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2019_2025_brc.parquet"
-DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2019_2025_brc.parquet"
+# Canonical inputs default to the combined 2013-2025 mean_elo>=1800 --no-prune pooled
+# build (build_pooled_stats.py) with the winpos crush histogram and the unified
+# (cloud+fishnet) eval DB. Override with --input / --crush-db / --eval-db.
+DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2025_brc.parquet"
+DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet"
 DEFAULT_EVAL_DB   = Path("E:/chess/unified_eval_db.parquet")
 
 # Crush selection weight. Surfaced as a constant because the explorer reads it back (via
