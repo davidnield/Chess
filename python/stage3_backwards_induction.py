@@ -670,6 +670,8 @@ def run_backwards_induction(
     memo_leave:       float = 0.0,
     cover_weight:     float = 0.0,
     cover_min_games:  int = 0,
+    cover_prior:      float = 0.0,
+    cover_baseline:   float = 0.22,
     self_error_weight: float = 0.0,
     reply_shrink:     float = 0.0,
     augment_engine:   bool = False,
@@ -865,6 +867,7 @@ def run_backwards_induction(
     memo_pot      = _ArrMap(sp, np.full(N, np.nan))   # propagated memorization cost
     cover_depth   = _ArrMap(sp, np.full(N, np.nan))   # reach-weighted covered opp-decision depth
     mem_nodes     = _ArrMap(sp, np.full(N, np.nan))   # count of prepared opponent branches
+    cover_games   = _ArrMap(sp, np.full(N, np.nan))   # recorded games at the node (--cover-prior)
     best_forcing  = _ArrMap(sp, np.full(N, np.nan))
     best_error    = _ArrMap(sp, np.full(N, np.nan))
     best_decis    = _ArrMap(sp, np.full(N, np.nan))
@@ -1166,7 +1169,25 @@ def run_backwards_induction(
         # consolidating (much of the opponent's mass kept on rails with few lines to learn);
         # low = fan-out (many branches, mass leaks to the rare tail). A bare leaf / out-of-book
         # child has depth 0 -> eff 0, so it can't be gamed by exiting book early.
-        return cover_depth.get(ch, 0.0) / (1.0 + mem_nodes.get(ch, 0.0))
+        raw = cover_depth.get(ch, 0.0) / (1.0 + mem_nodes.get(ch, 0.0))
+        if cover_prior <= 0.0:
+            return raw
+        # THIN-DATA SHRINKAGE (--cover-prior), the same Bayesian pattern forcingness
+        # uses. The raw ratio is biased HIGH at sparse nodes for exactly the reason
+        # raw Simpson is: alternatives that fragmented below the pool's per-edge
+        # min_games never appear, so the survivors renormalise to 100% and the node
+        # reads as a narrow, efficient rail. Measured: a node with one surviving
+        # 55-game reply scores 0.500 while a well-sampled 90/10 node scores 0.333 --
+        # inverted. Shrinking toward the reach-weighted mean with pseudocount k
+        # restores the ordering, as the identical correction already does for
+        # forcingness.
+        n = cover_games.get(ch, 0.0)
+        if n <= 0.0 or mem_nodes.get(ch, 0.0) <= 0.0:
+            # Leaf / truncated / nothing prepared below: raw is 0 and must STAY 0,
+            # or shrinking toward a positive baseline would hand a bonus to exiting
+            # book early -- the one property this metric is built to deny.
+            return raw
+        return (cover_prior * cover_baseline + raw * n) / (cover_prior + n)
 
     def augmented_candidates(ph):
         """Engine-move rescue for a FORCED-LOSING node (used only when every recorded
@@ -1429,6 +1450,8 @@ def run_backwards_induction(
                                    for mv in prep) if total else 0.0)
             mem_nodes[ph] = (sum(1.0 + (mv["total"] / total) * mem_nodes.get(mv["child"], 0.0)
                                  for mv in prep) if total else 0.0)
+            # Sample size behind those ratios, for --cover-prior shrinkage.
+            cover_games[ph] = float(total)
 
     while queue:
         ph = queue.popleft()
@@ -1877,10 +1900,30 @@ def main():
     parser.add_argument("--cover-min-games", type=int, default=0,
                         help="Min games for an opponent reply to count as a PREPARED branch in "
                              "the coverage metric (a 'line you must learn'). Replies below it are "
-                             "treated as un-prepared: their mass is not covered and they add no "
-                             "branch. With --min-move-games 0 (the sharp recipe) set this higher "
-                             "(~25-50) so 1-game freak replies aren't counted as memorization "
-                             "burden. Default 0.")
+                             "treated as un-prepared: their mass is not covered (lowering "
+                             "cover_depth) and they add no branch. NOTE the pool already applies "
+                             "a per-edge floor at merge — the canonical 2013-2025 pool used "
+                             "min_games=50 and its minimum edge total is exactly 50, so ANY value "
+                             "<= 50 is an exact no-op there. Measured on that pool, the flag "
+                             "starts biting at 75 (excludes 33.7% of edges), 100 (50.4%), "
+                             "150 (67.1%), 500 (90.2%). Default 0.")
+    parser.add_argument("--cover-prior", type=float, default=0.0,
+                        help="Pseudocount for Bayesian shrinkage of cover_eff toward "
+                             "--cover-baseline, the same correction --forcing-prior applies to "
+                             "Simpson concentration and for the same reason: the raw ratio is "
+                             "biased HIGH at sparse nodes, because replies that fragmented below "
+                             "the pool's per-edge floor never appear and the survivors "
+                             "renormalise to 100%%, so a thin node reads as a narrow efficient "
+                             "rail. Measured: one surviving 55-game reply scores 0.500 while a "
+                             "well-sampled 90/10 node scores 0.333 — inverted. Leaves and nodes "
+                             "with nothing prepared keep raw 0 (shrinking those toward a positive "
+                             "baseline would pay for leaving book early). 0.0 = disabled "
+                             "(DEFAULT, exact no-op); 200 matches --forcing-prior.")
+    parser.add_argument("--cover-baseline", type=float, default=0.22,
+                        help="Baseline cover_eff that thin nodes shrink toward (--cover-prior "
+                             "only). Default 0.22 = the reach-weighted mean measured over the "
+                             "canonical White pass-1 book (median 0.418; the mean is lower "
+                             "because out-of-book nodes score 0).")
     parser.add_argument("--require-eval", action="store_true",
                         help="At our turn, consider ONLY candidate moves whose resulting "
                              "position is present in the eval DB; if none is, truncate our "
@@ -1973,6 +2016,9 @@ def main():
     if args.cover_weight > 0:
         print(f"Cover weight:      {args.cover_weight}  (min-games={args.cover_min_games}; "
               f"coverage depth per memorized branch)")
+        print(f"Cover shrinkage:   "
+              + (f"prior={args.cover_prior} toward baseline={args.cover_baseline}"
+                 if args.cover_prior > 0 else "OFF (raw ratio; biased high at thin nodes)"))
     print(f"Error weight:      {args.error_weight}")
     if args.error_weight > 0:
         print(f"Error prior:       {args.error_prior}")
@@ -2237,6 +2283,8 @@ def main():
             memo_leave=args.memo_leave_cost,
             cover_weight=args.cover_weight,
             cover_min_games=args.cover_min_games,
+            cover_prior=args.cover_prior,
+            cover_baseline=args.cover_baseline,
             self_error_weight=args.self_error_weight,
             reply_shrink=args.reply_shrink,
             augment_engine=args.augment_engine,
