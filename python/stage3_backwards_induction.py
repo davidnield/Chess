@@ -2274,7 +2274,14 @@ def main():
     _memlog(f"pre-output-build ({len(frames)} slice frame(s))")
     result = pl.concat(frames).sort(["event", "elo_band", "position_hash"])
     _memlog("post-output-build")
-    result.write_parquet(str(output_path), compression="zstd")
+    # Atomic publish. Every driver skip-gates on the output EXISTING, so a rep
+    # half-written when the process dies (power cut, OOM kill) would be silently
+    # accepted as complete on the next run and poison whatever consumes it.
+    # Writing to a sibling temp and renaming means the final path only ever
+    # appears fully written — os.replace is atomic on NTFS and POSIX alike.
+    tmp_out = output_path.with_name(output_path.name + ".partial")
+    result.write_parquet(str(tmp_out), compression="zstd")
+    os.replace(tmp_out, output_path)
 
     size_mb      = output_path.stat().st_size / 1e6
     elapsed_total = time.time() - t_total
