@@ -672,6 +672,8 @@ def run_backwards_induction(
     cover_min_games:  int = 0,
     cover_prior:      float = 0.0,
     cover_baseline:   float = 0.22,
+    cover_leave_cost: float = 0.0,
+    cover_mass_shrink: float = 0.0,
     self_error_weight: float = 0.0,
     reply_shrink:     float = 0.0,
     augment_engine:   bool = False,
@@ -915,6 +917,8 @@ def run_backwards_induction(
     _counter_crush = crush_penalty > 0
     _self_err = self_error_weight > 0 and bool(eval_lookup)
     _reply_shrink = reply_shrink > 0 and bool(eval_lookup)
+    # No eval_lookup needed: this correction is pure reply mass, not engine eval.
+    _cover_mass = cover_mass_shrink > 0
     relative_crush = (crush_mode == "relative-propagated"
                       and (crush_weight > 0 or _counter_crush))
     # Engine-candidate augmentation is only live when the caller supplied the full
@@ -1327,7 +1331,15 @@ def run_backwards_induction(
             # A childless node at OUR turn = we've left book (no prepared continuation)
             # → leaving-book penalty; at the opponent's turn it's a terminal (game over).
             memo_pot[ph] = memo_leave if position_side[ph] == our_color else 0.0
-            cover_depth[ph] = mem_nodes[ph] = 0.0  # no opponent decisions below → 0 coverage, 0 lines
+            # Coverage. The parent credits this reply with share*(1 + cover_depth[ph]),
+            # where the 1 asserts "we covered the opponent's decision there". At OUR
+            # turn a childless node means we left book — we have NO answer, so that
+            # credit is not earned. Returning -cover_leave_cost withdraws it: at 1.0 an
+            # unanswerable reply contributes exactly 0 covered depth. At the OPPONENT's
+            # turn a childless node is just the game ending, not a preparation failure,
+            # so the credit stands. Mirrors memo_leave above.
+            cover_depth[ph] = (-cover_leave_cost if position_side[ph] == our_color else 0.0)
+            mem_nodes[ph] = 0.0
             return
         if position_side[ph] == our_color:
             if force_root_move and ph == start_hash:
@@ -1357,7 +1369,10 @@ def run_backwards_induction(
                     self_err_pot[ph] = 0.0
                 # We are out of book here — assign the leaving-book penalty.
                 memo_pot[ph] = memo_leave
-                cover_depth[ph] = mem_nodes[ph] = 0.0  # truncated → nothing prepared below
+                # Past the eval-DB frontier: we are out of book, so withdraw the
+                # parent's coverage credit for this reply (see the childless case).
+                cover_depth[ph] = -cover_leave_cost
+                mem_nodes[ph] = 0.0
                 return
             values[ph]        = b["val"]
             values_robust[ph] = b["robust"]
@@ -1386,7 +1401,8 @@ def run_backwards_induction(
             # (leaf/out-of-book child falls back to that edge's leaf value, like `value`).
             value_worst[ph] = value_worst.get(b["child"], b["val"])
             # coverage: our move adds no opponent branching — inherit the chosen child's.
-            cover_depth[ph] = cover_depth.get(b["child"], 0.0)
+            # A move into an unmaterialised leaf inherits the leaving-book default.
+            cover_depth[ph] = cover_depth.get(b["child"], -cover_leave_cost)
             mem_nodes[ph]   = mem_nodes.get(b["child"], 0.0)
         else:
             # Opponent: mean over their empirical distribution (value);
@@ -1446,8 +1462,31 @@ def run_backwards_induction(
             # are not prepared → their mass is NOT covered (lowers cover_depth) and they add
             # no branch. Denominator is ALL replies, so the rare tail genuinely leaks away.
             prep = [mv for mv in mvs if mv["total"] >= cover_min_games]
-            cover_depth[ph] = (sum((mv["total"] / total) * (1.0 + cover_depth.get(mv["child"], 0.0))
-                                   for mv in prep) if total else 0.0)
+            # -cover_leave_cost is the DEFAULT, not just the stored value: a reply whose
+            # child is a bare leaf is never materialised as a node, so the explicit
+            # assignment in the childless branch would never be reached for it. Same
+            # convention as memo_pot.get(child, memo_leave).
+            cd = (sum((mv["total"] / total)
+                      * (1.0 + cover_depth.get(mv["child"], -cover_leave_cost))
+                      for mv in prep) if total else 0.0)
+            # PROPAGATING coverage correction (--cover-mass-shrink). The shares above
+            # renormalise over RECORDED replies, so mass that vanished at the pool's
+            # per-edge floor (or because games simply ended) is invisible and the node
+            # reads as fully covered. reached_mass is the honest denominator — the same
+            # quantity --reply-shrink uses. Applying it HERE rather than at the point of
+            # use is the difference that matters: cover_depth is built bottom-up, so an
+            # uncorrected deep node carries its inflation into every ancestor.
+            if _cover_mass and total:
+                reached = float(reached_mass[idx[ph]])
+                if reached > 0.0:
+                    c = total / reached
+                    if c > 1.0:          # transpositions: a child counted once per parent
+                        c = 1.0
+                    cd *= 1.0 - cover_mass_shrink * (1.0 - c)
+            # Unanswerable replies contribute negatively (see cover_leave_cost); a node
+            # whose replies we mostly cannot answer floors at zero coverage rather than
+            # going negative and inverting the ratio's sign further up.
+            cover_depth[ph] = cd if cd > 0.0 else 0.0
             mem_nodes[ph] = (sum(1.0 + (mv["total"] / total) * mem_nodes.get(mv["child"], 0.0)
                                  for mv in prep) if total else 0.0)
             # Sample size behind those ratios, for --cover-prior shrinkage.
@@ -1919,6 +1958,37 @@ def main():
                              "with nothing prepared keep raw 0 (shrinking those toward a positive "
                              "baseline would pay for leaving book early). 0.0 = disabled "
                              "(DEFAULT, exact no-op); 200 matches --forcing-prior.")
+    parser.add_argument("--cover-leave-cost", type=float, default=0.0,
+                        help="Withdraw the coverage credit for an opponent reply we cannot "
+                             "answer. cover_depth credits each reply share*(1 + depth below), "
+                             "where the 1 asserts we covered that decision — but where OUR book "
+                             "ends (childless at our turn, or past the eval-DB frontier) we have "
+                             "no answer and never earned it. This subtracts the given amount, so "
+                             "1.0 makes an unanswerable reply contribute exactly 0 covered "
+                             "depth. WHY IT MATTERS: leaving book was free in BOTH terms, so a "
+                             "subtree that simply stops sooner got a better depth-per-branch "
+                             "ratio. Measured on 1.d4 d5 2.Bf4: ...h5 scored 0.1672 (depth 5.24 "
+                             "/ 30.4 branches, ending mean ply 9.9) versus ...c5 at 0.1298 "
+                             "(8.82 / 66.9, ply 17.1) — cover_eff tracked shallowness across all "
+                             "six replies, and the 'a bare leaf scores 0' guard reaches only ONE "
+                             "ply. NB charging BRANCHES instead does not work: every line "
+                             "eventually truncates, so the charge lands on all candidates about "
+                             "equally and never reorders them (verified at 1.0 and 3.0). Not "
+                             "applied at the opponent's turn — a childless node there is the "
+                             "game ending, not a preparation failure. Intended range 0-1. "
+                             "0.0 = disabled (DEFAULT, exact no-op).")
+    parser.add_argument("--cover-mass-shrink", type=float, default=0.0,
+                        help="PROPAGATING coverage correction, strength 0-1. cover_depth's "
+                             "shares renormalise over RECORDED replies, so mass that vanished "
+                             "at the pool's per-edge floor (or where games simply ended) is "
+                             "invisible and a node reads as fully covered. Scales cover_depth "
+                             "by 1 - strength*(1-c) with c = recorded reply mass / mass that "
+                             "REACHED the node (the same reached_mass --reply-shrink uses, "
+                             "clamped at 1.0 for transpositions). Applied inside the recursion, "
+                             "not at the point of use, so a thin deep node cannot carry its "
+                             "inflation up into every ancestor — which is precisely what "
+                             "--cover-prior fails to prevent. Needs no prior or pseudocount. "
+                             "0.0 = disabled (DEFAULT, exact no-op).")
     parser.add_argument("--cover-baseline", type=float, default=0.22,
                         help="Baseline cover_eff that thin nodes shrink toward (--cover-prior "
                              "only). Default 0.22 = the reach-weighted mean measured over the "
@@ -2018,7 +2088,11 @@ def main():
               f"coverage depth per memorized branch)")
         print(f"Cover shrinkage:   "
               + (f"prior={args.cover_prior} toward baseline={args.cover_baseline}"
-                 if args.cover_prior > 0 else "OFF (raw ratio; biased high at thin nodes)"))
+                 if args.cover_prior > 0 else "OFF (raw ratio; biased high at thin nodes)")
+              + f" | leave-cost={args.cover_leave_cost}"
+              + (" (leaving book is FREE — shallow books score high)"
+                 if args.cover_leave_cost <= 0 else "")
+              + f" | mass-shrink={args.cover_mass_shrink}")
     print(f"Error weight:      {args.error_weight}")
     if args.error_weight > 0:
         print(f"Error prior:       {args.error_prior}")
@@ -2285,6 +2359,8 @@ def main():
             cover_min_games=args.cover_min_games,
             cover_prior=args.cover_prior,
             cover_baseline=args.cover_baseline,
+            cover_leave_cost=args.cover_leave_cost,
+            cover_mass_shrink=args.cover_mass_shrink,
             self_error_weight=args.self_error_weight,
             reply_shrink=args.reply_shrink,
             augment_engine=args.augment_engine,
