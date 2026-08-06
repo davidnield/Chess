@@ -68,7 +68,8 @@ import pyarrow.parquet as pq
 # Reuse the proven SAN tokenizer + signed-int64 Zobrist from Stage 1 (sibling module).
 from stage1_extract_positions import iter_san_moves, zobrist_int64
 from zobrist import IncrementalZobrist
-from eval_arrays import MISSING as _EVAL_MISSING, lookup_evals, open_eval_arrays
+from eval_arrays import (MISSING as _EVAL_MISSING, lookup_evals,
+                         open_eval_arrays, verify_eval_arrays)
 from winpos_fused import winpos_batch
 
 # Winpos crossing thresholds, in centipawns. 300 is the canonical one every
@@ -387,7 +388,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
                  min_elo: int, max_ply: int, tiers: dict | None,
                  limit_games: int | None = None, optimize: bool = True,
                  term_out: Path | None = None,
-                 winpos_out: dict[int, Path] | None = None) -> dict:
+                 winpos_out: dict[int, Path] | None = None,
+                 with_child_eval: bool = True) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated ps + crush partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
@@ -406,9 +408,19 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
     Rows are emitted for EVERY edge, not just pool survivors: the `keys` join the
     SQL performs needs a global min_games decision that does not exist yet while a
     single file is being extracted, so it moves to the merge's semi-join.
+
+    `with_child_eval` populates the child_eval column the merge needs for the
+    other-moves bucket's aggregate evaluation. It is INDEPENDENT of winpos on
+    purpose: both read the same mmap'd arrays, and tying them together meant that
+    turning winpos off — the obvious lever if a threshold's partials are too big —
+    silently emptied the bucket's eval (other_eval_mean all NULL, other_eval_cov
+    0), so Stage 3 fell back to the empirical score with nothing in the logs. Only
+    the equivalence/bench harnesses pass False, since they replay without the
+    eval arrays present.
     """
     want_term = term_out is not None
     want_wp = bool(winpos_out)
+    want_ev = want_wp or with_child_eval
     if (ps_out.exists() and crush_out.exists()
             and (not want_term or term_out.exists())
             and (not want_wp or all(p.exists() for p in winpos_out.values()))):
@@ -427,7 +439,7 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
     spans: list[tuple[int, int]] = []
     facts: list[tuple[int, int, object]] = []
     mm_h = mm_e = None
-    if want_wp:
+    if want_ev:
         mm_h, mm_e = open_eval_arrays()
     # Reused across every game in the file; the memo is cleared per read batch.
     hasher = IncrementalZobrist(chess.Board()) if optimize else None
@@ -448,7 +460,7 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
         # without a separate join over ~2.25B below-floor edges. Stored NULL where
         # the eval DB has no entry, so SQL aggregates skip it instead of averaging
         # in a sentinel.
-        if want_wp:
+        if want_ev:
             cev = pl.Series("child_eval",
                             lookup_evals(np.asarray(buf["child_hash"], dtype=np.int64),
                                          mm_h, mm_e), dtype=pl.Int32)
@@ -1357,6 +1369,17 @@ def main() -> None:
         print("\nDepth prune: DISABLED (full depth)\n", flush=True)
 
     if args.phase in ("extract", "all"):
+        # Fail here, not 6 workers deep. Every extract needs the eval arrays now
+        # (child_eval for the other-moves bucket, plus the winpos crossings when
+        # fused), and open_eval_arrays runs inside the worker — so a missing or
+        # STALE pair would otherwise surface as N identical tracebacks out of a
+        # process pool at the start of a ~90 h run. Verifying once up front turns
+        # that into one line naming the fix.
+        try:
+            print(f"Eval arrays: {verify_eval_arrays()}", flush=True)
+        except (FileNotFoundError, ValueError) as e:
+            sys.exit(f"FATAL: {e}")
+
         files = discover_source_files(args.start_year, args.end_year, args.months, args.events)
         partial_dir.mkdir(parents=True, exist_ok=True)
         tasks = []

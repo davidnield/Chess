@@ -43,7 +43,8 @@ the analysis surface, or the tests. If that stops being true, move it to `scratc
 | `F:/chess/standard-chess-games/data/` | Pre-compression archive only — **never a pipeline input.** F: is a USB spinning disk — never point DuckDB spill/temp at it either. Also the **only** copy retaining `[%clk]`/`[%eval]` movetext comments (recipe v3 strips them from `D:` at ingest). |
 | `E:/chess/position-moves-*` | Legacy Stage-1 edge extracts (2024/2025 only). The `-all` dirs are NTFS-hardlinked unions of the per-month dirs — same physical bytes, so deleting per-month dirs frees nothing; space is only freed when the `-all` links go too. |
 | `E:/chess/crush-per-game-v2/` | Per-game decisive-result facts (`extract_crush_per_game.py`): win flags, termination, move_count. Input to crush histogram builders. |
-| `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts) and `crush_hist_*.parquet` (crush histograms). `_pooled_partials_*/` are resumable working dirs for in-flight pooled builds. |
+| `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts), `position_stats_aux_*.parquet` (the per-position sidecar of unseen mass), and `crush_hist_*.parquet` (crush histograms). `_pooled_partials_*/` are resumable working dirs for in-flight pooled builds. |
+| `E:/chess/eval_arrays/` | `unified_eval_db.parquet` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16) so extract workers mmap ONE shared resident copy instead of N private 4.8 GB loads. **Derived** — `eval_arrays.meta.json` fingerprints the source (size/mtime/rows) and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]`. |
 | `E:/chess/repertoire/` | Stage-3 outputs, with `.meta.json` provenance sidecars recording the exact inputs/flags that built each one. |
 | `E:/chess/lichess_eval_db.parquet` | `position_hash → eval_cp` cloud-eval Stockfish DB (`build_lichess_eval_db.py`). The raw `lichess-evals/` dump it was built from has been deleted — rebuilding requires re-downloading from database.lichess.org. Superseded as the Stage-3 default by `unified_eval_db.parquet` below, but still a direct input to it. |
 | `E:/chess/unified_eval_db.parquet` | **Canonical eval DB.** `lichess_eval_db.parquet` unioned with the aggregated fishnet-evals dump (`build_fishnet_eval_db.py`, cloud-preferred, median-of-replicates per era tier) — broader position coverage than the cloud DB alone. This is the default `--eval-db` for Stage-3 and `build_sharp_reps.py`. |
@@ -58,15 +59,16 @@ output.
 
 ```
 D: source parquets
-   │  build_pooled_stats.py --phase extract   (fused extract+aggregate; per-file partials)
+   │  build_pooled_stats.py --phase extract   (ONE replay, four payloads per file:
+   │                                           ps + terminal-accounting + winpos
+   │                                           histograms + child_hash/child_eval)
    │  build_pooled_stats.py --phase merge     (monthly consolidation → final GROUP BYs)
    ▼
-position_stats_pooled_<tag>.parquet
-   │  build_crush_winpos_phase2.py            (SECOND replay from D: — the crush histogram the
-   │                                           locked recipe actually consumes; needs the
-   │                                           finished position_stats as its `keys` universe)
-   ▼
-crush_hist_relwin_pooled_<tag>.parquet
+position_stats_pooled_<tag>.parquet          ← surviving edges (min_games 50)
+position_stats_aux_pooled_<tag>.parquet      ← the sidecar: per position, the mass the
+   │                                           outgoing edges cannot see (term / horizon /
+   │                                           below-floor "other"). See Stage 3 below.
+crush_hist_relwin_pooled_<tag>.parquet       ← winpos histogram, one per threshold
    │  build_sharp_reps.py                     (locked Stage-3 recipe; TWO-PASS wrapper around
    │                                           stage3_backwards_induction.py: pass-1 build →
    │                                           plan_consistency_report.py --export-prefix →
@@ -79,6 +81,19 @@ repertoire_pooled_{white,black}_sharp.parquet
    │  repertoire_explorer.py                  (browsing UI)
 ```
 
+**The winpos histogram is produced by the extract's own replay** (`--fuse-winpos`,
+default on, thresholds via `--winpos-thresholds`). `build_crush_winpos_phase2.py` was a
+SECOND full pass over D: (measured 47 h, peak 76 GB) and is now redundant — kept only
+because `build_crush_winpos.winpos_sql` remains the *definition* of the win event and the
+oracle `_test_winpos_fused.py` holds the fused path to. The extract cannot apply the
+pool's `min_games` floor (a global merge decision), so it emits a row per edge and the
+merge semi-joins to the survivors — same restriction, later.
+
+**The extract requires the mmap'd eval arrays** (`E:/chess/eval_arrays/`, built by
+`eval_arrays.py`): winpos needs per-position evals for the crossing test, and `child_eval`
+feeds the aux bucket's aggregate evaluation. `--phase extract` verifies them up front and
+refuses to start if they are missing or stale.
+
 Pooled outputs are stamped `event='Pooled', elo_band=0` — a synthetic slice, so Stage 3 consumes
 them unchanged. Skipped corrupt source months are encoded in `SKIP_PARTITIONS` in
 `build_pooled_stats.py` (and `MONTHS_2024_SKIP` in the legacy
@@ -89,11 +104,9 @@ them unchanged. Skipped corrupt source months are encoded in `SKIP_PARTITIONS` i
 its partials was the largest avoidable cost in the merge. The extract still writes
 `.crush.parquet` partials, so it can be merged later without re-extracting.
 
-**TODO for the next full rebuild — fuse winpos into the extract.** The second replay above is
-avoidable; it costs ~1.5-3 days at 6 workers for nothing that the extract's own replay could not
-produce. Design and sequencing are in the plan file
-`~/.claude/plans/fused-winpos-extract.md`. Do this AFTER the winpos run on the current pool, and
-before ingesting 2025-10 … 2026-07.
+**The `.crush.parquet` partials are still written and still unconsumed.** Stopping that
+saves ~163 GB and some extract time; it is deliberately deferred until the fused winpos
+output has been validated end-to-end on a full build.
 
 ### Legacy sliced path (per-(event, elo_band) stats)
 
@@ -107,7 +120,26 @@ raising the memory limit.
 
 Backwards induction over the position DAG (zobrist int64 hashes, Kahn topological order — each
 position valued once despite transpositions; residual cycles get Tarjan SCC condensation +
-damped fixpoint sweeps). Move selection combines five ingredients:
+damped fixpoint sweeps).
+
+**Opponent-node denominator (`--aux-stats`, default off = exact no-op).** An opponent node's
+value is a mean over their replies, and that mean used to divide by the node's OUTGOING edges
+only — so games that ENDED there, replies below `min_games`, and games cut by the ply cap all
+contributed nothing. The first is directional: the side to move scores ~0.095 at a terminal
+node, so dropping them deleted precisely the opponent's collapses (measured 0.9015 vs 0.5087,
+understating winning lines by ~0.027 and compounding up the tree). With the sidecar the
+denominator becomes `out + term + other + horizon`, each bucket carrying its own value —
+terminations their empirical result (a finished game is a fact), the below-floor bucket its
+empirical score blended with the engine on the eval-COVERED mass, the horizon its own eval or
+empirical fallback. `--reply-shrink` is forced to 0 when the sidecar is supplied: both correct
+overlapping missing mass and stacking them double-counts it.
+
+OUR nodes are deliberately asymmetric — `values[ph]` there is prescriptive ("what our book
+gets from here"), not an empirical mean, so only the half of a termination where the OPPONENT
+resigned before we moved is folded in. Games where *we* resigned abandoned the book and must
+not be charged to the recipe.
+
+Move selection combines five ingredients:
 
 1. **Empirical value** — smoothed propagated score (Beta-Binomial prior on leaves so lucky
    low-count lines don't win the max).
@@ -134,10 +166,14 @@ provenance in each output's `.meta.json`.
 
 - **Resignation-proxy** (`build_crush_stats.py`): win = decisive result with `termination='Normal'`
   (mate or resignation). No eval component.
-- **Winpos** (`build_crush_winpos.py`, **canonical crush source for `build_sharp_reps.py`**): win
-  event = the *earliest* of (first position strictly after the edge with eval ≥ +300cp for our
-  side, decisive-normal end). One event per game per side — no double counting; a +3 advantage
-  counts even if later thrown away; uncovered positions fall back to normal terminations.
+- **Winpos** (**canonical crush source for `build_sharp_reps.py`**): win event = the *earliest*
+  of (first position strictly after the edge with eval ≥ +300cp for our side, decisive-normal
+  end). One event per game per side — no double counting; a +3 advantage counts even if later
+  thrown away; uncovered positions fall back to normal terminations. Now computed inside the
+  extract by `winpos_fused.py`; `build_crush_winpos.winpos_sql` remains the definition and the
+  test oracle. Uncovered positions must be masked explicitly — the `MISSING` sentinel is
+  −32768, which would otherwise satisfy `eval ≤ −threshold` and manufacture a black crossing at
+  every position the eval DB has never seen.
 
 The distinction matters: the original design intended the eval clause, and its absence went
 unnoticed for weeks because the definition wasn't written down.
@@ -245,10 +281,19 @@ The elo-sort tested in the benchmark was **not** adopted: the one heavy consumer
 **Movetext invariant (LOSSY):** canonical `D:` movetext is **comment-stripped** — `[%clk]`/`[%eval]`
 brace annotations are removed at ingest. The comments survive **only** in the `F:` raw archive.
 This changes no downstream aggregate: the strip removes exactly what `iter_san_moves` discards at
-parse time, and `has_eval` is computed on the original movetext *before* stripping (verified:
-176k comment-era games, identical extracted moves stripped vs raw). Every non-movetext column is
-byte-identical to the R schema, so output stays a drop-in match for the existing `D:` partitions.
-The original R script lives in `archive/` — don't use it.
+parse time, and `has_eval` / `move_count` are computed on the original movetext *before*
+stripping. Every non-movetext column is byte-identical to the R schema, so output stays a
+drop-in match for the existing `D:` partitions. The original R script lives in `archive/` —
+don't use it.
+
+That invariant rests on **two independent implementations agreeing** — the polars chain in
+`process_pgn_parquets.movetext_strip_expr` and the tokenizer in `iter_san_moves` — and they are
+NOT interchangeable in general: `1...e5` with no space strips to `e5` but tokenizes as the
+unparseable `1...e5`. It holds only because Lichess always writes the space. So
+`_test_movetext_strip.py` asserts the equality (SAN tokens *and* `move_count`, on real
+comment-era games) **and** that precondition, so a source-format change fails the test instead
+of silently eating a move. Keep the patterns in `MOVETEXT_STRIP_STEPS`: the test exercises the
+production expression rather than a copy of it.
 
 ## Notifications
 

@@ -25,7 +25,9 @@ source parquets (year=/month=/event=)
    │                                                 emit pre-aggregated partials
    │  build_pooled_stats.py        --phase merge     two-phase external GROUP BY
    ▼
-position_stats_*.parquet  +  crush_hist_*.parquet
+position_stats_*.parquet      per-edge win/draw/loss counts
+position_stats_aux_*.parquet  per-position: the mass those edges can't see
+crush_hist_*.parquet          "winning position reached early", same replay
    │  build_sharp_reps.py          two-pass driver around the engine below
    │    └─ stage3_backwards_induction.py
    ▼
@@ -67,6 +69,17 @@ Opponent nodes average over the empirical move distribution instead of assuming
 best play, because the repertoire is for playing humans. The gates are what cover
 the worst case.
 
+That average has to count the games that never produced a reply at all. Some
+opponents resign or get mated at the position; some answer with a move too rare
+to survive the pool's frequency floor; some games run past the depth the extract
+records. Averaging over the replies that remain silently drops all three — and
+the first is the opposite of noise, since a game ending on the opponent's turn is
+usually one they just lost. The `position_stats_aux_*` sidecar carries that
+missing mass so the mean divides by everything that actually arrived: finished
+games contribute their real result, the rare-reply bucket blends its empirical
+score with the engine's opinion, and the depth-limited games are marked as such
+rather than being confused with the other two.
+
 ## Repo layout
 
 ```
@@ -74,7 +87,9 @@ python/
   zobrist.py                     the position hash every stage keys on
   process_pgn_parquets.py        ingest + compression (recipe v3)
   build_pooled_stats.py          canonical extract + aggregate
-  build_crush_winpos*.py         "winning position reached early" histogram
+  winpos_fused.py                "winning position reached early", inside that replay
+  build_crush_winpos*.py         the SQL definition of that event, kept as the test oracle
+  eval_arrays.py                 the eval DB as mmap'd arrays workers can share
   build_{lichess,fishnet}_eval_db.py   Stockfish eval databases
   stage3_backwards_induction.py  the valuation engine
   build_sharp_reps.py            the locked recipe, as a two-pass driver

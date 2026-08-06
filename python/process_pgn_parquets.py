@@ -142,6 +142,37 @@ PARTITION_SCHEMA = pa.schema([
 ])
 
 
+# ── movetext comment strip (M1) ──────────────────────────────────────────────
+# The one LOSSY step in the recipe: canonical D: movetext has its brace comments
+# ({[%clk ...]}, {[%eval ...]}) removed, and they survive only in the F: raw
+# archive. The claim that this changes no downstream aggregate rests on the strip
+# removing EXACTLY what stage1_extract_positions.iter_san_moves already discards
+# at parse time — two independent implementations that have to agree.
+#
+# They agree on Lichess's actual format but are not interchangeable in general:
+# `1...e5` with no space strips to `e5`, while iter_san_moves yields the token
+# `1...e5`, which fails parse_san. Lichess always writes the space, so the
+# invariant holds — and _test_movetext_strip.py asserts BOTH the equality on real
+# games and the precondition (no `\d+\.\.\.` followed by a non-space) that makes
+# it safe, so a source-format change is caught rather than silently mis-parsed.
+#
+# Exposed as a function rather than inlined in the select below so the test can
+# exercise the production expression instead of a copy of these patterns.
+MOVETEXT_STRIP_STEPS = (
+    (r"\s*\{[^}]*\}", ""),   # brace comments
+    (r"\d+\.\.\.\s*", ""),   # the "1..." black-move renumbering comments force
+    (r"\s{2,}", " "),        # collapse the space runs the removals leave
+)
+
+
+def movetext_strip_expr(col: str = "movetext"):
+    """The M1 strip as a polars expression, aliased back to `col`."""
+    e = pl.col(col)
+    for pattern, repl in MOVETEXT_STRIP_STEPS:
+        e = e.str.replace_all(pattern, repl)
+    return e.str.strip_chars().alias(col)
+
+
 # ── logging ─────────────────────────────────────────────────────────────────
 
 def log(msg: str) -> None:
@@ -240,18 +271,10 @@ def transform(df: pl.DataFrame, year: int, month: int) -> pl.DataFrame:
         pl.col("Termination").alias("termination"),
         pl.col("TimeControl").alias("time_control"),
 
-        # movetext — M1 comment strip (recipe v3, LOSSY vs the F: raw archive):
-        # drop brace comments ({[%clk ...]}, {[%eval ...]}), the "1..." black-move
-        # renumbering they force, then collapse space runs. This is exactly what
-        # iter_san_moves discards at parse time today, so it changes no downstream
-        # aggregate. has_eval below is computed on the ORIGINAL movetext (pre-strip),
-        # and move_count counts white "N. " tokens which the strip never touches.
-        pl.col("movetext")
-          .str.replace_all(r"\s*\{[^}]*\}", "")
-          .str.replace_all(r"\d+\.\.\.\s*", "")
-          .str.replace_all(r"\s{2,}", " ")
-          .str.strip_chars()
-          .alias("movetext"),
+        # movetext — M1 comment strip (recipe v3, LOSSY vs the F: raw archive).
+        # See movetext_strip_expr; _test_movetext_strip.py holds it to
+        # iter_san_moves on real comment-era games.
+        movetext_strip_expr(),
 
         # ── Computed fields ──
         pl.col("Site").str.replace("https://lichess.org/", "", literal=True).alias("game_id"),

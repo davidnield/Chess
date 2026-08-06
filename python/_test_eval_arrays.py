@@ -15,7 +15,9 @@ Usage:  python _test_eval_arrays.py [--sample N]
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -23,8 +25,9 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from eval_arrays import (DEFAULT_ARRAY_DIR, DEFAULT_EVAL_DB, MISSING,
-                         lookup_evals, open_eval_arrays)
+from eval_arrays import (DEFAULT_ARRAY_DIR, DEFAULT_EVAL_DB, META_NAME, MISSING,
+                         build_eval_arrays, lookup_evals, open_eval_arrays,
+                         verify_eval_arrays)
 
 _checks: list[tuple[bool, str]] = []
 
@@ -34,6 +37,72 @@ def check(ok: bool, label: str) -> None:
     print(f"  {'PASS' if ok else 'FAIL'}  {label}")
 
 
+def raises(fn, exc) -> bool:
+    try:
+        fn()
+    except exc:
+        return True
+    except Exception:                                          # noqa: BLE001
+        return False
+    return False
+
+
+def check_staleness() -> None:
+    """The arrays are a DERIVED copy — rebuild the eval DB and they go stale.
+
+    Nothing about that is visible at read time: a stale array is the right shape,
+    sorted, and answers every query. It just answers with the previous DB's
+    evaluations, in both the winpos crossings and the other-moves bucket. So the
+    guard is tested here on throwaway arrays rather than trusted.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="eval_arrays_stale_"))
+    try:
+        db = tmp / "src.parquet"
+        adir = tmp / "arrays"
+        pl.DataFrame({"position_hash": [5, 1, 9, 3],
+                      "eval_cp": [10, -20, 30, -40]}).write_parquet(db)
+        build_eval_arrays(db, adir)
+        check((adir / META_NAME).exists(),
+              "build writes a fingerprint sidecar")
+        check("verified against" in verify_eval_arrays(adir, db),
+              "freshly built arrays verify against their source")
+
+        # Rebuild the source with different content. This is exactly the
+        # build_fishnet_eval_db.py path that has already happened once.
+        pl.DataFrame({"position_hash": [5, 1, 9, 3, 7],
+                      "eval_cp": [10, -20, 30, -40, 50]}).write_parquet(db)
+        check(raises(lambda: verify_eval_arrays(adir, db), ValueError),
+              "a CHANGED source is detected as stale (this is the bug being fixed)")
+
+        # build_eval_arrays is the one caller that can fix staleness, so it
+        # rebuilds instead of raising.
+        build_eval_arrays(db, adir)
+        check("verified against" in verify_eval_arrays(adir, db),
+              "build_eval_arrays rebuilds a stale pair rather than raising")
+        check(int(np.load(adir / "eval_hash.npy", mmap_mode="r").shape[0]) == 5,
+              "the rebuilt arrays carry the new row count")
+
+        # Legacy arrays (built before the sidecar existed) must not force a
+        # needless 400M-row rebuild when they are demonstrably current.
+        (adir / META_NAME).unlink()
+        check("adopted legacy arrays" in verify_eval_arrays(adir, db),
+              "meta-less arrays matching row count + mtime are adopted")
+        check((adir / META_NAME).exists(),
+              "adoption records the fingerprint so later checks are exact")
+
+        # ...but a meta-less pair whose row count disagrees is a hard failure,
+        # which is the case adoption must never wave through.
+        (adir / META_NAME).unlink()
+        pl.DataFrame({"position_hash": [5, 1], "eval_cp": [10, -20]}).write_parquet(db)
+        check(raises(lambda: verify_eval_arrays(adir, db), ValueError),
+              "meta-less arrays with a MISMATCHED row count are rejected")
+
+        check(raises(lambda: verify_eval_arrays(tmp / "nope", db), FileNotFoundError),
+              "absent arrays raise FileNotFoundError with a build hint")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     # 1.25M ~= one read batch (50K games x ~25 plies), the size the extract will
@@ -41,10 +110,17 @@ def main() -> None:
     ap.add_argument("--sample", type=int, default=1_250_000)
     a = ap.parse_args()
 
+    # Runs on throwaway arrays, so it works with no E: data present.
+    print("Staleness guard:")
+    check_staleness()
+
     if not (DEFAULT_ARRAY_DIR / "eval_hash.npy").exists():
-        print(f"  SKIP: eval arrays not built at {DEFAULT_ARRAY_DIR}")
-        print("\nALL PASS (0 checks — arrays unavailable)")
-        sys.exit(0)
+        print(f"\n  SKIP: eval arrays not built at {DEFAULT_ARRAY_DIR}")
+        n_fail = sum(1 for ok, _ in _checks if not ok)
+        print(f"\n{'ALL PASS' if n_fail == 0 else f'{n_fail} FAILURES'} "
+              f"({len(_checks)} checks — real arrays unavailable)")
+        sys.exit(0 if n_fail == 0 else 1)
+    print()
 
     h, e = open_eval_arrays()
     print(f"Arrays: {h.shape[0]:,} entries\n")

@@ -111,8 +111,13 @@ def main() -> None:
             ps = tmp / f"{tag}.ps.parquet"
             cr = tmp / f"{tag}.crush.parquet"
             t0 = time.time()
+            # with_child_eval=False: this test is about the replay path (hasher
+            # + EPD memo), and the eval join is a lookup against E: arrays that
+            # is identical on both sides by construction. Leaving it out keeps
+            # the test runnable without the eval arrays built.
             r = extract_file(src, ps, cr, min_elo=1800, max_ply=30, tiers=None,
-                             limit_games=args.games, optimize=opt)
+                             limit_games=args.games, optimize=opt,
+                             with_child_eval=False)
             el = time.time() - t0
             out[tag] = (ps, cr, el, r)
             print(f"  {tag:<10} {r['kept']:,}/{r['games']:,} kept  "

@@ -24,6 +24,7 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -37,9 +38,107 @@ DEFAULT_ARRAY_DIR = Path("E:/chess/eval_arrays")
 # real data, so it can never collide with a genuine evaluation.
 MISSING = np.int16(-32768)
 
+META_NAME = "eval_arrays.meta.json"
+
 
 def _paths(array_dir: Path) -> tuple[Path, Path]:
     return array_dir / "eval_hash.npy", array_dir / "eval_cp.npy"
+
+
+# ── staleness ─────────────────────────────────────────────────────────────────
+# These arrays are a DERIVED copy of unified_eval_db.parquet, and the skip gate
+# used to be `if the .npy files exist, use them`. That is silent corruption
+# waiting to happen: rebuild the eval DB (which build_fishnet_eval_db.py has
+# already done once) and every later extract keeps reading the OLD evals, with
+# no error. It would land in two places at once — the winpos crossing plies and
+# the child_eval feeding the other-moves bucket — so the repertoire would shift
+# for a reason nothing in the logs could explain.
+#
+# So the arrays record what they were built from, and callers verify.
+
+def source_fingerprint(eval_db: Path) -> dict:
+    """Identity of the source DB: size + mtime + row count.
+
+    Row count is read from the parquet FOOTER (no column data), so this stays
+    cheap enough to call before every run.
+    """
+    import pyarrow.parquet as pq
+    st = eval_db.stat()
+    return {"source": str(eval_db), "size": st.st_size,
+            "mtime_ns": st.st_mtime_ns,
+            "n_rows": pq.read_metadata(eval_db).num_rows}
+
+
+def read_meta(array_dir: Path = DEFAULT_ARRAY_DIR) -> dict | None:
+    p = array_dir / META_NAME
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _write_meta(array_dir: Path, fp: dict) -> None:
+    p = array_dir / META_NAME
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(fp, indent=2), encoding="utf-8")
+    tmp.replace(p)
+
+
+def verify_eval_arrays(array_dir: Path = DEFAULT_ARRAY_DIR,
+                       eval_db: Path | None = None,
+                       adopt: bool = True) -> str:
+    """Raise unless the arrays match the eval DB they were built from.
+
+    Returns a one-line status for logging. Raises FileNotFoundError if the
+    arrays or the source are absent, ValueError if they no longer agree.
+
+    `adopt` handles arrays built before this metadata existed: there is no
+    fingerprint to compare, but if the row count matches the source AND the
+    arrays post-date it, they are almost certainly current — record the
+    fingerprint and move on rather than forcing a needless 400M-row rebuild.
+    A mismatch on either signal is still a hard failure.
+    """
+    hp, cp = _paths(array_dir)
+    if not (hp.exists() and cp.exists()):
+        raise FileNotFoundError(
+            f"eval arrays missing at {array_dir}. Build them with:\n"
+            f"    .venv/Scripts/python.exe python/eval_arrays.py")
+    meta = read_meta(array_dir)
+    src = Path(eval_db or (meta or {}).get("source") or DEFAULT_EVAL_DB)
+    if not src.exists():
+        raise FileNotFoundError(
+            f"eval arrays at {array_dir} cannot be verified: their source "
+            f"{src} is gone. Point --eval-db at the current DB or rebuild.")
+    fp = source_fingerprint(src)
+
+    if meta is None:
+        n = int(np.load(hp, mmap_mode="r").shape[0])
+        if n != fp["n_rows"]:
+            raise ValueError(
+                f"eval arrays at {array_dir} hold {n:,} entries but {src.name} "
+                f"has {fp['n_rows']:,} rows — they were built from a different "
+                f"DB. Rebuild: python/eval_arrays.py --force")
+        if hp.stat().st_mtime_ns < fp["mtime_ns"]:
+            raise ValueError(
+                f"eval arrays at {array_dir} pre-date {src.name} "
+                f"({fp['n_rows']:,} rows matched, but the DB is newer) — they "
+                f"may be stale. Rebuild: python/eval_arrays.py --force")
+        if adopt:
+            _write_meta(array_dir, fp)
+            return (f"adopted legacy arrays ({n:,} entries, row count and mtime "
+                    f"consistent with {src.name}); fingerprint recorded")
+        return f"unverified legacy arrays ({n:,} entries)"
+
+    drift = [k for k in ("size", "mtime_ns", "n_rows") if meta.get(k) != fp[k]]
+    if drift:
+        raise ValueError(
+            f"eval arrays at {array_dir} are STALE: {src.name} changed "
+            f"({', '.join(drift)}). Built from {meta.get('n_rows', '?'):,} rows, "
+            f"source now has {fp['n_rows']:,}. Rebuild:\n"
+            f"    .venv/Scripts/python.exe python/eval_arrays.py --force")
+    return f"verified against {src.name} ({fp['n_rows']:,} rows)"
 
 
 def build_eval_arrays(eval_db: Path = DEFAULT_EVAL_DB,
@@ -50,7 +149,15 @@ def build_eval_arrays(eval_db: Path = DEFAULT_EVAL_DB,
 
     hp, cp = _paths(array_dir)
     if hp.exists() and cp.exists() and not force:
-        return hp, cp
+        # Skip gate is a VERIFICATION, not an existence check — see
+        # verify_eval_arrays. Staleness rebuilds here rather than raising:
+        # regenerating is exactly this function's job, and it is the one caller
+        # that can fix the problem instead of reporting it.
+        try:
+            verify_eval_arrays(array_dir, eval_db)
+            return hp, cp
+        except (FileNotFoundError, ValueError) as e:
+            print(f"eval arrays: rebuilding — {e}", file=sys.stderr)
     array_dir.mkdir(parents=True, exist_ok=True)
 
     df = pl.read_parquet(eval_db, columns=["position_hash", "eval_cp"])
@@ -83,6 +190,10 @@ def build_eval_arrays(eval_db: Path = DEFAULT_EVAL_DB,
         with open(tmp, "wb") as fh:
             np.save(fh, arr)
         tmp.replace(path)
+    # LAST, like every other _SUCCESS-style sentinel here: the fingerprint must
+    # only exist once both arrays are complete, or a crash between the two
+    # renames would leave a half-built pair that verifies clean.
+    _write_meta(array_dir, source_fingerprint(eval_db))
     return hp, cp
 
 
@@ -131,6 +242,7 @@ def main() -> None:
     print(f"evals  {e.shape[0]:,}  ({cp.stat().st_size/1e9:.2f} GB)")
     print(f"sorted: {bool(np.all(h[:-1] <= h[1:]))}")
     print(f"cp range: [{int(e.min())}, {int(e.max())}]")
+    print(f"status: {verify_eval_arrays(Path(a.out_dir), Path(a.eval_db))}")
 
 
 if __name__ == "__main__":
