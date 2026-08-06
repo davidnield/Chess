@@ -75,7 +75,41 @@ EVENT_MAP = {
     "Rated Rapid game":         "Rapid",
     "Rated Bullet game":        "Bullet",
     "Rated Blitz game":         "Blitz",
+    # "Rated Standard game" is what Lichess called the slow bucket in six months of
+    # the archive — 2015-03, 2017-11, 2017-12, 2018-01, 2018-02, 2018-04 — where
+    # every neighbouring month calls the same games "Rated Classical game" (before
+    # 2018-05) or "Rated Rapid game" (after). The shares are conserved exactly
+    # across the boundary: 2015-02 is 28.5% Classical / 0% Standard, 2015-03 is
+    # 1.8% / 26.7%, 2015-04 is 28.0% / 0%. It is a dump-vintage difference upstream,
+    # not a converter difference — our own 2018-03 conversion emits "Rapid".
+    #
+    # Without this entry the scan filter below drops every one of them: 14,100,331
+    # games, the entire slow population of those six months, silently absent from
+    # the pool while their neighbours have it. Mapped to Rapid rather than Classical
+    # because 2018-04 carries 3.1% Classical ALONGSIDE 14.3% Standard, mirroring
+    # 2018-05's 3.0% Classical + 13.7% Rapid — so Standard is the Rapid half of an
+    # already-split pair, not the whole bucket.
+    "Rated Standard game":      "Rapid",
 }
+
+
+def _event_expr():
+    """The `event` partition column, built FROM EVENT_MAP.
+
+    This mapping used to exist twice: once as EVENT_MAP (which the scan filter
+    reads via .keys()) and once as a literal when/then chain here. Two copies of a
+    six-way table that must agree, with nothing forcing them to — and the failure
+    mode is silent rather than loud. A key present in EVENT_MAP but missing from
+    the chain passes the filter and then evaluates to null, so the rows are written
+    to event=null instead of raising; a key in the chain but not the map is simply
+    unreachable. Deriving one from the other removes the possibility.
+    """
+    items = list(EVENT_MAP.items())
+    src, dst = items[0]
+    expr = pl.when(pl.col("Event") == src).then(pl.lit(dst))
+    for src, dst in items[1:]:
+        expr = expr.when(pl.col("Event") == src).then(pl.lit(dst))
+    return expr.alias("event")
 
 # ── compression settings ────────────────────────────────────────────────────
 
@@ -315,14 +349,8 @@ def transform(df: pl.DataFrame, year: int, month: int) -> pl.DataFrame:
         pl.lit(year).cast(pl.Int32).alias("year"),
         pl.lit(month).cast(pl.Int32).alias("month"),
 
-        # event: same case_when as R (only the 6 rated standard events)
-        pl.when(pl.col("Event") == "Rated UltraBullet game").then(pl.lit("UltraBullet"))
-          .when(pl.col("Event") == "Rated Correspondence game").then(pl.lit("Correspondence"))
-          .when(pl.col("Event") == "Rated Classical game").then(pl.lit("Classical"))
-          .when(pl.col("Event") == "Rated Rapid game").then(pl.lit("Rapid"))
-          .when(pl.col("Event") == "Rated Bullet game").then(pl.lit("Bullet"))
-          .when(pl.col("Event") == "Rated Blitz game").then(pl.lit("Blitz"))
-          .alias("event"),
+        # event: derived from EVENT_MAP, the same table the scan filter uses.
+        _event_expr(),
     ])
 
 
