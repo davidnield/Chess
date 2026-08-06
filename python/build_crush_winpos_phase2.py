@@ -289,7 +289,16 @@ def main() -> None:
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
                     help=f"Stockfish eval DB for the >= +{THRESH_CP}cp win event "
                          f"(default: {DEFAULT_EVAL_DB.name}).")
+    ap.add_argument("--source", default=None,
+                    help="Derived-parquet root to read. Only discovery uses it "
+                         "(workers receive absolute paths), so this is enough to "
+                         "run the old two-phase path over the same bounded slice "
+                         "as the fused one for an A/B.")
     args = ap.parse_args()
+
+    if args.source:
+        import build_pooled_stats as _bps
+        _bps.SOURCE_ROOT = Path(args.source)
 
     global INTER, SCRATCH
     stats, out, eval_db = Path(args.stats), Path(args.out), Path(args.eval_db)

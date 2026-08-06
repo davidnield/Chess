@@ -17,6 +17,11 @@ Why this one test covers both optimizations end-to-end:
     hash -> EPD were ever NOT a function the memoized run would keep a
     different representative EPD than the unmemoized one and this fails.
 
+Both paths also emit child_hash now (carried across plies out of the replay), so
+the column comparison below covers it on both — but the binding check that it is
+the RIGHT value, rather than merely the same on both paths, is
+_test_extract_child_hash.py against python-chess.
+
 Usage:  python _test_extract_equivalence.py [--games N] [--file PATH]
 """
 from __future__ import annotations

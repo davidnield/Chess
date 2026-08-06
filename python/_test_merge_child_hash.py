@@ -1,14 +1,16 @@
-"""V4 — removing the merge's (epd, san) -> child_hash cache changes nothing.
+"""The pool's stored child_hash agrees with a python-chess re-derivation.
 
-build_pooled_stats.merge_position_stats derives child_hash by replaying one move
-from each row's parent_epd. It used to memoize that on (parent_epd, move_san),
-but the cache could not hit: the GROUP BY immediately above already made
-(parent_hash, move_san) unique, and parent_epd is a function of parent_hash. So
-the dict held ~23.45M entries — several GB, built in the single-threaded tail of
-the merge — to serve 18 lookups.
+History: this file used to prove that removing an (epd, san) -> child_hash memo
+from merge_position_stats changed nothing (the cache could not hit — the GROUP BY
+above it already made the key unique, so ~23.45M entries served 18 lookups).
+The derivation loop it guarded is now gone entirely: child_hash comes out of the
+extract replay, where the position after ply p is the position before ply p+1.
 
-This asserts (a) the key really is unique on real data, and (b) cached and
-uncached derivation produce identical child_hash values.
+What survives is the invariant that actually matters and is worth keeping pinned
+on the SHIPPED pool: whatever produced the stored column, replaying the move from
+parent_epd must reproduce it. _test_extract_child_hash.py checks the same identity
+at the source (on freshly replayed games); this checks it on the artifact Stage 3
+actually reads, which is the one that would silently mis-link the DAG.
 
 Usage:  python _test_merge_child_hash.py [--rows N] [--stats PATH]
 """
@@ -48,25 +50,6 @@ def _one(epd: str, san: str):
         return None
 
 
-def derive_uncached(epds, sans):
-    """The shipped path."""
-    return [_one(e, s) for e, s in zip(epds, sans)]
-
-
-def derive_cached(epds, sans):
-    """The removed path, reproduced verbatim for comparison."""
-    cache: dict[tuple[str, str], int | None] = {}
-    out = []
-    for epd, san in zip(epds, sans):
-        key = (epd, san)
-        h = cache.get(key, "miss")
-        if h == "miss":
-            h = _one(epd, san)
-            cache[key] = h
-        out.append(h)
-    return out, len(cache)
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", type=int, default=15_000,
@@ -90,22 +73,26 @@ def main() -> None:
     n = len(epds)
     print(f"Rows:  {n:,}\n")
 
-    # (a) the key is unique -> the cache could never have paid for itself
+    # (a) the key is unique -> _agg_ps's .first() on child_hash is exact, and the
+    #     removed memo could never have paid for itself
     n_key = df.select(["parent_epd", "move_san"]).n_unique()
     check(n_key == n,
-          f"(parent_epd, move_san) unique on real data: {n_key:,}/{n:,} "
-          f"-> cache hit rate {100 * (1 - n_key / n):.4f}%")
+          f"(parent_epd, move_san) unique on real data: {n_key:,}/{n:,}")
 
-    # (b) identical output either way
-    plain = derive_uncached(epds, sans)
-    cached, cache_size = derive_cached(epds, sans)
-    check(plain == cached,
-          f"cached and uncached child_hash identical over {n:,} rows "
-          f"(cache would have held {cache_size:,} entries)")
+    # (b) the stored column reproduces under python-chess
+    derived = [_one(e, s) for e, s in zip(epds, sans)]
+    stored = df["child_hash"].to_list()
+    bad = [i for i, (d, s) in enumerate(zip(derived, stored)) if d != s]
+    check(not bad,
+          f"stored child_hash == python-chess re-derivation over {n:,} rows "
+          f"({len(bad)} mismatches)")
+    for i in bad[:5]:
+        print(f"        {sans[i]:<8} stored {stored[i]} derived {derived[i]}")
+        print(f"          {epds[i]}")
 
-    # (c) and both still agree with what the shipped parquet already contains
-    check(plain == df["child_hash"].to_list(),
-          "derived child_hash matches the stored column in the shipped parquet")
+    # (c) nothing null: a null would drop the edge at stage3's CSR filter
+    check(df["child_hash"].null_count() == 0,
+          "no null child_hash (a null silently drops the edge in Stage 3)")
 
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print(f"\n{'ALL PASS' if n_fail == 0 else f'{n_fail} FAILURES'} ({len(_checks)} checks)")

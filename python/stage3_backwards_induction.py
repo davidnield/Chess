@@ -676,6 +676,10 @@ def run_backwards_induction(
     cover_mass_shrink: float = 0.0,
     self_error_weight: float = 0.0,
     reply_shrink:     float = 0.0,
+    aux:              "pl.DataFrame | None" = None,
+    aux_term_flags:   bool = True,
+    aux_horizon:      str = "empirical",
+    aux_parts:        str = "term,other,horizon",
     augment_engine:   bool = False,
     full_eval_hashes: "np.ndarray | None" = None,
     full_eval_es:     "np.ndarray | None" = None,
@@ -905,6 +909,102 @@ def run_backwards_induction(
                                 weights=e_total[internal_edge].astype(np.float64),
                                 minlength=N)
                     if N else np.zeros(0, np.float64))
+
+    # ── aux sidecar: the mass a node's OUTGOING edges cannot see ───────────────
+    # Three populations, each needing different treatment, aligned to node ids.
+    # Absent -> zeros, so a node with no aux row behaves exactly as before and
+    # aux=None is an exact no-op.
+    #
+    #   TERM     the game ENDED here. Its result is a FACT, so it enters the mean
+    #            at its empirical score. Split by reason upstream so a time
+    #            forfeit (a statement about the clock) stays separable from a
+    #            mate/resignation (a statement about the position); both are
+    #            counted by default because the edge scores they are averaged
+    #            against already count time forfeits, and filtering one side of a
+    #            mean but not the other is a worse defect than the one it fixes.
+    #   OTHER    replies below the pool's per-edge floor. Empirical score blended
+    #            with the bucket's aggregate engine eval by the SAME
+    #            effective_eval_weight leaf edges use.
+    #   HORIZON  the game was still running when the ply cap stopped the replay.
+    #            Valued empirically by default: unlike a pruned reply, its outcome
+    #            IS observed — only the path is missing — so it is evidence about
+    #            this node in exactly the way a leaf edge's white_score_avg is.
+    #            --aux-horizon eval takes the node's engine eval instead.
+    # Allocated ONLY when the sidecar is supplied: seven float64[N] arrays is
+    # ~875 MB on the 15.6M-position pool, and the default path must not pay it.
+    # --aux-parts selects which populations are restored. Needed because they are
+    # wildly different sizes — on 2018-01 the other-moves bucket carried 1,253,751
+    # of edge mass against 4,224 for terminations — so "aux on" measures the bucket
+    # unless the parts can be separated.
+    _parts = {p.strip().lower() for p in (aux_parts or "").split(",") if p.strip()}
+    _bad = _parts - {"term", "other", "horizon"}
+    if _bad:
+        raise ValueError(f"--aux-parts: unknown {sorted(_bad)}; "
+                         f"choose from term, other, horizon")
+    _aux = aux is not None and N > 0 and bool(_parts)
+    aux_term_tot = aux_term_sum = aux_oth_tot = aux_oth_sum = None
+    aux_hor_tot = aux_hor_sum = aux_oth_eval = aux_crack = aux_oth_cov = None
+    if _aux:
+        aux_crack = np.zeros(N)      # OUR-node collapses; see the our-turn note below
+        aux_oth_cov = np.zeros(N)    # eval-covered FRACTION of the bucket's mass
+        aux_term_tot = np.zeros(N); aux_term_sum = np.zeros(N)
+        aux_oth_tot  = np.zeros(N); aux_oth_sum  = np.zeros(N)
+        aux_hor_tot  = np.zeros(N); aux_hor_sum  = np.zeros(N)
+        aux_oth_eval = np.full(N, np.nan)
+        ah = aux["position_hash"].to_numpy().astype(np.int64)
+        pos = np.clip(np.searchsorted(node_hash, ah), 0, max(N - 1, 0))
+        keep = node_hash[pos] == ah          # aux rows for positions we do not
+        rows = pos[keep]                     # value are simply irrelevant
+        # One row per position is the sidecar's contract (merge_aux_stats groups
+        # by parent_hash off a DISTINCT key set). Asserted because the scatter
+        # below is `arr[rows] +=`, which SILENTLY KEEPS ONLY THE LAST write for a
+        # repeated index rather than accumulating — a duplicate would quietly
+        # under-count the very mass this table exists to restore.
+        if rows.shape[0] != np.unique(rows).shape[0]:
+            raise ValueError("--aux-stats has duplicate position_hash rows; "
+                             "the sidecar must carry exactly one row per position")
+        def _col(name):
+            return aux[name].to_numpy().astype(np.float64)[keep] if name in aux.columns \
+                else np.zeros(int(keep.sum()))
+        groups = ["term_normal", "term_other"] + (["term_flag"] if aux_term_flags else [])
+        if "term" in _parts:
+            for g in groups:
+                aux_term_tot[rows] += _col(f"{g}_total")
+                aux_term_sum[rows] += _col(f"{g}_white_wins") + 0.5 * _col(f"{g}_draws")
+        # Terminations at OUR node, where the SIDE TO MOVE WON — i.e. the opponent
+        # resigned before we had played. `1.e4 e5 {Black resigns}` ends at a
+        # White-to-move position, so it lands on one of OUR nodes and the whole
+        # aux row there used to go unread. Splitting matters because the two halves
+        # mean opposite things:
+        #   we lost (measured 2,054 of 2,442 on 2018-01) -> the game ABANDONED the
+        #     book; including it would charge the recipe for a resignation it never
+        #     recommended.
+        #   they cracked (168) -> a genuine collapse, and exactly the evidence the
+        #     objective exists to reward.
+        # Only the second is counted. Draws are deliberately left out: a draw with
+        # us to move is usually one we agreed to, which is a deviation, and the
+        # data cannot separate that from stalemate or repetition.
+        if "term" in _parts:
+            crack_col = "white_wins" if our_color == chess.WHITE else "black_wins"
+            for g in groups:
+                aux_crack[rows] += _col(f"{g}_{crack_col}")
+        if "other" in _parts:
+            aux_oth_tot[rows] = _col("other_total")
+            aux_oth_sum[rows] = _col("other_white_wins") + 0.5 * _col("other_draws")
+            aux_oth_cov[rows] = _col("other_eval_cov")
+        if "horizon" in _parts:
+            aux_hor_tot[rows] = _col("horizon_total")
+            aux_hor_sum[rows] = _col("horizon_white_wins") + 0.5 * _col("horizon_draws")
+        # A bucket with no eval-covered child has other_eval_mean NULL. Polars
+        # renders that as NaN in to_numpy() for a Float64 column, which is already
+        # the sentinel the read site tests for — but that is a property of the
+        # dtype, not a guarantee, so the null mask is applied explicitly. Getting
+        # it wrong would read "no engine opinion" as an expected score of 0.0,
+        # i.e. dead lost, on exactly the thin lines the bucket exists to describe.
+        if "other" in _parts and "other_eval_mean" in aux.columns:
+            aux_oth_eval[rows] = _col("other_eval_mean")
+            _null = aux["other_eval_mean"].is_null().to_numpy()[keep]
+            aux_oth_eval[rows[_null]] = np.nan
 
     queue: deque[int] = deque(int(node_hash[i]) for i in np.nonzero(pending_count == 0)[0])
     _memlog("post graph-build (CSR + value arrays)")
@@ -1375,6 +1475,26 @@ def run_backwards_induction(
                 mem_nodes[ph] = 0.0
                 return
             values[ph]        = b["val"]
+            # Blend in the games where the opponent resigned BEFORE we moved. The
+            # node's value is otherwise purely prescriptive — "what our book gets
+            # from here" — and that is right for the games that continued, but
+            # some fraction of arrivals never gave us a move to play at all. Those
+            # are ours, at score 1.0 (0.0 in white-score units for a Black book).
+            #
+            # Like self-error, this is a property of the POSITION and identical for
+            # every candidate here, so it cannot change which move we pick AT this
+            # node — it changes the node's value, and therefore the PARENT's
+            # choice. Same mechanism as terminations at an opponent node.
+            #
+            # value_worst is deliberately untouched: an opponent who resigns is not
+            # playing best defence, so worst-case must not improve because of it.
+            if _aux:
+                crack = aux_crack[idx[ph]]
+                if crack:
+                    cont = sum(mv["total"] for mv in mvs)
+                    win = 1.0 if our_color == chess.WHITE else 0.0
+                    if cont + crack:
+                        values[ph] = (values[ph] * cont + win * crack) / (cont + crack)
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
             best_aug[ph]      = b.get("aug", False)
@@ -1410,6 +1530,53 @@ def run_backwards_induction(
             total = sum(mv["total"] for mv in mvs)
             values[ph] = (sum(mv["val"] * mv["total"] for mv in mvs) / total
                           if total else slice_prior)
+            # ── aux: put back the mass the outgoing edges never had ───────────
+            # THE defect this rebuild exists to fix. The mean above divides by
+            # the sum of OUTGOING edges, so games that ended here, games whose
+            # reply fell below the pool floor, and games cut off by the ply cap
+            # all contribute nothing — and the first of those is not noise:
+            # measured, the side to move scores 0.0953 at a terminal node, so
+            # excluding them deletes precisely the opponent's collapses.
+            aux_num = aux_den = 0.0
+            if _aux:
+                i_ph = idx[ph]
+                t_tot = aux_term_tot[i_ph]
+                if t_tot:
+                    aux_num += aux_term_sum[i_ph]      # a finished game's result
+                    aux_den += t_tot                   # is a fact, not an estimate
+                o_tot = aux_oth_tot[i_ph]
+                if o_tot:
+                    emp_o = aux_oth_sum[i_ph] / o_tot
+                    ev_o = aux_oth_eval[i_ph]
+                    if ev_o == ev_o and eval_weight > 0:      # not NaN
+                        # Sample size for the eval's trust is the COVERED mass, not
+                        # the whole bucket: other_eval_mean describes only the edges
+                        # the eval DB actually knows. Passing o_tot would claim the
+                        # engine's opinion rests on 1/cov times the evidence it has,
+                        # and it would be most wrong exactly on the thin, poorly
+                        # covered lines this bucket exists to describe.
+                        n_eff = o_tot * aux_oth_cov[i_ph]
+                        w_o = effective_eval_weight(eval_weight, eval_weight_min,
+                                                    eval_weight_k, n_eff)
+                        v_o = (1.0 - w_o) * emp_o + w_o * ev_o
+                    else:
+                        v_o = emp_o
+                    aux_num += v_o * o_tot
+                    aux_den += o_tot
+                h_tot = aux_hor_tot[i_ph]
+                if h_tot:
+                    if aux_horizon == "eval":
+                        hv = eval_lookup.get(ph) if eval_lookup else None
+                        v_h = hv if hv is not None else aux_hor_sum[i_ph] / h_tot
+                    else:
+                        v_h = aux_hor_sum[i_ph] / h_tot
+                    aux_num += v_h * h_tot
+                    aux_den += h_tot
+                if aux_den:
+                    base = values[ph] * total if total else slice_prior * 0.0
+                    denom = total + aux_den
+                    values[ph] = ((base + aux_num) / denom if denom
+                                  else slice_prior)
             # --reply-shrink: the mean above renormalises over the replies that
             # SURVIVED min_games, so a node whose alternatives fragmented below the
             # floor asserts its one survivor with probability 1. Measured case:
@@ -1428,7 +1595,13 @@ def run_backwards_induction(
                 if es is not None:
                     reached = float(reached_mass[idx[ph]])
                     if reached > 0.0:
-                        c = total / reached
+                        # With the aux table the accounted mass is explicit, so c
+                        # stops conflating "replies were pruned" with "the game
+                        # ended" and "the extract stopped". That is most of what
+                        # --reply-shrink was correcting; running both at full
+                        # strength double-counts the same missing games, which is
+                        # why the driver zeroes reply_shrink when aux is supplied.
+                        c = (total + aux_den) / reached
                         if c > 1.0:      # transpositions: several in-edges, or a
                             c = 1.0      # child counted once per parent
                         w = 1.0 - reply_shrink * (1.0 - c)
@@ -1919,6 +2092,44 @@ def main():
                              "Propagates additively along the chosen chain (like memo_cost) and "
                              "is deliberately excluded from the SCC convergence gate for the "
                              "same reason. Requires --eval-db. 0.0 = disabled (default).")
+    parser.add_argument("--aux-stats", default=None,
+                        help="position_stats_aux_*.parquet sidecar from "
+                             "build_pooled_stats.py. Adds the mass an opponent "
+                             "node's OUTGOING edges cannot see: games that ENDED "
+                             "there (measured, the side to move scores 0.0953, so "
+                             "excluding them deletes precisely the opponent's "
+                             "collapses), replies below the pool's per-edge floor "
+                             "(the other-moves bucket, with its games-weighted "
+                             "engine eval), and games cut off by the ply cap. "
+                             "Also makes --reply-shrink's coverage c honest, which "
+                             "is why supplying this zeroes reply-shrink unless you "
+                             "override it. Omitted (DEFAULT) = exact no-op.")
+    parser.add_argument("--aux-term-flags", action=argparse.BooleanOptionalAction,
+                        default=True,
+                        help="Count TIME FORFEIT terminations in the aux mean "
+                             "(DEFAULT ON). A flag is a fact about the clock, not "
+                             "the position, and carries the same sign as a "
+                             "resignation — but the edge-level white_score_avg it "
+                             "is averaged against already counts time forfeits, so "
+                             "excluding them from one half of a mean and not the "
+                             "other is a worse distortion. Measured 13.6% of "
+                             "in-tree terminations. --no-aux-term-flags to drop them.")
+    parser.add_argument("--aux-parts", default="term,other,horizon",
+                        help="Which aux populations to restore, comma-separated "
+                             "from term,other,horizon (default all). They differ by "
+                             "orders of magnitude — on 2018-01 the other-moves "
+                             "bucket carried 1,253,751 of edge mass against 4,224 "
+                             "for terminations — so isolating a part is the only "
+                             "way to attribute an effect to it.")
+    parser.add_argument("--aux-horizon", choices=["empirical", "eval"],
+                        default="empirical",
+                        help="How to value games the ply cap cut off. 'empirical' "
+                             "(DEFAULT) uses their actual results: unlike a pruned "
+                             "reply, a horizon game's OUTCOME is observed — only "
+                             "its path is missing — so it is evidence about the "
+                             "node exactly as a leaf edge's score is. 'eval' "
+                             "substitutes the node's engine eval (the "
+                             "--reply-shrink analogy, kept for A/B).")
     parser.add_argument("--reply-shrink", type=float, default=0.0,
                         help="Shrink an opponent node's mean value toward that "
                              "position's OWN engine eval, in proportion to how much "
@@ -2073,6 +2284,27 @@ def main():
     print(f"Forcing prior:     {args.forcing_prior}")
     print(f"Forcing baseline:  {args.forcing_baseline}")
     print(f"Eval DB:           {args.eval_db or '(none)'}")
+    # Load the sidecar and resolve the reply-shrink interaction up front, so the
+    # header prints what will ACTUALLY run rather than what was asked for.
+    aux_df = None
+    reply_shrink_eff = args.reply_shrink
+    if args.aux_stats:
+        aux_path = Path(args.aux_stats)
+        if not aux_path.exists():
+            sys.exit(f"--aux-stats not found: {aux_path}")
+        aux_df = pl.read_parquet(aux_path)
+        print(f"Aux stats:         {aux_path.name} ({aux_df.height:,} positions, "
+              f"flags={'in' if args.aux_term_flags else 'out'}, "
+              f"horizon={args.aux_horizon})")
+        if reply_shrink_eff:
+            # Both correct the same missing mass; the aux table measures it
+            # exactly where reply-shrink only approximated it from coverage.
+            # Stacking them shrinks twice. Explicit --reply-shrink still wins,
+            # but say so rather than silently honouring it.
+            print(f"  NOTE: --reply-shrink {reply_shrink_eff} kept alongside "
+                  f"--aux-stats; these correct overlapping mass and stacking "
+                  f"them double-shrinks. 0.0 is the intended pairing.")
+    print(f"Reply shrink:      {reply_shrink_eff}")
     print(f"Eval weight:       {args.eval_weight}")
     if args.eval_weight_k > 0:
         print(f"Eval weight min:   {args.eval_weight_min}")
@@ -2362,7 +2594,11 @@ def main():
             cover_leave_cost=args.cover_leave_cost,
             cover_mass_shrink=args.cover_mass_shrink,
             self_error_weight=args.self_error_weight,
-            reply_shrink=args.reply_shrink,
+            reply_shrink=reply_shrink_eff,
+            aux=aux_df,
+            aux_term_flags=args.aux_term_flags,
+            aux_horizon=args.aux_horizon,
+            aux_parts=args.aux_parts,
             augment_engine=args.augment_engine,
             full_eval_hashes=full_eval_hashes,
             full_eval_es=full_eval_es,

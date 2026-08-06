@@ -128,11 +128,20 @@ LEARN = {"delta_main": 0.005, "delta_rare": 0.04, "reach_pivot": 0.02,
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
 
-def common_flags(stats: Path, crush_db: Path, eval_db: Path) -> list[str]:
+def common_flags(stats: Path, crush_db: Path, eval_db: Path,
+                 aux: Path | None = None) -> list[str]:
     """The locked sharp recipe (winpos + relative gate, 2026-07), parameterized by
-    input paths."""
+    input paths.
+
+    `aux` supplies the termination / other-moves / horizon sidecar. When present
+    it also forces --reply-shrink to 0: both corrections cover overlapping
+    missing mass, and the sidecar measures exactly what reply-shrink could only
+    infer from coverage, so running them together shrinks the same games twice.
+    """
+    reply = 0.0 if aux else REPLY_SHRINK
     return [
         "--input", str(stats),
+        *(["--aux-stats", str(aux)] if aux else []),
         "--eval-db", str(eval_db), "--eval-weight", "0.5",
         "--require-eval",
         "--robustness-floor", "0.1", "--gate-metric", "eval",
@@ -144,7 +153,7 @@ def common_flags(stats: Path, crush_db: Path, eval_db: Path) -> list[str]:
         "--crush-gamma", "0.99", "--crush-imm-window", "2",
         "--crush-weight", str(CRUSH_WEIGHT), "--crush-prior", "5000", "--crush-baseline", "zero",
         "--memo-weight", "0",
-        "--reply-shrink", str(REPLY_SHRINK),
+        "--reply-shrink", str(reply),
     ]
 
 
@@ -180,13 +189,15 @@ def meta_path(out: Path) -> Path:
     return out.with_name(out.name + ".meta.json")
 
 
-def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str) -> None:
+def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str,
+               aux: Path | None = None) -> None:
     """Record how the rep was built so the explorer can recover the crush weight (and the
     inputs) without the user re-specifying --crush-weight."""
     prior, reach = plan_paths(tag)
     meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": "relative-propagated",
             "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
-            "reply_shrink": REPLY_SHRINK,
+            "reply_shrink": 0.0 if aux else REPLY_SHRINK,
+            "aux_stats": str(aux) if aux else None,
             "input": str(stats), "crush_db": str(crush_db), "eval_db": str(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -206,7 +217,8 @@ def run(name: str, cmd: list[str]) -> bool:
 
 
 def build_color(tag: str, extra: list[str], flags: list[str],
-                stats: Path, crush_db: Path, eval_db: Path, force: bool) -> bool:
+                stats: Path, crush_db: Path, eval_db: Path, force: bool,
+                aux: Path | None = None) -> bool:
     """Pass-1 -> measure -> pass-2 chain for one color. Returns True on success.
     `rerun` cascades: once any step actually executes, every later step reruns too
     (its inputs just changed), regardless of its own output existing."""
@@ -243,11 +255,11 @@ def build_color(tag: str, extra: list[str], flags: list[str],
                    [PY, stage3, "--output", str(out)]
                    + flags + extra + learn_flags(prior, reach)):
             return False
-        write_meta(out, stats, crush_db, eval_db, tag)
+        write_meta(out, stats, crush_db, eval_db, tag, aux)
     else:
         print(f"  Skipping {tag} pass-2 (exists: {out.name}). Use --force to rebuild.")
         if not meta_path(out).exists():
-            write_meta(out, stats, crush_db, eval_db, tag)
+            write_meta(out, stats, crush_db, eval_db, tag, aux)
     return True
 
 
@@ -263,6 +275,12 @@ def main() -> None:
                     help=f"Relative crush histogram parquet (default: {DEFAULT_CRUSH_REL.name}).")
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
                     help=f"Stockfish eval DB parquet (default: {DEFAULT_EVAL_DB.name}).")
+    ap.add_argument("--aux-stats", default=None,
+                    help="position_stats_aux_*.parquet sidecar. Adds the mass an "
+                         "opponent node's outgoing edges cannot see (terminations, "
+                         "the other-moves bucket, ply-cap horizon). Supplying it "
+                         "forces --reply-shrink to 0, since the two corrections "
+                         "overlap. Omitted = the pre-sidecar recipe unchanged.")
     args = ap.parse_args()
 
     stats, crush_db, eval_db = Path(args.input), Path(args.crush_db), Path(args.eval_db)
@@ -275,11 +293,16 @@ def main() -> None:
             sys.exit(f"FATAL: missing prerequisite {p}{hint}")
     REP_DIR.mkdir(parents=True, exist_ok=True)
     PLAN_DIR.mkdir(parents=True, exist_ok=True)
-    flags = common_flags(stats, crush_db, eval_db)
+    aux = Path(args.aux_stats) if args.aux_stats else None
+    if aux and not aux.exists():
+        sys.exit(f"FATAL: --aux-stats not found: {aux}")
+    flags = common_flags(stats, crush_db, eval_db, aux)
+    if aux:
+        print(f"Aux stats: {aux.name}  (reply-shrink forced to 0 — see common_flags)")
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
-        if not build_color(tag, extra, flags, stats, crush_db, eval_db, args.force):
+        if not build_color(tag, extra, flags, stats, crush_db, eval_db, args.force, aux):
             failures.append(tag)
     print(f"\nDone in {(time.time()-t_all)/60:.1f} min.")
     if failures:
