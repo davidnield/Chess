@@ -384,17 +384,27 @@ _WINPOS_SCHEMA = {
 }
 
 
-def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
+def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
                  min_elo: int, max_ply: int, tiers: dict | None,
                  limit_games: int | None = None, optimize: bool = True,
                  term_out: Path | None = None,
                  winpos_out: dict[int, Path] | None = None,
                  with_child_eval: bool = True) -> dict:
-    """Fused per-file extractor: filter -> replay once -> pre-aggregated ps + crush partials.
+    """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
     pre-2026-07 replay path byte-for-byte. Only _test_extract_equivalence.py and
     _bench_extract.py pass it; production always runs optimized.
+
+    `crush_out` writes the RETIRED resignation-proxy histogram, and is None unless
+    --crush-hist is passed. It used to be written unconditionally so the retired
+    metric could be re-merged without a re-extract — a cheap hedge when the partial
+    dir held ps + crush alone. Fusing winpos in tripled that dir, and the 2026-08
+    rebuild measured the hedge at ~303 GB against ~280 GB of free-space margin,
+    which is the whole reason it is now gated. The hedge is also redundant: the
+    thing it insures against is the resignation-proxy win event, and the winpos
+    histograms at 200/300/500cp supersede it. Gate the WRITE and the caller's
+    skip-gate together or every completed chunk re-runs (see main).
 
     `term_out` writes the TERM/HORIZON terminal-accounting partial. Optional so the
     equivalence/bench harnesses can call the replay without it; production always
@@ -418,10 +428,12 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
     the equivalence/bench harnesses pass False, since they replay without the
     eval arrays present.
     """
+    want_crush = crush_out is not None
     want_term = term_out is not None
     want_wp = bool(winpos_out)
     want_ev = want_wp or with_child_eval
-    if (ps_out.exists() and crush_out.exists()
+    if (ps_out.exists()
+            and (not want_crush or crush_out.exists())
             and (not want_term or term_out.exists())
             and (not want_wp or all(p.exists() for p in winpos_out.values()))):
         return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
@@ -470,7 +482,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
         else:
             df = df.with_columns(pl.lit(None, dtype=pl.Int32).alias("child_eval"))
         ps_parts.append(_agg_ps(df))
-        crush_parts.append(_agg_crush(df))
+        if want_crush:
+            crush_parts.append(_agg_crush(df))
         if want_wp and spans:
             # ONE vectorised lookup for the whole batch. Per-ply binary searches
             # over a 3.2 GB array would be cache-hostile; lookup_evals sorts the
@@ -563,9 +576,10 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
 
     ps_out.parent.mkdir(parents=True, exist_ok=True)
     ps_tmp = ps_out.with_suffix(".parquet.tmp")
-    cr_tmp = crush_out.with_suffix(".parquet.tmp")
     ps_df.write_parquet(ps_tmp, compression="zstd")
-    crush_df.write_parquet(cr_tmp, compression="zstd")
+    if want_crush:
+        cr_tmp = crush_out.with_suffix(".parquet.tmp")
+        crush_df.write_parquet(cr_tmp, compression="zstd")
     if want_term:
         tm_tmp = term_out.with_suffix(".parquet.tmp")
         term_df.write_parquet(tm_tmp, compression="zstd")
@@ -578,8 +592,13 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path,
         wp_tmp = out_path.with_suffix(".parquet.tmp")
         wdf.write_parquet(wp_tmp, compression="zstd")
         wp_tmp.replace(out_path)
+    # ps LAST: the caller's skip-gate is conjunctive, so the kind renamed last is
+    # the one whose absence reopens the gate after an interruption. Previously
+    # crush held that slot; with it gated off, ps has to take it or an interrupt
+    # between the two renames would leave a chunk that passes the gate half-built.
+    if want_crush:
+        cr_tmp.replace(crush_out)
     ps_tmp.replace(ps_out)
-    cr_tmp.replace(crush_out)
     return {"file": src_file.name, "skipped": False, "games": n_games, "kept": n_kept,
             "failed": n_failed, "ps_rows": ps_df.height, "crush_rows": crush_df.height,
             "term_rows": term_df.height, "winpos_rows": wp_rows,
@@ -599,7 +618,8 @@ def _init_worker(min_elo: int, max_ply: int, tiers: dict | None) -> None:
 
 def _worker(task: tuple) -> dict:
     src_str, ps_str, cr_str, tm_str, wp_map, limit = task
-    return extract_file(Path(src_str), Path(ps_str), Path(cr_str),
+    return extract_file(Path(src_str), Path(ps_str),
+                        Path(cr_str) if cr_str else None,
                         _W["min_elo"], _W["max_ply"], _W["tiers"], limit,
                         term_out=Path(tm_str),
                         winpos_out={int(t): Path(p) for t, p in wp_map.items()})
@@ -1385,14 +1405,19 @@ def main() -> None:
         tasks = []
         for f, y, m, ev in files:
             ps_p = partial_dir / partial_name(f, y, m, ev, "ps")
-            cr_p = partial_dir / partial_name(f, y, m, ev, "crush")
+            # Gated on the same flag as the merge below. Both must move together:
+            # dropping the write while the gate still demands cr_p.exists() would
+            # fail every already-complete chunk and re-extract the lot.
+            cr_p = (partial_dir / partial_name(f, y, m, ev, "crush")
+                    if args.crush_hist else None)
             tm_p = partial_dir / partial_name(f, y, m, ev, "term")
             wp_p = {t: partial_dir / partial_name(f, y, m, ev, f"winpos{t}")
                     for t in (WINPOS_THRESHOLDS if args.fuse_winpos else ())}
-            if (ps_p.exists() and cr_p.exists() and tm_p.exists()
+            if (ps_p.exists() and tm_p.exists()
+                    and (cr_p is None or cr_p.exists())
                     and all(p.exists() for p in wp_p.values())):
                 continue
-            tasks.append((str(f), str(ps_p), str(cr_p), str(tm_p),
+            tasks.append((str(f), str(ps_p), str(cr_p) if cr_p else None, str(tm_p),
                           {str(t): str(p) for t, p in wp_p.items()},
                           args.limit_games))
         print(f"Extract: {len(files)} source files, {len(tasks)} to process, "
@@ -1413,7 +1438,7 @@ def main() -> None:
                         rate = tot_games / el if el else 0
                         print(f"  [{done}/{len(tasks)}] {r['file']}: "
                               f"{r.get('kept',0):,}/{r.get('games',0):,} kept, "
-                              f"ps={r.get('ps_rows',0):,} crush={r.get('crush_rows',0):,} "
+                              f"ps={r.get('ps_rows',0):,} wp={r.get('winpos_rows',0):,} "
                               f"({r['sec']:.0f}s) | {rate:,.0f} games/s agg | "
                               f"{el/60:.1f} min", flush=True)
         el = time.time() - t0
