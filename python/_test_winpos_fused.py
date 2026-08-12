@@ -23,6 +23,7 @@ Run: .venv/Scripts/python.exe python/_test_winpos_fused.py
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 import duckdb
@@ -45,24 +46,30 @@ def check(ok: bool, label: str) -> None:
 
 def run_oracle(pm: pl.DataFrame, crush: pl.DataFrame, win_w, win_b,
                keys) -> dict:
-    """winpos_sql over in-memory fixtures written to scratch parquet."""
-    scratch = Path(__file__).parent / "_test_fixtures" / "winpos_fused"
-    scratch.mkdir(parents=True, exist_ok=True)
-    pm_pq, cr_pq = scratch / "pm.parquet", scratch / "crush.parquet"
-    pm.write_parquet(pm_pq)
-    crush.write_parquet(cr_pq)
-    con = duckdb.connect()
-    con.execute("CREATE TEMP TABLE keys (parent_hash BIGINT, move_san VARCHAR)")
-    if keys:
-        con.executemany("INSERT INTO keys VALUES (?, ?)", list(keys))
-    con.execute("CREATE TEMP TABLE win_w (position_hash BIGINT)")
-    if win_w:
-        con.executemany("INSERT INTO win_w VALUES (?)", [(h,) for h in win_w])
-    con.execute("CREATE TEMP TABLE win_b (position_hash BIGINT)")
-    if win_b:
-        con.executemany("INSERT INTO win_b VALUES (?)", [(h,) for h in win_b])
-    rows = con.execute(winpos_sql(str(pm_pq), str(cr_pq))).fetchall()
-    con.close()
+    """winpos_sql over in-memory fixtures staged to parquet.
+
+    winpos_sql reads its inputs by path, so they have to hit disk. They are
+    per-invocation scratch, NOT curated fixtures: staging them under
+    _test_fixtures/ put data-dependent parquet into git, and the real-data
+    level's newest-year selector silently rewrote them whenever a backfill
+    landed a new year. A temp dir keeps the working tree clean.
+    """
+    with tempfile.TemporaryDirectory(prefix="winpos_fused_oracle_") as td:
+        pm_pq, cr_pq = Path(td) / "pm.parquet", Path(td) / "crush.parquet"
+        pm.write_parquet(pm_pq)
+        crush.write_parquet(cr_pq)
+        con = duckdb.connect()
+        con.execute("CREATE TEMP TABLE keys (parent_hash BIGINT, move_san VARCHAR)")
+        if keys:
+            con.executemany("INSERT INTO keys VALUES (?, ?)", list(keys))
+        con.execute("CREATE TEMP TABLE win_w (position_hash BIGINT)")
+        if win_w:
+            con.executemany("INSERT INTO win_w VALUES (?)", [(h,) for h in win_w])
+        con.execute("CREATE TEMP TABLE win_b (position_hash BIGINT)")
+        if win_b:
+            con.executemany("INSERT INTO win_b VALUES (?)", [(h,) for h in win_b])
+        rows = con.execute(winpos_sql(str(pm_pq), str(cr_pq))).fetchall()
+        con.close()
     return {(ph, san, mb): (n, w, b) for ph, san, mb, n, w, b in rows}
 
 
@@ -109,7 +116,6 @@ REAL_GAMES = 4000
 def real_check() -> None:
     """Extract-fused winpos vs the shipped second-pass replay + winpos_sql."""
     import shutil
-    import tempfile
 
     import chess
     import numpy as np
@@ -135,6 +141,11 @@ def real_check() -> None:
     if src is None or not (Path("E:/chess/eval_arrays/eval_hash.npy")).exists():
         print("  SKIP real-data level (source parquet or eval arrays unavailable)")
         return
+    # The selector takes the newest year on disk, so which games this level
+    # actually covers drifts as backfills land. Print it: without this a failure
+    # is not reproducible from the output alone.
+    print(f"  real-data source: {src.relative_to(SOURCE_ROOT)} "
+          f"(first {REAL_GAMES:,} games)")
 
     tmp = Path(tempfile.mkdtemp(prefix="winpos_fused_"))
     try:
