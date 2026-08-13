@@ -82,6 +82,33 @@ import the production query/logic rather than copying it (`_test_winpos.py` is t
 failure you expect to fix and the test that would prove it. This codebase has many tuned constants
 and changing one on intuition is guessing.
 
+## Validation ladder
+
+Four tiers, cheapest first. Each catches a class the tier below cannot, and **a change may not
+reach a tier without passing the ones under it.**
+
+| tier | cost | what only this tier catches |
+|------|------|-----------------------------|
+| 1 · `run_tests.py` | seconds | logic, contracts, schema drift, doc-path rot |
+| 2 · real CLI over a slice (`--source`, one partition) | minutes | real movetext and real schemas; A/B equivalence of two implementations over identical input |
+| 3 · single-month prototype (extract → merge → aux → small Stage-3) | hours | accounting identities, bucket mass shares, peak-RAM and wall-clock projections |
+| 4 · full build | days | the answer itself — **requires explicit go-ahead; never launched on test-green alone** |
+
+Rules that make the ladder load-bearing:
+
+- **No tier may be skipped for high-blast-radius changes**: the value calculation (`value_node`,
+  the aux buckets, the selection key), the columns the extract emits, or anything that changes a
+  stored column's meaning. A wrong `child_hash` corrupts every downstream join and nothing fails.
+- **A new flag defaults to off and must be an exact no-op** — rebuild both repertoires without it
+  and diff against canonical at tolerance 0. Known exemption: `crush_rate` / `crush_potential`
+  wobble ~2e-16 from a DuckDB parallel float SUM.
+- **Measure across scales, never at a single slice.** One-slice tier-2 numbers have flipped a
+  verdict here twice: the winpos fusion's marginal cost read +19%, then +34.6%, then +13.1%
+  depending on which slice was measured. Report the trend, not the fastest run.
+- Tiers 2 and 3 produce the numbers the go-ahead is based on; they do not replace it. No tier
+  settles a statistical judgment call (is `--reply-shrink 1.0` right? does a confound invalidate a
+  comparison?) — those need a human regardless of how green the suite is.
+
 ## Resumability conventions
 
 Long runs die (crashes, OOMs, silent external kills) — every stage must survive a restart. Patterns
