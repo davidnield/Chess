@@ -58,7 +58,11 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-RULES = ("popular", "engine-top-1", "greedy-winrate")
+RULES = ("popular", "engine-top-1", "greedy-winrate", "from-book")
+# "from-book" is not a baseline — it re-grows an EXISTING repertoire through this
+# same traversal, which is how the sharp book gets cut to a comparable footprint.
+# Pruning it with separate code would risk the two sides differing in exactly the
+# way the comparison is supposed to rule out.
 # Opponent replies below this share of a node's mass are not expanded. They are
 # still counted as mass we fail to cover, so dropping them costs coverage rather
 # than hiding it.
@@ -108,8 +112,37 @@ def our_score(w: int, d: int, b: int, n: int, white: bool) -> float:
     return ws if white else 1.0 - ws
 
 
-def pick(rule: str, grp: pl.DataFrame, white: bool) -> tuple[str, int]:
-    """Apply a baseline rule to one node's candidate edges."""
+def child_of(epd: str, san: str) -> int | None:
+    """Hash after playing `san` from `epd`, for moves absent from the pool.
+
+    Stage 3 can select an ENGINE-AUGMENTED move that no pooled game ever played,
+    so the sharp book's best_move is not always one of the stats edges. Dropping
+    those nodes would silently prune the book exactly where it is most original.
+    """
+    import chess
+
+    from zobrist import IncrementalZobrist, zobrist_int64
+    try:
+        b = chess.Board(epd + " 0 1") if len(epd.split()) == 4 else chess.Board(epd)
+        h = IncrementalZobrist(b)
+        h.push_move(b, b.parse_san(san))
+        return h.current(b)
+    except Exception:                                             # noqa: BLE001
+        return None
+
+
+def pick(rule: str, grp: pl.DataFrame, white: bool,
+         book: dict | None = None, ph: int | None = None
+         ) -> tuple[str, int] | None:
+    """Apply a rule to one node's candidate edges. None = stop here."""
+    if rule == "from-book":
+        san = (book or {}).get(ph)
+        if not san:
+            return None                      # a leaf of the source book
+        hit = grp.filter(pl.col("move_san") == san)
+        if hit.height:
+            return san, hit.row(0, named=True)["child_hash"]
+        return san, child_of(grp.row(0, named=True)["parent_epd"], san)
     if rule == "popular":
         r = grp.sort("total", descending=True).row(0, named=True)
     elif rule == "greedy-winrate":
@@ -142,6 +175,9 @@ def main() -> int:
                          "from that repertoire.")
     ap.add_argument("--like", default=None,
                     help="Repertoire to match the footprint of.")
+    ap.add_argument("--book", default=None,
+                    help="Source repertoire for --rule from-book: re-grow it "
+                         "through this traversal, cut to --budget decisions.")
     ap.add_argument("--min-games", type=int, default=50,
                     help="Edge floor, matching the pool's own floor.")
     ap.add_argument("--max-ply", type=int, default=30)
@@ -168,6 +204,22 @@ def main() -> int:
     import chess
     from zobrist import zobrist_int64
     root = zobrist_int64(chess.Board())
+
+    src_moves: dict[int, str] = {}
+    src_values: dict[int, float] = {}
+    if a.rule == "from-book":
+        if not a.book:
+            print("FATAL: --rule from-book needs --book")
+            return 1
+        bf = pl.read_parquet(a.book, columns=["position_hash", "side_to_move",
+                                              "value", "best_move"])
+        for h, stm, v, mv in bf.iter_rows():
+            if v is not None:
+                src_values[h] = v
+            if stm == a.perspective and mv:
+                src_moves[h] = mv
+        print(f"source book: {len(src_moves):,} our-turn decisions available, "
+              f"cutting to the {budget:,} most reachable")
 
     mm = None
     if a.rule == "engine-top-1":
@@ -207,14 +259,21 @@ def main() -> int:
             if us:
                 if spent >= budget:
                     continue
-                san, ch = pick(a.rule, grp, white)
+                got = pick(a.rule, grp, white, src_moves, ph)
+                if got is None:
+                    continue                 # source book has no move here
+                san, ch = got
                 tot = int(grp["total"].sum())
+                # from-book keeps the source's Stage-3 value, so a pruned sharp
+                # book stays calibration-comparable to its unpruned self. The
+                # rule-based baselines fall back to the empirical score, which
+                # is descriptive only.
+                emp = our_score(int(grp["white_wins"].sum()), int(grp["draws"].sum()),
+                                int(grp["black_wins"].sum()), tot, True)
                 rows[ph] = dict(
                     position_hash=ph, position_epd=first["parent_epd"],
                     side_to_move="white" if ply % 2 == 0 else "black",
-                    value=our_score(int(grp["white_wins"].sum()),
-                                    int(grp["draws"].sum()),
-                                    int(grp["black_wins"].sum()), tot, True),
+                    value=src_values.get(ph, emp) if a.rule == "from-book" else emp,
                     best_move=san)
                 spent += 1
                 if ch is not None and ch not in seen:
@@ -223,12 +282,12 @@ def main() -> int:
                     tie += 1
             else:
                 tot = int(grp["total"].sum())
+                emp = our_score(int(grp["white_wins"].sum()), int(grp["draws"].sum()),
+                                int(grp["black_wins"].sum()), tot, True)
                 rows[ph] = dict(
                     position_hash=ph, position_epd=first["parent_epd"],
                     side_to_move="white" if ply % 2 == 0 else "black",
-                    value=our_score(int(grp["white_wins"].sum()),
-                                    int(grp["draws"].sum()),
-                                    int(grp["black_wins"].sum()), tot, True),
+                    value=src_values.get(ph, emp) if a.rule == "from-book" else emp,
                     best_move=None)
                 for r in grp.iter_rows(named=True):
                     p = r["total"] / tot if tot else 0.0
@@ -247,9 +306,14 @@ def main() -> int:
     pl.DataFrame(list(rows.values())).write_parquet(out, compression="zstd")
     print(f"\n{a.rule} / {a.perspective}: {len(rows):,} nodes, "
           f"{spent:,} our-turn decisions -> {out}")
-    print("NOTE: `value` here is the node's EMPIRICAL score, not a Stage-3 "
-          "prediction. Coverage and realized score are comparable to the sharp "
-          "book; calibration is not.")
+    if a.rule == "from-book":
+        print(f"NOTE: `value` carried over from the source book for "
+              f"{sum(1 for h in rows if h in src_values):,} nodes, so this "
+              f"pruned book stays calibration-comparable to its unpruned self.")
+    else:
+        print("NOTE: `value` here is the node's EMPIRICAL score, not a Stage-3 "
+              "prediction. Coverage and realized score are comparable across "
+              "books; calibration is not.")
     return 0
 
 

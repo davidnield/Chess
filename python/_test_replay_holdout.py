@@ -39,8 +39,8 @@ import chess
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from replay_holdout import (BOOK_END, DEVIATION, GAME_END, OUT_OF_BOOK,
-                            load_book, walk_game)
+from replay_holdout import (BOOK_END, DEVIATION, GAME_END, OUT_OF_BOOK, Book,
+                            walk_books, walk_game)
 from zobrist import IncrementalZobrist, zobrist_int64
 
 _checks: list[tuple[bool, str]] = []
@@ -163,14 +163,31 @@ def main() -> int:
         "best_move": ["e4", None],
     }).write_parquet(tmp)
     try:
-        mv, val, n = load_book(tmp, "white")
-        check(n == 2 and len(val) == 2 and mv == {1: "e4"},
-              "load_book: 'white'/'black' spelling yields our-turn moves")
-        mv_b, val_b, _ = load_book(tmp, "black")
-        check(mv_b == {} and abs(val_b[1] - 0.4) < 1e-12,
-              "load_book: black perspective flips value and takes black's moves")
+        bw = Book(tmp, "white")
+        check(bw.n_rows == 2 and len(bw.values) == 2 and bw.moves == {1: "e4"},
+              "Book: 'white'/'black' spelling yields our-turn moves")
+        bb = Book(tmp, "black")
+        check(bb.moves == {2: None} or bb.moves == {},
+              "Book: black perspective takes only black's moves (none here)")
+        check(abs(bb.values[1] - 0.4) < 1e-12,
+              "Book: black perspective flips value")
     finally:
         tmp.unlink(missing_ok=True)
+
+    # --- many books, one replay ----------------------------------------
+    # The multi-book pass must give byte-identical results to walking each book
+    # on its own, or the #114 sweep silently measures something else.
+    b1, b2 = Book.__new__(Book), Book.__new__(Book)
+    b1.moves, b1.values = moves, values
+    b2.moves, b2.values = m2, values          # m2 lacks the ply-2 best_move
+    game = "1. e4 e5 2. Nf3 Nc6 3. Bb5"
+    multi = walk_books(game, "white", [b1, b2], chess.Board(),
+                       IncrementalZobrist(chess.Board()), 30)
+    solo = [run(game, b.moves, b.values)[:3] for b in (b1, b2)]
+    check([m[:3] for m in multi] == solo,
+          f"multi-book pass == per-book walks ({[m[0] for m in multi]})")
+    check(multi[0][0] == GAME_END and multi[1][0] == BOOK_END,
+          "books with different depths exit independently in the same pass")
 
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print()
