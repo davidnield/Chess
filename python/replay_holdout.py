@@ -137,13 +137,20 @@ def walk_game(movetext: str, perspective: str,
         for san in iter_san_moves(movetext):
             if ply >= max_ply:
                 return BOOK_END, ply, values.get(h)
-            # A node the book does not contain: for the side to move this is
-            # where prep stops. Which of the two exits it is depends on WHOSE
-            # turn it is -- our turn means we ran out of prepared moves, the
-            # opponent's means they left our coverage.
+            # A node the book does not contain. Which exit this is depends on
+            # WHOSE MOVE BROUGHT US HERE, which is the opposite of whose turn it
+            # now is -- and reading it off the turn directly (the first version
+            # of this) inverts the two labels:
+            #   our turn now   -> the OPPONENT moved last, into a position we
+            #                     have no entry for. Coverage ran out.
+            #   their turn now -> WE moved last, playing a book move whose
+            #                     result the book does not continue. Budget.
+            # At ply 0 nobody has moved; a missing root just means no book.
             if h not in values:
-                us = (board.turn == chess.WHITE) == our_white
-                return (BOOK_END if us else OUT_OF_BOOK), ply, None
+                if ply == 0:
+                    return BOOK_END, 0, None
+                our_turn_now = (board.turn == chess.WHITE) == our_white
+                return (OUT_OF_BOOK if our_turn_now else BOOK_END), ply, None
             path.append(h)
 
             us_to_move = (board.turn == chess.WHITE) == our_white
