@@ -22,3 +22,10 @@ requests>=2.31          # Lichess API (eval DB fetch, game import)
 fastapi>=0.139,<1
 uvicorn>=0.51,<1
 fsrs>=5,<6
+
+# --- test-only ---
+# starlette's TestClient imports httpx, but nothing above pulls it in, so
+# _test_trainer_m2.py fails on any freshly built environment with a bare
+# ModuleNotFoundError. Listed here rather than in a separate dev file because
+# run_tests.py is run from this environment on every machine.
+httpx>=0.28
