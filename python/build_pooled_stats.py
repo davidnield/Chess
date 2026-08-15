@@ -102,18 +102,60 @@ SKIP_PARTITIONS: set[tuple[int, int]] = set()
 
 # Source columns needed for the fused pass. No game_id needed (we aggregate, never
 # join per-game crush facts). movetext is the heavyweight string.
-SRC_COLUMNS = ["movetext", "white_score", "termination", "move_count", "mean_elo"]
+SRC_COLUMNS = ["movetext", "white_score", "termination", "move_count", "mean_elo",
+               "white_title", "black_title", "white_elo", "black_elo"]
 READ_BATCH_GAMES = 50_000
 # Compact the per-chunk accumulator every N batches to bound peak memory (the
 # concat+regroup keeps the running frame near the chunk's unique-key count).
 COMPACT_EVERY = 8
 
+# ── game-level filters (explorer run, decided 2026-08-13) ─────────────────────
+# Measured on 1M rows of 2024-06 Blitz: bot 0.1134%, terminations 0.004%,
+# rating gap >300 0.49% -- ~0.64% of games total, and the same share of walk
+# time saved. All three are expressible from the D: schema, so they belong HERE
+# rather than in process_pgn_parquets.py (re-deriving D: is a multi-day ~9 TB
+# rewrite that would also destroy what the repertoire pipeline reads).
+#
+# What is ALREADY excluded upstream, and must not be re-added: the ingest's
+# single filter is `Event isin(EVENT_MAP.keys())`, an EXACT string match, so D:
+# holds rated, non-tournament, standard-chess games only -- arena and swiss
+# games, casual games, variants and simuls are all gone (~10% of raw rows).
+EXCLUDED_TERMINATIONS = frozenset({"Rules infraction", "Abandoned"})
+DEFAULT_MAX_RATING_GAP = 300
+
+# Games read per output partial. The accumulator is bounded by THIS, not by the
+# source file's 2M rows -- which is what lets a worker run in ~3 GB instead of
+# ~23 GB, and is the difference between 2 workers per machine and 7-8.
+#
+# Boundaries are on games READ, not games KEPT, so they do not move when
+# --min-elo or the filters change and a partly-written file stays resumable.
+CHUNK_GAMES = 250_000
+
+# Deepest ply that carries a parent_epd. Past this the column is NULL.
+# 16 covers 3,424 of the 3,810 named openings in lichess-org/chess-openings (90%),
+# which is the entire population anything would ever render an EPD for. Set to a
+# huge number to restore the old always-populate behaviour.
+EPD_MAX_PLY = 16
+
 
 # ── per-chunk fused extraction ────────────────────────────────────────────────
 
+# parent_epd is kept in the SCHEMA but populated only to EPD_MAX_PLY (below).
+# Measured from a real partial's footer it was 19.55 B/row = 50.3% of the file,
+# the largest column by a wide margin, and it is redundant for identity:
+# parent_hash discriminates at least as finely (polyglot sets the ep key on pawn
+# adjacency, board.epd() prints ep only when the capture is legal). It exists for
+# display/debug -- and nothing displays a ply-40 position. Nulling it past the
+# opening keeps every downstream consumer, the merge SQL and ~20 tests working
+# unchanged while recovering most of the bytes, since a mostly-null column
+# compresses to almost nothing.
+#
+# drop_nulls().first() rather than .first(): a transposition can reach one
+# (parent_hash, move_san) group at two different plies, one inside the EPD window
+# and one outside, and we want the populated value when it exists.
 def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
     return df.group_by("parent_hash", "move_san").agg(
-        pl.col("parent_epd").first().alias("parent_epd"),
+        pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         # child_hash is a FUNCTION of the group key (same position + same move
         # reaches the same position), so .first() is exact, not a representative.
         # child_eval is a function of child_hash, hence also of the key.
@@ -130,7 +172,7 @@ def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
 def _agg_ps_resum(df: pl.DataFrame) -> pl.DataFrame:
     # Re-aggregate already-aggregated ps frames (sum the counts; keep a representative epd/ply).
     return df.group_by("parent_hash", "move_san").agg(
-        pl.col("parent_epd").first().alias("parent_epd"),
+        pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         pl.col("child_hash").first().alias("child_hash"),
         pl.col("child_eval").first().alias("child_eval"),
         pl.col("ply").first().alias("ply"),
@@ -330,7 +372,13 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
     ph = get_hash()
     for ply in range(1, maxply + 1):
         san = toks[ply - 1]
-        if epd_memo is None:
+        # EPD only inside the opening window -- see EPD_MAX_PLY. Past it the value
+        # is never displayed, costs 19.55 B/row on disk, and board.epd() was
+        # measured at 52% of replay time (against 19% for parse_san+push), so
+        # skipping it is a throughput win as well as a storage one.
+        if ply > EPD_MAX_PLY:
+            epd = None
+        elif epd_memo is None:
             epd = board.epd()
         else:
             epd = epd_memo.get(ph)
@@ -389,7 +437,11 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
                  limit_games: int | None = None, optimize: bool = True,
                  term_out: Path | None = None,
                  winpos_out: dict[int, Path] | None = None,
-                 with_child_eval: bool = True) -> dict:
+                 with_child_eval: bool = True,
+                 exclude_bots: bool = False,
+                 excluded_terminations: frozenset = frozenset(),
+                 max_rating_gap: int | None = None,
+                 chunk_games: int | None = None) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
@@ -432,7 +484,19 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     want_term = term_out is not None
     want_wp = bool(winpos_out)
     want_ev = want_wp or with_child_eval
-    if (ps_out.exists()
+    _chunked = chunk_games is not None and chunk_games > 0
+    if _chunked:
+        # One cheap test instead of a conjunction over an unknown chunk count.
+        if _done_sentinel(ps_out).exists():
+            return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
+        # No sentinel => the previous attempt died mid-file. Clear its chunks
+        # before rewriting: if CHUNK_GAMES changed between runs the old tail
+        # would otherwise survive as orphans and be double-counted by the merge,
+        # which globs rather than enumerating.
+        _stem = ps_out.name.rsplit(".", 2)[0]
+        for stale in ps_out.parent.glob(f"{_stem}_c[0-9][0-9][0-9].*"):
+            stale.unlink(missing_ok=True)
+    elif (ps_out.exists()
             and (not want_crush or crush_out.exists())
             and (not want_term or term_out.exists())
             and (not want_wp or all(p.exists() for p in winpos_out.values()))):
@@ -440,6 +504,11 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
 
     t0 = time.time()
     n_games = n_kept = n_failed = 0
+    # Per-filter drop counts, returned so the merge can stamp them into the run's
+    # .meta.json. What was EXCLUDED carries provenance just as much as what was
+    # counted -- a census whose filter set is implied by the code version rather
+    # than recorded is not reproducible.
+    n_drop = {"elo": 0, "no_score": 0, "termination": 0, "bot": 0, "rating_gap": 0}
     ps_parts: list[pl.DataFrame] = []
     crush_parts: list[pl.DataFrame] = []
     term_parts: list[pl.DataFrame] = []
@@ -456,6 +525,12 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     # Reused across every game in the file; the memo is cleared per read batch.
     hasher = IncrementalZobrist(chess.Board()) if optimize else None
     epd_memo: dict[int, str] | None = {} if optimize else None
+    chunked = chunk_games is not None and chunk_games > 0
+    if chunked and chunk_games < READ_BATCH_GAMES:
+        # A chunk cannot close mid-batch (flush_batch works on the whole buffer),
+        # so a value below the batch size would silently collapse to ONE chunk
+        # and defeat the memory bound entirely. Round up rather than accept it.
+        chunk_games = READ_BATCH_GAMES
 
     def flush_batch():
         if term_buf is not None and term_buf["position_hash"]:
@@ -515,9 +590,78 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             if len(parts) > 1:
                 wp_parts[thr] = [_agg_crush_resum(pl.concat(parts))]
 
+    tot_rows = {"ps": 0, "crush": 0, "term": 0, "winpos": 0}
+    chunk_i = 0
+
+    def write_chunk() -> None:
+        """Finalise the accumulators to one numbered partial set and reset them.
+
+        Called every `chunk_games` games READ, and once at the end. Splitting the
+        WRITE rather than the READ is what keeps the source scan sequential: a
+        per-chunk *task* design would re-read the file prefix for every chunk
+        (~3.5x read amplification on a 2M-row file at 250K chunks).
+
+        This is what bounds worker memory. The accumulators used to grow across a
+        whole 2M-game source file -- measured at ~23 GB RSS per worker, which held
+        the fleet to 2 workers on the Ryzen's 31 GB and 2 on the i9's 64 GB. Bound
+        to a chunk instead, the same run fits 7-8 workers per machine.
+        """
+        nonlocal chunk_i, ps_parts, crush_parts, term_parts
+        compact()
+        ps_df = ps_parts[0] if ps_parts else pl.DataFrame(schema={
+            "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
+            "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
+            "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
+            "total": pl.Int64})
+        crush_df = crush_parts[0] if crush_parts else pl.DataFrame(schema={
+            "parent_hash": pl.Int64, "move_san": pl.Utf8, "move_bucket": pl.Int32,
+            "n": pl.Int64, "white_wins": pl.Int64, "black_wins": pl.Int64})
+        term_df = term_parts[0] if term_parts else pl.DataFrame(schema={
+            "position_hash": pl.Int64, "kind": pl.Int32, "reason": pl.Int32,
+            "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
+            "total": pl.Int64})
+
+        k = chunk_i if chunked else None
+        ps_p = _chunk_path(ps_out, k)
+        ps_p.parent.mkdir(parents=True, exist_ok=True)
+        ps_tmp = ps_p.with_suffix(".parquet.tmp")
+        ps_df.write_parquet(ps_tmp, compression="zstd")
+        if want_crush:
+            cr_p = _chunk_path(crush_out, k)
+            cr_tmp = cr_p.with_suffix(".parquet.tmp")
+            crush_df.write_parquet(cr_tmp, compression="zstd")
+        if want_term:
+            tm_p = _chunk_path(term_out, k)
+            tm_tmp = tm_p.with_suffix(".parquet.tmp")
+            term_df.write_parquet(tm_tmp, compression="zstd")
+            tm_tmp.replace(tm_p)
+        for thr, out_path in (winpos_out or {}).items():
+            parts = wp_parts[thr]
+            wdf = parts[0] if parts else pl.DataFrame(schema=_WINPOS_SCHEMA)
+            tot_rows["winpos"] += wdf.height
+            wp_p = _chunk_path(out_path, k)
+            wp_tmp = wp_p.with_suffix(".parquet.tmp")
+            wdf.write_parquet(wp_tmp, compression="zstd")
+            wp_tmp.replace(wp_p)
+        # ps LAST, WITHIN each chunk. The whole-file gate is the _DONE sentinel,
+        # but keeping this ordering means a half-written chunk never presents a
+        # complete-looking ps partial beside a missing sibling.
+        if want_crush:
+            cr_tmp.replace(cr_p)
+        ps_tmp.replace(ps_p)
+
+        tot_rows["ps"] += ps_df.height
+        tot_rows["crush"] += crush_df.height
+        tot_rows["term"] += term_df.height
+        ps_parts, crush_parts, term_parts = [], [], []
+        for thr in wp_parts:
+            wp_parts[thr] = []
+        chunk_i += 1
+
     pf = pq.ParquetFile(src_file)
     batch_i = 0
     done = False
+    chunk_start = 0
     for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=SRC_COLUMNS):
         for rec in batch.to_pylist():
             if limit_games is not None and n_games >= limit_games:
@@ -526,12 +670,39 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             n_games += 1
             me = rec["mean_elo"]
             if me is None or me < min_elo:
+                n_drop["elo"] += 1
                 continue
             ws = rec["white_score"]
             if ws is None:
+                n_drop["no_score"] += 1
                 continue
-            n_kept += 1
+            # `term` is read here rather than after n_kept because the
+            # termination filter needs it. Order is cheapest-and-most-selective
+            # first; all three are scalar comparisons ahead of the expensive walk.
             term = rec["termination"]
+            if term in excluded_terminations:
+                n_drop["termination"] += 1
+                continue
+            # Bots are 0.11% of games but play thousands each, many engine- or
+            # book-backed, so a handful of accounts can dominate the counts for
+            # exactly the rare openings a popularity census is about.
+            #
+            # Note this is an == test on a possibly-None field. Do NOT restate it
+            # as `!= "BOT"` in polars/SQL: titles are ~99.9% null and != would
+            # propagate nulls, dropping nearly everything.
+            if exclude_bots and (rec["white_title"] == "BOT"
+                                 or rec["black_title"] == "BOT"):
+                n_drop["bot"] += 1
+                continue
+            # A 1200-vs-2000 game lands in the 1600 elo_band while representing
+            # neither player. The extract is keyed on that band, so this is about
+            # making the slicing honest, not about win-rate distortion.
+            if max_rating_gap is not None:
+                we, be = rec["white_elo"], rec["black_elo"]
+                if we is not None and be is not None and abs(we - be) > max_rating_gap:
+                    n_drop["rating_gap"] += 1
+                    continue
+            n_kept += 1
             normal = term == "Normal"
             white_norm = normal and ws == 1.0
             black_norm = normal and ws == 0.0
@@ -557,51 +728,31 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
         batch_i += 1
         if batch_i % COMPACT_EVERY == 0:
             compact()
+        # Chunk boundary on games READ (not kept) so it does not move when
+        # --min-elo or the filters change.
+        #
+        # Evaluated HERE, at a batch end, not per record: flush_batch() works on
+        # the whole buffer, so a chunk cannot close mid-batch. Effective
+        # granularity is therefore READ_BATCH_GAMES (50,000) and chunk_games is
+        # rounded UP to the next multiple of it -- see the guard in extract_file.
+        if chunked and n_games - chunk_start >= chunk_games:
+            write_chunk()
+            chunk_start = n_games
         if done:
             break
 
-    compact()
-    ps_df = ps_parts[0] if ps_parts else pl.DataFrame(schema={
-        "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
-        "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
-        "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
-        "total": pl.Int64})
-    crush_df = crush_parts[0] if crush_parts else pl.DataFrame(schema={
-        "parent_hash": pl.Int64, "move_san": pl.Utf8, "move_bucket": pl.Int32,
-        "n": pl.Int64, "white_wins": pl.Int64, "black_wins": pl.Int64})
-    term_df = term_parts[0] if term_parts else pl.DataFrame(schema={
-        "position_hash": pl.Int64, "kind": pl.Int32, "reason": pl.Int32,
-        "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
-        "total": pl.Int64})
-
-    ps_out.parent.mkdir(parents=True, exist_ok=True)
-    ps_tmp = ps_out.with_suffix(".parquet.tmp")
-    ps_df.write_parquet(ps_tmp, compression="zstd")
-    if want_crush:
-        cr_tmp = crush_out.with_suffix(".parquet.tmp")
-        crush_df.write_parquet(cr_tmp, compression="zstd")
-    if want_term:
-        tm_tmp = term_out.with_suffix(".parquet.tmp")
-        term_df.write_parquet(tm_tmp, compression="zstd")
-        tm_tmp.replace(term_out)
-    wp_rows = 0
-    for thr, out_path in (winpos_out or {}).items():
-        parts = wp_parts[thr]
-        wdf = parts[0] if parts else pl.DataFrame(schema=_WINPOS_SCHEMA)
-        wp_rows += wdf.height
-        wp_tmp = out_path.with_suffix(".parquet.tmp")
-        wdf.write_parquet(wp_tmp, compression="zstd")
-        wp_tmp.replace(out_path)
-    # ps LAST: the caller's skip-gate is conjunctive, so the kind renamed last is
-    # the one whose absence reopens the gate after an interruption. Previously
-    # crush held that slot; with it gated off, ps has to take it or an interrupt
-    # between the two renames would leave a chunk that passes the gate half-built.
-    if want_crush:
-        cr_tmp.replace(crush_out)
-    ps_tmp.replace(ps_out)
+    flush_batch()
+    # Write the tail only if it holds something, or if nothing has been written
+    # at all (a source file with zero kept games must still yield one partial set
+    # so the merge's globs and the run's file accounting stay consistent).
+    if ps_parts or crush_parts or term_parts or any(wp_parts.values()) or chunk_i == 0:
+        write_chunk()
+    if chunked:
+        _done_sentinel(ps_out).touch()
     return {"file": src_file.name, "skipped": False, "games": n_games, "kept": n_kept,
-            "failed": n_failed, "ps_rows": ps_df.height, "crush_rows": crush_df.height,
-            "term_rows": term_df.height, "winpos_rows": wp_rows,
+            "failed": n_failed, "ps_rows": tot_rows["ps"], "crush_rows": tot_rows["crush"],
+            "term_rows": tot_rows["term"], "winpos_rows": tot_rows["winpos"],
+            "chunks": chunk_i, "drop": dict(n_drop),
             "sec": time.time() - t0}
 
 
@@ -610,10 +761,19 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
 _W: dict = {}
 
 
-def _init_worker(min_elo: int, max_ply: int, tiers: dict | None) -> None:
+def _init_worker(min_elo: int, max_ply: int, tiers: dict | None,
+                 with_child_eval: bool = True, exclude_bots: bool = False,
+                 excluded_terminations: frozenset = frozenset(),
+                 max_rating_gap: int | None = None,
+                 chunk_games: int | None = None) -> None:
     _W["min_elo"] = min_elo
     _W["max_ply"] = max_ply
     _W["tiers"] = tiers
+    _W["with_child_eval"] = with_child_eval
+    _W["exclude_bots"] = exclude_bots
+    _W["excluded_terminations"] = excluded_terminations
+    _W["max_rating_gap"] = max_rating_gap
+    _W["chunk_games"] = chunk_games
 
 
 def _worker(task: tuple) -> dict:
@@ -622,7 +782,12 @@ def _worker(task: tuple) -> dict:
                         Path(cr_str) if cr_str else None,
                         _W["min_elo"], _W["max_ply"], _W["tiers"], limit,
                         term_out=Path(tm_str),
-                        winpos_out={int(t): Path(p) for t, p in wp_map.items()})
+                        winpos_out={int(t): Path(p) for t, p in wp_map.items()},
+                        with_child_eval=_W["with_child_eval"],
+                        exclude_bots=_W["exclude_bots"],
+                        excluded_terminations=_W["excluded_terminations"],
+                        max_rating_gap=_W["max_rating_gap"],
+                        chunk_games=_W["chunk_games"])
 
 
 # ── depth-tier seeding (from existing >=1800 frequency stats) ───────────────────
@@ -690,6 +855,34 @@ def discover_source_files(start_year: int, end_year: int, months: list[int] | No
 
 def partial_name(src_file: Path, year: int, month: int, event: str, kind: str) -> str:
     return f"year={year}_month={month}_event={event}_{src_file.stem}.{kind}.parquet"
+
+
+def _chunk_path(base: Path, k: int | None) -> Path:
+    """`...part-0.ps.parquet` -> `...part-0_c000.ps.parquet` (k=None: unchanged).
+
+    The chunk marker goes on the STEM, not the extension, so the merge's
+    `*.ps.parquet` globs keep matching without modification.
+    """
+    if k is None:
+        return base
+    stem, kind, ext = base.name.rsplit(".", 2)
+    return base.with_name(f"{stem}_c{k:03d}.{kind}.{ext}")
+
+
+def _done_sentinel(ps_out: Path) -> Path:
+    """Whole-source-file completion marker for the chunked skip gate.
+
+    With one partial per file the gate could just test the partials' existence.
+    Chunking breaks that: the number of chunks is not known until the file has
+    been read, so "are all of them present?" is unanswerable from the filesystem
+    alone. A sentinel written after the LAST chunk restores a single, cheap,
+    conjunctive test -- and keeps resume granularity per-file, exactly as before.
+
+    Leading underscore so it is invisible to pyarrow dataset discovery and to the
+    merge's `*.parquet` globs.
+    """
+    stem = ps_out.name.rsplit(".", 2)[0]
+    return ps_out.with_name(f"_{stem}.DONE")
 
 
 # ── final merges (DuckDB, single pass) ─────────────────────────────────────────
@@ -1309,6 +1502,44 @@ def main() -> None:
                          f"Each one is a separate histogram to build AND to merge, "
                          f"so cost scales with the count — the eval lookup is shared "
                          f"but nothing downstream of it is.")
+    ap.add_argument("--child-eval", action=argparse.BooleanOptionalAction, default=True,
+                    help="Populate the child_eval column the merge needs for the "
+                         "other-moves bucket's aggregate evaluation. Requires the "
+                         "mmap'd eval arrays at E:/chess/eval_arrays. "
+                         "--no-child-eval is REQUIRED to run on a machine without "
+                         "that path (the distributed explorer run), and costs "
+                         "nothing recoverable: child_hash is still emitted, so the "
+                         "eval join can be done at merge time on a machine where "
+                         "the arrays are local. Doing it here instead would mean "
+                         "binary-searching a 2.98 GB mmap over SMB.")
+    # NOTE: argparse runs help strings through `%`-formatting, so every literal
+    # percent below must be doubled or --help dies with a TypeError.
+    ap.add_argument("--exclude-bots", action=argparse.BooleanOptionalAction, default=False,
+                    help="Drop games with title 'BOT' on either side (~0.11%% of "
+                         "games). Off by default so the repertoire pipeline's "
+                         "behaviour is unchanged; ON for the explorer census.")
+    ap.add_argument("--exclude-terminations", nargs="*", default=None,
+                    metavar="TERM",
+                    help="Drop games whose termination is in this list. The "
+                         "explorer run passes 'Rules infraction' 'Abandoned' "
+                         "(~0.004%% combined). Default: keep everything.")
+    ap.add_argument("--max-rating-gap", type=int, default=None,
+                    help="Drop games where abs(white_elo - black_elo) exceeds "
+                         "this (explorer run uses 300, ~0.49%% of games). The point "
+                         "is that a 1200-vs-2000 game lands in the 1600 elo_band "
+                         "while representing neither player, and the extract is "
+                         "keyed on that band. Default: no cap.")
+    ap.add_argument("--chunk-games", type=int, default=0, metavar="N",
+                    help=f"Write a numbered partial set every N games READ, "
+                         f"instead of one set per source file. This is what "
+                         f"bounds worker memory: the accumulators grow with the "
+                         f"chunk, not with the file's 2M rows. At the default 0 "
+                         f"(off) behaviour is unchanged. The distributed explorer "
+                         f"run uses {CHUNK_GAMES:,}, which takes a worker from "
+                         f"~23 GB to ~3 GB and the fleet from 2 workers per "
+                         f"machine to 7-8. Boundaries are on games READ, not "
+                         f"kept, so they do not move when --min-elo or the "
+                         f"filters change.")
     ap.add_argument("--min-games", type=int, default=50)
     ap.add_argument("--max-ply", type=int, default=30)
     ap.add_argument("--crush-hist", action="store_true",
@@ -1388,17 +1619,39 @@ def main() -> None:
     else:
         print("\nDepth prune: DISABLED (full depth)\n", flush=True)
 
+    excluded_terms = frozenset(args.exclude_terminations or ())
+    if args.exclude_bots or excluded_terms or args.max_rating_gap is not None:
+        print("Game filters: "
+              + ", ".join(filter(None, [
+                  "exclude BOT" if args.exclude_bots else "",
+                  f"exclude termination in {sorted(excluded_terms)}" if excluded_terms else "",
+                  f"exclude rating gap > {args.max_rating_gap}"
+                  if args.max_rating_gap is not None else "",
+              ])), flush=True)
+
     if args.phase in ("extract", "all"):
-        # Fail here, not 6 workers deep. Every extract needs the eval arrays now
-        # (child_eval for the other-moves bucket, plus the winpos crossings when
-        # fused), and open_eval_arrays runs inside the worker — so a missing or
-        # STALE pair would otherwise surface as N identical tracebacks out of a
-        # process pool at the start of a ~90 h run. Verifying once up front turns
-        # that into one line naming the fix.
-        try:
-            print(f"Eval arrays: {verify_eval_arrays()}", flush=True)
-        except (FileNotFoundError, ValueError) as e:
-            sys.exit(f"FATAL: {e}")
+        # Fail here, not 6 workers deep. open_eval_arrays runs INSIDE the worker,
+        # so a missing or STALE pair would otherwise surface as N identical
+        # tracebacks out of a process pool at the start of a multi-day run.
+        # Verifying once up front turns that into one line naming the fix.
+        #
+        # Gated on whether evals are actually needed. This used to be
+        # unconditional, which made the extract refuse to start on any machine
+        # without a local E:/chess/eval_arrays AND E:/chess/unified_eval_db.parquet
+        # (verify_eval_arrays raises FileNotFoundError if either is absent, and
+        # resolves the DB path from the arrays' own meta.json). That blocked the
+        # distributed explorer run outright: neither remote machine has an E:.
+        # With --no-fuse-winpos --no-child-eval nothing reads the arrays, so
+        # demanding them was a hard stop for no reason.
+        needs_evals = args.fuse_winpos or args.child_eval
+        if needs_evals:
+            try:
+                print(f"Eval arrays: {verify_eval_arrays()}", flush=True)
+            except (FileNotFoundError, ValueError) as e:
+                sys.exit(f"FATAL: {e}")
+        else:
+            print("Eval arrays: not needed "
+                  "(--no-fuse-winpos and --no-child-eval)", flush=True)
 
         files = discover_source_files(args.start_year, args.end_year, args.months, args.events)
         partial_dir.mkdir(parents=True, exist_ok=True)
@@ -1413,7 +1666,12 @@ def main() -> None:
             tm_p = partial_dir / partial_name(f, y, m, ev, "term")
             wp_p = {t: partial_dir / partial_name(f, y, m, ev, f"winpos{t}")
                     for t in (WINPOS_THRESHOLDS if args.fuse_winpos else ())}
-            if (ps_p.exists() and tm_p.exists()
+            if args.chunk_games > 0:
+                # Chunked: the sentinel is the gate (chunk count is not knowable
+                # from the filesystem). Must match extract_file's own test.
+                if _done_sentinel(ps_p).exists():
+                    continue
+            elif (ps_p.exists() and tm_p.exists()
                     and (cr_p is None or cr_p.exists())
                     and all(p.exists() for p in wp_p.values())):
                 continue
@@ -1424,15 +1682,22 @@ def main() -> None:
               f"{args.workers} workers\n", flush=True)
         t0 = time.time()
         done = tot_games = tot_kept = 0
+        tot_drop: dict[str, int] = {}
         if tasks:
-            with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker,
-                                     initargs=(args.min_elo, args.max_ply, tiers)) as ex:
+            with ProcessPoolExecutor(
+                    max_workers=args.workers, initializer=_init_worker,
+                    initargs=(args.min_elo, args.max_ply, tiers,
+                              args.child_eval, args.exclude_bots,
+                              excluded_terms, args.max_rating_gap,
+                              args.chunk_games or None)) as ex:
                 futs = [ex.submit(_worker, t) for t in tasks]
                 for fut in as_completed(futs):
                     r = fut.result()
                     done += 1
                     tot_games += r.get("games", 0)
                     tot_kept += r.get("kept", 0)
+                    for k, v in (r.get("drop") or {}).items():
+                        tot_drop[k] = tot_drop.get(k, 0) + v
                     if done % 10 == 0 or done == len(tasks):
                         el = time.time() - t0
                         rate = tot_games / el if el else 0
@@ -1443,7 +1708,14 @@ def main() -> None:
                               f"{el/60:.1f} min", flush=True)
         el = time.time() - t0
         print(f"\nExtract done: {tot_kept:,}/{tot_games:,} games kept in {el/60:.1f} min "
-              f"({tot_games/el if el else 0:,.0f} games/s)\n", flush=True)
+              f"({tot_games/el if el else 0:,.0f} games/s)", flush=True)
+        # Provenance: what was excluded, and by which rule. Without this the
+        # filter set is implied by the code version rather than recorded.
+        if tot_games and tot_drop:
+            print("  dropped:", ", ".join(
+                f"{k} {v:,} ({100*v/tot_games:.3f}%)"
+                for k, v in sorted(tot_drop.items(), key=lambda kv: -kv[1]) if v))
+        print(flush=True)
 
     if args.phase in ("merge", "all"):
         tmp_base = Path(args.tmp_dir) if args.tmp_dir else None

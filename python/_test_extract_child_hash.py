@@ -100,7 +100,26 @@ def main() -> None:
         sys.exit(1)
 
     # 1. against python-chess, on the distinct edges (the expensive check)
-    edges = df.select(["parent_epd", "move_san", "parent_hash", "child_hash"]).unique()
+    #
+    # Restricted to edges that CARRY an EPD. build_pooled_stats now populates
+    # parent_epd only to EPD_MAX_PLY (16) -- past the opening it is null, because
+    # it measured 50.3% of partial bytes and nothing renders a ply-40 position.
+    # This check reconstructs the board FROM the EPD, so it can only run where
+    # one exists; a null becomes chess.Board("8/8/8/8/8/8/8/8") and reports every
+    # SAN as illegal.
+    #
+    # Depth is still covered, by other checks rather than by this one:
+    #   * check 3 below walks the chain across EVERY ply at any depth, and a
+    #     wrong deep hash shows up there as a broken parent/child link;
+    #   * _test_zobrist_incremental.py differentially tests the hasher against
+    #     python-chess over millions of plies with no depth limit.
+    edges = (df.select(["parent_epd", "move_san", "parent_hash", "child_hash"])
+               .filter(pl.col("parent_epd").is_not_null())
+               .unique())
+    n_deep = df.filter(pl.col("parent_epd").is_null()).height
+    if n_deep:
+        print(f"  EPD-backed check covers ply <= EPD_MAX_PLY; "
+              f"{n_deep:,} deeper plies rely on checks 2-4")
     bad = []
     for epd, san, ph, ch in edges.iter_rows():
         b = chess.Board(epd)
