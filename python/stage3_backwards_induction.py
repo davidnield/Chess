@@ -2488,7 +2488,25 @@ def main():
             keys = ["event", "elo_band", "parent_hash", "move_san"]
             cdb_sql = str(cdb_path).replace("\\", "/")
             con = duckdb.connect()
-            con.execute("SET preserve_insertion_order=false; SET memory_limit='16GB';")
+            # The crush histogram outgrew this connection's original settings
+            # (16GB, all threads, no spill dir). The 2013-2026 DB is 1.20 B rows /
+            # 12.84 GB and this GROUP BY died with "could not allocate block of
+            # size 256.0 KiB (14.9 GiB/14.9 GiB used)" on two of three targets
+            # (2026-08-25); the third passed, so it was marginal, not impossible.
+            # Per CLAUDE.md that error is a genuinely exhausted limit, so: a larger
+            # budget, fewer threads (smaller per-thread hash partitions), and -- the
+            # part that turns a hard crash into a slow success -- a real spill
+            # directory, which this connection never had. con.close() below runs
+            # before backward induction, so this budget does not stack with Stage
+            # 3's own peak (76.8 GB measured, against a 105 GB chain abort).
+            con.execute("SET preserve_insertion_order=false; "
+                        "SET memory_limit='32GB'; SET threads=6;")
+            _spill = os.environ.get("CHESS_DUCKDB_TMP", "D:/chess_duckdb_tmp")
+            if Path(_spill).is_dir():
+                con.execute(f"SET temp_directory='{_spill}'")
+            else:
+                print(f"WARN: spill dir {_spill} missing; crush GROUP BY cannot "
+                      f"offload and may OOM (set CHESS_DUCKDB_TMP)", flush=True)
             if args.crush_mode == "relative-propagated":
                 # Relative histogram (move_bucket = full moves from THIS position to the
                 # decisive end). Per edge precompute, for both colours:
