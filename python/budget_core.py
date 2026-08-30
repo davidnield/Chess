@@ -878,6 +878,55 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
 
 # ── extraction ──────────────────────────────────────────────────────────────
 
+def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
+                   bmax: int, fixed_policy: dict[int, str] | None = None
+                   ) -> tuple[dict, int, bool]:
+    """Extract a book holding at least `target` DISTINCT decisions.
+
+    The curves charge a transposed position once per PATH that reaches it while
+    extraction books it once, so a book asked for N decisions delivers fewer.
+    Measured on the <=2024 white pool: 17 of 20, 305 of 400, 817 of 1000 (15%,
+    24%, 18%). The truncation baseline has no such gap and always books its full
+    budget, so scoring "b=400 dp" against "b=400 trunc" compares 305 memorised
+    moves against 400 -- size rather than method, and biased AGAINST the DP.
+
+    So search for the smallest path-charged budget whose extraction books
+    `target` distinct decisions: grow geometrically to bracket it, then bisect.
+    Returns (result, charged_budget, hit_target). Each probe is an extract_book
+    over curves that are already built, so this costs extractions, not a rebuild.
+
+    Distinct spend is empirically monotone in the charged budget (20->17,
+    21->18, 22->19, 23->20, 24->21 on the white pool) but that is NOT proven --
+    the allocator may reshuffle -- so the caller gets the realised count and
+    hit_target rather than a promise.
+    """
+    res = extract_book(g, curves, target, fixed_policy=fixed_policy)
+    if res["spent_distinct"] >= target or target >= bmax:
+        return res, target, res["spent_distinct"] >= target
+
+    lo, best_lo = target, res           # books < target
+    hi, best_hi = -1, None              # books >= target
+    probe = target
+    while probe < bmax:
+        probe = min(bmax, max(probe + 1, int(probe * 1.5)))
+        r = extract_book(g, curves, probe, fixed_policy=fixed_policy)
+        if r["spent_distinct"] >= target:
+            hi, best_hi = probe, r
+            break
+        lo, best_lo = probe, r
+    if best_hi is None:                 # capacity cannot reach the target
+        return best_lo, lo, False
+
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        r = extract_book(g, curves, mid, fixed_policy=fixed_policy)
+        if r["spent_distinct"] >= target:
+            hi, best_hi = mid, r
+        else:
+            lo = mid
+    return best_hi, hi, True
+
+
 def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                  fixed_policy: dict[int, str] | None = None,
                  force_booked: set[int] | None = None

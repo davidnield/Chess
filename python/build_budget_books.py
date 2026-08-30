@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -210,6 +211,20 @@ def main() -> int:
                          "0.0043 at b=6 on the <=2024 white pool. When set, "
                          "keeps the source book's move, the top-K by child "
                          "eval, and the single most forcing candidate.")
+    ap.add_argument("--match-distinct", action="store_true",
+                    help="Spend a LARGER path-charged budget until the book "
+                         "holds --budget DISTINCT decisions. The curves charge "
+                         "a transposed position once per path but you only "
+                         "memorise it once, so without this a b=400 DP book "
+                         "holds 305 moves while the truncation baseline holds "
+                         "400 -- an unequal-footprint comparison biased against "
+                         "the DP. Costs extra extractions, not a rebuild.")
+    ap.add_argument("--match-inflate", type=float, default=1.6,
+                    help="Curve headroom when --match-distinct is on: curves "
+                         "are built to ceil(max budget * this) so the search "
+                         "has room above the target. Measured gaps are 15-24%%, "
+                         "so 1.6 brackets them with margin. Above --grid-cap "
+                         "atoms this costs no extra memory.")
     ap.add_argument("--grid-cap", type=int, default=256)
     ap.add_argument("--aux-stats", default=None,
                     help="Default: read from --rep's .meta.json.")
@@ -242,6 +257,10 @@ def main() -> int:
     our_white = a.perspective == "white"
     budgets = sorted(set(a.budget))
     bmax = max(budgets)
+    # --match-distinct spends ABOVE the requested budget, so the curves need
+    # headroom above it or the search has nowhere to go.
+    curve_bmax = (int(math.ceil(bmax * a.match_inflate)) if a.match_distinct
+                  else bmax)
     eps = a.epsilon if a.epsilon is not None else min(1e-3, 8.0 / bmax)
 
     # source meta drives the defaults that must MIRROR the source build
@@ -355,7 +374,7 @@ def main() -> int:
 
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     log("building curves...")
-    curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap,
+    curves, diag = bc.build_curves(g, bmax=curve_bmax, k_atoms=a.grid_cap,
                                    fixed_policy=fixed)
     cap = curves[g.root].capacity if g.root in curves else 0
     log(f"  root capacity {cap:,} (path-sum); stranded cycle nodes "
@@ -380,8 +399,16 @@ def main() -> int:
                                          fixed_policy=mask)
             res = bc.extract_book(g, gcurves, b, fixed_policy=mask,
                                   force_booked=booked)
+            charged, matched = b, res["spent_distinct"] >= b
+        elif a.match_distinct:
+            res, charged, matched = bc.match_distinct(g, curves, b, curve_bmax,
+                                                      fixed_policy=fixed)
+            log(f"  match-distinct b={b}: charged {charged} for "
+                f"{res['spent_distinct']} distinct"
+                + ("" if matched else "  (TARGET NOT REACHED — capacity)"))
         else:
             res = bc.extract_book(g, curves, b, fixed_policy=fixed)
+            charged, matched = b, res["spent_distinct"] >= b
 
         rows = []
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
@@ -414,8 +441,11 @@ def main() -> int:
             "method": a.method + ("+fixed" if a.fixed_policy else ""),
             "epsilon": eps, "max_ply": a.max_ply,
             "share_floor": a.share_floor, "grid_cap": a.grid_cap,
+            "match_distinct": bool(a.match_distinct),
+            "budget_charged": charged,
+            "distinct_target_met": bool(matched),
             "root_value_curve": None if g.root not in curves
-            else curves[g.root].eval(b),
+            else curves[g.root].eval(charged),
             "root_value_realized": res["root_value_realized"],
             "root_capacity_paths": cap,
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],

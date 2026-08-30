@@ -147,5 +147,34 @@ check("a cycle through the root does not empty the book",
       f"booked={sorted(rroot['booked'])}, "
       f"realized={rroot['root_value_realized']}")
 
+# MATCH-DISTINCT. The per-path overcount above means a book asked for N
+# decisions delivers fewer; the truncation baseline has no such gap, so a
+# like-for-like Phase D comparison needs the DP to actually reach N. Measured
+# on the <=2024 white pool: 17 of 20, 305 of 400, 817 of 1000.
+#
+# The diamond at the top of this file is the minimal case: 2 path-charged units
+# buy 2 distinct decisions (root + T), and T is charged twice, so asking for 3
+# distinct must charge more than 3.
+from budget_core import match_distinct                          # noqa: E402
+
+r2, ch2, ok2 = match_distinct(g, curves, 2, 10)
+check("match_distinct is a no-op when the plain budget already suffices",
+      ok2 and ch2 == 2 and r2["spent_distinct"] == 2,
+      f"charged {ch2}, booked {r2['spent_distinct']}, ok={ok2}")
+
+# a target the graph cannot reach: only 2 our-nodes exist at all
+r9, ch9, ok9 = match_distinct(g, curves, 9, 10)
+check("match_distinct reports failure rather than looping when capacity is short",
+      ok9 is False and r9["spent_distinct"] < 9,
+      f"charged {ch9}, booked {r9['spent_distinct']}, ok={ok9}")
+check("failed match still returns a usable book", r9["spent_distinct"] >= 1,
+      f"booked {r9['spent_distinct']}")
+
+# on the cycle fixture the search must still terminate and stay consistent
+rc, chc, okc = match_distinct(gcyc, ccur, 2, 10)
+check("match_distinct terminates on a graph with cycles",
+      rc["spent_distinct"] >= 1 and chc >= 2,
+      f"charged {chc}, booked {rc['spent_distinct']}, ok={okc}")
+
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)
