@@ -41,6 +41,34 @@ Four ways a walk ends, and they mean completely different things:
 Conflating the last three is precisely what --reply-shrink's help text warns
 about, so they are counted separately and never summed into one "coverage".
 
+CALIBRATION IS PER EXIT REASON, AND game_end IS NOT EVIDENCE
+-----------------------------------------------------------
+Binning every faithful exit into one calibration table measures game
+TERMINATION PARITY, not prediction quality. Diagnosed 2026-08-31 on the sweep
+holdout, where the single table read as a catastrophic miscalibration -- one bin
+holding 84% of the mass, predicted 0.683 against realized 0.307 -- and was
+entirely an artifact:
+
+  * 127,899 of the ~128k binned exits were game_end, mean exit ply 3.93;
+  * 58% of those ended at ply 2 scoring 0.1125 -- White played the book's first
+    move, Black replied, White forfeited on time. The "prediction" is the book's
+    value for an ordinary opening position and the "realization" is a walkover;
+  * the sign is pure parity. A game ending on an EVEN ply ended on Black's move,
+    so White was mated or flagged (realized 0.11-0.40); an ODD ply ended on
+    White's move, so White won (realized 1.00 in 8 of 10 odd plies). Even-ply
+    forfeits are shallow and land in low-V bins, odd-ply wins run deeper and
+    land in high-V bins, which manufactures a clean-looking S-curve out of
+    nothing;
+  * meanwhile the exits that DO test the book -- opp_out_of_book and the
+    coverage flavour of book_end, 83,513 of them at mean ply 13-15 -- were
+    silently excluded, because the exit node is by definition not in the book so
+    the old code recorded v=None for them.
+
+So: bin by `values[path[-1]]`, the book's value at the last position it still
+recognized, which is well defined for EVERY exit; report one table per reason;
+and never read game_end as calibration. Its rows are kept, labelled, because
+their absence would be just as easy to misread as their old silent inclusion.
+
 MANY BOOKS, ONE REPLAY
 ----------------------
 Pass --repertoire more than once and every book is evaluated in a single pass
@@ -101,6 +129,14 @@ DEVIATION, OUT_OF_BOOK, BOOK_END, GAME_END, PARSE_ERROR = (
     "our_deviation", "opp_out_of_book", "book_end", "game_end", "parse_error")
 REASONS = (DEVIATION, OUT_OF_BOOK, BOOK_END, GAME_END, PARSE_ERROR)
 FAITHFUL = (OUT_OF_BOOK, BOOK_END, GAME_END)
+# Printed next to each calibration table so a reader cannot pick up the one that
+# is not evidence. See the CALIBRATION section of the module docstring.
+CALIB_NOTE = {
+    OUT_OF_BOOK: "  [COVERAGE exit: prep ran out]",
+    BOOK_END: "  [BUDGET exit: we chose to stop]",
+    GAME_END: "  [NOT EVIDENCE: the game ended, so this bins termination "
+              "parity -- even ply = we were mated/flagged, odd ply = we won]",
+}
 # Expected-score outcomes are ~50/45/5 win/loss/draw at this band, so SD ~ 0.49.
 # Used only to print an SE next to each mean, because the first run of this
 # reported a +0.0065 difference whose standard error was 0.0081.
@@ -134,7 +170,10 @@ class Book:
         self.reasons: Counter = Counter()
         self.ply_hist: dict[str, Counter] = defaultdict(Counter)
         self.score_sum: dict[str, float] = defaultdict(float)
-        self.depth_v: list[tuple[float, float]] = []
+        # (predicted V at the last IN-BOOK node, realized score, exit reason).
+        # Keyed on path[-1], not on the exit node: a coverage exit leaves the
+        # book by definition, so the exit node has no value to bin.
+        self.depth_v: list[tuple[float, float, str]] = []
 
 
 def _exit_reason(ply: int, our_turn_now: bool) -> str:
@@ -256,19 +295,34 @@ def report(b: Book, n_games: int, max_ply: int) -> None:
               "confounded; compare on faithful% / survival.")
 
     if b.depth_v:
-        print("\ncalibration at the exit node, book-faithful games only")
-        print("  V bin          n      predicted   realized   gap")
-        bins: dict[int, list[tuple[float, float]]] = defaultdict(list)
-        for v, r in b.depth_v:
-            bins[min(int(v * 20), 19)].append((v, r))
-        for k in sorted(bins):
-            rows = bins[k]
-            if len(rows) < 50:
+        by_reason: dict[str, list[tuple[float, float]]] = defaultdict(list)
+        for v, r, reason in b.depth_v:
+            by_reason[reason].append((v, r))
+        for reason in FAITHFUL:
+            rows_all = by_reason.get(reason)
+            if not rows_all:
                 continue
-            pv = sum(x[0] for x in rows) / len(rows)
-            rv = sum(x[1] for x in rows) / len(rows)
-            print(f"  {k/20:.2f}-{(k+1)/20:.2f}  {len(rows):>9,}  "
-                  f"{pv:>10.4f}  {rv:>9.4f}  {rv-pv:>+6.4f}")
+            note = CALIB_NOTE.get(reason, "")
+            print(f"\ncalibration at the last in-book node -- {reason} exits "
+                  f"only ({len(rows_all):,}){note}")
+            print("  V bin          n      predicted   realized   gap     "
+                  "1 SE")
+            bins: dict[int, list[tuple[float, float]]] = defaultdict(list)
+            for v, r in rows_all:
+                bins[min(int(v * 20), 19)].append((v, r))
+            for k in sorted(bins):
+                rows = bins[k]
+                if len(rows) < 50:
+                    continue
+                pv = sum(x[0] for x in rows) / len(rows)
+                rv = sum(x[1] for x in rows) / len(rows)
+                # Bins here run to a few dozen rows, where a +0.12 gap is under
+                # two SEs. Printing the gap without it invites the same
+                # over-reading the old single table produced.
+                se = SCORE_SD / (len(rows) ** 0.5)
+                print(f"  {k/20:.2f}-{(k+1)/20:.2f}  {len(rows):>9,}  "
+                      f"{pv:>10.4f}  {rv:>9.4f}  {rv-pv:>+6.4f}  {se:>6.4f}"
+                      f"{'' if abs(rv-pv) >= se else '  [noise]'}")
 
 
 def main() -> int:
@@ -314,7 +368,7 @@ def main() -> int:
                 res = walk_books(mt or "", a.perspective, books, board, hasher,
                                  a.max_ply)
                 realized = float(ws) if a.perspective == "white" else 1.0 - float(ws)
-                for b, (reason, ply, v, path) in zip(books, res):
+                for b, (reason, ply, _v, path) in zip(books, res):
                     b.reasons[reason] += 1
                     b.ply_hist[reason][ply] += 1
                     b.score_sum[reason] += realized
@@ -325,8 +379,14 @@ def main() -> int:
                         if faithful:
                             b.node_fn[h] = b.node_fn.get(h, 0) + 1
                             b.node_fs[h] = b.node_fs.get(h, 0.0) + realized
-                    if faithful and v is not None:
-                        b.depth_v.append((v, realized))
+                    # walk_books' `v` is the value at the EXIT node, which a
+                    # coverage exit has left -- it is None for exactly the two
+                    # reasons that test the book. path[-1] is the last node the
+                    # book still recognized and is defined for every exit.
+                    if faithful and path:
+                        vp = b.values.get(path[-1])
+                        if vp is not None:
+                            b.depth_v.append((vp, realized, reason))
                 n_games += 1
             if a.limit_games and n_games >= a.limit_games:
                 break

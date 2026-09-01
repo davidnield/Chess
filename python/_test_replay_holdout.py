@@ -189,6 +189,58 @@ def main() -> int:
     check(multi[0][0] == GAME_END and multi[1][0] == BOOK_END,
           "books with different depths exit independently in the same pass")
 
+    # --- calibration population (regression, 2026-08-31) ----------------
+    # The old single calibration table binned the value AT THE EXIT NODE. A
+    # coverage exit has by definition left the book, so that value is None for
+    # exactly the two exits that test the book, and the table was built almost
+    # entirely from game_end -- i.e. from termination parity, not prediction.
+    # Measured on the sweep holdout: 127,899 of ~128k binned exits were
+    # game_end, 58% of them ending at ply 2 (White played the book move, Black
+    # replied, White flagged) scoring 0.1125 against a predicted 0.6820, while
+    # 83,513 real coverage exits at ply 13-15 were silently dropped.
+    #
+    # The fix bins values[path[-1]], the last node the book still recognized.
+    # Pin that it is defined for every faithful exit and that the reason travels
+    # with the row so game_end can be held out of the read.
+    r, ply, v, p = run("1. e4 d5 2. exd5", moves, values)
+    check(r == OUT_OF_BOOK and v is None,
+          f"a coverage exit carries NO value at the exit node (got v={v})")
+    check(bool(p) and values.get(p[-1]) is not None,
+          "...but its last in-book node IS binnable — the row the old table lost")
+    check(p[-1] == hash_after(["e4"]),
+          "coverage exit bins the parent, the deepest node still prepared")
+
+    r, ply, v, p = run("1. e4 e5 2. Nf3 Nc6", m2, values)
+    check(r == BOOK_END and p and p[-1] == hash_after(["e4", "e5"])
+          and abs(values[p[-1]] - v) < 1e-12,
+          "a BUDGET exit bins the leaf itself, unchanged from the old rule")
+
+    r, ply, v, p = run("1. e4 e5 2. Nf3 Nc6 3. Bb5", moves, values)
+    check(r == GAME_END and p and values.get(p[-1]) is not None,
+          "game_end is still binnable — it is reported, but labelled not-evidence")
+
+    # Every faithful exit must yield a bin, or the table silently samples a
+    # sub-population again. (--max-ply is the one exit whose node is not
+    # appended to the path, so it bins the parent; that is deliberate, since
+    # appending it would change the node counters and the stored parquet.)
+    battery = ["1. e4 d5 2. exd5",                       # coverage
+               "1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. Ba4",   # coverage, deeper
+               "1. e4 e5 2. Nf3 Nc6 3. Bb5",             # game_end
+               ]
+    binnable = 0
+    for g in battery:
+        r, _ply, _v, p = run(g, moves, values)
+        if r in (OUT_OF_BOOK, BOOK_END, GAME_END) and p \
+                and values.get(p[-1]) is not None:
+            binnable += 1
+    check(binnable == len(battery),
+          f"every faithful exit yields a binnable prediction "
+          f"({binnable}/{len(battery)})")
+
+    r, _ply, _v, p = run("1. e4 e5 2. Nf3 Nc6 3. Bb5", moves, values, max_ply=3)
+    check(r == BOOK_END and p and p[-1] == hash_after(["e4", "e5"]),
+          "--max-ply exit bins the parent (its node is never added to the path)")
+
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print()
     print(f"{'ALL PASS' if not n_fail else f'{n_fail} FAILED'} ({len(_checks)} checks)")
