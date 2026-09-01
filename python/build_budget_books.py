@@ -312,6 +312,19 @@ def main() -> int:
 
     log("loading source rep (subgraph slice)...")
     want = set(parents) | set(edf["child_hash"].drop_nulls().to_list())
+    # Slice identity travels from the source rep. A rep spans exactly one
+    # (event, elo_band) in every current build; if that ever stops being true
+    # the book would need per-row slices, so fail rather than pick one.
+    _sl = (pl.scan_parquet(a.rep).select(["event", "elo_band"])
+           .unique().collect())
+    if _sl.height != 1:
+        log(f"FATAL: --rep spans {_sl.height} (event, elo_band) slices; "
+            f"budget books carry a single slice. Slices: {_sl.to_dicts()}")
+        return 1
+    src_event = _sl["event"][0]
+    src_elo_band = _sl["elo_band"][0]
+    log(f"slice: event={src_event!r} elo_band={src_elo_band}")
+
     rep = (pl.scan_parquet(a.rep)
            .filter(pl.col("position_hash").is_in(list(want)))
            .select(["position_hash", "side_to_move", "value", "best_move",
@@ -421,6 +434,15 @@ def main() -> int:
             rows.append({
                 "position_hash": h,
                 "position_epd": g.epd.get(h) or src.get("position_epd"),
+                # The slice these books belong to, inherited from --rep. Every
+                # downstream reader keys on it: repertoire_explorer refuses to
+                # load a rep without it (and its whole per-slice view cache is
+                # built on it), and score_repertoire selects by it. Omitting
+                # these silently produced books the explorer could not open at
+                # all, which is not the "replay/score-compatible" this script's
+                # header claims.
+                "event": src_event,
+                "elo_band": src_elo_band,
                 "side_to_move": side,
                 "value": flip(res["realized"].get(h)),
                 "best_move": res["booked"].get(h),
