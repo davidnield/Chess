@@ -1,11 +1,28 @@
 """
 build_pooled_stats.py — fast, reusable combined position-stats + relative crush
-histogram, pooled to a SINGLE slice (event='Pooled', elo_band=0).
+histogram, keyed per (event, elo_band) slice.
 
-This is the CANONICAL pooler for new datasets: it fuses extraction + elo/event
-filtering + pooling straight from the source parquets. (build_combined_slice.py is the
+This is the CANONICAL extractor for new datasets: it fuses extraction + elo/event
+filtering straight from the source parquets. (build_combined_slice.py is the
 OTHER pooling path — it re-pools stats that were already aggregated per (event,elo_band).
 Use that only when you already have per-band position_stats and just want to combine them.)
+
+SLICING (2026-09): position-stats are aggregated on
+(parent_hash, move_san, event, elo_band), so the output reproduces the Lichess
+opening explorer's two filters — speed and rating band. `elo_band` is
+rating_bands.lichess_rating_group(mean_elo): lila-openingexplorer's
+RatingGroup::select_avg, nine labels 0/1000/.../2500, NOT the old 100-wide
+floor(mean_elo/100)*100. Measured cost is 1.05x in rows, because 97% of rows are
+singletons and a singleton lives in exactly one band.
+
+Two consequences worth knowing before reading a merged output:
+  - --min-games is now a PER-CELL floor. A move with 100 games spread thinly
+    across six events and nine bands can have no cell reach 50 and land wholly
+    in the below-floor bucket, where the same move would have survived under the
+    old pooled key. Pass a lower --min-games for a census.
+  - The crush/winpos histograms are NOT sliced: their partials carry no band, so
+    merge_crush still stamps event='Pooled', elo_band=0 and semi-joins to the
+    DISTINCT (parent_hash, move_san) keys of position-stats.
 
 Fused single-pass design (replaces the old Stage-1 raw-edge dump + Stage-2 tier
 merge, whose tier/shard/fragment machinery was ~OOM-defensive scaffolding for the
@@ -70,6 +87,7 @@ from stage1_extract_positions import iter_san_moves, zobrist_int64
 from zobrist import IncrementalZobrist
 from eval_arrays import (MISSING as _EVAL_MISSING, lookup_evals,
                          open_eval_arrays, verify_eval_arrays)
+from rating_bands import lichess_rating_group
 from winpos_fused import winpos_batch
 
 # Winpos crossing thresholds, in centipawns. 300 is the canonical one every
@@ -154,7 +172,7 @@ EPD_MAX_PLY = 16
 # (parent_hash, move_san) group at two different plies, one inside the EPD window
 # and one outside, and we want the populated value when it exists.
 def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
-    return df.group_by("parent_hash", "move_san").agg(
+    return df.group_by("parent_hash", "move_san", "event", "elo_band").agg(
         pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         # child_hash is a FUNCTION of the group key (same position + same move
         # reaches the same position), so .first() is exact, not a representative.
@@ -171,7 +189,7 @@ def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
 
 def _agg_ps_resum(df: pl.DataFrame) -> pl.DataFrame:
     # Re-aggregate already-aggregated ps frames (sum the counts; keep a representative epd/ply).
-    return df.group_by("parent_hash", "move_san").agg(
+    return df.group_by("parent_hash", "move_san", "event", "elo_band").agg(
         pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         pl.col("child_hash").first().alias("child_hash"),
         pl.col("child_eval").first().alias("child_eval"),
@@ -200,9 +218,27 @@ def _agg_crush_resum(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _new_buf() -> dict:
+    # `event` is deliberately NOT here: it is constant for a whole source file
+    # (the source is hive-partitioned by event), so it is attached once to the
+    # frame in flush_batch instead of appended per row. `elo_band` varies per
+    # GAME, so it has to ride along per ply.
     return {k: [] for k in
             ("parent_hash", "child_hash", "move_san", "parent_epd", "ply",
-             "ws", "wn", "bn", "move_bucket")}
+             "ws", "wn", "bn", "move_bucket", "elo_band")}
+
+
+def _event_of(src_file: Path) -> str:
+    """The hive `event=` component of a source path (`.../event=Blitz/x.parquet`).
+
+    A FALLBACK only: main() passes the event discovery already knows, which is
+    authoritative. This exists so a caller that hands over a bare path (the
+    replay harnesses) still gets the right label instead of a NULL column. A
+    path with no `event=` component yields POOL_EVENT.
+    """
+    for parent in src_file.parents:
+        if parent.name.startswith("event="):
+            return parent.name.split("=", 1)[1]
+    return POOL_EVENT
 
 
 # ── terminal accounting (TERM / HORIZON) ──────────────────────────────────────
@@ -321,12 +357,18 @@ def classify_maxply(tiers: dict | None, w1: str | None, b1: str | None,
 
 def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
                move_count, tiers, max_ply_cap, hasher=None, epd_memo=None,
-               term_buf=None, reason: int = TERM_OTHER) -> bool:
+               term_buf=None, reason: int = TERM_OTHER, band: int = 0) -> bool:
     """Append one game's per-ply rows into the columnar buffer, capping depth by the
     asymmetric tier (classified from the first two SAN moves). Returns True on parse error.
 
     NOTE: move_bucket still uses the game's REAL move_count (full length from source),
     so the relative-crush horizon is unaffected by where we truncate extraction.
+
+    `band` is the game's Lichess rating group, computed ONCE per game by the
+    caller (see extract_file) and stamped onto every ply row. It defaults to 0
+    only so the replay-path harnesses (_test_epd_memo, _test_extract_child_hash)
+    can keep calling this without caring about the band; production always
+    passes it.
 
     `hasher` / `epd_memo` are the two extract-speed optimizations (2026-07 profiling:
     the position hash and board.epd() were 29% and 52% of replay time, against 19%
@@ -405,6 +447,7 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
         buf["wn"].append(1 if white_norm else 0)
         buf["bn"].append(1 if black_norm else 0)
         buf["move_bucket"].append(b)
+        buf["elo_band"].append(band)
         ph = ch
     # `ph` is now the position after the last recorded ply. maxply was clamped to
     # min(tier, cap, len(toks)), so it equals len(toks) exactly when nothing
@@ -422,6 +465,7 @@ _BUF_SCHEMA = {
     "parent_hash": pl.Int64, "child_hash": pl.Int64, "move_san": pl.Utf8,
     "parent_epd": pl.Utf8, "ply": pl.Int32, "ws": pl.Float64,
     "wn": pl.Int32, "bn": pl.Int32, "move_bucket": pl.Int32,
+    "elo_band": pl.Int64,
 }
 
 # Schema-identical to the crush histogram, so Stage 3 consumes a winpos partial
@@ -441,7 +485,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
                  exclude_bots: bool = False,
                  excluded_terminations: frozenset = frozenset(),
                  max_rating_gap: int | None = None,
-                 chunk_games: int | None = None) -> dict:
+                 chunk_games: int | None = None,
+                 event: str | None = None) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
@@ -479,7 +524,13 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     0), so Stage 3 fell back to the empirical score with nothing in the logs. Only
     the equivalence/bench harnesses pass False, since they replay without the
     eval arrays present.
+
+    `event` labels every row this file produces. It is constant for the whole
+    file (the source is hive-partitioned by event), so it is attached once to
+    each frame rather than appended per row -- unlike `elo_band`, which varies
+    per game. None means "derive it from the source path" (see _event_of).
     """
+    ev_label = event if event is not None else _event_of(src_file)
     want_crush = crush_out is not None
     want_term = term_out is not None
     want_wp = bool(winpos_out)
@@ -541,7 +592,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             spans.clear()
             facts.clear()
             return
-        df = pl.DataFrame(buf, schema=_BUF_SCHEMA)
+        df = pl.DataFrame(buf, schema=_BUF_SCHEMA).with_columns(
+            pl.lit(ev_label, dtype=pl.Utf8).alias("event"))
         # child_eval rides along on the SAME arrays winpos already has open. It is
         # what lets the merge compute the other-moves bucket's aggregate evaluation
         # without a separate join over ~2.25B below-floor edges. Stored NULL where
@@ -609,7 +661,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
         nonlocal chunk_i, ps_parts, crush_parts, term_parts
         compact()
         ps_df = ps_parts[0] if ps_parts else pl.DataFrame(schema={
-            "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
+            "parent_hash": pl.Int64, "move_san": pl.Utf8, "event": pl.Utf8,
+            "elo_band": pl.Int64, "parent_epd": pl.Utf8,
             "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
             "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
             "total": pl.Int64})
@@ -703,13 +756,19 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
                     n_drop["rating_gap"] += 1
                     continue
             n_kept += 1
+            # ONE band per game, stamped onto every ply row by _walk_game. This
+            # is lila-openingexplorer's RatingGroup::select_avg, not our old
+            # 100-wide floor(mean_elo/100)*100 -- see rating_bands.py, which
+            # also documents the <=1-point floor-vs-round difference from
+            # theirs that riding on the stored mean_elo inherits.
+            band = lichess_rating_group(me)
             normal = term == "Normal"
             white_norm = normal and ws == 1.0
             black_norm = normal and ws == 0.0
             g0 = len(buf["parent_hash"]) if want_wp else 0
             if _walk_game(buf, rec["movetext"], ws, white_norm, black_norm,
                           rec["move_count"], tiers, max_ply, hasher, epd_memo,
-                          term_buf, _term_reason(term)):
+                          term_buf, _term_reason(term), band):
                 n_failed += 1
             if want_wp:
                 g1 = len(buf["parent_hash"])
@@ -777,7 +836,7 @@ def _init_worker(min_elo: int, max_ply: int, tiers: dict | None,
 
 
 def _worker(task: tuple) -> dict:
-    src_str, ps_str, cr_str, tm_str, wp_map, limit = task
+    src_str, ps_str, cr_str, tm_str, wp_map, limit, event = task
     return extract_file(Path(src_str), Path(ps_str),
                         Path(cr_str) if cr_str else None,
                         _W["min_elo"], _W["max_ply"], _W["tiers"], limit,
@@ -787,7 +846,8 @@ def _worker(task: tuple) -> dict:
                         exclude_bots=_W["exclude_bots"],
                         excluded_terminations=_W["excluded_terminations"],
                         max_rating_gap=_W["max_rating_gap"],
-                        chunk_games=_W["chunk_games"])
+                        chunk_games=_W["chunk_games"],
+                        event=event)
 
 
 # ── depth-tier seeding (from existing >=1800 frequency stats) ───────────────────
@@ -946,7 +1006,8 @@ def _write_empty(path: Path, schema: dict) -> None:
 
 
 _PS_BUCKET_SCHEMA = {
-    "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
+    "parent_hash": pl.Int64, "move_san": pl.Utf8, "event": pl.Utf8,
+    "elo_band": pl.Int64, "parent_epd": pl.Utf8,
     "child_hash": pl.Int64, "ply": pl.Int32, "white_wins": pl.Int64,
     "draws": pl.Int64, "black_wins": pl.Int64, "total": pl.Int64,
 }
@@ -1118,7 +1179,7 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
              "SUM(n)::BIGINT AS n, SUM(white_wins)::BIGINT AS white_wins, "
              "SUM(black_wins)::BIGINT AS black_wins")
     specs = {
-        "ps": ("parent_hash, move_san",
+        "ps": ("parent_hash, move_san, event, elo_band",
                "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
                "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
                "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
@@ -1301,7 +1362,7 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
             otmp = oout.with_suffix(".parquet.tmp")
             sql_group = f"""
                 CREATE TEMP TABLE g AS
-                SELECT parent_hash, move_san,
+                SELECT parent_hash, move_san, event, elo_band,
                        any_value(parent_epd)  AS parent_epd,
                        any_value(child_hash)  AS child_hash,
                        any_value(child_eval)  AS child_eval,
@@ -1311,10 +1372,11 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
                        SUM(black_wins)::BIGINT AS black_wins,
                        SUM(total)::BIGINT      AS total
                 FROM read_parquet('{_sql_path(pdir)}/month=*/bkt={i}/*.parquet')
-                GROUP BY parent_hash, move_san
+                GROUP BY parent_hash, move_san, event, elo_band
             """
             surv_sql = f"""
-                COPY (SELECT parent_hash, move_san, parent_epd, child_hash, ply,
+                COPY (SELECT parent_hash, move_san, event, elo_band,
+                             parent_epd, child_hash, ply,
                              white_wins, draws, black_wins, total
                       FROM g WHERE total >= {int(min_games)})
                 TO '{_sql_path(btmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
@@ -1375,9 +1437,10 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
     # 11,286 rows/s (88.6 µs/row, ~40 min on 27.4M rows) in the merge's serial tail.
     # _test_extract_child_hash.py is what holds the extract to the same answer.
     df = pl.read_parquet(agg_ckpt)
+    # event/elo_band are carried through from the extract now (they are part of
+    # the aggregation key), so nothing is stamped here. Re-adding a pl.lit for
+    # either would silently overwrite the real slice with the pooled sentinel.
     df = df.with_columns(
-        pl.lit(POOL_EVENT).alias("event"),
-        pl.lit(POOL_ELO, dtype=pl.Int64).alias("elo_band"),
         ((pl.col("white_wins") + 0.5 * pl.col("draws")) / pl.col("total")).alias("white_score_avg"),
     )
     out_tmp = out_path.with_suffix(".parquet.tmp")
@@ -1677,7 +1740,7 @@ def main() -> None:
                 continue
             tasks.append((str(f), str(ps_p), str(cr_p) if cr_p else None, str(tm_p),
                           {str(t): str(p) for t, p in wp_p.items()},
-                          args.limit_games))
+                          args.limit_games, ev))
         print(f"Extract: {len(files)} source files, {len(tasks)} to process, "
               f"{args.workers} workers\n", flush=True)
         t0 = time.time()

@@ -52,6 +52,10 @@ def check(ok: bool, label: str) -> None:
 
 
 def compare(a: Path, b: Path, keys: list[str], kind: str) -> None:
+    """`keys` must be the partial's FULL aggregation key, or the sort below is
+    not a total order and two identical frames can still compare unequal
+    row-for-row. It tracks _agg_ps / _agg_crush's group_by, so widening one
+    widens this."""
     da, db = pl.read_parquet(a), pl.read_parquet(b)
     if da.columns != db.columns:
         check(False, f"{kind}: column mismatch {da.columns} vs {db.columns}")
@@ -128,7 +132,8 @@ def main() -> None:
         print(f"\n  speedup: {b_el/o_el:.2f}x  ({100*(1-o_el/b_el):.0f}% faster)\n")
 
         compare(out["baseline"][0], out["optimized"][0],
-                ["parent_hash", "move_san"], "position-stats partial")
+                ["parent_hash", "move_san", "event", "elo_band"],
+                "position-stats partial")
         compare(out["baseline"][1], out["optimized"][1],
                 ["parent_hash", "move_san", "move_bucket"], "crush partial")
 
