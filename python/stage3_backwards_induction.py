@@ -211,6 +211,104 @@ def effective_eval_weight(ew_max: float, ew_min: float, k: float, n: int) -> flo
     return ew_min + (ew_max - ew_min) * k / (k + n)
 
 
+def aux_opp_mix(term_tot: float, term_sum: float,
+                oth_tot: float, oth_sum: float,
+                oth_eval: float, oth_cov: float,
+                hor_tot: float, hor_sum: float,
+                hor_eval: float | None,
+                eval_weight: float, eval_weight_min: float = 0.0,
+                eval_weight_k: float = 0.0,
+                horizon_mode: str = "empirical") -> tuple[float, float]:
+    """WHITE-SCORE (numerator, denominator) one position's aux buckets add to an
+    OPPONENT node's mean. Callers in other perspectives flip with `den - num`,
+    which is exact because the mix is linear in the bucket sums.
+
+    SHARED BY BOTH ENGINES (2026-09-04). Stage 3 and budget_core each grew their
+    own copy and they had drifted: the budget builder used the OTHER bucket's raw
+    empirical score while Stage 3 blended `other_eval_mean` at a coverage-weighted
+    eval weight. That is a difference in the objective being optimised, not in
+    budget allocation, so the four-arm comparison was partly measuring it. One
+    implementation, imported by both.
+
+    The three buckets are NOT interchangeable and are deliberately valued by
+    different rules:
+      term     the game ended here. A finished game's result is a fact, so it
+               enters at its empirical score with no engine opinion at all.
+      other    replies pruned under min_games. Their outcomes ARE observed but
+               their continuations are not, so the engine gets a say -- weighted
+               by n_eff = oth_tot * oth_cov, the eval-COVERED mass, because
+               `other_eval_mean` only describes the edges the eval DB knows.
+               Passing the whole bucket would claim the engine's opinion rests on
+               1/cov times the evidence it has, and would be most wrong on
+               exactly the thin lines this bucket exists to describe.
+      horizon  the extract's ply cap cut the game off. The OUTCOME is observed
+               and only the path is missing, so 'empirical' (the default) trusts
+               it; 'eval' substitutes the node's own engine score.
+
+    A NaN `oth_eval` means no eval-covered child, and must fall back to the
+    empirical mean rather than read as 0.0 (dead lost).
+    """
+    num = den = 0.0
+    if term_tot:
+        num += term_sum          # a finished game's result is a fact
+        den += term_tot
+    if oth_tot:
+        emp_o = oth_sum / oth_tot
+        if oth_eval == oth_eval and eval_weight > 0:      # not NaN
+            n_eff = oth_tot * oth_cov
+            w_o = effective_eval_weight(eval_weight, eval_weight_min,
+                                        eval_weight_k, n_eff)
+            v_o = (1.0 - w_o) * emp_o + w_o * oth_eval
+        else:
+            v_o = emp_o
+        num += v_o * oth_tot
+        den += oth_tot
+    if hor_tot:
+        if horizon_mode == "eval" and hor_eval is not None:
+            v_h = hor_eval
+        else:
+            v_h = hor_sum / hor_tot
+        num += v_h * hor_tot
+        den += hor_tot
+    return num, den
+
+
+def aux_our_blend(value: float, cont_mass: float, crack_mass: float,
+                  win_score: float) -> float:
+    """Fold opponent collapses BEFORE our move into an our-node's value.
+
+    `1.e4 e5 {Black resigns}` ends at a White-to-move position, so it lands on
+    one of OUR nodes. The node's value is otherwise purely prescriptive -- "what
+    our book gets from here" -- which is right for the games that continued, but
+    some fraction of arrivals never gave us a move to play at all. Those are ours.
+
+    Unit-agnostic: pass `win_score` in the caller's convention (1.0 for a White
+    book in white-score units, 0.0 for a Black one, always 1.0 for engines that
+    work in our-perspective units).
+
+    cont_mass IS THE WHOLE CONTINUING POPULATION, not just the surviving edges
+    (corrected 2026-09-04, found by external review). Stage 3 used to pass only
+    the sum of surviving outgoing edges, which omits games that continued through
+    below-floor OTHER moves and through the extract's horizon. Our policy
+    replaces those games' historical move choices, but it does not make them stop
+    arriving, so leaving them out shrinks the denominator and over-weights the
+    resignations -- worst precisely at thin nodes, where the surviving edges are
+    the smallest share of arrivals. With 100 surviving continuations, 900 OTHER
+    continuations and 100 collapses against a prepared value of 0.6, the old
+    denominator gave 0.8 where the arrival-weighted answer is
+    (1000*0.6 + 100)/1100 = 0.63636.
+
+    Non-crack terminations (our-node losses and draws) are deliberately NOT in
+    either term: a game we lost with us to move ABANDONED the book, and charging
+    the recipe for a resignation it never recommended would be worse than
+    dropping it. That is a modelling choice, and a stated one -- see the loader.
+    """
+    total = cont_mass + crack_mass
+    if crack_mass <= 0.0 or total <= 0.0:
+        return value
+    return (value * cont_mass + win_score * crack_mass) / total
+
+
 def opponent_error(
     opp_moves:    list[dict],
     eval_lookup:  dict[int, float] | None,
@@ -1489,12 +1587,19 @@ def run_backwards_induction(
             # value_worst is deliberately untouched: an opponent who resigns is not
             # playing best defence, so worst-case must not improve because of it.
             if _aux:
-                crack = aux_crack[idx[ph]]
+                i_ph = idx[ph]
+                crack = aux_crack[i_ph]
                 if crack:
-                    cont = sum(mv["total"] for mv in mvs)
+                    # THE WHOLE CONTINUING POPULATION, not just the surviving
+                    # edges. Games that continued through a below-floor OTHER
+                    # move, or that the extract's horizon cut off, still arrived
+                    # here and would still have got our book move. Omitting them
+                    # shrank the denominator and over-weighted the collapses,
+                    # worst at thin nodes. See aux_our_blend.
+                    cont = (sum(mv["total"] for mv in mvs)
+                            + float(aux_oth_tot[i_ph]) + float(aux_hor_tot[i_ph]))
                     win = 1.0 if our_color == chess.WHITE else 0.0
-                    if cont + crack:
-                        values[ph] = (values[ph] * cont + win * crack) / (cont + crack)
+                    values[ph] = aux_our_blend(values[ph], cont, crack, win)
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
             best_aug[ph]      = b.get("aug", False)
@@ -1537,41 +1642,22 @@ def run_backwards_induction(
             # all contribute nothing — and the first of those is not noise:
             # measured, the side to move scores 0.0953 at a terminal node, so
             # excluding them deletes precisely the opponent's collapses.
+            # The bucket-by-bucket rules live in aux_opp_mix, which budget_core
+            # imports so both engines value this mass identically. They had
+            # drifted apart (the budget builder read the OTHER bucket raw, with
+            # no other_eval_mean blend), which is a difference in the OBJECTIVE
+            # and not in budget allocation.
             aux_num = aux_den = 0.0
             if _aux:
                 i_ph = idx[ph]
-                t_tot = aux_term_tot[i_ph]
-                if t_tot:
-                    aux_num += aux_term_sum[i_ph]      # a finished game's result
-                    aux_den += t_tot                   # is a fact, not an estimate
-                o_tot = aux_oth_tot[i_ph]
-                if o_tot:
-                    emp_o = aux_oth_sum[i_ph] / o_tot
-                    ev_o = aux_oth_eval[i_ph]
-                    if ev_o == ev_o and eval_weight > 0:      # not NaN
-                        # Sample size for the eval's trust is the COVERED mass, not
-                        # the whole bucket: other_eval_mean describes only the edges
-                        # the eval DB actually knows. Passing o_tot would claim the
-                        # engine's opinion rests on 1/cov times the evidence it has,
-                        # and it would be most wrong exactly on the thin, poorly
-                        # covered lines this bucket exists to describe.
-                        n_eff = o_tot * aux_oth_cov[i_ph]
-                        w_o = effective_eval_weight(eval_weight, eval_weight_min,
-                                                    eval_weight_k, n_eff)
-                        v_o = (1.0 - w_o) * emp_o + w_o * ev_o
-                    else:
-                        v_o = emp_o
-                    aux_num += v_o * o_tot
-                    aux_den += o_tot
-                h_tot = aux_hor_tot[i_ph]
-                if h_tot:
-                    if aux_horizon == "eval":
-                        hv = eval_lookup.get(ph) if eval_lookup else None
-                        v_h = hv if hv is not None else aux_hor_sum[i_ph] / h_tot
-                    else:
-                        v_h = aux_hor_sum[i_ph] / h_tot
-                    aux_num += v_h * h_tot
-                    aux_den += h_tot
+                aux_num, aux_den = aux_opp_mix(
+                    aux_term_tot[i_ph], aux_term_sum[i_ph],
+                    aux_oth_tot[i_ph], aux_oth_sum[i_ph],
+                    aux_oth_eval[i_ph], aux_oth_cov[i_ph],
+                    aux_hor_tot[i_ph], aux_hor_sum[i_ph],
+                    (eval_lookup.get(ph) if eval_lookup else None),
+                    eval_weight, eval_weight_min, eval_weight_k,
+                    aux_horizon)
                 if aux_den:
                     base = values[ph] * total if total else slice_prior * 0.0
                     denom = total + aux_den

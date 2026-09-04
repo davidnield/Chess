@@ -24,10 +24,31 @@ sorted by density (gain/cost) non-increasing — a concave step hull. The
 our-node max CONVEXIFIES adjacent increasing-density increments into single
 atoms: that merge IS chain compression — a trap prefix (tiny gains) fuses with
 its payoff step into one cost-k atom whose density is the trap's true amortized
-rate. The opponent-node allocation is then a greedy density merge, which is the
-exact sup-convolution for concave inputs (classic exchange argument); the
-duality gap is localized to at most one straddling atom per node and is
-measured, not assumed (--exact-alloc in the CLI, T3/T7 tests).
+rate. The opponent-node allocation is then a greedy density merge.
+
+THE GREEDY MERGE IS NOT EXACT ONCE ANYTHING HAS FUSED (corrected 2026-09-04).
+The exchange argument this module used to cite holds for DIVISIBLE concave
+resources, and for discrete concavity with UNIT marginal increments — not for
+the indivisible cost-k packages convexification produces. Counterexample, two
+opponent children at p=0.5 carrying one atom each:
+
+    A: cost 2, gain 0.6  ->  weighted density 0.30/2 = 0.150
+    B: cost 3, gain 0.8  ->  weighted density 0.40/3 = 0.133
+    at budget 3:  greedy buys A, then cannot afford B  -> 0.30
+                  the exact allocation buys B alone    -> 0.40
+
+The earlier claim ("gap localized to at most one straddling atom, measured not
+assumed") was therefore wrong twice: the gap is not confined to a straddle, and
+it was never measured — `--exact-alloc` is named here but no parser exposes it.
+`exact_opp_curve` does implement the exact max-plus convolution, reachable from
+tests only, and it is exact ONLY over the child curves handed to it: it cannot
+recover a policy an earlier hull already lost.
+
+Consequence for the measured fusion gap (7.2% of random-DAG instances carrying a
+fused atom are suboptimal, worst +0.114, against 0.0% of instances with none):
+fusion is the TRIGGER, but two mechanisms fire together — the hull under-states
+value AND the packages stop being divisible. Retaining the pre-fusion point set
+addresses only the first, so it is not on its own a fix.
 
 PERSPECTIVE CONVENTION
 ----------------------
@@ -62,6 +83,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent))
 
 from stage3_backwards_induction import (  # noqa: E402  (path insert above)
+    aux_opp_mix,
+    aux_our_blend,
     cp_to_expected_score,
     effective_eval_weight,
     forcingness,
@@ -246,6 +269,51 @@ def leaf_node_value(edges_ws_total: list[tuple[float, int]],
     return leaf_edge_value(ws, tot, own_eval_ws, slice_prior, our_white,
                            prior_strength, eval_weight, eval_weight_min,
                            eval_weight_k)
+
+
+def aux_row_buckets(aux: dict | None, our_white: bool,
+                    term_flags: bool = True
+                    ) -> tuple[float, float, float, float, float,
+                               float, float, float, float]:
+    """Adapt ONE aux sidecar row into the aggregates the shared valuation takes.
+
+    Stage 3 scatters these into parallel numpy arrays at load; the budget builder
+    keeps the raw parquet row. Only the SHAPE differs, so only the shape is
+    adapted here -- the rules themselves are aux_opp_mix / aux_our_blend, both
+    imported from stage3, so the two engines cannot drift apart again.
+
+    Returns, in WHITE-SCORE units:
+        (term_tot, term_sum, crack, oth_tot, oth_sum, oth_eval, oth_cov,
+         hor_tot, hor_sum)
+    `crack` is a MASS, not a score: the games at an our-turn node where OUR side
+    won, i.e. the opponent resigned or was mated before we got to move. Draws are
+    excluded deliberately -- a draw with us to move is usually one we agreed to,
+    which is a deviation, and the data cannot separate that from stalemate or
+    repetition (stage3's loader carries the same note).
+
+    A missing `other_eval_mean` becomes NaN, the sentinel aux_opp_mix tests for;
+    reading it as 0.0 would assert "dead lost" on exactly the thin lines the
+    bucket exists to describe.
+    """
+    if not aux:
+        return (0.0, 0.0, 0.0, 0.0, 0.0, float("nan"), 0.0, 0.0, 0.0)
+
+    def g(name: str) -> float:
+        return float(aux.get(name) or 0.0)
+
+    groups = ["term_normal", "term_other"] + (["term_flag"] if term_flags else [])
+    term_tot = sum(g(f"{x}_total") for x in groups)
+    term_sum = sum(g(f"{x}_white_wins") + 0.5 * g(f"{x}_draws") for x in groups)
+    crack_col = "white_wins" if our_white else "black_wins"
+    crack = sum(g(f"{x}_{crack_col}") for x in groups)
+    oe = aux.get("other_eval_mean")
+    return (term_tot, term_sum, crack,
+            g("other_total"),
+            g("other_white_wins") + 0.5 * g("other_draws"),
+            float("nan") if oe is None else float(oe),
+            g("other_eval_cov"),
+            g("horizon_total"),
+            g("horizon_white_wins") + 0.5 * g("horizon_draws"))
 
 
 # ── gates (reimplemented; production-parity pinned by _test_budget_oracle) ──
@@ -450,6 +518,18 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             ln = leaf_node_value(lst, eval_ws.get(h), slice_prior, our_white,
                                  prior_strength, eval_weight,
                                  eval_weight_min, eval_weight_k)
+            # Opponent collapses BEFORE our move land on OUR nodes, so the aux
+            # row here is not empty -- and it used to go entirely unread, valuing
+            # "stop and wing it" purely on the games that gave us a move. Stage 3
+            # has always blended them; the two engines therefore optimised
+            # different objectives, which a four-arm comparison would read as a
+            # budget effect. Same rule, same function, both sides.
+            if aux_rows:
+                (_tt, _ts, crack, _ot, _os, _oe, _oc,
+                 _ht, _hs) = aux_row_buckets(aux_rows.get(h), our_white)
+                if crack:
+                    cont = (sum(e["total"] for e in es) + _ot + _ht)
+                    ln = aux_our_blend(ln, cont, crack, 1.0)
             node = OurNode(l_node=ln)
             # gate the recorded candidates; always admit the source move
             src = rep_moves.get(h)
@@ -559,23 +639,26 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             g.our[h] = node
         else:
             tot = sum(e["total"] for e in es)
-            aux = aux_rows.get(h)
+            # The OTHER bucket used to enter raw here while Stage 3 blended
+            # other_eval_mean into it at a coverage-weighted eval weight -- the
+            # second half of the objective drift. aux_opp_mix owns all three
+            # bucket rules now.
+            #
+            # horizon_mode is left at stage3's default ('empirical': a horizon
+            # game's OUTCOME is observed, only its path is missing). The locked
+            # recipe does not override it; a source build that passed
+            # --aux-horizon eval would need it mirrored from meta here.
             aux_num = aux_den = 0.0
-            if aux:
-                for grp in ("term_normal", "term_other", "term_flag"):
-                    t = aux.get(f"{grp}_total", 0) or 0
-                    if t:
-                        s = (aux.get(f"{grp}_white_wins", 0) or 0) + \
-                            0.5 * (aux.get(f"{grp}_draws", 0) or 0)
-                        aux_num += s if our_white else t - s
-                        aux_den += t
-                for grp in ("other", "horizon"):
-                    t = aux.get(f"{grp}_total", 0) or 0
-                    if t:
-                        s = (aux.get(f"{grp}_white_wins", 0) or 0) + \
-                            0.5 * (aux.get(f"{grp}_draws", 0) or 0)
-                        aux_num += s if our_white else t - s
-                        aux_den += t
+            if aux_rows:
+                (t_tot, t_sum, _crack, o_tot, o_sum, o_eval, o_cov,
+                 hr_tot, hr_sum) = aux_row_buckets(aux_rows.get(h), our_white)
+                w_num, aux_den = aux_opp_mix(
+                    t_tot, t_sum, o_tot, o_sum, o_eval, o_cov,
+                    hr_tot, hr_sum, eval_ws.get(h),
+                    eval_weight, eval_weight_min, eval_weight_k)
+                # One flip to our-perspective. Exact because the mix is linear in
+                # the bucket sums, so the our-score numerator is den - num.
+                aux_num = w_num if our_white else aux_den - w_num
             denom = tot + aux_den
             node = OppNode(const_base=(aux_num / denom) if denom else 0.0)
             for e in es:

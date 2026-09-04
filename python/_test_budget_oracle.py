@@ -36,6 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import chess
+import polars as pl
 
 from budget_core import (
     Graph, OppNode, OurNode, build_curves, build_graph, extract_book,
@@ -253,6 +254,87 @@ v_s3 = vals.get(sh)
 check("root value reconciles with stage3 (matched knobs, tight)",
       v_dp is not None and v_s3 is not None and abs(v_dp - v_s3) < 1e-9,
       f"dp={v_dp} stage3={v_s3}")
+
+# -- D7 WITH AUX: the objective must survive the sidecar (2026-09-04) -------
+# Found by external review. The reconciliation above only held because the
+# fixture had no aux mass. The two engines read the sidecar differently:
+#   * at an OUR node budget_core never read the row at all, so "stop and wing
+#     it" ignored the games where the opponent resigned before we moved --
+#     stage3 has always blended those in;
+#   * at an OPPONENT node budget_core used the OTHER bucket's raw empirical
+#     score while stage3 blended other_eval_mean at a coverage-weighted eval
+#     weight.
+# Both are differences in the OBJECTIVE BEING OPTIMISED, not in budget
+# allocation, so the four-arm comparison would have booked them as a budget
+# effect. Same fixture, same knobs, now with mass in every bucket -- if either
+# engine reads a bucket the other does not, the root values separate.
+AUX_GROUPS = ("term_normal", "term_flag", "term_other", "horizon")
+AUX_SCHEMA = {
+    "position_hash": pl.Int64,
+    **{f"{g}_{c}": pl.Int64 for g in AUX_GROUPS
+       for c in ("total", "white_wins", "draws", "black_wins")},
+    "other_total": pl.Int64, "other_white_wins": pl.Int64,
+    "other_draws": pl.Int64, "other_black_wins": pl.Int64,
+    "other_edges": pl.Int32, "other_eval_mean": pl.Float64,
+    "other_eval_min": pl.Float64, "other_eval_max": pl.Float64,
+    "other_eval_cov": pl.Float64,
+}
+
+
+def aux_row(position_hash: int, **kw) -> dict:
+    r = {"position_hash": position_hash}
+    for g in AUX_GROUPS:
+        for c in ("total", "white_wins", "draws", "black_wins"):
+            r[f"{g}_{c}"] = 0
+    r.update({"other_total": 0, "other_white_wins": 0, "other_draws": 0,
+              "other_black_wins": 0, "other_edges": 0, "other_eval_mean": None,
+              "other_eval_min": None, "other_eval_max": None,
+              "other_eval_cov": 0.0})
+    r.update(kw)
+    return r
+
+
+# Root (OUR node): opponent collapses before we moved, plus below-floor OTHER
+# continuations that belong in the blend's denominator.
+# After 1.e4 (OPPONENT node): every bucket, with an other_eval_mean far from the
+# bucket's own empirical mean so a missing blend cannot hide in rounding.
+aux_list = [
+    aux_row(sh, term_normal_total=600, term_normal_white_wins=600,
+            other_total=1500, other_white_wins=750, other_black_wins=750),
+    aux_row(oh, term_normal_total=400, term_normal_white_wins=250,
+            term_normal_black_wins=150,
+            term_flag_total=100, term_flag_white_wins=60,
+            term_flag_black_wins=40,
+            other_total=2000, other_white_wins=1000, other_black_wins=1000,
+            other_edges=7, other_eval_mean=0.20, other_eval_cov=0.75,
+            horizon_total=300, horizon_white_wins=150, horizon_black_wins=150),
+]
+aux_df = pl.DataFrame(aux_list, schema=AUX_SCHEMA)
+aux_rows = {r["position_hash"]: r for r in aux_list}
+
+vals_a, bm_a, *_ = run_backwards_induction(
+    edges, "white", prior_strength=0.0, min_move_games=0, eval_weight=1.0,
+    require_eval=True, eval_lookup=eval_ws, robustness_floor=0.1,
+    gate_metric="eval", gate_rel_floor=0.1, gate_rel_baseline="own-eval",
+    gate_rel_own_margin=0.02, aux=aux_df)
+policy_a = {h: bm_a.get(h) for h in our_hashes if bm_a.get(h)}
+
+g_aux = build_graph(by_parent, sh, True, rep_moves=policy_a, eval_ws=eval_ws,
+                    aux_rows=aux_rows, slice_prior=0.5, eps=1e-6, max_ply=10,
+                    share_floor=0.0, prior_strength=0.0, eval_weight=1.0,
+                    robustness_floor=0.1, gate_rel_floor=0.1,
+                    gate_rel_own_margin=0.02)
+cur_aux, _ = build_curves(g_aux, bmax=20, fixed_policy=policy_a)
+r_aux = extract_book(g_aux, cur_aux, 20, fixed_policy=policy_a)
+va_dp, va_s3 = r_aux["root_value_realized"], vals_a.get(sh)
+check("root value reconciles with stage3 WITH aux mass in every bucket",
+      va_dp is not None and va_s3 is not None and abs(va_dp - va_s3) < 1e-9,
+      f"dp={va_dp} stage3={va_s3}")
+# ...and the aux actually moved something, or the check above is vacuous.
+check("the aux fixture is not inert (it moves the root value)",
+      va_s3 is not None and v_s3 is not None and abs(va_s3 - v_s3) > 1e-6,
+      f"with aux {va_s3}, without {v_s3}")
+
 
 # -- candidate cap (default-on; measured 10x subgraph reduction) ------------
 # Four candidates at one node; cap 2 must keep the SOURCE move (even though its
