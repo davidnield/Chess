@@ -387,11 +387,44 @@ def main() -> int:
 
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     log("building curves...")
-    curves, diag = bc.build_curves(g, bmax=curve_bmax, k_atoms=a.grid_cap,
+    curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap,
                                    fixed_policy=fixed)
-    cap = curves[g.root].capacity if g.root in curves else 0
-    log(f"  root capacity {cap:,} (path-sum); stranded cycle nodes "
-        f"{diag['stranded_cycle_nodes']:,}  ({time.time()-t0:,.0f}s)")
+    log(f"  stranded cycle nodes {diag['stranded_cycle_nodes']:,}  "
+        f"({time.time()-t0:,.0f}s)")
+
+    # SECOND curve set, for --match-distinct probes ONLY.
+    #
+    # curve_bmax used to be the single build cap, which made the flag change
+    # answers at budgets far BELOW it and broke its own no-op contract
+    # (2026-08-31: dp_black_b2 went 9 -> 24 rows with charged=2, i.e. via the
+    # early exit, having never probed). _node_curve truncates its point set at
+    # `b > bmax` and only then takes a CONCAVE MAJORANT, and a hull is global:
+    # admitting one far high point makes the merge cascade fuse every increment
+    # before it into one expensive atom, which the extraction cannot buy at all.
+    # Demonstrated on the pure functions in scratch/python/match_distinct_repro.py
+    # -- 14 unit atoms collapse to a single cost-24 atom and every budget 1..20
+    # drops to base.
+    #
+    # Inflating can only ever coarsen a hull, so it is weakly HARMFUL below the
+    # cap and must not be imposed on books that never needed the headroom. Keep
+    # the plain curves authoritative -- extraction at the requested budget is
+    # then bit-identical with and without the flag, which is what the
+    # verification asserts -- and reach for the inflated set only when the
+    # search genuinely has to probe higher, where the book differs anyway.
+    probe_curves = None
+    if a.match_distinct and curve_bmax > bmax:
+        log(f"building probe curves (bmax {curve_bmax}) for --match-distinct...")
+        probe_curves, _ = bc.build_curves(g, bmax=curve_bmax,
+                                          k_atoms=a.grid_cap,
+                                          fixed_policy=fixed)
+        log(f"  probe curves ready  ({time.time()-t0:,.0f}s)")
+
+    # Diagnostics read the WIDEST set: both are trimmed at their own bmax, so
+    # taking capacity or a value-at-charged off the plain curves would silently
+    # report the cap rather than the quantity.
+    widest = probe_curves if probe_curves is not None else curves
+    cap = widest[g.root].capacity if g.root in widest else 0
+    log(f"  root capacity {cap:,} (path-sum)")
 
     for b in budgets:
         out = outs[b]
@@ -414,11 +447,19 @@ def main() -> int:
                                   force_booked=booked)
             charged, matched = b, res["spent_distinct"] >= b
         elif a.match_distinct:
-            res, charged, matched = bc.match_distinct(g, curves, b, curve_bmax,
-                                                      fixed_policy=fixed)
+            res, charged, matched, spent = bc.match_distinct(
+                g, curves, b, curve_bmax, fixed_policy=fixed,
+                probe_curves=probe_curves)
+            # matched is `spent >= b`; the equal-footprint comparison needs
+            # `spent == b`, and the two came apart in the wild (fixdp_white_b20
+            # booked 21 for a target of 20 and reported success). Say which.
+            exact = spent == b
             log(f"  match-distinct b={b}: charged {charged} for "
-                f"{res['spent_distinct']} distinct"
-                + ("" if matched else "  (TARGET NOT REACHED — capacity)"))
+                f"{spent} distinct"
+                + ("" if matched else "  (TARGET NOT REACHED — capacity)")
+                + ("" if exact or not matched
+                   else f"  (OVERSHOT by {spent - b}: the distinct count skips "
+                        f"{b}; footprint audits at tol 0 will reject this)"))
         else:
             res = bc.extract_book(g, curves, b, fixed_policy=fixed)
             charged, matched = b, res["spent_distinct"] >= b
@@ -465,9 +506,14 @@ def main() -> int:
             "share_floor": a.share_floor, "grid_cap": a.grid_cap,
             "match_distinct": bool(a.match_distinct),
             "budget_charged": charged,
+            # target_met is `spent >= budget`; exact is `spent == budget`. Only
+            # the latter licenses an equal-footprint comparison, and they came
+            # apart in the wild -- fixdp_white_b20 booked 21 for a target of 20
+            # and recorded target_met=True, which a reader would take as matched.
             "distinct_target_met": bool(matched),
-            "root_value_curve": None if g.root not in curves
-            else curves[g.root].eval(charged),
+            "distinct_exact": bool(res["spent_distinct"] == b),
+            "root_value_curve": None if g.root not in widest
+            else widest[g.root].eval(charged),
             "root_value_realized": res["root_value_realized"],
             "root_capacity_paths": cap,
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],

@@ -155,15 +155,15 @@ check("a cycle through the root does not empty the book",
 # The diamond at the top of this file is the minimal case: 2 path-charged units
 # buy 2 distinct decisions (root + T), and T is charged twice, so asking for 3
 # distinct must charge more than 3.
-from budget_core import match_distinct                          # noqa: E402
+from budget_core import flat_curve, match_distinct              # noqa: E402
 
-r2, ch2, ok2 = match_distinct(g, curves, 2, 10)
+r2, ch2, ok2, sp2 = match_distinct(g, curves, 2, 10)
 check("match_distinct is a no-op when the plain budget already suffices",
       ok2 and ch2 == 2 and r2["spent_distinct"] == 2,
       f"charged {ch2}, booked {r2['spent_distinct']}, ok={ok2}")
 
 # a target the graph cannot reach: only 2 our-nodes exist at all
-r9, ch9, ok9 = match_distinct(g, curves, 9, 10)
+r9, ch9, ok9, sp9 = match_distinct(g, curves, 9, 10)
 check("match_distinct reports failure rather than looping when capacity is short",
       ok9 is False and r9["spent_distinct"] < 9,
       f"charged {ch9}, booked {r9['spent_distinct']}, ok={ok9}")
@@ -171,10 +171,37 @@ check("failed match still returns a usable book", r9["spent_distinct"] >= 1,
       f"booked {r9['spent_distinct']}")
 
 # on the cycle fixture the search must still terminate and stay consistent
-rc, chc, okc = match_distinct(gcyc, ccur, 2, 10)
+rc, chc, okc, spc = match_distinct(gcyc, ccur, 2, 10)
 check("match_distinct terminates on a graph with cycles",
       rc["spent_distinct"] >= 1 and chc >= 2,
       f"charged {chc}, booked {rc['spent_distinct']}, ok={okc}")
+
+# --- the returned spend, and the no-op contract (2026-08-31) --------------
+# The flag broke its own contract by changing books it never probed: a single
+# INFLATED curve set served both the target extraction and the probes, and a
+# concave hull is global, so far points fused the cheap early atoms away.
+# Pin the two properties that failure needs.
+check("match_distinct returns the realised distinct count",
+      sp2 == r2["spent_distinct"] and sp9 == r9["spent_distinct"]
+      and spc == rc["spent_distinct"],
+      f"returned {sp2}/{sp9}/{spc}")
+
+# hit_target is `>= target`; only `== target` licenses an equal-footprint
+# claim. fixdp_white_b20 booked 21 for a target of 20 and reported success.
+check("hit_target is the >= test, so callers must check == for equal footprint",
+      ok2 is (sp2 >= 2) and ok9 is (sp9 >= 9),
+      f"ok2={ok2} sp2={sp2}; ok9={ok9} sp9={sp9}")
+
+# The target extraction must read the PLAIN curves, so passing probe_curves
+# cannot disturb a book that never probes. Hand it a deliberately different
+# set: if the early exit ever consulted it, the result would move.
+_wrong = {h: c for h, c in curves.items()}
+_wrong[g.root] = flat_curve(-99.0)
+rp, chp, okp, spp = match_distinct(g, curves, 2, 10, probe_curves=_wrong)
+check("probe curves cannot touch a book that meets its target unprobed",
+      chp == ch2 and spp == sp2 and okp == ok2
+      and rp["booked"] == r2["booked"],
+      f"charged {chp} vs {ch2}, booked {spp} vs {sp2}")
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

@@ -879,8 +879,9 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
 # ── extraction ──────────────────────────────────────────────────────────────
 
 def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
-                   bmax: int, fixed_policy: dict[int, str] | None = None
-                   ) -> tuple[dict, int, bool]:
+                   bmax: int, fixed_policy: dict[int, str] | None = None,
+                   probe_curves: dict[int, Curve] | None = None
+                   ) -> tuple[dict, int, bool, int]:
     """Extract a book holding at least `target` DISTINCT decisions.
 
     The curves charge a transposed position once per PATH that reaches it while
@@ -892,39 +893,60 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
 
     So search for the smallest path-charged budget whose extraction books
     `target` distinct decisions: grow geometrically to bracket it, then bisect.
-    Returns (result, charged_budget, hit_target). Each probe is an extract_book
-    over curves that are already built, so this costs extractions, not a rebuild.
+    Each probe is an extract_book over curves that are already built, so this
+    costs extractions, not a rebuild.
 
-    Distinct spend is empirically monotone in the charged budget (20->17,
-    21->18, 22->19, 23->20, 24->21 on the white pool) but that is NOT proven --
-    the allocator may reshuffle -- so the caller gets the realised count and
-    hit_target rather than a promise.
+    TWO CURVE SETS, AND WHY. `curves` must be built to the caller's PLAIN bmax
+    and is what the target extraction uses, so a book that already meets its
+    target comes back bit-identical to the same build without this flag -- the
+    no-op contract. `probe_curves` (built to a larger bmax) is consulted ONLY
+    for probes above the target, which need budgets the plain curves cannot
+    express. Before 2026-08-31 a single inflated set served both and the flag
+    silently changed books it never probed: a hull is global, so admitting far
+    points fuses the cheap early atoms away (see the module note on
+    curve_from_points and scratch/python/match_distinct_repro.py). Passing no
+    probe_curves confines the search to the plain set's range.
+
+    Returns (result, charged_budget, hit_target, spent_distinct). hit_target is
+    `spent >= target`; compare `spent == target` for an EQUAL-FOOTPRINT claim,
+    which is why the realised count is returned rather than left to be re-derived
+    -- fixdp_white_b20 booked 21 for a target of 20 and reported success.
+
+    Distinct spend is NOT monotone in the charged budget. It usually steps by
+    one (20->17, 21->18, 22->19, 23->20 on the white pool) but the allocator can
+    reshuffle: the same b20 run bracketed 30 and 32 while 31 booked FEWER than
+    20. Bisection therefore returns a smallest-KNOWN-good budget, not a proven
+    minimum, and can overshoot the target when the count skips it.
     """
     res = extract_book(g, curves, target, fixed_policy=fixed_policy)
     if res["spent_distinct"] >= target or target >= bmax:
-        return res, target, res["spent_distinct"] >= target
+        return (res, target, res["spent_distinct"] >= target,
+                res["spent_distinct"])
+
+    # Probes only, and only above the target -- see the docstring.
+    pc = probe_curves if probe_curves is not None else curves
 
     lo, best_lo = target, res           # books < target
     hi, best_hi = -1, None              # books >= target
     probe = target
     while probe < bmax:
         probe = min(bmax, max(probe + 1, int(probe * 1.5)))
-        r = extract_book(g, curves, probe, fixed_policy=fixed_policy)
+        r = extract_book(g, pc, probe, fixed_policy=fixed_policy)
         if r["spent_distinct"] >= target:
             hi, best_hi = probe, r
             break
         lo, best_lo = probe, r
     if best_hi is None:                 # capacity cannot reach the target
-        return best_lo, lo, False
+        return best_lo, lo, False, best_lo["spent_distinct"]
 
     while hi - lo > 1:
         mid = (lo + hi) // 2
-        r = extract_book(g, curves, mid, fixed_policy=fixed_policy)
+        r = extract_book(g, pc, mid, fixed_policy=fixed_policy)
         if r["spent_distinct"] >= target:
             hi, best_hi = mid, r
         else:
             lo = mid
-    return best_hi, hi, True
+    return best_hi, hi, True, best_hi["spent_distinct"]
 
 
 def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
