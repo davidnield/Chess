@@ -241,6 +241,33 @@ def main() -> int:
     check(r == BOOK_END and p and p[-1] == hash_after(["e4", "e5"]),
           "--max-ply exit bins the parent (its node is never added to the path)")
 
+    # --- game_end ply/termination split (2026-08-31) ------------------
+    # game_end holds two populations that must not be summed: the ply<=2 clock
+    # slice (parity, not play) and the deeper resignations and mates (the crush
+    # payoff, ~0.82 on the sweep). Pin that the exit ply the split keys on is
+    # the one the walk reports, at the boundary in both directions.
+    from replay_holdout import ABANDON_PLY, TERM_MAP, CLOCK, NORMAL, OTHER
+
+    check(ABANDON_PLY == 2,
+          f"the abandonment cut is ply<=2, where 53.1% end on the clock "
+          f"(got {ABANDON_PLY})")
+    check(TERM_MAP.get("Time forfeit") == CLOCK
+          and TERM_MAP.get("Normal") == NORMAL,
+          "Lichess termination strings map to the clock/normal classes")
+    check(TERM_MAP.get("Abandoned", OTHER) == OTHER
+          and TERM_MAP.get("Unterminated", OTHER) == OTHER,
+          "unrecognized terminations fall through to 'other', never to 'normal'")
+
+    # 1.e4 e5 with White to move and no book move there: a BUDGET exit at ply 2,
+    # so it sits on the shallow side of the cut.
+    r, ply, _v, _p = run("1. e4 e5", m2, values)
+    check(ply <= ABANDON_PLY,
+          f"a two-ply exit is classed shallow (ply {ply} <= {ABANDON_PLY})")
+    # The full book line ends at ply 5 -- deep side, must be kept.
+    r, ply, _v, _p = run("1. e4 e5 2. Nf3 Nc6 3. Bb5", moves, values)
+    check(r == GAME_END and ply > ABANDON_PLY,
+          f"a five-ply game_end is classed deep and KEPT (ply {ply})")
+
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print()
     print(f"{'ALL PASS' if not n_fail else f'{n_fail} FAILED'} ({len(_checks)} checks)")

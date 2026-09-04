@@ -41,6 +41,42 @@ Four ways a walk ends, and they mean completely different things:
 Conflating the last three is precisely what --reply-shrink's help text warns
 about, so they are counted separately and never summed into one "coverage".
 
+game_end IS PART SIGNAL AND PART CLOCK -- SPLIT IT, DO NOT DROP IT
+------------------------------------------------------------------
+A first pass at the sweep read treated the whole game_end population as
+non-evidence and excluded it from the realized-score comparison. That is wrong
+and it biases against exactly the books this project is trying to build.
+Resigning or being mated inside the book is a real chess result, and forcing it
+early is the entire point of the crush term.
+
+Measured on 7.56M 2025 games at >=1800, with no book involved:
+
+    ply 1-2    53.1% ended on the clock, mean score 0.3576
+    ply 3-4    29.6%                                0.5535
+    ply 5-8    17.4%                                0.5398
+    ply 9-16    9.3%                                0.5423
+
+Only the first bucket is majority-clock; from ply 3 on the population is
+resignations and mates scoring at or above the 0.5188 pool. But ply 1-2 is 0.14%
+of all games and ~58% of game_end exits, because a game can only end in-book if
+it ends early -- and its sign is fixed by PARITY, not play: an abandonment
+before White's first move is a White loss and a Black win regardless of the
+position. That is why the same games give White's game_end 0.408 and Black's
+0.591, and it is the whole apparent colour gap in the sweep.
+
+Backing it out of baseline_white: 132,397 game_end exits average 0.408, and if
+58% sit at ply <= 2 scoring 0.113, the remaining 42% average 0.817 -- the
+highest-scoring population in the replay. Dropping game_end deletes it. Measured
+on the sweep, c0.4_black (the highest crush setting) beats baseline by +0.028 on
+raw delta with its ENTIRE advantage inside game_end (0.680 vs 0.591, half a move
+deeper) while its game_end-excluded delta sits BELOW baseline.
+
+So the exits are split by ply and by Lichess's `termination`, and two adjusted
+deltas are printed that drop only the shallow clock slice. Neither raw nor
+adjusted is a clean ranking statistic on its own -- raw carries the artifact,
+whose direction differs by colour -- which is why the split is reported rather
+than one number being chosen for the reader.
+
 CALIBRATION IS PER EXIT REASON, AND game_end IS NOT EVIDENCE
 -----------------------------------------------------------
 Binning every faithful exit into one calibration table measures game
@@ -123,7 +159,28 @@ from zobrist import IncrementalZobrist, zobrist_int64
 
 EVENTS = ["Blitz", "Rapid", "Classical"]
 SRC_COLUMNS = ["movetext", "white_score", "mean_elo"]
+# Read only where the partition has it; older partitions may not. Absent =>
+# every exit is classed UNKNOWN and the adjusted deltas are suppressed rather
+# than silently computed off a wrong denominator.
+TERM_COLUMN = "termination"
 READ_BATCH_GAMES = 50_000
+
+# How the GAME ended. Only meaningful for a game_end exit, where the exit IS the
+# game ending; for a coverage or budget exit the game ran on past us and this
+# describes something later, so it is reported but never used to adjust.
+CLOCK, NORMAL, OTHER, UNKNOWN = "clock", "normal", "other", "unknown"
+TERM_CLASSES = (NORMAL, CLOCK, OTHER, UNKNOWN)
+# Lichess writes "Time forfeit" for a flag and "Normal" for resignation, mate,
+# stalemate and agreed draws -- it does NOT separate resignation from mate.
+TERM_MAP = {"Time forfeit": CLOCK, "Normal": NORMAL}
+# The ply at or below which a game_end exit stops being about the opening.
+# Measured on 7.56M 2025 games: 53.1% of ply 1-2 endings are clock forfeits
+# (against 9-17% at ply 5-16), and their sign is fixed by parity rather than by
+# play -- an abandonment before White's first move is a White loss and a Black
+# win whatever the position. From ply 3 on the population is dominated by
+# resignations and mates scoring at or above pool, which are real results and
+# are exactly what a sharp repertoire is built to force.
+ABANDON_PLY = 2
 
 DEVIATION, OUT_OF_BOOK, BOOK_END, GAME_END, PARSE_ERROR = (
     "our_deviation", "opp_out_of_book", "book_end", "game_end", "parse_error")
@@ -174,6 +231,13 @@ class Book:
         # Keyed on path[-1], not on the exit node: a coverage exit leaves the
         # book by definition, so the exit node has no value to bin.
         self.depth_v: list[tuple[float, float, str]] = []
+        # (reason, shallow?, termination class) -> [games, score sum]. Splits
+        # every faithful exit finely enough to separate the ply<=2 clock slice
+        # -- which is parity, not play -- from the resignations and mates, which
+        # are the crush payoff. Excluding all of game_end deletes the second
+        # along with the first and penalises the sharpest books hardest.
+        self.exit_split: dict[tuple[str, bool, str], list] = defaultdict(
+            lambda: [0, 0.0])
 
 
 def _exit_reason(ply: int, our_turn_now: bool) -> str:
@@ -256,6 +320,58 @@ def walk_game(movetext: str, perspective: str, moves: dict, values: dict,
     return r, ply, v
 
 
+def _report_exit_split(b: Book, base: float, nf: int, fs: float) -> None:
+    """The game_end breakdown, and the deltas that drop only the noise.
+
+    Two cuts are printed because the choice is a judgement, not a fact:
+      adj(clock)  drops ply<=2 game_end exits that ended ON THE CLOCK -- the
+                  narrowest defensible cut, removing only abandonments.
+      adj(all<=2) drops every ply<=2 game_end exit. A "Normal" termination two
+                  plies in is a resignation nobody plays out, so it is arguably
+                  the same artifact wearing a different label.
+    Both KEEP the deeper resignations and mates. Dropping game_end wholesale
+    would delete the crush payoff: measured on the sweep, the ply>2 remainder
+    scores ~0.82, the best population in the replay.
+    """
+    ge = {(sh, how): v for (r, sh, how), v in b.exit_split.items()
+          if r == GAME_END}
+    if not ge:
+        return
+    tot = sum(v[0] for v in ge.values())
+    print(f"\ngame_end breakdown ({tot:,} exits) -- is it the opening, or the clock?")
+    print(f"  {'segment':<22}{'games':>10}{'share':>9}{'mean score':>12}")
+    for sh, lbl in ((True, f"ply <= {ABANDON_PLY}"), (False, f"ply > {ABANDON_PLY}")):
+        for how in TERM_CLASSES:
+            n, s = ge.get((sh, how), [0, 0.0])
+            if not n:
+                continue
+            print(f"  {lbl + ' / ' + how:<22}{n:>10,}{100*n/tot:>8.1f}%"
+                  f"{s/n:>12.4f}")
+
+    unknown = sum(n for (_sh, how), (n, _s) in ge.items() if how == UNKNOWN)
+    if unknown:
+        print(f"  [{unknown:,} exits have no termination column; "
+              f"adjusted deltas suppressed]")
+        return
+
+    f_n = sum(v[0] for v in b.exit_split.values())
+    f_s = sum(v[1] for v in b.exit_split.values())
+    for lbl, drop in (
+            ("adj(clock)",
+             [(sh, how) for (sh, how) in ge if sh and how == CLOCK]),
+            ("adj(all<=2)", [(sh, how) for (sh, how) in ge if sh])):
+        dn = sum(ge[k][0] for k in drop)
+        ds = sum(ge[k][1] for k in drop)
+        n, s = f_n - dn, f_s - ds
+        if n <= 0:
+            continue
+        m = s / n
+        se = SCORE_SD / (n ** 0.5)
+        print(f"  {lbl:<12} drop {dn:>8,} -> mean {m:.4f} +/- {se:.4f} "
+              f"vs {base:.4f} pool -> {m-base:+.4f}"
+              f"   (raw {fs-base:+.4f} on {nf:,})")
+
+
 def report(b: Book, n_games: int, max_ply: int) -> None:
     print(f"\n{'=' * 70}\n{b.label}   ({b.n_rows:,} rows -> {len(b.values):,} "
           f"valued nodes, {len(b.moves):,} our-turn moves)\n{'=' * 70}")
@@ -293,6 +409,7 @@ def report(b: Book, n_games: int, max_ply: int) -> None:
               f"{'  [WITHIN NOISE]' if abs(fs-base) < se else ''}")
         print("  NB: realized score across DIFFERENT books is selection-"
               "confounded; compare on faithful% / survival.")
+        _report_exit_split(b, base, nf, fs)
 
     if b.depth_v:
         by_reason: dict[str, list[tuple[float, float]]] = defaultdict(list)
@@ -357,21 +474,34 @@ def main() -> int:
 
     board, hasher = chess.Board(), IncrementalZobrist(chess.Board())
     n_games = 0
+    n_no_term = 0
     t0 = time.time()
     for src, _y, _m, _ev in files:
-        for batch in pq.ParquetFile(src).iter_batches(
-                batch_size=READ_BATCH_GAMES, columns=SRC_COLUMNS):
+        pf = pq.ParquetFile(src)
+        has_term = TERM_COLUMN in pf.schema_arrow.names
+        if not has_term:
+            n_no_term += 1
+        cols = SRC_COLUMNS + ([TERM_COLUMN] if has_term else [])
+        for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=cols):
             df = pl.from_arrow(batch).filter(
                 (pl.col("mean_elo") >= a.min_elo)
                 & pl.col("white_score").is_not_null())
-            for mt, ws in zip(df["movetext"].to_list(), df["white_score"].to_list()):
+            terms = (df[TERM_COLUMN].to_list() if has_term
+                     else [None] * df.height)
+            for mt, ws, tm in zip(df["movetext"].to_list(),
+                                  df["white_score"].to_list(), terms):
                 res = walk_books(mt or "", a.perspective, books, board, hasher,
                                  a.max_ply)
                 realized = float(ws) if a.perspective == "white" else 1.0 - float(ws)
+                how = UNKNOWN if not has_term else TERM_MAP.get(tm, OTHER)
                 for b, (reason, ply, _v, path) in zip(books, res):
                     b.reasons[reason] += 1
                     b.ply_hist[reason][ply] += 1
                     b.score_sum[reason] += realized
+                    if reason in FAITHFUL:
+                        cell = b.exit_split[(reason, ply <= ABANDON_PLY, how)]
+                        cell[0] += 1
+                        cell[1] += realized
                     faithful = reason in FAITHFUL
                     for h in path:
                         b.node_n[h] = b.node_n.get(h, 0) + 1
@@ -396,6 +526,10 @@ def main() -> int:
     dt = time.time() - t0
     print(f"\nreplayed {n_games:,} games in {dt:,.0f}s "
           f"({n_games/max(dt,1e-9):,.0f}/s) against {len(books)} book(s)")
+    if n_no_term:
+        print(f"NB: {n_no_term} of {len(files)} source files carry no "
+              f"'{TERM_COLUMN}' column; their exits are classed {UNKNOWN} and "
+              f"the adjusted deltas are suppressed.")
     for b in books:
         report(b, n_games, a.max_ply)
 
