@@ -82,13 +82,43 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            min_games: int) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
-    only at opponent nodes, by reply share; our moves carry it unchanged."""
+    only at opponent nodes, by reply share; our moves carry it unchanged.
+
+    EDGES FETCHED AND REACH SETTLED ARE SEPARATE (fixed 2026-09-04). The guard
+    used to be `if cr < eps or ch in fetched: continue`, which skipped the reach
+    update below for anything already visited. A transposition first reached
+    through a short unlikely path and later through a likelier one therefore
+    KEPT the lower reach, and — the part that actually loses positions — its
+    children had already been expanded at that lower reach, so any child then
+    under eps was dropped and never revisited. Nothing downstream can recover
+    them: build_graph only sees the rows this returns, and recomputing reach
+    correctly over an already-truncated edge set still has no rows for the
+    pruned cone.
+
+    So a node is re-enqueued whenever its reach IMPROVES, and its children are
+    re-expanded from the better value. Its adjacency is re-read rather than
+    cached in Python (the rows are already in `frames`; a dict-of-dicts copy of
+    a multi-million-edge subgraph is not worth the peak), and only genuinely new
+    parents append to `frames`, so the returned edge set stays duplicate-free
+    and memory is unchanged.
+
+    Termination: reach only ever increases, is bounded by 1, and the update is
+    strict (`>`), so a cycle whose shares multiply to exactly 1 cannot re-fire.
+    Every chess cycle alternates turns, so it contains an opponent node whose
+    share is < 1 and the product strictly decays toward the eps cutoff.
+
+    NOTE: optimistic reach is a MAX over paths, not the total probability of
+    arriving — those differ when several opponent move orders converge on one
+    position, and the max is not an upper bound on the sum. It is used here only
+    as a pruning heuristic; see the plan's note on policy-free reach.
+    """
     frames: list[pl.DataFrame] = []
     reach: dict[int, float] = {root: 1.0}
     ply: dict[int, int] = {root: 0}
     frontier = [root]
     fetched: set[int] = set()
     lvl = 0
+    reopened = 0
     while frontier:
         con.execute("CREATE OR REPLACE TEMP TABLE frontier (h BIGINT)")
         con.executemany("INSERT INTO frontier VALUES (?)",
@@ -101,8 +131,12 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
             JOIN frontier f ON f.h = s.parent_hash
             WHERE s.total >= {min_games}
         """).pl()
+        fresh = {h for h in frontier if h not in fetched}
+        if df.height and fresh:
+            keep = df.filter(pl.col("parent_hash").is_in(list(fresh)))
+            if keep.height:
+                frames.append(keep)
         fetched.update(frontier)
-        frames.append(df)
         nxt: dict[int, float] = {}
         if df.height:
             for ph, grp in df.group_by("parent_hash"):
@@ -124,17 +158,27 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                         if share < share_floor:
                             continue
                         cr = r * share
-                    if cr < eps or ch in fetched:
+                    if cr < eps:
                         continue
                     if cr > reach.get(ch, 0.0):
+                        if ch in fetched:
+                            reopened += 1
                         reach[ch] = cr
-                        ply[ch] = p_ply + 1
+                        # A position's side to move is fixed, so every path to it
+                        # has the same parity and only the DEPTH can differ. Keep
+                        # the shallowest, which is what level-order discovery gave
+                        # before re-propagation existed.
+                        ply[ch] = min(ply.get(ch, p_ply + 1), p_ply + 1)
                         nxt[ch] = cr
         frontier = list(nxt)
         lvl += 1
         log(f"  level {lvl}: fetched {len(fetched):,} nodes, "
             f"frontier {len(frontier):,}, edges so far "
-            f"{sum(f.height for f in frames):,}")
+            f"{sum(f.height for f in frames):,}"
+            + (f", reopened {reopened:,}" if reopened else ""))
+    if reopened:
+        log(f"  reach re-propagation reopened {reopened:,} node-visits "
+            f"(each one a subtree the old collector would have pruned)")
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
