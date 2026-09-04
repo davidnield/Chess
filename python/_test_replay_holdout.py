@@ -268,6 +268,45 @@ def main() -> int:
     check(r == GAME_END and ply > ABANDON_PLY,
           f"a five-ply game_end is classed deep and KEPT (ply {ply})")
 
+    # --- a terminal move that LEAVES the book is not a game_end (2026-09-04) --
+    # Membership was only tested at the top of the iteration consuming the NEXT
+    # token, so a game whose last move left the book fell through to the
+    # unconditional game_end tail, with a null exit value because the position
+    # is absent. The label therefore depended on whether the game happened to
+    # continue -- and game_end is read as the crush payoff (the ply>2 remainder
+    # is the best-scoring population in the replay), so the contamination
+    # inflates exactly the number the sharp recipe is judged on.
+    r_stop, ply_stop, v_stop, _p = run("1. e4 d5", moves, values)
+    r_cont, ply_cont, _v, _p = run("1. e4 d5 2. exd5", moves, values)
+    check(r_stop == OUT_OF_BOOK and ply_stop == 2,
+          f"a game ENDING on the move that left the book is a coverage exit "
+          f"(got {r_stop}, ply {ply_stop})")
+    check((r_stop, ply_stop) == (r_cont, ply_cont),
+          f"the same departure classifies identically whether or not the game "
+          f"continues ({r_stop}/{ply_stop} vs {r_cont}/{ply_cont})")
+    check(v_stop is None,
+          f"...and carries no exit value, like every coverage exit (got {v_stop})")
+
+    # Same bug on the BUDGET side: our own move walks off the book's edge and the
+    # game ends there. Whose move departed decides the label, exactly as in-loop.
+    v_trunc = {k: v for k, v in values.items() if k != hash_after(LINE)}
+    r, ply, _v, _p = run("1. e4 e5 2. Nf3 Nc6 3. Bb5", moves, v_trunc)
+    check(r == BOOK_END and ply == 5,
+          f"a game ending after OUR move left the book is a budget exit "
+          f"(got {r}, ply {ply})")
+
+    # game_end still means game_end when the final position IS covered, and the
+    # max_ply cap still outranks it -- the tail applies the loop's tests in the
+    # loop's order.
+    r, ply, v, _p = run("1. e4 e5 2. Nf3 Nc6 3. Bb5", moves, values)
+    check(r == GAME_END and ply == 5 and v is not None,
+          f"a game ending INSIDE the book is still game_end, with a value "
+          f"(got {r}, ply {ply}, v={v})")
+    r, ply, _v, _p = run("1. e4 e5 2. Nf3", moves, values, max_ply=3)
+    check(r == BOOK_END and ply == 3,
+          f"a game ending exactly at --max-ply is the cap's budget exit, not "
+          f"game_end (got {r}, ply {ply})")
+
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print()
     print(f"{'ALL PASS' if not n_fail else f'{n_fail} FAILED'} ({len(_checks)} checks)")

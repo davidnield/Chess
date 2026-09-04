@@ -36,7 +36,12 @@ Four ways a walk ends, and they mean completely different things:
                    someone actually played.
   book_end         our turn, position is in the book, but the book has no move
                    here -- a leaf. A BUDGET exit: we chose to stop preparing.
-  game_end         the game itself ended while still inside the book.
+  game_end         the game itself ended AT a position the book still covers.
+                   A game whose last move left the book is a coverage or budget
+                   exit that happens to be terminal, not a game_end -- see
+                   walk_books' tail. Which of the two it was is a fact about the
+                   book; the game also ending there is recorded separately as
+                   the termination class.
 
 Conflating the last three is precisely what --reply-shrink's help text warns
 about, so they are counted separately and never summed into one "coverage".
@@ -297,10 +302,34 @@ def walk_books(movetext: str, perspective: str, books: list[Book],
             hasher.push_move(board, mv_obj)      # pushes onto `board` itself
             h = hasher.current(board)
             ply += 1
-        for i in alive:                          # ran out of moves in book
+        # The GAME ran out of moves. Membership at this final position was never
+        # tested: the in-loop check runs at the top of the iteration that would
+        # consume the NEXT token, and there is no next token. Assigning game_end
+        # unconditionally therefore labels a book that had ALREADY ended as "the
+        # game ended inside the book", with a null exit value because the
+        # position is absent. `e4 e5` reports game_end where `e4 e5 Nf3` reports
+        # opp_out_of_book at the SAME position -- the label depended on whether
+        # the game happened to continue.
+        #
+        # It runs the wrong way for this project specifically: game_end is read
+        # as the crush payoff (the ply>2 remainder is the best-scoring population
+        # in the replay), so contaminating it with coverage exits inflates
+        # exactly the number the sharp recipe is judged on.
+        #
+        # Apply the two tests the loop would have applied, in the same order, so
+        # game_end means what it claims: the game ended at a position the book
+        # still covers. The termination class is recorded separately for every
+        # exit, so nothing is lost by narrowing the label.
+        us_now = (board.turn == chess.WHITE) == our_white
+        for i in alive:
             b = books[i]
-            if h in b.values:
-                paths[i].append(h)
+            if ply >= max_ply:
+                out[i] = (BOOK_END, ply, b.values.get(h), paths[i])
+                continue
+            if h not in b.values:
+                out[i] = (_exit_reason(ply, us_now), ply, None, paths[i])
+                continue
+            paths[i].append(h)
             out[i] = (GAME_END, ply, b.values.get(h), paths[i])
     except (ValueError, AssertionError):
         for i in alive:
