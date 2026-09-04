@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "baseline_commit": "f249c4dced5935619500514e26fd1ddb0dea78a1",
+  "research_branch": "codex/human-repertoire",
+  "research_worktree": "C:\\Users\\David\\Documents\\Chess-human-repertoire",
+  "source_checkout": "C:\\Users\\David\\Documents\\Chess",
+  "created_utc": "2026-09-04T23:36:39.4585488Z",
+  "context_files": [
+    {
+      "file": "handoff_for_external_review.md",
+      "source": "C:\\Users\\David\\Documents\\Chess\\scratch\\handoff_for_external_review.md",
+      "sha256": "6E75DE63DEFE2C50A5FC9FFFDE8F35F27D47EB3F38C7A810D82AF92F3213DBA5"
+    },
+    {
+      "file": "external_review_2026-09-04.md",
+      "source": "C:\\Users\\David\\Documents\\Chess\\scratch\\external_review_2026-09-04.md",
+      "sha256": "A3AC77F8C9E4CD86203DBA24C168DE48720E05B068BB4D9D85E7FDE7DA8E9451"
+    },
+    {
+      "file": "human_repertoire_start_here.md",
+      "source": "C:\\Users\\David\\Documents\\Chess\\scratch\\human_repertoire_start_here.md",
+      "sha256": "E736C6F597FD5003238014A0929F3A87354CBC130E2B140F4A38E7F8225A1D07"
+    }
+  ],
+  "milestone": "First prototype: fallback play, imperfect recall, exact tiny-book oracle, bounded real example"
+}

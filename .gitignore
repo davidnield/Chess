@@ -26,3 +26,6 @@ trainer_data/
 # was produced, but deliberately not pushed — they are not part of the pipeline or
 # the test suite and would only be noise in a fresh checkout. See scratch/README.md.
 scratch/
+
+# Human repertoire research: generated experiment inputs and outputs
+/research/human_repertoire/_artifacts/
