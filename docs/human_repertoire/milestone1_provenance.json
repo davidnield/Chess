@@ -1,0 +1,134 @@
+{
+  "counts": {
+    "expanded_positions": 10,
+    "extracted_stats_rows": 78,
+    "nodes": 79,
+    "reference_cards": 1,
+    "source_stats_rows": 42040,
+    "unknown_evals": 0
+  },
+  "created_utc": "2026-09-05T04:13:41.125340+00:00",
+  "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+  "identity": {
+    "adapter_sha256": {
+      "python\\eval_arrays.py": "5655db0bede4ed215e0d6288b1fe34d73db526ae4d7dc63be1988096c9208383",
+      "python\\zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+      "research\\human_repertoire\\extract_real.py": "22558692bcb5dfb78212f5078d988dfba1cee8d81e72e16b763c87144c6b4e69"
+    },
+    "config": {
+      "aux": "E:/chess/position-stats/position_stats_aux_pooled_e2e_2018_01.parquet",
+      "base": {
+        "discount": 0.99,
+        "horizon": 3,
+        "max_disadvantage": 0.4,
+        "max_engine_loss_cp": 150,
+        "min_points": 0.48,
+        "soundness_floor_cp": -100,
+        "threshold_cp": 300
+      },
+      "budgets": [
+        0,
+        1,
+        2
+      ],
+      "candidate_moves": 2,
+      "depth": 3,
+      "eval_arrays": "E:/chess/eval_arrays",
+      "eval_db": "E:/chess/unified_eval_db.parquet",
+      "expanded_replies": 2,
+      "fallback_engine_tilt": [
+        0.0,
+        1.0
+      ],
+      "max_nodes": 500,
+      "max_source_bytes": 8388608,
+      "max_source_rows": 100000,
+      "opponent_engine_tilt": [
+        0.0,
+        1.0
+      ],
+      "recalls": [
+        1.0,
+        0.85,
+        0.65
+      ],
+      "reference": "E:/chess/repertoire/_budget/trunc_white_b20.parquet",
+      "root_san": [
+        "e4",
+        "e5",
+        "Nf3",
+        "Nc6"
+      ],
+      "stats": "E:/chess/position-stats/position_stats_pooled_e2e_2018_01.parquet",
+      "wdl_prior": [
+        0.45,
+        0.1,
+        0.45
+      ],
+      "wdl_prior_strength": 100
+    },
+    "sources": [
+      {
+        "mtime_ns": 1785967696115723400,
+        "path": "E:\\chess\\position-stats\\position_stats_pooled_e2e_2018_01.parquet",
+        "sha256": "8edf9b635a81d58c3a34f49da5439361aa6032b0fc0f2d3d5e706f92a625d1e0",
+        "size": 1455022
+      },
+      {
+        "mtime_ns": 1785967696948820400,
+        "path": "E:\\chess\\position-stats\\position_stats_aux_pooled_e2e_2018_01.parquet",
+        "sha256": "59c763c8d104ff03b9fdcf99767c6797963b8fd58dcf1d169e95a2545475b4e9",
+        "size": 570957
+      },
+      {
+        "mtime_ns": 1788130338548547300,
+        "path": "E:\\chess\\repertoire\\_budget\\trunc_white_b20.parquet",
+        "sha256": "07c83bdcf6c767bf19f43a7fe3c57042b91f025d38ce9ab323329c42ea403e81",
+        "size": 3864
+      },
+      {
+        "mtime_ns": 1785902882763251000,
+        "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+        "size": 3199991680
+      },
+      {
+        "mtime_ns": 1785902883307954800,
+        "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+        "size": 799998016
+      },
+      {
+        "mtime_ns": 1785993454057331100,
+        "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+        "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+        "size": 137
+      },
+      {
+        "mtime_ns": 1785532993604486400,
+        "path": "E:\\chess\\unified_eval_db.parquet",
+        "size": 3804112433
+      }
+    ]
+  },
+  "limitations": [
+    "Stats filename indicates January 2018 test slice; sampling recipe and rating threshold are not independently documented in its metadata.",
+    "Condition on recorded surviving move continuations at every expanded position. Aux term/flag/other/horizon counts are retained for audit but excluded from the model population.",
+    "Unexpanded branches retain all recorded move mass and end at a frontier with historical W/D/L; later first hits are unobserved.",
+    "Reference is an existing 20-card truncated sharp book projection; build recipe/date sidecar absent. Its value fields are unused.",
+    "Engine array provenance is verified, but individual engine versions/depths and dates are absent; no contemporaneous engine reanalysis.",
+    "No training/validation/test split or human calibration; the old slice and newer reference/evals are deliberately not a holdout comparison.",
+    "Large eval inputs fingerprinted by size/mtime/footer row count and small metadata hash, not full multi-GB content hashes. Frozen extracted rows have full hashes."
+  ],
+  "schema_version": 1,
+  "snapshot_sha256": {
+    "real/aux_rows.json": "83dbc1ff5c11b21bf89182f64ad3e08ea2a67dcdf5885b8387d417847bcb3fff",
+    "real/eval_rows.json": "b404c09224baa2b4e465b650385f6216b211e0180d6ed2027e1c284fad36c7e0",
+    "real/graph.json": "e9c4e468bfb59806209498be042ea5d2d43d0e572c5de014b5150fe1b07098c2",
+    "real/reference_rows.json": "f864d2e6e8c28241b6d64babc4a9acdb5b3970866e0ce811664b65ba9289e8e9",
+    "real/stats_rows.json": "9ad39551a087d06a9583c1d53a69bc608f9ccb8ec1cc42c40ce74c7686d29e6e"
+  },
+  "source_schemas": {
+    "aux": "position_hash: int64\nterm_normal_total: int64\nterm_normal_white_wins: int64\nterm_normal_draws: int64\nterm_normal_black_wins: int64\nterm_flag_total: int64\nterm_flag_white_wins: int64\nterm_flag_draws: int64\nterm_flag_black_wins: int64\nterm_other_total: int64\nterm_other_white_wins: int64\nterm_other_draws: int64\nterm_other_black_wins: int64\nhorizon_total: int64\nhorizon_white_wins: int64\nhorizon_draws: int64\nhorizon_black_wins: int64\nother_total: int64\nother_white_wins: int64\nother_draws: int64\nother_black_wins: int64\nother_edges: int32\nother_eval_mean: double\nother_eval_min: double\nother_eval_max: double\nother_eval_cov: double",
+    "reference": "position_hash: int64\nposition_epd: large_string\nevent: large_string\nelo_band: int64\nside_to_move: large_string\nvalue: double\nbest_move: large_string",
+    "stats": "parent_hash: int64\nmove_san: large_string\nparent_epd: large_string\nchild_hash: int64\nply: int32\nwhite_wins: int64\ndraws: int64\nblack_wins: int64\ntotal: int64\nevent: large_string\nelo_band: int64\nwhite_score_avg: double"
+  }
+}

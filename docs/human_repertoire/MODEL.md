@@ -92,8 +92,25 @@ reference diagnostics only and never used as an independent outcome evaluator.
 
 ## Status
 
-2026-09-04: worktree verified; context reviewed. Isolated environment created in
-`research/human_repertoire/_artifacts/venv`. Core, independent oracle and synthetic
-fixtures implemented. Real example will use a small existing stats test slice;
-its sampling limitations must accompany every conclusion. Production code and
-canonical files remain inputs only.
+2026-09-04 (2026-09-05 UTC): milestone implemented and verified. Isolated environment
+is in `research/human_repertoire/_artifacts/venv`. The real adapter is specifically
+a White-to-move, three-ply demonstration after `1.e4 e5 2.Nf3 Nc6`. It replays every
+recorded edge with python-chess, checks this checkout's signed Polyglot hashes,
+and verifies the read-only eval-array provenance without adopting metadata.
+
+At our positions, two most frequent recorded moves plus any observed reference
+move are study candidates. At opponent positions, the two most frequent replies
+are expanded to another our-decision. All recorded moves retain their probability;
+unexpanded branches become frontiers. The allowed candidates are fixed across
+comparisons. A fallback/stronger-opponent sensitivity exponentially tilts observed
+frequencies toward better supplied engine values while preserving their support.
+This is an explicit scenario, not a calibrated strength model.
+
+Real W/D/L uses counts with 100 prior observations at (.45,.10,.45), using outgoing
+counts for expanded nodes and extracted incoming counts at frontiers. This is a
+descriptive shrinkage model, with no independence or counterfactual-validity claim.
+Move frequencies condition on recorded surviving continuations. Aux term, flag,
+other and horizon counts are preserved for audit but excluded from this explicitly
+conditional population; conservation applies to this population only. No source
+propagated value enters the evaluator. See the report for the resulting negative
+early-advantage finding and the limitations of the tie-break outcome ranking.
