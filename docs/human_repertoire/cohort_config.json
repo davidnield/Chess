@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "train": {
+      "Blitz": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Blitz/part-0.parquet",
+      "Rapid": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Rapid/part-0.parquet",
+      "Classical": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Classical/part-0.parquet"
+    },
+    "validation": {
+      "Blitz": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Blitz/part-0.parquet",
+      "Rapid": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Rapid/part-0.parquet",
+      "Classical": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Classical/part-0.parquet"
+    }
+  },
+  "row_group": 0,
+  "frame_rows": 262144,
+  "batch_rows": 8192,
+  "max_row_group_rows": 1000000,
+  "max_projected_row_group_bytes": 536870912,
+  "max_games_per_cohort": 2000,
+  "rank_seed": "human-repertoire-m2-v1",
+  "min_rating": 1800,
+  "max_rating_gap": 200,
+  "root_san": ["e4", "e5", "Nf3", "Nc6"],
+  "horizon": 12,
+  "max_graph_nodes": 40000,
+  "eval_arrays": "E:/chess/eval_arrays",
+  "eval_db": "E:/chess/unified_eval_db.parquet",
+  "reference_snapshot": "real/reference_rows.json",
+  "study_positions": 4,
+  "moves_per_position": 2,
+  "budgets": [0, 1, 2],
+  "recalls": [1.0, 0.85, 0.65],
+  "wdl_prior": [0.45, 0.10, 0.45],
+  "wdl_prior_strength": 20,
+  "move_prior_strength": 1.0,
+  "config": {
+    "horizon": 12,
+    "discount": 0.99,
+    "threshold_cp": 300,
+    "soundness_floor_cp": -100,
+    "max_engine_loss_cp": 150,
+    "min_points": 0.48,
+    "max_disadvantage": 0.4,
+    "repetition_visits": 3
+  }
+}
