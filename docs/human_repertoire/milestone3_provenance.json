@@ -1,0 +1,1146 @@
+{
+  "audits": {
+    "test_Blitz_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1269,
+        "rank_cap_excluded": 1019,
+        "rating": 45664,
+        "rating_gap": 100,
+        "root_prefix": 18503,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-06": 250
+      },
+      "observed_ends": 2,
+      "time_controls": {
+        "180+0": 100,
+        "180+1": 1,
+        "180+2": 56,
+        "300+0": 72,
+        "300+3": 20,
+        "300+4": 1
+      }
+    },
+    "test_Blitz_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1276,
+        "rank_cap_excluded": 1026,
+        "rating": 45481,
+        "rating_gap": 85,
+        "root_prefix": 18694,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-16": 250
+      },
+      "observed_ends": 3,
+      "time_controls": {
+        "180+0": 111,
+        "180+1": 1,
+        "180+2": 59,
+        "300+0": 56,
+        "300+2": 1,
+        "300+3": 21,
+        "360+2": 1
+      }
+    },
+    "test_Blitz_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1317,
+        "rank_cap_excluded": 1067,
+        "rating": 45375,
+        "rating_gap": 110,
+        "root_prefix": 18734,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-27": 250
+      },
+      "observed_ends": 2,
+      "time_controls": {
+        "120+3": 1,
+        "180+0": 121,
+        "180+1": 1,
+        "180+2": 52,
+        "300+0": 58,
+        "300+3": 17
+      }
+    },
+    "test_Classical_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1063,
+        "rank_cap_excluded": 813,
+        "rating": 55394,
+        "rating_gap": 474,
+        "root_prefix": 8605,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-04": 49,
+        "2024-03-05": 72,
+        "2024-03-06": 53,
+        "2024-03-07": 69,
+        "2024-03-08": 7
+      },
+      "observed_ends": 6,
+      "time_controls": {
+        "1200+10": 4,
+        "1200+8": 1,
+        "1500+0": 13,
+        "1500+1": 3,
+        "1500+10": 4,
+        "1500+25": 1,
+        "1500+5": 2,
+        "1800+0": 153,
+        "1800+10": 2,
+        "1800+20": 20,
+        "1800+30": 8,
+        "1800+5": 4,
+        "2100+5": 1,
+        "2400+0": 1,
+        "2400+40": 1,
+        "2700+10": 1,
+        "2700+17": 1,
+        "2700+30": 1,
+        "3600+0": 3,
+        "3600+10": 2,
+        "3600+30": 2,
+        "3600+45": 1,
+        "900+15": 14,
+        "900+20": 4,
+        "900+25": 1,
+        "900+30": 1,
+        "9900+10": 1
+      }
+    },
+    "test_Classical_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1153,
+        "rank_cap_excluded": 903,
+        "rating": 54839,
+        "rating_gap": 488,
+        "root_prefix": 9056,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-14": 11,
+        "2024-03-15": 68,
+        "2024-03-16": 65,
+        "2024-03-17": 75,
+        "2024-03-18": 31
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "0+60": 1,
+        "10800+180": 2,
+        "1200+10": 5,
+        "1500+0": 18,
+        "1500+1": 3,
+        "1500+15": 1,
+        "1500+2": 1,
+        "1500+3": 2,
+        "1500+6": 1,
+        "180+35": 2,
+        "1800+0": 172,
+        "1800+10": 2,
+        "1800+20": 18,
+        "1800+3": 4,
+        "1800+30": 3,
+        "1800+5": 2,
+        "300+30": 2,
+        "3600+30": 1,
+        "900+15": 10
+      }
+    },
+    "test_Classical_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1088,
+        "rank_cap_excluded": 838,
+        "rating": 55255,
+        "rating_gap": 512,
+        "root_prefix": 8681,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-25": 76,
+        "2024-03-26": 71,
+        "2024-03-27": 64,
+        "2024-03-28": 39
+      },
+      "observed_ends": 7,
+      "time_controls": {
+        "10800+180": 1,
+        "1140+19": 1,
+        "1200+10": 2,
+        "1200+15": 1,
+        "1200+30": 1,
+        "1500+0": 13,
+        "1500+1": 1,
+        "1500+10": 1,
+        "1500+25": 1,
+        "1500+5": 3,
+        "1500+6": 1,
+        "1500+7": 1,
+        "1800+0": 146,
+        "1800+1": 1,
+        "1800+10": 4,
+        "1800+15": 3,
+        "1800+20": 29,
+        "1800+3": 1,
+        "1800+30": 3,
+        "1800+6": 1,
+        "2400+10": 1,
+        "2400+40": 1,
+        "2700+15": 1,
+        "2700+3": 1,
+        "2700+45": 1,
+        "300+30": 2,
+        "3600+0": 1,
+        "3600+30": 1,
+        "3600+5": 1,
+        "480+45": 1,
+        "5400+0": 4,
+        "5400+3": 1,
+        "720+20": 1,
+        "900+15": 15,
+        "900+25": 1,
+        "900+30": 2
+      }
+    },
+    "test_Rapid_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1420,
+        "rank_cap_excluded": 1170,
+        "rating": 51898,
+        "rating_gap": 180,
+        "root_prefix": 12038,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-05": 146,
+        "2024-03-06": 104
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "1080+3": 1,
+        "300+5": 1,
+        "300+8": 1,
+        "600+0": 212,
+        "600+5": 27,
+        "900+0": 2,
+        "900+10": 4,
+        "900+3": 1,
+        "900+5": 1
+      }
+    },
+    "test_Rapid_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1329,
+        "rank_cap_excluded": 1079,
+        "rating": 52573,
+        "rating_gap": 171,
+        "root_prefix": 11463,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-15": 250
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "1200+0": 1,
+        "300+10": 1,
+        "300+5": 7,
+        "300+8": 1,
+        "420+2": 2,
+        "480+0": 5,
+        "480+3": 1,
+        "600+0": 182,
+        "600+1": 1,
+        "600+2": 1,
+        "600+3": 1,
+        "600+5": 31,
+        "720+7": 1,
+        "900+0": 3,
+        "900+10": 9,
+        "900+12": 1,
+        "900+13": 1,
+        "900+5": 1
+      }
+    },
+    "test_Rapid_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1316,
+        "rank_cap_excluded": 1066,
+        "rating": 52075,
+        "rating_gap": 151,
+        "root_prefix": 11994,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-03-25": 250
+      },
+      "observed_ends": 3,
+      "time_controls": {
+        "180+10": 1,
+        "300+5": 2,
+        "300+8": 1,
+        "480+1": 1,
+        "480+4": 1,
+        "600+0": 179,
+        "600+10": 2,
+        "600+5": 47,
+        "900+0": 6,
+        "900+10": 9,
+        "900+5": 1
+      }
+    },
+    "train_Blitz_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1377,
+        "rank_cap_excluded": 1127,
+        "rating": 44643,
+        "rating_gap": 135,
+        "root_prefix": 19381,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-06": 250
+      },
+      "observed_ends": 2,
+      "time_controls": {
+        "180+0": 123,
+        "180+1": 1,
+        "180+2": 45,
+        "300+0": 67,
+        "300+3": 14
+      }
+    },
+    "train_Blitz_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1281,
+        "rank_cap_excluded": 1031,
+        "rating": 45916,
+        "rating_gap": 76,
+        "root_prefix": 18263,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-16": 250
+      },
+      "observed_ends": 1,
+      "time_controls": {
+        "180+0": 106,
+        "180+1": 1,
+        "180+2": 54,
+        "300+0": 73,
+        "300+1": 1,
+        "300+3": 15
+      }
+    },
+    "train_Blitz_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1318,
+        "rank_cap_excluded": 1068,
+        "rating": 46219,
+        "rating_gap": 101,
+        "root_prefix": 17898,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-26": 250
+      },
+      "observed_ends": 1,
+      "time_controls": {
+        "180+0": 99,
+        "180+1": 1,
+        "180+2": 54,
+        "180+3": 1,
+        "300+0": 76,
+        "300+2": 1,
+        "300+3": 18
+      }
+    },
+    "train_Classical_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1215,
+        "rank_cap_excluded": 965,
+        "rating": 55265,
+        "rating_gap": 617,
+        "root_prefix": 8438,
+        "scanned": 65536,
+        "selected": 250,
+        "unfinished_result": 1
+      },
+      "dates": {
+        "2024-01-04": 48,
+        "2024-01-05": 71,
+        "2024-01-06": 66,
+        "2024-01-07": 65
+      },
+      "observed_ends": 5,
+      "time_controls": {
+        "1200+10": 7,
+        "1200+12": 2,
+        "1200+15": 1,
+        "1200+20": 1,
+        "1440+2": 1,
+        "1500+0": 27,
+        "1500+1": 6,
+        "1500+15": 1,
+        "1500+5": 4,
+        "1800+0": 150,
+        "1800+1": 1,
+        "1800+10": 1,
+        "1800+15": 1,
+        "1800+18": 1,
+        "1800+2": 1,
+        "1800+20": 20,
+        "1800+3": 2,
+        "1800+30": 2,
+        "1800+5": 1,
+        "2400+10": 1,
+        "2700+0": 1,
+        "2700+15": 1,
+        "2700+45": 1,
+        "3600+0": 3,
+        "3600+2": 1,
+        "3600+3": 2,
+        "3600+60": 2,
+        "5400+5": 1,
+        "900+15": 7
+      }
+    },
+    "train_Classical_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1171,
+        "rank_cap_excluded": 921,
+        "rating": 55465,
+        "rating_gap": 513,
+        "root_prefix": 8387,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-14": 25,
+        "2024-01-15": 65,
+        "2024-01-16": 77,
+        "2024-01-17": 77,
+        "2024-01-18": 6
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "0+60": 1,
+        "1200+10": 5,
+        "1200+15": 1,
+        "1200+20": 1,
+        "1200+30": 1,
+        "1200+8": 1,
+        "1440+3": 1,
+        "1440+5": 1,
+        "1500+0": 14,
+        "1500+1": 4,
+        "1500+10": 1,
+        "1500+15": 1,
+        "1500+2": 2,
+        "1500+5": 6,
+        "1500+6": 1,
+        "1500+7": 1,
+        "1800+0": 155,
+        "1800+10": 3,
+        "1800+15": 2,
+        "1800+2": 1,
+        "1800+20": 24,
+        "1800+25": 1,
+        "1800+30": 3,
+        "1800+5": 1,
+        "1800+8": 1,
+        "2400+0": 1,
+        "2700+15": 2,
+        "2700+30": 1,
+        "2700+45": 1,
+        "3600+30": 4,
+        "3600+60": 2,
+        "5400+3": 1,
+        "5400+30": 1,
+        "900+15": 3,
+        "900+17": 1
+      }
+    },
+    "train_Classical_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1319,
+        "rank_cap_excluded": 1069,
+        "rating": 55081,
+        "rating_gap": 629,
+        "root_prefix": 8507,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-25": 78,
+        "2024-01-26": 70,
+        "2024-01-27": 61,
+        "2024-01-28": 41
+      },
+      "observed_ends": 3,
+      "time_controls": {
+        "1140+15": 1,
+        "1200+10": 4,
+        "1200+20": 1,
+        "1200+60": 2,
+        "1500+0": 13,
+        "1500+1": 1,
+        "1500+10": 3,
+        "1500+25": 1,
+        "1500+3": 1,
+        "1500+5": 2,
+        "1500+6": 1,
+        "1500+7": 1,
+        "1800+0": 174,
+        "1800+1": 1,
+        "1800+10": 4,
+        "1800+20": 19,
+        "1800+30": 1,
+        "1800+40": 1,
+        "1800+5": 2,
+        "2700+2": 1,
+        "2700+30": 1,
+        "2700+45": 1,
+        "2700+5": 1,
+        "3600+0": 2,
+        "3600+4": 1,
+        "3600+45": 1,
+        "5400+0": 3,
+        "5400+30": 1,
+        "900+15": 4,
+        "900+20": 1
+      }
+    },
+    "train_Rapid_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1474,
+        "rank_cap_excluded": 1224,
+        "rating": 52147,
+        "rating_gap": 205,
+        "root_prefix": 11710,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-05": 250
+      },
+      "observed_ends": 0,
+      "time_controls": {
+        "1200+0": 3,
+        "1200+5": 3,
+        "300+5": 3,
+        "300+8": 2,
+        "600+0": 182,
+        "600+5": 48,
+        "900+0": 1,
+        "900+10": 7,
+        "900+5": 1
+      }
+    },
+    "train_Rapid_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1483,
+        "rank_cap_excluded": 1233,
+        "rating": 51547,
+        "rating_gap": 156,
+        "root_prefix": 12350,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-15": 250
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "120+13": 1,
+        "300+5": 3,
+        "300+7": 1,
+        "300+8": 1,
+        "360+4": 1,
+        "420+3": 1,
+        "480+0": 3,
+        "600+0": 185,
+        "600+1": 1,
+        "600+5": 43,
+        "900+0": 5,
+        "900+10": 4,
+        "900+3": 1
+      }
+    },
+    "train_Rapid_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1505,
+        "rank_cap_excluded": 1255,
+        "rating": 52064,
+        "rating_gap": 212,
+        "root_prefix": 11755,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-01-24": 214,
+        "2024-01-25": 36
+      },
+      "observed_ends": 1,
+      "time_controls": {
+        "15+20": 1,
+        "300+12": 1,
+        "300+5": 3,
+        "300+8": 1,
+        "420+10": 1,
+        "480+0": 2,
+        "540+6": 1,
+        "600+0": 205,
+        "600+2": 1,
+        "600+3": 1,
+        "600+5": 25,
+        "720+4": 1,
+        "840+3": 1,
+        "900+0": 2,
+        "900+10": 4
+      }
+    },
+    "tune_Blitz_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1342,
+        "rank_cap_excluded": 1092,
+        "rating": 45968,
+        "rating_gap": 116,
+        "root_prefix": 18110,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-05": 250
+      },
+      "observed_ends": 1,
+      "time_controls": {
+        "120+2": 1,
+        "180+0": 112,
+        "180+2": 47,
+        "300+0": 79,
+        "300+2": 1,
+        "300+3": 10
+      }
+    },
+    "tune_Blitz_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1156,
+        "rank_cap_excluded": 906,
+        "rating": 46561,
+        "rating_gap": 92,
+        "root_prefix": 17727,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-15": 250
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "120+2": 1,
+        "180+0": 92,
+        "180+2": 67,
+        "300+0": 63,
+        "300+3": 27
+      }
+    },
+    "tune_Blitz_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1295,
+        "rank_cap_excluded": 1045,
+        "rating": 45521,
+        "rating_gap": 102,
+        "root_prefix": 18618,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-25": 250
+      },
+      "observed_ends": 1,
+      "time_controls": {
+        "180+0": 100,
+        "180+2": 55,
+        "300+0": 83,
+        "300+2": 1,
+        "300+3": 11
+      }
+    },
+    "tune_Classical_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1095,
+        "rank_cap_excluded": 845,
+        "rating": 55157,
+        "rating_gap": 629,
+        "root_prefix": 8655,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-04": 69,
+        "2024-02-05": 70,
+        "2024-02-06": 70,
+        "2024-02-07": 41
+      },
+      "observed_ends": 4,
+      "time_controls": {
+        "10800+180": 1,
+        "1200+10": 6,
+        "1200+20": 2,
+        "1440+4": 1,
+        "1500+0": 15,
+        "1500+1": 3,
+        "1500+10": 3,
+        "1500+15": 1,
+        "1500+5": 4,
+        "1500+7": 1,
+        "1800+0": 153,
+        "1800+1": 1,
+        "1800+10": 4,
+        "1800+19": 1,
+        "1800+20": 26,
+        "1800+25": 1,
+        "1800+3": 2,
+        "1800+30": 1,
+        "1800+5": 2,
+        "2100+0": 1,
+        "2100+25": 1,
+        "2400+30": 2,
+        "2700+15": 1,
+        "2700+45": 1,
+        "300+35": 1,
+        "3600+30": 1,
+        "480+45": 1,
+        "5400+30": 1,
+        "900+15": 12
+      }
+    },
+    "tune_Classical_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1186,
+        "rank_cap_excluded": 936,
+        "rating": 55261,
+        "rating_gap": 687,
+        "root_prefix": 8402,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-13": 37,
+        "2024-02-14": 69,
+        "2024-02-15": 59,
+        "2024-02-16": 76,
+        "2024-02-17": 9
+      },
+      "observed_ends": 5,
+      "time_controls": {
+        "1020+25": 1,
+        "1200+10": 9,
+        "1200+20": 1,
+        "1200+30": 1,
+        "15+40": 1,
+        "1500+0": 9,
+        "1500+1": 4,
+        "1500+10": 4,
+        "1500+15": 1,
+        "1500+2": 1,
+        "1500+25": 1,
+        "1500+5": 1,
+        "1800+0": 166,
+        "1800+10": 1,
+        "1800+20": 20,
+        "1800+30": 1,
+        "1800+5": 1,
+        "2400+180": 1,
+        "2700+15": 2,
+        "2700+3": 1,
+        "2700+45": 2,
+        "300+30": 1,
+        "3600+0": 3,
+        "3600+30": 2,
+        "480+45": 1,
+        "5400+30": 1,
+        "900+15": 12,
+        "900+30": 1
+      }
+    },
+    "tune_Classical_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1115,
+        "rank_cap_excluded": 865,
+        "rating": 55465,
+        "rating_gap": 595,
+        "root_prefix": 8361,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-23": 55,
+        "2024-02-24": 65,
+        "2024-02-25": 74,
+        "2024-02-26": 56
+      },
+      "observed_ends": 5,
+      "time_controls": {
+        "1200+10": 2,
+        "1200+12": 2,
+        "1200+15": 1,
+        "1500+0": 8,
+        "1500+1": 4,
+        "1500+10": 4,
+        "1500+12": 1,
+        "1500+15": 1,
+        "1500+25": 1,
+        "1800+0": 166,
+        "1800+1": 1,
+        "1800+10": 1,
+        "1800+15": 2,
+        "1800+20": 25,
+        "1800+3": 1,
+        "1800+30": 4,
+        "1800+5": 2,
+        "1800+90": 1,
+        "2700+0": 1,
+        "2700+10": 1,
+        "2700+45": 2,
+        "3600+0": 2,
+        "3600+15": 1,
+        "3600+45": 2,
+        "3600+60": 2,
+        "5400+30": 1,
+        "7200+5": 1,
+        "900+15": 10
+      }
+    },
+    "tune_Rapid_0": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1438,
+        "rank_cap_excluded": 1188,
+        "rating": 52177,
+        "rating_gap": 156,
+        "root_prefix": 11765,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-05": 250
+      },
+      "observed_ends": 5,
+      "time_controls": {
+        "1200+0": 1,
+        "300+5": 2,
+        "300+8": 1,
+        "360+14": 1,
+        "480+0": 2,
+        "600+0": 204,
+        "600+2": 1,
+        "600+3": 1,
+        "600+5": 31,
+        "900+0": 1,
+        "900+10": 5
+      }
+    },
+    "tune_Rapid_1": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1396,
+        "rank_cap_excluded": 1146,
+        "rating": 52144,
+        "rating_gap": 187,
+        "root_prefix": 11809,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-15": 250
+      },
+      "observed_ends": 5,
+      "time_controls": {
+        "1200+0": 2,
+        "1200+7": 1,
+        "240+11": 1,
+        "300+5": 2,
+        "480+0": 2,
+        "480+3": 1,
+        "540+0": 1,
+        "600+0": 189,
+        "600+1": 1,
+        "600+10": 1,
+        "600+5": 40,
+        "900+0": 2,
+        "900+10": 7
+      }
+    },
+    "tune_Rapid_2": {
+      "counts": {
+        "accepted": 250,
+        "eligible": 1477,
+        "rank_cap_excluded": 1227,
+        "rating": 52088,
+        "rating_gap": 130,
+        "root_prefix": 11841,
+        "scanned": 65536,
+        "selected": 250
+      },
+      "dates": {
+        "2024-02-25": 250
+      },
+      "observed_ends": 2,
+      "time_controls": {
+        "300+5": 5,
+        "300+8": 1,
+        "360+6": 1,
+        "480+0": 3,
+        "480+1": 1,
+        "600+0": 197,
+        "600+2": 1,
+        "600+3": 1,
+        "600+5": 36,
+        "900+0": 1,
+        "900+10": 2,
+        "900+5": 1
+      }
+    }
+  },
+  "cohort_counts": {
+    "test": {
+      "Blitz": 750,
+      "Classical": 750,
+      "Rapid": 750
+    },
+    "train": {
+      "Blitz": 750,
+      "Classical": 750,
+      "Rapid": 750
+    },
+    "tune": {
+      "Blitz": 750,
+      "Classical": 750,
+      "Rapid": 750
+    }
+  },
+  "created_utc": "2026-09-05T05:48:30.589830+00:00",
+  "elapsed_seconds": 46.07799999997951,
+  "identity": {
+    "config": {
+      "batch_rows": 8192,
+      "bootstrap_replicates": 500,
+      "bootstrap_seed": 20240906,
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "extract_runtime_seconds": 360,
+      "frame_rows": 65536,
+      "frames_per_stratum": 3,
+      "games_per_frame": 250,
+      "horizon": 12,
+      "max_cached_positions": 50000,
+      "max_decisions_per_split": 30000,
+      "max_decoded_rows": 4000000,
+      "max_files_per_stratum": 256,
+      "max_projected_row_group_bytes": 536870912,
+      "max_rating_gap": 200,
+      "max_row_group_rows": 1000000,
+      "min_rating": 1800,
+      "model_runtime_seconds": 360,
+      "months": {
+        "test": 3,
+        "train": 1,
+        "tune": 2
+      },
+      "move_token_pseudocount": 1.0,
+      "prior_strengths": [
+        0.1,
+        1.0,
+        5.0,
+        20.0
+      ],
+      "rank_seed": "human-repertoire-m3-v1",
+      "root_san": [
+        "e4",
+        "e5",
+        "Nf3",
+        "Nc6"
+      ],
+      "schema_version": 1,
+      "source_root": "D:/data/chess/standard-chess-games-compressed",
+      "token_temperatures": [
+        0.5,
+        1.0
+      ],
+      "year": 2024
+    },
+    "extractor_sha256": "3e420cabab9766165e911790ce01cddd40c40e1f014ae754967150b2ce64a06f",
+    "frames_sha256": "8882e43da1b3843c5ab7c8d9ef6a74ef1d88a37557f62cf6fd15ee17837a0a81",
+    "hash_adapter_sha256": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "replay_sha256": "2d04c135273e76e7040ca6e09400461448e274ec1501d45f48bd0c474fa53025",
+    "sources": [
+      {
+        "mtime_ns": 1784472681664912200,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Blitz\\part-10.parquet",
+        "size": 329299938
+      },
+      {
+        "mtime_ns": 1784478781514907000,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Blitz\\part-17.parquet",
+        "size": 327710434
+      },
+      {
+        "mtime_ns": 1784466819704776100,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Blitz\\part-3.parquet",
+        "size": 329971475
+      },
+      {
+        "mtime_ns": 1784481972501414400,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Classical\\part-0.parquet",
+        "size": 94491080
+      },
+      {
+        "mtime_ns": 1784468966626979800,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Rapid\\part-1.parquet",
+        "size": 325878344
+      },
+      {
+        "mtime_ns": 1784474678388552800,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Rapid\\part-3.parquet",
+        "size": 324471100
+      },
+      {
+        "mtime_ns": 1784480117868857400,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Rapid\\part-5.parquet",
+        "size": 323977067
+      },
+      {
+        "mtime_ns": 1784457035755869700,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Blitz\\part-10.parquet",
+        "size": 327182567
+      },
+      {
+        "mtime_ns": 1784462381691169800,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Blitz\\part-16.parquet",
+        "size": 329003744
+      },
+      {
+        "mtime_ns": 1784451255419216900,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Blitz\\part-3.parquet",
+        "size": 328712903
+      },
+      {
+        "mtime_ns": 1784464865131853500,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Classical\\part-0.parquet",
+        "size": 84750689
+      },
+      {
+        "mtime_ns": 1784453306667607500,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Rapid\\part-1.parquet",
+        "size": 323519722
+      },
+      {
+        "mtime_ns": 1784459044471094200,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Rapid\\part-3.parquet",
+        "size": 324077836
+      },
+      {
+        "mtime_ns": 1784464564646882700,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Rapid\\part-5.parquet",
+        "size": 321375653
+      },
+      {
+        "mtime_ns": 1784454783536326700,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Blitz\\part-10.parquet",
+        "size": 327461957
+      },
+      {
+        "mtime_ns": 1784460884784258800,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Blitz\\part-17.parquet",
+        "size": 327596112
+      },
+      {
+        "mtime_ns": 1784449054939449700,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Blitz\\part-3.parquet",
+        "size": 327271079
+      },
+      {
+        "mtime_ns": 1784463432904252200,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Classical\\part-0.parquet",
+        "size": 87100066
+      },
+      {
+        "mtime_ns": 1784451076497808300,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Rapid\\part-1.parquet",
+        "size": 322519522
+      },
+      {
+        "mtime_ns": 1784456797207338500,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Rapid\\part-3.parquet",
+        "size": 322478764
+      },
+      {
+        "mtime_ns": 1784462149138894700,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=3\\event=Rapid\\part-5.parquet",
+        "size": 322950141
+      }
+    ]
+  },
+  "shared_players": {
+    "train/test": 333,
+    "train/tune": 401,
+    "tune/test": 393
+  },
+  "snapshots": {
+    "m3/test_games.json": "e52c0d23b62e14a9352fb510e96d30261802b79422c3010ddb013ddacd8a5014",
+    "m3/train_games.json": "b3f1112cc251a05b6ec8916750524026918e3a3e5f6814703ed6d149666663bb",
+    "m3/tune_games.json": "fcbf1bc2dd95aa70c5c925071afddef31649fb724ed2ab50143a20f4a102b432"
+  },
+  "unique_players": {
+    "test": 3752,
+    "train": 3765,
+    "tune": 3780
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "elapsed_seconds": 16.51500000001397,
+  "fitted_counts_sha256": "51ffe1f37d5748dcb92525c2de835f33788068dec159a5719f2f8a85aedcea77",
+  "frozen_utc": "2026-09-05T05:49:48.822534+00:00",
+  "identity": {
+    "code_sha256": "e86fbeb5fe83930cee37a863cdf2fe47b4b4498b6647a95de7acfc9e3a501696",
+    "cohort_manifest_sha256": "0dff453a35f5b3b913966e5aa856cc8cf7329db9973a5cb8c3b27513a67f6bbe",
+    "config": {
+      "batch_rows": 8192,
+      "bootstrap_replicates": 500,
+      "bootstrap_seed": 20240906,
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "extract_runtime_seconds": 360,
+      "frame_rows": 65536,
+      "frames_per_stratum": 3,
+      "games_per_frame": 250,
+      "horizon": 12,
+      "max_cached_positions": 50000,
+      "max_decisions_per_split": 30000,
+      "max_decoded_rows": 4000000,
+      "max_files_per_stratum": 256,
+      "max_projected_row_group_bytes": 536870912,
+      "max_rating_gap": 200,
+      "max_row_group_rows": 1000000,
+      "min_rating": 1800,
+      "model_runtime_seconds": 360,
+      "months": {
+        "test": 3,
+        "train": 1,
+        "tune": 2
+      },
+      "move_token_pseudocount": 1.0,
+      "prior_strengths": [
+        0.1,
+        1.0,
+        5.0,
+        20.0
+      ],
+      "rank_seed": "human-repertoire-m3-v1",
+      "root_san": [
+        "e4",
+        "e5",
+        "Nf3",
+        "Nc6"
+      ],
+      "schema_version": 1,
+      "source_root": "D:/data/chess/standard-chess-games-compressed",
+      "token_temperatures": [
+        0.5,
+        1.0
+      ],
+      "year": 2024
+    },
+    "plan_sha256": "fe1185c99faec0f324df36567676716f654571c8017442833760bedf050fbb88",
+    "python_chess_version": "1.11.2"
+  },
+  "selected_names": {
+    "milestone2_position": "position_uniform_a1",
+    "shared_position": "position_token_a1_t0.5",
+    "token_only": "token_only_t0.5",
+    "tuned_position": "position_uniform_a1",
+    "uniform_legal": "uniform_legal"
+  },
+  "selected_specs": {
+    "milestone2_position": {
+      "alpha": 1.0,
+      "only_prior": false,
+      "prior": "uniform",
+      "temperature": 0
+    },
+    "shared_position": {
+      "alpha": 1.0,
+      "only_prior": false,
+      "prior": "token",
+      "temperature": 0.5
+    },
+    "token_only": {
+      "alpha": 1,
+      "only_prior": true,
+      "prior": "token",
+      "temperature": 0.5
+    },
+    "tuned_position": {
+      "alpha": 1.0,
+      "only_prior": false,
+      "prior": "uniform",
+      "temperature": 0
+    },
+    "uniform_legal": {
+      "alpha": 1,
+      "only_prior": true,
+      "prior": "uniform",
+      "temperature": 0
+    }
+  },
+  "tuning_scores_sha256": "c80a2637c06ff6211e4088cad41a2e46194e2ed5cf6ddfd139a519a5870db724"
+}
