@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import statistics
+import threading
 import time
 
 import chess
@@ -163,9 +164,24 @@ def prepare(c):
 def analyse_position(engine, fen, nodes, seconds):
     board = chess.Board(fen)
     engine.configure({"Clear Hash": None})
-    info = engine.analyse(board, chess.engine.Limit(nodes=nodes, time=seconds), game=object())
+    # python-chess 1.11.2's aggregated info uses dict.update(). An old bound
+    # flag can survive a later score line without that flag. Consume individual
+    # UCI updates and retain the final score-bearing line instead.
+    info, work = {}, {}
+    timer = threading.Timer(seconds+10, engine.close)
+    timer.daemon = True
+    timer.start()
+    try:
+        with engine.analysis(board, chess.engine.Limit(nodes=nodes, time=seconds), game=object()) as stream:
+            for update in stream:
+                if "score" in update:
+                    info = dict(update)
+                work.update({k: update[k] for k in ("nodes", "time") if k in update})
+    finally:
+        timer.cancel()
     if "score" not in info or info.get("lowerbound") or info.get("upperbound"):
         raise ValueError("engine returned no unbounded root score")
+    info.update(work)
     score = info["score"].white()
     return {"cp": score.score(mate_score=100000), "mate": score.mate(),
         "depth": info.get("depth"), "seldepth": info.get("seldepth"), "nodes": info.get("nodes"),

@@ -120,10 +120,21 @@ class CommonGraphTests(unittest.TestCase):
                 self.bound = False
             def configure(self, values):
                 self.calls.append(values)
-            def analyse(self, board, limit, game):
+            def close(self):
+                pass
+            def analysis(self, board, limit, game):
                 self.calls.append((limit.nodes, limit.time, game))
-                return {"score": chess.engine.PovScore(chess.engine.Cp(-45), chess.BLACK),
-                        "nodes": 123, "depth": 8, "lowerbound": self.bound}
+                # An early bound must not contaminate the final score line.
+                updates = [{"score": chess.engine.PovScore(chess.engine.Cp(-30), chess.BLACK), "lowerbound": True},
+                           {"score": chess.engine.PovScore(chess.engine.Cp(-45), chess.BLACK), "nodes": 123, "depth": 8}]
+                if self.bound:
+                    updates[-1]["lowerbound"] = True
+                class Stream:
+                    def __enter__(self):
+                        return iter(updates)
+                    def __exit__(self, *args):
+                        pass
+                return Stream()
         engine = FakeEngine()
         result = analyse_position(engine, chess.STARTING_FEN, 1000, .1)
         self.assertEqual(result["cp"], 45)
