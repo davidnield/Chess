@@ -1,0 +1,296 @@
+{
+  "baseline_max_probability_error": 7.771561172376096e-16,
+  "books": {
+    "empty": {},
+    "source_one_card": {
+      "8704797333742910878": "d4"
+    },
+    "two_cards": {
+      "2776049323298866377": "Nxd4",
+      "8704797333742910878": "d4"
+    }
+  },
+  "counts": {
+    "added_real_positions": 1969,
+    "engine_targets": 256,
+    "expanded_nodes": 24829,
+    "missing_engine_targets": 126,
+    "missing_source_evals": 2848,
+    "new_expanded_positions": 354,
+    "observed_nodes": 22515,
+    "real_positions": 14244
+  },
+  "created_utc": "2026-09-05T14:30:47.753699+00:00",
+  "elapsed_seconds": 47.5,
+  "engine_identity": {
+    "binary": {
+      "mtime_ns": 1769897604000000000,
+      "path": "C:\\Users\\David\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+      "sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+      "size": 114007552
+    },
+    "id": {
+      "author": "the Stockfish developers (see AUTHORS file)",
+      "name": "Stockfish 18"
+    },
+    "options": {
+      "Clear Hash": {
+        "default": null,
+        "max": null,
+        "min": null,
+        "type": "button",
+        "var": []
+      },
+      "Debug Log File": {
+        "default": "<empty>",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "EvalFile": {
+        "default": "nn-c288c895ea92.nnue",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "EvalFileSmall": {
+        "default": "nn-37f18f62d772.nnue",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "Hash": {
+        "default": 16,
+        "max": 33554432,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "Move Overhead": {
+        "default": 10,
+        "max": 5000,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "MultiPV": {
+        "default": 1,
+        "max": 256,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "NumaPolicy": {
+        "default": "auto",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "Ponder": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "Skill Level": {
+        "default": 20,
+        "max": 20,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "Syzygy50MoveRule": {
+        "default": true,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "SyzygyPath": {
+        "default": "<empty>",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "SyzygyProbeDepth": {
+        "default": 1,
+        "max": 100,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "SyzygyProbeLimit": {
+        "default": 7,
+        "max": 7,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "Threads": {
+        "default": 1,
+        "max": 1024,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "UCI_Chess960": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "UCI_Elo": {
+        "default": 1320,
+        "max": 3190,
+        "min": 1320,
+        "type": "spin",
+        "var": []
+      },
+      "UCI_LimitStrength": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "UCI_ShowWDL": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "nodestime": {
+        "default": 0,
+        "max": 10000,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      }
+    }
+  },
+  "eval_sources": [
+    {
+      "mtime_ns": 1785902882763251000,
+      "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+      "size": 3199991680
+    },
+    {
+      "mtime_ns": 1785902883307954800,
+      "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+      "size": 799998016
+    },
+    {
+      "mtime_ns": 1785993454057331100,
+      "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+      "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+      "size": 137
+    },
+    {
+      "mtime_ns": 1785532993604486400,
+      "path": "E:\\chess\\unified_eval_db.parquet",
+      "size": 3804112433
+    }
+  ],
+  "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+  "identity": {
+    "adapter_sha256": {
+      "eval_arrays.py": "5655db0bede4ed215e0d6288b1fe34d73db526ae4d7dc63be1988096c9208383",
+      "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5"
+    },
+    "code_sha256": {
+      "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
+      "continuation_audit.py": "ee073e41ade162b473ec4746f6e5ea734df5ee0e2e51d4daabc8919c91d428ba",
+      "empirical.py": "d274ef8ee11fd94fbd2927f02f5d5c8e522359208c3284b73950b7457305a5c9",
+      "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+      "oracle.py": "bf4f0b16cf0be5bf9d40de3bb6fbd793a7e9a9c4c550ae168dee5d5f16bfc084",
+      "shared_fallback.py": "e86fbeb5fe83930cee37a863cdf2fe47b4b4498b6647a95de7acfc9e3a501696"
+    },
+    "config": {
+      "comparison_runtime_seconds": 360,
+      "config": {
+        "discount": 0.99,
+        "horizon": 12,
+        "max_disadvantage": 0.4,
+        "max_engine_loss_cp": 150,
+        "max_states": 200000,
+        "min_points": 0.48,
+        "recall": 0.85,
+        "reentry": true,
+        "repetition_visits": 3,
+        "soundness_floor_cp": -100,
+        "threshold_cp": 300
+      },
+      "deeper_nodes": 400000,
+      "deeper_time_seconds": 2.0,
+      "engine_deeper_positions": 32,
+      "engine_missing_quota": 126,
+      "engine_nodes": 100000,
+      "engine_options": {
+        "Hash": 32,
+        "Skill Level": 20,
+        "Threads": 1,
+        "UCI_LimitStrength": false,
+        "UCI_ShowWDL": true
+      },
+      "engine_path": "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe",
+      "engine_positions": 256,
+      "engine_runtime_seconds": 420,
+      "engine_time_seconds": 1.0,
+      "eval_arrays": "E:/chess/eval_arrays",
+      "eval_db": "E:/chess/unified_eval_db.parquet",
+      "expansion_seeds": 64,
+      "extra_plies": 2,
+      "fitted_counts": "m3/fitted_counts.json",
+      "frozen_model": "m3/frozen_model.json",
+      "max_graph_nodes": 40000,
+      "max_legal_cache_positions": 20000,
+      "max_new_expanded_positions": 512,
+      "model_names": [
+        "tuned_position",
+        "shared_position"
+      ],
+      "moves_per_model": 3,
+      "reference_snapshot": "real/reference_rows.json",
+      "schema_version": 1,
+      "train_games": "m3/train_games.json",
+      "wdl_prior": [
+        0.45,
+        0.1,
+        0.45
+      ],
+      "wdl_prior_strength": 20
+    },
+    "frozen_model_sha256": "0757c1a1a2faec9f83faac247c9a1bc711a305fda00201e08c10b3a1cdedcaf6",
+    "plan_sha256": "56ce9bea967e170a29416868a0c2bbc28864f83a4fba96454b0e8e87e82f93b6",
+    "python_chess_version": "1.11.2"
+  },
+  "reference_sha256": "f864d2e6e8c28241b6d64babc4a9acdb5b3970866e0ce811664b65ba9289e8e9",
+  "snapshots": {
+    "m4/engine_selection.json": "596c0287b2f2ba21a0ae7461f5738370b54e1557d849b25910134be030c4dfc4",
+    "m4/graphs.json": "a377c68edf318abf40afacbee3b0f13b5e6d41519fd163449f0e3ffec11d8db8",
+    "m4/source_evals.json": "a56b562599750c4c514ac1856eec242eb8336104a7ff0e71869a0971483db9eb",
+    "m4/templates.json": "4ab753a9b7323393548f7cb4058e4f70a4cc3e6b9a462b50db5800d84632ae77"
+  },
+  "specs": {
+    "shared_position": {
+      "alpha": 1.0,
+      "only_prior": false,
+      "prior": "token",
+      "temperature": 0.5
+    },
+    "tuned_position": {
+      "alpha": 1.0,
+      "only_prior": false,
+      "prior": "uniform",
+      "temperature": 0
+    }
+  }
+}
