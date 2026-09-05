@@ -27,6 +27,8 @@ class Node:
     cp: float | None = None  # observed first-hit marker, our perspective
     wdl: tuple[float, float, float] = (0.4, 0.2, 0.4)
     cost: int = 1
+    end_probability: float = 0.0  # observed human ending before the next move
+    end_wdl: tuple[float, float, float] = (0, 1, 0)
 
 
 @dataclass(frozen=True)
@@ -38,7 +40,7 @@ class Graph:
         if self.root not in self.nodes:
             raise ValueError("missing root")
         for key, n in self.nodes.items():
-            if n.side not in {"us", "opp", "terminal", "frontier"}:
+            if n.side not in {"us", "opp", "terminal", "human_terminal", "frontier"}:
                 raise ValueError(f"invalid side at {key}")
             if type(n.cost) is not int or n.cost <= 0:
                 raise ValueError("cost must be a positive integer")
@@ -47,6 +49,13 @@ class Graph:
             if len(n.wdl) != 3:
                 raise ValueError("W/D/L requires three outcomes")
             distribution(n.wdl)
+            if len(n.end_wdl) != 3:
+                raise ValueError("ending W/D/L requires three outcomes")
+            distribution(n.end_wdl)
+            if not isfinite(n.end_probability) or not 0 <= n.end_probability <= 1:
+                raise ValueError("invalid human ending probability")
+            if n.side in {"terminal", "human_terminal", "frontier"} and n.end_probability:
+                raise ValueError("terminal/frontier cannot also have a human ending hazard")
             if n.side in {"us", "opp"}:
                 if not n.edges or len({e.move for e in n.edges}) != len(n.edges):
                     raise ValueError("nonterminal needs distinct moves")
@@ -81,6 +90,7 @@ class Config:
     min_points: float = 0.0
     max_disadvantage: float = 1.0
     max_books: int = 200_000
+    max_states: int = 200_000
 
     def validate(self, g: Graph):
         if type(self.horizon) is not int or not 0 <= self.horizon <= 100:
@@ -94,6 +104,8 @@ class Config:
             raise ValueError("invalid centipawn threshold")
         if type(self.max_books) is not int or self.max_books < 1:
             raise ValueError("invalid search cap")
+        if type(self.max_states) is not int or self.max_states < 1:
+            raise ValueError("invalid evaluation state cap")
         for k in self.recall_by_position:
             if k not in g.nodes or g.nodes[k].side != "us":
                 raise ValueError("recall override is not our position")
@@ -132,6 +144,12 @@ class Metrics:
     horizon_mass: float = 0
     repetition_mass: float = 0
     unknown_eval_mass: float = 0
+    human_end_mass: float = 0
+    frontier_before_horizon_mass: float = 0
+    unresolved_no_hit_mass: float = 0
+    certain_advantage_mass: float = 0
+    certain_early_advantage: float = 0
+    unresolved_first_hit_mass: float = 0
 
     @property
     def points(self):
@@ -149,22 +167,34 @@ def evaluate(g: Graph, book: Mapping[str, str], c: Config) -> Metrics:
         if k not in g.nodes or move not in eligible(g, c, k):
             raise ValueError(f"uncertified/invalid prepared move: {k} {move}")
 
+    states = 0
     @lru_cache(None)
-    def visit(key, ply, history, event, hit_ply, active, unknown):
+    def visit(key, ply, history, event, hit_ply, active, unknown, unknown_before_hit):
+        nonlocal states
+        states += 1
+        if states > c.max_states:
+            raise RuntimeError("evaluation state cap exceeded; no partial value returned")
         n = g.nodes[key]
         unknown = unknown or n.cp is None
+        unknown_before_hit = unknown_before_hit or (event == 0 and n.cp is None)
         if event == 0 and n.cp is not None and abs(n.cp) >= c.threshold_cp:
             event, hit_ply = (1 if n.cp > 0 else -1), ply
         repeated = c.repetition_visits is not None and history.count(key) + 1 >= c.repetition_visits
         # Exact graph terminals precede repetition; repetition precedes truncation.
         reason = ("terminal" if n.side == "terminal" else "repetition" if repeated else
+                  "human_end" if n.side == "human_terminal" else
                   "frontier" if n.side == "frontier" else "horizon" if ply == c.horizon else None)
         if reason:
             w, d, l = (0, 1, 0) if reason == "repetition" else n.wdl
             return Metrics(w, d, l, float(event == 1), float(event == -1), float(event == 0),
                            c.discount ** hit_ply if event == 1 else 0, w if event == 1 else 0,
                            float(reason == "terminal"), float(reason == "frontier"),
-                           float(reason == "horizon"), float(reason == "repetition"), float(unknown))
+                           float(reason == "horizon"), float(reason == "repetition"), float(unknown), float(reason == "human_end"),
+                           float(reason == "frontier" and ply < c.horizon),
+                           float(reason == "frontier" and ply < c.horizon and event == 0),
+                           float(event == 1 and not unknown_before_hit),
+                           c.discount ** hit_ply if event == 1 and not unknown_before_hit else 0,
+                           float(unknown_before_hit or (reason == "frontier" and ply < c.horizon and event == 0)))
         probs = (c.fallback if n.side == "us" else c.opponent).get(key, {})
         branches = []
         if n.side == "us":
@@ -179,13 +209,31 @@ def evaluate(g: Graph, book: Mapping[str, str], c: Config) -> Metrics:
         total = [0.0] * len(Metrics.__dataclass_fields__)
         next_history = history + (key,) if c.repetition_visits is not None else ()
         for probability, child, next_active in branches:
-            if probability:
-                result = visit(child, ply + 1, next_history, event, hit_ply, next_active, unknown)
-                for i, value in enumerate(asdict(result).values()):
+            if probability and n.end_probability < 1:
+                result = visit(child, ply + 1, next_history, event, hit_ply, next_active, unknown, unknown_before_hit)
+                # Metrics are scalar immutable floats. asdict() recursively
+                # deep-copies them; direct declared-field reads avoid that cost.
+                for i, name in enumerate(Metrics.__dataclass_fields__):
+                    value = getattr(result, name)
                     total[i] += probability * value
+        # Arrival-level human endings are policy-invariant in this explicit
+        # scenario. They consume no artificial ply and include all W/D/L.
+        if n.end_probability:
+            w, d, l = n.end_wdl
+            end = Metrics(w, d, l, float(event == 1), float(event == -1), float(event == 0),
+                          c.discount ** hit_ply if event == 1 else 0, w if event == 1 else 0,
+                          unknown_eval_mass=float(unknown), human_end_mass=1,
+                          certain_advantage_mass=float(event == 1 and not unknown_before_hit),
+                          certain_early_advantage=c.discount ** hit_ply if event == 1 and not unknown_before_hit else 0,
+                          unresolved_first_hit_mass=float(unknown_before_hit))
+            total = [(1-n.end_probability)*x + n.end_probability*getattr(end, name)
+                     for x, name in zip(total, Metrics.__dataclass_fields__)]
         return Metrics(*total)
 
-    return visit(g.root, 0, (), 0, 0, True, False)
+    try:
+        return visit(g.root, 0, (), 0, 0, True, False, False)
+    finally:
+        visit.cache_clear()
 
 
 def feasible(m: Metrics, c: Config) -> bool:
