@@ -1,0 +1,610 @@
+{
+  "audits": {
+    "train": {
+      "Blitz": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 5576,
+          "rank_cap_excluded": 3576,
+          "rating": 177445,
+          "rating_gap": 423,
+          "root_prefix": 78700,
+          "scanned": 262144,
+          "selected_before_replay": 2000
+        },
+        "dates": {
+          "2024-01-01": 2000
+        },
+        "limits": {
+          "projected_compressed_bytes": 149434902,
+          "projected_uncompressed_bytes": 461170206,
+          "rows": 1000000
+        },
+        "observed_ends": 27,
+        "rating_range": [
+          1800,
+          2938
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1493,
+          "Time forfeit": 507
+        },
+        "time_controls": {
+          "15+6": 3,
+          "180+0": 913,
+          "180+1": 17,
+          "180+2": 427,
+          "180+3": 3,
+          "180+5": 1,
+          "240+0": 1,
+          "300+0": 489,
+          "300+3": 139,
+          "300+4": 2,
+          "420+0": 1,
+          "60+3": 2,
+          "60+5": 2
+        }
+      },
+      "Classical": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 4928,
+          "rank_cap_excluded": 2928,
+          "rating": 220430,
+          "rating_gap": 2528,
+          "root_prefix": 34254,
+          "scanned": 262144,
+          "selected_before_replay": 2000,
+          "unfinished_result": 4
+        },
+        "dates": {
+          "2024-01-01": 144,
+          "2024-01-02": 134,
+          "2024-01-03": 157,
+          "2024-01-04": 139,
+          "2024-01-05": 155,
+          "2024-01-06": 133,
+          "2024-01-07": 178,
+          "2024-01-08": 145,
+          "2024-01-09": 151,
+          "2024-01-10": 145,
+          "2024-01-11": 142,
+          "2024-01-12": 143,
+          "2024-01-13": 140,
+          "2024-01-14": 94
+        },
+        "limits": {
+          "projected_compressed_bytes": 84172577,
+          "projected_uncompressed_bytes": 255326197,
+          "rows": 588454
+        },
+        "observed_ends": 24,
+        "rating_range": [
+          1800,
+          2724
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1856,
+          "Time forfeit": 144
+        },
+        "time_controls": {
+          "0+40": 1,
+          "1080+12": 6,
+          "10800+180": 2,
+          "1140+15": 1,
+          "1140+9": 2,
+          "1200+10": 31,
+          "1200+12": 2,
+          "1200+15": 3,
+          "1200+20": 5,
+          "1200+30": 1,
+          "1200+60": 1,
+          "1200+8": 9,
+          "1200+9": 2,
+          "1440+2": 1,
+          "1500+0": 165,
+          "1500+1": 26,
+          "1500+10": 18,
+          "1500+15": 11,
+          "1500+17": 1,
+          "1500+2": 3,
+          "1500+20": 3,
+          "1500+25": 3,
+          "1500+3": 5,
+          "1500+5": 20,
+          "1500+6": 2,
+          "1500+7": 3,
+          "180+35": 3,
+          "1800+0": 1277,
+          "1800+1": 1,
+          "1800+10": 16,
+          "1800+15": 5,
+          "1800+18": 1,
+          "1800+20": 146,
+          "1800+25": 1,
+          "1800+3": 9,
+          "1800+30": 15,
+          "1800+45": 1,
+          "1800+5": 12,
+          "1800+6": 1,
+          "2100+0": 1,
+          "2100+30": 1,
+          "2400+0": 5,
+          "2400+1": 1,
+          "2400+10": 3,
+          "2400+30": 2,
+          "2400+5": 1,
+          "2700+0": 4,
+          "2700+13": 1,
+          "2700+15": 5,
+          "2700+20": 3,
+          "2700+3": 1,
+          "2700+30": 2,
+          "2700+45": 5,
+          "300+30": 3,
+          "300+35": 2,
+          "300+60": 1,
+          "3600+0": 16,
+          "3600+1": 1,
+          "3600+10": 3,
+          "3600+2": 1,
+          "3600+3": 2,
+          "3600+30": 3,
+          "3600+35": 2,
+          "3600+45": 3,
+          "3600+6": 1,
+          "3600+60": 8,
+          "480+45": 6,
+          "5400+0": 1,
+          "5400+3": 1,
+          "5400+30": 7,
+          "5400+5": 1,
+          "600+30": 1,
+          "720+20": 1,
+          "900+15": 75,
+          "900+16": 1,
+          "900+20": 4,
+          "900+25": 1,
+          "900+30": 4,
+          "960+15": 1
+        }
+      },
+      "Rapid": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 6367,
+          "rank_cap_excluded": 4367,
+          "rating": 203732,
+          "rating_gap": 833,
+          "root_prefix": 51212,
+          "scanned": 262144,
+          "selected_before_replay": 2000
+        },
+        "dates": {
+          "2024-01-01": 2000
+        },
+        "limits": {
+          "projected_compressed_bytes": 147387520,
+          "projected_uncompressed_bytes": 451100620,
+          "rows": 1000000
+        },
+        "observed_ends": 25,
+        "rating_range": [
+          1800,
+          2952
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1773,
+          "Time forfeit": 227
+        },
+        "time_controls": {
+          "1140+6": 1,
+          "120+10": 2,
+          "120+14": 1,
+          "1200+0": 2,
+          "1200+5": 1,
+          "180+10": 1,
+          "300+15": 2,
+          "300+5": 16,
+          "300+7": 1,
+          "300+8": 4,
+          "360+3": 4,
+          "360+8": 1,
+          "420+10": 1,
+          "420+2": 3,
+          "420+3": 1,
+          "420+5": 1,
+          "480+0": 22,
+          "480+1": 1,
+          "600+0": 1505,
+          "600+1": 7,
+          "600+2": 10,
+          "600+3": 6,
+          "600+5": 308,
+          "720+0": 1,
+          "720+11": 1,
+          "780+10": 1,
+          "780+9": 1,
+          "90+35": 1,
+          "900+0": 21,
+          "900+10": 61,
+          "900+3": 1,
+          "900+5": 11
+        }
+      },
+      "pooled_selected": {
+        "Blitz": 675,
+        "Classical": 611,
+        "Rapid": 714
+      }
+    },
+    "validation": {
+      "Blitz": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 5513,
+          "rank_cap_excluded": 3513,
+          "rating": 180628,
+          "rating_gap": 422,
+          "root_prefix": 75581,
+          "scanned": 262144,
+          "selected_before_replay": 2000
+        },
+        "dates": {
+          "2024-02-01": 2000
+        },
+        "limits": {
+          "projected_compressed_bytes": 148655582,
+          "projected_uncompressed_bytes": 458707238,
+          "rows": 1000000
+        },
+        "observed_ends": 28,
+        "rating_range": [
+          1800,
+          2963
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1498,
+          "Time forfeit": 502
+        },
+        "time_controls": {
+          "120+2": 1,
+          "180+0": 944,
+          "180+1": 5,
+          "180+2": 415,
+          "240+0": 1,
+          "240+3": 1,
+          "300+0": 515,
+          "300+3": 118
+        }
+      },
+      "Classical": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 4531,
+          "rank_cap_excluded": 2531,
+          "rating": 220834,
+          "rating_gap": 2486,
+          "root_prefix": 34293,
+          "scanned": 262144,
+          "selected_before_replay": 2000
+        },
+        "dates": {
+          "2024-02-01": 142,
+          "2024-02-02": 116,
+          "2024-02-03": 135,
+          "2024-02-04": 146,
+          "2024-02-05": 124,
+          "2024-02-06": 120,
+          "2024-02-07": 147,
+          "2024-02-08": 177,
+          "2024-02-09": 135,
+          "2024-02-10": 143,
+          "2024-02-11": 170,
+          "2024-02-12": 129,
+          "2024-02-13": 149,
+          "2024-02-14": 123,
+          "2024-02-15": 44
+        },
+        "limits": {
+          "projected_compressed_bytes": 75433954,
+          "projected_uncompressed_bytes": 228541902,
+          "rows": 529134
+        },
+        "observed_ends": 43,
+        "rating_range": [
+          1800,
+          2787
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1845,
+          "Rules infraction": 2,
+          "Time forfeit": 153
+        },
+        "time_controls": {
+          "1020+25": 1,
+          "10800+0": 1,
+          "10800+180": 1,
+          "1140+19": 1,
+          "1140+9": 1,
+          "1200+10": 47,
+          "1200+12": 2,
+          "1200+15": 6,
+          "1200+20": 11,
+          "1200+25": 1,
+          "1200+30": 11,
+          "1200+60": 3,
+          "1200+8": 3,
+          "1440+4": 2,
+          "15+40": 1,
+          "1500+0": 120,
+          "1500+1": 18,
+          "1500+10": 21,
+          "1500+15": 7,
+          "1500+2": 3,
+          "1500+20": 3,
+          "1500+25": 1,
+          "1500+3": 2,
+          "1500+5": 13,
+          "1500+7": 2,
+          "1500+8": 1,
+          "1800+0": 1275,
+          "1800+1": 2,
+          "1800+10": 24,
+          "1800+15": 10,
+          "1800+18": 2,
+          "1800+19": 1,
+          "1800+2": 1,
+          "1800+20": 174,
+          "1800+25": 2,
+          "1800+3": 3,
+          "1800+30": 21,
+          "1800+40": 2,
+          "1800+5": 11,
+          "2100+10": 1,
+          "2100+30": 2,
+          "2100+5": 1,
+          "2400+15": 1,
+          "2400+20": 1,
+          "2400+30": 1,
+          "2700+0": 6,
+          "2700+1": 1,
+          "2700+10": 7,
+          "2700+15": 3,
+          "2700+17": 1,
+          "2700+20": 1,
+          "2700+30": 6,
+          "2700+45": 10,
+          "2700+5": 2,
+          "300+30": 4,
+          "300+35": 1,
+          "3600+0": 19,
+          "3600+10": 3,
+          "3600+3": 2,
+          "3600+30": 9,
+          "3600+60": 1,
+          "480+45": 1,
+          "5400+10": 1,
+          "5400+30": 8,
+          "600+180": 1,
+          "600+30": 2,
+          "7200+120": 1,
+          "780+150": 1,
+          "840+17": 1,
+          "900+15": 82,
+          "900+20": 3,
+          "900+30": 5
+        }
+      },
+      "Rapid": {
+        "counts": {
+          "accepted": 2000,
+          "eligible": 5869,
+          "rank_cap_excluded": 3869,
+          "rating": 206954,
+          "rating_gap": 626,
+          "root_prefix": 48695,
+          "scanned": 262144,
+          "selected_before_replay": 2000
+        },
+        "dates": {
+          "2024-02-01": 2000
+        },
+        "limits": {
+          "projected_compressed_bytes": 145904762,
+          "projected_uncompressed_bytes": 446653694,
+          "rows": 1000000
+        },
+        "observed_ends": 26,
+        "rating_range": [
+          1800,
+          2972
+        ],
+        "schema": "site: string\nwhite: string\nblack: string\nresult: string\nwhite_title: string\nblack_title: string\nwhite_elo: int16\nblack_elo: int16\nwhite_rating_diff: int16\nblack_rating_diff: int16\nutc_date: date32[day]\nutc_time: time32[ms]\neco: string\nopening: string\ntermination: string\ntime_control: string\nmovetext: string\ngame_id: string\nmean_elo: int16\nelo_band: int16\nwhite_score: double\nmove_count: int16\nopening_family: string\neco_class: string\nhas_eval: bool\nbase_time: int32\nincrement: int32",
+        "terminations": {
+          "Normal": 1780,
+          "Time forfeit": 220
+        },
+        "time_controls": {
+          "1080+10": 1,
+          "1200+0": 2,
+          "1200+5": 1,
+          "300+10": 4,
+          "300+12": 1,
+          "300+5": 16,
+          "300+8": 4,
+          "360+3": 1,
+          "420+2": 2,
+          "420+3": 1,
+          "480+0": 14,
+          "480+2": 2,
+          "480+3": 2,
+          "480+5": 3,
+          "480+8": 1,
+          "540+9": 1,
+          "600+0": 1548,
+          "600+1": 7,
+          "600+10": 3,
+          "600+19": 1,
+          "600+2": 1,
+          "600+3": 7,
+          "600+5": 290,
+          "660+0": 1,
+          "720+0": 1,
+          "720+3": 2,
+          "780+4": 1,
+          "900+0": 17,
+          "900+10": 59,
+          "900+3": 4,
+          "900+5": 2
+        }
+      },
+      "pooled_selected": {
+        "Blitz": 689,
+        "Classical": 581,
+        "Rapid": 730
+      }
+    }
+  },
+  "created_utc": "2026-09-05T04:40:56.085723+00:00",
+  "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+  "identity": {
+    "config": {
+      "batch_rows": 8192,
+      "budgets": [
+        0,
+        1,
+        2
+      ],
+      "config": {
+        "discount": 0.99,
+        "horizon": 12,
+        "max_disadvantage": 0.4,
+        "max_engine_loss_cp": 150,
+        "min_points": 0.48,
+        "repetition_visits": 3,
+        "soundness_floor_cp": -100,
+        "threshold_cp": 300
+      },
+      "eval_arrays": "E:/chess/eval_arrays",
+      "eval_db": "E:/chess/unified_eval_db.parquet",
+      "frame_rows": 262144,
+      "horizon": 12,
+      "max_games_per_cohort": 2000,
+      "max_graph_nodes": 40000,
+      "max_projected_row_group_bytes": 536870912,
+      "max_rating_gap": 200,
+      "max_row_group_rows": 1000000,
+      "min_rating": 1800,
+      "move_prior_strength": 1.0,
+      "moves_per_position": 2,
+      "rank_seed": "human-repertoire-m2-v1",
+      "recalls": [
+        1.0,
+        0.85,
+        0.65
+      ],
+      "reference_snapshot": "real/reference_rows.json",
+      "root_san": [
+        "e4",
+        "e5",
+        "Nf3",
+        "Nc6"
+      ],
+      "row_group": 0,
+      "schema_version": 1,
+      "sources": {
+        "train": {
+          "Blitz": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Blitz/part-0.parquet",
+          "Classical": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Classical/part-0.parquet",
+          "Rapid": "D:/data/chess/standard-chess-games-compressed/year=2024/month=1/event=Rapid/part-0.parquet"
+        },
+        "validation": {
+          "Blitz": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Blitz/part-0.parquet",
+          "Classical": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Classical/part-0.parquet",
+          "Rapid": "D:/data/chess/standard-chess-games-compressed/year=2024/month=2/event=Rapid/part-0.parquet"
+        }
+      },
+      "study_positions": 4,
+      "wdl_prior": [
+        0.45,
+        0.1,
+        0.45
+      ],
+      "wdl_prior_strength": 20
+    },
+    "eval_adapter_sha256": "5655db0bede4ed215e0d6288b1fe34d73db526ae4d7dc63be1988096c9208383",
+    "extractor_sha256": "2d04c135273e76e7040ca6e09400461448e274ec1501d45f48bd0c474fa53025",
+    "hash_adapter_sha256": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "sources": [
+      {
+        "mtime_ns": 1784463989239045600,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Blitz\\part-0.parquet",
+        "size": 329002434
+      },
+      {
+        "mtime_ns": 1784466016463548800,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Rapid\\part-0.parquet",
+        "size": 325689447
+      },
+      {
+        "mtime_ns": 1784481972501414400,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=1\\event=Classical\\part-0.parquet",
+        "size": 94491080
+      },
+      {
+        "mtime_ns": 1784448436922761400,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Blitz\\part-0.parquet",
+        "size": 326833957
+      },
+      {
+        "mtime_ns": 1784450460019169100,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Rapid\\part-0.parquet",
+        "size": 323910394
+      },
+      {
+        "mtime_ns": 1784464865131853500,
+        "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=2\\event=Classical\\part-0.parquet",
+        "size": 84750689
+      },
+      {
+        "mtime_ns": 1785902882763251000,
+        "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+        "size": 3199991680
+      },
+      {
+        "mtime_ns": 1785902883307954800,
+        "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+        "size": 799998016
+      },
+      {
+        "mtime_ns": 1785993454057331100,
+        "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+        "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+        "size": 137
+      },
+      {
+        "mtime_ns": 1785532993604486400,
+        "path": "E:\\chess\\unified_eval_db.parquet",
+        "size": 3804112433
+      }
+    ]
+  },
+  "missing_evals": 2129,
+  "players_per_cohort": {
+    "train": 3377,
+    "validation": 3391
+  },
+  "shared_players": 319,
+  "snapshots": {
+    "m2/evals.json": "664e3965bcf96af03e766f824530adc6624669a3056a365444106f3e02c2c24e",
+    "m2/train_games.json": "56270fc9e3a07ea1fd969688a77298b9b8bc952d1c8b307780c9f3ba94785691",
+    "m2/validation_games.json": "497914a600568c500631192b2c399b802c1d7087f32ef1e4c7b9c0db8912ca7d"
+  },
+  "unique_positions": 19709
+}

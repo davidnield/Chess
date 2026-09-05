@@ -113,6 +113,21 @@ class EmpiricalTests(unittest.TestCase):
         self.assertEqual(result["components"], 2)
         self.assertEqual(result["largest_component_games"], 2)
 
+    def test_table_selection_matches_independent_depth_first_search(self):
+        from .model import book_cost, objective, optimise
+        from .oracle import enumerate_books
+        from .validate_cohort import choose
+        g = demanding()
+        for recall in (.65, 1):
+            c = Config(recall=recall, min_points=.48, max_disadvantage=.4)
+            books = list(enumerate_books(g, c, 3))
+            values = {tuple(sorted(b.items())): evaluate(g, b, c) for b in books}
+            for budget in range(4):
+                selected = choose(books, values, g, c, budget)
+                dfs = optimise(g, c, budget)
+                self.assertEqual(objective(selected[1], book_cost(g, selected[0])), objective(dfs.metrics, dfs.cost))
+                self.assertEqual(selected[1], evaluate(g, selected[0], c))
+
 
 if __name__ == "__main__":
     unittest.main()

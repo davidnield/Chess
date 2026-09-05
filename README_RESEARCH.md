@@ -13,3 +13,11 @@ Milestone 1 is complete: [findings and limitations](docs/human_repertoire/milest
 [runnable commands](research/human_repertoire/README.md). The synthetic examples
 show recall/budget-dependent book changes. The bounded real example cannot
 distinguish early advantage and does not justify changing the user's repertoire.
+
+Milestone 2 is also complete: [documented BRC cohort and validation report](docs/human_repertoire/milestone2_report.md).
+It uses 4,000 games with both players rated >=1800 across Blitz, Rapid and
+Classical (rating gap <=200), a twelve-ply horizon, and separate January/February
+2024 cohorts. The move model has useful predictive signal against a weak baseline,
+but sparse continuation support leaves book comparisons unresolved. Next work
+should improve and validate fallback prediction and engine coverage on a sample
+spread across dates before expanding optimisation or recommending a repertoire.

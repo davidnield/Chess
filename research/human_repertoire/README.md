@@ -63,3 +63,52 @@ duplicates the mathematical specification independently; `fixtures.py` generates
 the small examples; `extract_real.py` reuses only this checkout's `zobrist` and
 read-only `eval_arrays` helpers; `experiments.py` compares arms. No trainer, data
 writer, production optimiser or engine-analysis process is imported or launched.
+
+## Milestone 2: documented BRC cohort
+
+The next completed step uses both players rated >=1800 across Blitz, Rapid and
+Classical (rating gap <=200). It takes a fixed source-row frame from January and
+February 2024, preserves at most 2,000 opening games per month, and extends the
+horizon to twelve plies after the same root. See the tracked pre-analysis plan,
+`docs/human_repertoire/cohort_config.json`, and the milestone-2 report.
+
+After the resource check above, run with the same `$researchPython`:
+
+```powershell
+& $researchPython -B -m unittest research.human_repertoire.test_cohort -v
+& $researchPython -B -m research.human_repertoire.cohort
+& $researchPython -B -m unittest research.human_repertoire.test_model research.human_repertoire.test_real research.human_repertoire.test_cohort research.human_repertoire.test_empirical -v
+& $researchPython -B -m research.human_repertoire.validate_cohort
+```
+
+`cohort` is the only new command reading external data. It processes exactly
+262,144 rows from row group 0 of each of six declared files, caps projected
+row-group size at 512 MiB, uses one thread and bounded batches, and performs sparse
+read-only engine lookups. It samples at most 2,000 matching records per stratum by
+fixed game-ID hash rank, then selects at most 2,000 across the three strata by the
+same rank. Selection precedes outcome/eval analysis. This convenience frame is not
+a population-random monthly sample. Identities and full snapshot hashes guard reuse;
+changing source/config/extractor versions requires a separately preserved snapshot.
+
+`validate_cohort` reads only frozen local files. It chooses candidate books on
+January, checks February move/outcome predictions, compares frozen books on common
+cohort models, reports BRC strata separately, and tests session-correlated recall.
+The driver caps candidate enumeration at 1,024 books (40 used), core evaluation at
+200,000 states per book, and checks a 240-second deadline before uncached book
+evaluations. Diagnostics and final output also take time after those evaluations;
+the deadline is not a whole-process hard timeout. No scalable-optimiser claim is made.
+
+Additional outputs are all in `_artifacts/m2/`:
+
+| File | Contents |
+|---|---|
+| `cohort_manifest.json` | Frozen frame, source fingerprints, sampling/rejection audit, schemas, engine identity, player overlap |
+| `train_games.json`, `validation_games.json` | Selected game metadata, replayed opening moves, hashes and FENs |
+| `evals.json` | Frozen bounded engine lookup results, with missing values explicit |
+| `train_graph.json`, `validation_graph.json` | Models shared by all plans in each cohort, study candidates and support audit |
+| `results.json` | Resolved configs, fixed books, observations, validation diagnostics, first-hit bounds, source/code hashes |
+| `decision_diagnostics.json`, `outcome_diagnostics.json` | Per-game audit quantities for the reported predictive checks |
+| `test_results.txt` | Recorded 31-test verification output |
+
+The pre-extraction system check is `_artifacts/resource_check_m2.json`. Original
+milestone-1 snapshots and results remain separate and unchanged.

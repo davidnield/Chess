@@ -114,3 +114,54 @@ other and horizon counts are preserved for audit but excluded from this explicit
 conditional population; conservation applies to this population only. No source
 propagated value enters the evaluator. See the report for the resulting negative
 early-advantage finding and the limitations of the tie-break outcome ranking.
+
+## Milestone 2 extensions (defaults preserve milestone 1)
+
+The documented BRC cohort and comparison are defined in `cohort_config.json` and
+`milestone2_plan.md`. Both individual ratings must be >=1800; rating gap <=200 is
+retained. January chooses the four study positions, candidate moves and books.
+February supplies separate predictive diagnostics and a separately estimated
+position model in which the already-frozen books are evaluated. This second use
+of February is a model comparison, not observed outcomes of playing those books.
+
+`Node.end_probability` defaults to zero. At a nonterminal arrival it mixes an
+observed human ending with continued play without consuming a ply. Its ending
+W/D/L includes all result classes; the chance of ending is held fixed across books
+as an explicit assumption. If every recorded arrival ends there, `human_terminal`
+records certainty of a human ending. Checkmate and other board-rule endings remain
+`terminal`. The precedence is board terminal, stipulated repetition, certain human
+ending, frontier, horizon; a mixed human-ending hazard applies only if play is
+otherwise evaluated. No graph claims to model a player's causal resignation or
+clock response to preparation.
+
+Move frequencies receive one total prior observation spread uniformly across all
+legal moves. Observed moves and frozen prescriptions have explicit child boards;
+the remaining legal moves share an aggregate **unobserved-continuation frontier**
+with unknown eval. That aggregate is an observation boundary, not a fabricated
+chess move. Entirely unseen positions also stop at frontiers instead of receiving
+an invented personal fallback policy. End hazards are estimated from observed
+endings and continued moves, excluding right-censored horizon arrivals from that
+hazard's denominator. Outcome estimates use all observed arrivals and 20 prior
+observations at (.45,.10,.45). This stationary position model remains vulnerable
+to sparse support, transposition/history effects and player/action confounding.
+
+The evaluator separately reports frontiers reached before H, unresolved first-hit
+mass, and first advantages known to precede any unknown evaluation. Missing evals
+after an already-certain hit do not erase that hit. A first-hit observation interval
+has lower bound `certain_advantage_mass` and upper bound that plus unresolved
+first-hit mass (clipped to one). Discounted bounds use the corresponding discounted
+lower bound and a conservative maximum of one on unresolved paths. These are
+conditional bounds for missing observations under the fitted move model, **not**
+confidence intervals for sampling, engine error or human performance. The broad
+`unknown_eval_mass` diagnostic still counts missing evals anywhere on a path.
+
+The session-correlated recall scenario samples one Bernoulli variable at game
+start: with probability r all cards are remembered; otherwise none are. This has
+the same *pregame marginal* recall for a specified card as independent recall r.
+Conditional recall at reached positions can differ because earlier play reveals
+session state. Evaluate the mixture of r=1 and r=0 whole-game values, not an r
+mixture at every position. No recall probabilities are fitted from these games.
+
+Evaluation raises after 200,000 distinct history states and releases its cache
+after each book. Milestone-2 search is restricted to 40 feasible books with at
+most two cards; every selected book is checked with the independent path oracle.
