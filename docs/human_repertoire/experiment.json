@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "synthetic": {
+    "profile": "Illustrative independent recall, fixed opponent; no personal calibration",
+    "base": {"horizon": 8, "discount": 0.99, "threshold_cp": 300, "soundness_floor_cp": -100, "max_engine_loss_cp": 150, "min_points": 0.48, "max_disadvantage": 0.4},
+    "budgets": [0, 1, 2, 3],
+    "recalls": [1.0, 0.85, 0.65],
+    "fallback_success": [0.1, 0.5, 0.8],
+    "opponent_payoff_error": [0.9, 0.6]
+  },
+  "real": {
+    "stats": "E:/chess/position-stats/position_stats_pooled_e2e_2018_01.parquet",
+    "aux": "E:/chess/position-stats/position_stats_aux_pooled_e2e_2018_01.parquet",
+    "reference": "E:/chess/repertoire/_budget/trunc_white_b20.parquet",
+    "eval_arrays": "E:/chess/eval_arrays",
+    "eval_db": "E:/chess/unified_eval_db.parquet",
+    "root_san": ["e4", "e5", "Nf3", "Nc6"],
+    "depth": 3,
+    "expanded_replies": 2,
+    "candidate_moves": 2,
+    "max_source_bytes": 8388608,
+    "max_source_rows": 100000,
+    "max_nodes": 500,
+    "wdl_prior": [0.45, 0.10, 0.45],
+    "wdl_prior_strength": 100,
+    "base": {"horizon": 3, "discount": 0.99, "threshold_cp": 300, "soundness_floor_cp": -100, "max_engine_loss_cp": 150, "min_points": 0.48, "max_disadvantage": 0.4},
+    "budgets": [0, 1, 2],
+    "recalls": [1.0, 0.85, 0.65],
+    "fallback_engine_tilt": [0.0, 1.0],
+    "opponent_engine_tilt": [0.0, 1.0]
+  }
+}

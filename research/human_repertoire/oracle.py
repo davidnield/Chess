@@ -57,13 +57,15 @@ def path_evaluate(g, book, c):
     return Metrics(**totals)
 
 
-def enumerate_books(g, c, budget):
+def enumerate_books(g, c, budget, allowed=None):
     choices = {}
     for key, n in g.nodes.items():
         if n.side != "us" or n.cp is None:
             continue
         moves = [e.move for e in n.edges if e.sound_cp is not None
                  and e.sound_cp >= c.soundness_floor_cp and n.cp - e.sound_cp <= c.max_engine_loss_cp]
+        if allowed is not None:
+            moves = [m for m in moves if m in allowed.get(key, ())]
         if moves:
             choices[key] = moves
     keys = sorted(choices)
@@ -75,9 +77,9 @@ def enumerate_books(g, c, budget):
                 yield dict(zip(subset, moves))
 
 
-def oracle_best(g, c, budget):
+def oracle_best(g, c, budget, allowed=None):
     best = None
-    for book in enumerate_books(g, c, budget):
+    for book in enumerate_books(g, c, budget, allowed):
         m = path_evaluate(g, book, c)
         cost = sum(g.nodes[k].cost for k in book)
         if m.points + 1e-12 < c.min_points or m.disadvantage - 1e-12 > c.max_disadvantage:

@@ -44,6 +44,8 @@ class Graph:
                 raise ValueError("cost must be a positive integer")
             if n.cp is not None and not isfinite(n.cp):
                 raise ValueError("nonfinite evaluation")
+            if len(n.wdl) != 3:
+                raise ValueError("W/D/L requires three outcomes")
             distribution(n.wdl)
             if n.side in {"us", "opp"}:
                 if not n.edges or len({e.move for e in n.edges}) != len(n.edges):
