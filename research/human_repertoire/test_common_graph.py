@@ -118,6 +118,7 @@ class CommonGraphTests(unittest.TestCase):
             def __init__(self):
                 self.calls = []
                 self.bound = False
+                self.incomplete = False
             def configure(self, values):
                 self.calls.append(values)
             def close(self):
@@ -129,6 +130,8 @@ class CommonGraphTests(unittest.TestCase):
                            {"score": chess.engine.PovScore(chess.engine.Cp(-45), chess.BLACK), "nodes": 123, "depth": 8}]
                 if self.bound:
                     updates[-1]["lowerbound"] = True
+                if self.incomplete:
+                    updates.append({"score": chess.engine.PovScore(chess.engine.Cp(-40), chess.BLACK), "upperbound": True, "nodes": 200, "depth": 9})
                 class Stream:
                     def __enter__(self):
                         return iter(updates)
@@ -140,6 +143,12 @@ class CommonGraphTests(unittest.TestCase):
         self.assertEqual(result["cp"], 45)
         self.assertEqual(engine.calls[0], {"Clear Hash": None})
         self.assertEqual(engine.calls[1][:2], (1000, .1))
+        engine.incomplete = True
+        retained = analyse_position(engine, chess.STARTING_FEN, 1000, .1)
+        self.assertEqual(retained["cp"], 45)
+        self.assertEqual(retained["depth"], 8)
+        self.assertEqual(retained["nodes"], 200)
+        self.assertTrue(retained["final_score_was_bound"])
         engine.bound = True
         with self.assertRaisesRegex(ValueError, "root score"):
             analyse_position(engine, chess.STARTING_FEN, 1000, .1)

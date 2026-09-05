@@ -56,7 +56,12 @@ and clear hash/new-game state per position. Every initial search has a 100,000-n
 and 1-second limit (whichever stops first). Recheck the mandatory positions and
 the highest-priority remaining targets, 32 total, at 400,000 nodes / 2 seconds.
 Record actual nodes, depth, elapsed time, CP from White's perspective, mate status,
-PV and W/D/L where returned. Reject bound-only or missing root scores. Engine
+PV and W/D/L where returned. Use the last completed score-bearing UCI update
+without a bound flag within each fixed search; reject bound-only or missing root
+scores. A node cap can interrupt the next iteration, so separately record whether
+the final message was a bound, its depth, and total work. This parser clarification
+was added after a single-position protocol trace and before any completed audit
+or book comparison; graph hashes, targets and work caps remain unchanged. Engine
 limits are work caps, not a proof of score accuracy. No position is selected for
 the deeper pass based on the score it received.
 

@@ -166,8 +166,9 @@ def analyse_position(engine, fen, nodes, seconds):
     engine.configure({"Clear Hash": None})
     # python-chess 1.11.2's aggregated info uses dict.update(). An old bound
     # flag can survive a later score line without that flag. Consume individual
-    # UCI updates and retain the final score-bearing line instead.
-    info, work = {}, {}
+    # UCI updates and retain the last completed, non-bound score. A node limit
+    # can interrupt the next iteration, whose final message is only a bound.
+    info, work, final_score = {}, {}, {}
     timer = threading.Timer(seconds+10, engine.close)
     timer.daemon = True
     timer.start()
@@ -175,17 +176,20 @@ def analyse_position(engine, fen, nodes, seconds):
         with engine.analysis(board, chess.engine.Limit(nodes=nodes, time=seconds), game=object()) as stream:
             for update in stream:
                 if "score" in update:
-                    info = dict(update)
+                    final_score = dict(update)
+                    if not update.get("lowerbound") and not update.get("upperbound"):
+                        info = dict(update)
                 work.update({k: update[k] for k in ("nodes", "time") if k in update})
     finally:
         timer.cancel()
     if "score" not in info or info.get("lowerbound") or info.get("upperbound"):
         raise ValueError("engine returned no unbounded root score")
-    info.update(work)
     score = info["score"].white()
     return {"cp": score.score(mate_score=100000), "mate": score.mate(),
-        "depth": info.get("depth"), "seldepth": info.get("seldepth"), "nodes": info.get("nodes"),
-        "seconds": info.get("time"), "pv": [m.uci() for m in info.get("pv", [])],
+        "depth": info.get("depth"), "seldepth": info.get("seldepth"), "nodes": work.get("nodes"),
+        "seconds": work.get("time"), "score_nodes": info.get("nodes"),
+        "final_score_was_bound": bool(final_score.get("lowerbound") or final_score.get("upperbound")),
+        "final_reported_depth": final_score.get("depth"), "pv": [m.uci() for m in info.get("pv", [])],
         "wdl": list(info["wdl"].white()) if "wdl" in info else None,
         "limits": {"nodes": nodes, "seconds": seconds}, "fen": fen}
 
