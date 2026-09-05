@@ -20,8 +20,8 @@
     "observed_nodes": 22515,
     "real_positions": 14244
   },
-  "created_utc": "2026-09-05T14:30:47.753699+00:00",
-  "elapsed_seconds": 47.5,
+  "created_utc": "2026-09-05T14:37:03.706273+00:00",
+  "elapsed_seconds": 36.875,
   "engine_identity": {
     "binary": {
       "mtime_ns": 1769897604000000000,
@@ -207,7 +207,7 @@
     },
     "code_sha256": {
       "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
-      "continuation_audit.py": "ee073e41ade162b473ec4746f6e5ea734df5ee0e2e51d4daabc8919c91d428ba",
+      "continuation_audit.py": "e089f7eeb2e66c3fc9adbe5837bce5cd28f48df08af450732adb6fcd00682e43",
       "empirical.py": "d274ef8ee11fd94fbd2927f02f5d5c8e522359208c3284b73950b7457305a5c9",
       "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
       "oracle.py": "bf4f0b16cf0be5bf9d40de3bb6fbd793a7e9a9c4c550ae168dee5d5f16bfc084",
