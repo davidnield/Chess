@@ -1,0 +1,4 @@
+# Python 3.11.15; synthetic evaluator/tests need only the standard library.
+chess==1.11.2
+numpy==2.4.3
+pyarrow==24.0.0
