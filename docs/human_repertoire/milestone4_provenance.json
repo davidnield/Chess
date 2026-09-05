@@ -20,8 +20,8 @@
     "observed_nodes": 22515,
     "real_positions": 14244
   },
-  "created_utc": "2026-09-05T14:37:03.706273+00:00",
-  "elapsed_seconds": 36.875,
+  "created_utc": "2026-09-05T14:41:53.303263+00:00",
+  "elapsed_seconds": 37.15599999999995,
   "engine_identity": {
     "binary": {
       "mtime_ns": 1769897604000000000,
@@ -207,7 +207,7 @@
     },
     "code_sha256": {
       "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
-      "continuation_audit.py": "e089f7eeb2e66c3fc9adbe5837bce5cd28f48df08af450732adb6fcd00682e43",
+      "continuation_audit.py": "b864e32d2f36c92be4a793976e8d338bd7e9d90fb14c80b2d533bde013f34494",
       "empirical.py": "d274ef8ee11fd94fbd2927f02f5d5c8e522359208c3284b73950b7457305a5c9",
       "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
       "oracle.py": "bf4f0b16cf0be5bf9d40de3bb6fbd793a7e9a9c4c550ae168dee5d5f16bfc084",
@@ -269,7 +269,7 @@
       "wdl_prior_strength": 20
     },
     "frozen_model_sha256": "0757c1a1a2faec9f83faac247c9a1bc711a305fda00201e08c10b3a1cdedcaf6",
-    "plan_sha256": "56ce9bea967e170a29416868a0c2bbc28864f83a4fba96454b0e8e87e82f93b6",
+    "plan_sha256": "55104190aaced9516bfd6387bf2d9a6b49a91457ac074e8058b81cb3d9749909",
     "python_chess_version": "1.11.2"
   },
   "reference_sha256": "f864d2e6e8c28241b6d64babc4a9acdb5b3970866e0ce811664b65ba9289e8e9",
