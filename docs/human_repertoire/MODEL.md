@@ -165,3 +165,26 @@ mixture at every position. No recall probabilities are fitted from these games.
 Evaluation raises after 200,000 distinct history states and releases its cache
 after each book. Milestone-2 search is restricted to 40 feasible books with at
 most two cards; every selected book is checked with the independent path oracle.
+
+## Milestone 3 predictive prior (not yet a book-evaluation replacement)
+
+`shared_fallback.py` fits exact-position/UCI counts and color-symmetric move-token
+counts from January alone. A token records piece type, destination (Black ranks
+reflected), capture, promotion and castling. For legal moves at s, let
+`w(m) = (token_count(token(s,m)) + 1)^t` and `q(m|s) = w(m)/sum_legal(w)`.
+Each legal move receives its own weight, including moves sharing a token.
+The posterior is `(position_move_count + alpha*q)/(position_count + alpha)`.
+This is a descriptive empirical prior, not a fitted conditional-logit model.
+
+February selects alpha and t on decision-weighted log loss from the fixed grid.
+March supplies the final comparison with tuned uniform-prior position frequencies.
+The engine-free prior predicts all legal moves at unseen positions, but does not
+expand their downstream graphs or estimate outcomes. Observed game endings enter
+sample counts; no move is invented after an ending. Prediction conditions on an
+actual decision in the recorded opening window and does not estimate end hazards.
+
+This step changes no recall, cost, soundness, horizon, repetition or objective
+semantics. Those remain the milestone-2 evaluator's definitions. A future common
+graph adapter must explicitly preserve missing-evaluation and truncated-branch
+mass before any book comparison can use the new prior. Lower held-out move loss
+alone says nothing about achievable early advantage or human learning benefit.

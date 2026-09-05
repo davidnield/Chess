@@ -1,0 +1,427 @@
+{
+  "completed_utc": "2026-09-05T05:51:07.616342+00:00",
+  "elapsed_seconds": 11.202999999979511,
+  "frozen_model_sha256": "0757c1a1a2faec9f83faac247c9a1bc711a305fda00201e08c10b3a1cdedcaf6",
+  "paired_bootstrap": {
+    "components": 1534,
+    "decisions": 26857,
+    "draws": 500,
+    "estimate": -0.1529392516428606,
+    "games": 2250,
+    "largest_component_games": 139,
+    "percentile_95": [
+      -0.16111222944000123,
+      -0.14474469261235923
+    ],
+    "scope": "conditional on fitted/tuned model and selected frame; not training, selection, population or causal uncertainty",
+    "seed": 20240906
+  },
+  "paired_difference": {
+    "event:Blitz": {
+      "brier": -0.00972508353707513,
+      "log_loss": -0.1557583356137502
+    },
+    "event:Classical": {
+      "brier": -0.00905051877804186,
+      "log_loss": -0.14053831287789764
+    },
+    "event:Rapid": {
+      "brier": -0.010018308759832562,
+      "log_loss": -0.1624769850979111
+    },
+    "pooled": {
+      "brier": -0.009598621569096188,
+      "log_loss": -0.15293925164277145
+    },
+    "side:black": {
+      "brier": -0.01132334844943561,
+      "log_loss": -0.17092532777278713
+    },
+    "side:white": {
+      "brier": -0.007876076750019223,
+      "log_loss": -0.13497593083724624
+    },
+    "support:seen": {
+      "brier": -0.0014684371851555467,
+      "log_loss": -0.06594022793116583
+    },
+    "support:unseen": {
+      "brier": -0.028181473886851882,
+      "log_loss": -0.35178960153324956
+    }
+  },
+  "progression_rule_passed": true,
+  "summary": {
+    "milestone2_position": {
+      "event:Blitz": {
+        "brier": 0.7400456597585209,
+        "decisions": 8973,
+        "log_loss": 2.1983326842355537,
+        "predicted_unseen_move_mass": 0.38065467377516393,
+        "thin_position": 0.46907388833166164,
+        "unseen_move": 0.4005349381477767,
+        "unseen_position": 0.3056948623648724
+      },
+      "event:Classical": {
+        "brier": 0.7133847528507079,
+        "decisions": 8928,
+        "log_loss": 2.076257214988848,
+        "predicted_unseen_move_mass": 0.35567953617187026,
+        "thin_position": 0.44388440860215056,
+        "unseen_move": 0.36727150537634407,
+        "unseen_position": 0.27889784946236557
+      },
+      "event:Rapid": {
+        "brier": 0.754773518542086,
+        "decisions": 8956,
+        "log_loss": 2.2650275870829994,
+        "predicted_unseen_move_mass": 0.40014657858084623,
+        "thin_position": 0.4880527020991514,
+        "unseen_move": 0.42306833407771327,
+        "unseen_position": 0.328383206788745
+      },
+      "pooled": {
+        "brier": 0.7360941434459156,
+        "decisions": 26857,
+        "log_loss": 2.1799922054205307,
+        "predicted_unseen_move_mass": 0.3788522189558577,
+        "thin_position": 0.46702907994191456,
+        "unseen_move": 0.39699147335890084,
+        "unseen_position": 0.3043526827270358
+      },
+      "side:black": {
+        "brier": 0.7388677598417711,
+        "decisions": 13420,
+        "log_loss": 2.2371837840166826,
+        "predicted_unseen_move_mass": 0.41361059135605427,
+        "thin_position": 0.5088673621460507,
+        "unseen_move": 0.43293591654247393,
+        "unseen_position": 0.3368852459016393
+      },
+      "side:white": {
+        "brier": 0.7333240361279066,
+        "decisions": 13437,
+        "log_loss": 2.122872983513911,
+        "predicted_unseen_move_mass": 0.344137821574675,
+        "thin_position": 0.4252437299992558,
+        "unseen_move": 0.36109250576765645,
+        "unseen_position": 0.2718612785592022
+      },
+      "support:seen": {
+        "brier": 0.6375579999071213,
+        "decisions": 18683,
+        "log_loss": 1.6146142748640648,
+        "predicted_unseen_move_mass": 0.10709383099593867,
+        "thin_position": 0.2338489535941765,
+        "unseen_move": 0.13316919124337634,
+        "unseen_position": 0.0
+      },
+      "support:unseen": {
+        "brier": 0.9613144480379916,
+        "decisions": 8174,
+        "log_loss": 3.472254974760823,
+        "predicted_unseen_move_mass": 1.0,
+        "thin_position": 1.0,
+        "unseen_move": 1.0,
+        "unseen_position": 1.0
+      }
+    },
+    "shared_position": {
+      "event:Blitz": {
+        "brier": 0.7303205762214457,
+        "decisions": 8973,
+        "log_loss": 2.0425743486218035,
+        "predicted_unseen_move_mass": 0.3766613317597861,
+        "thin_position": 0.46907388833166164,
+        "unseen_move": 0.4005349381477767,
+        "unseen_position": 0.3056948623648724
+      },
+      "event:Classical": {
+        "brier": 0.704334234072666,
+        "decisions": 8928,
+        "log_loss": 1.9357189021109504,
+        "predicted_unseen_move_mass": 0.3515454295246458,
+        "thin_position": 0.44388440860215056,
+        "unseen_move": 0.36727150537634407,
+        "unseen_position": 0.27889784946236557
+      },
+      "event:Rapid": {
+        "brier": 0.7447552097822534,
+        "decisions": 8956,
+        "log_loss": 2.1025506019850884,
+        "predicted_unseen_move_mass": 0.396089029723768,
+        "thin_position": 0.4880527020991514,
+        "unseen_move": 0.42306833407771327,
+        "unseen_position": 0.328383206788745
+      },
+      "pooled": {
+        "brier": 0.7264955218768194,
+        "decisions": 26857,
+        "log_loss": 2.0270529537777593,
+        "predicted_unseen_move_mass": 0.37479067188752313,
+        "thin_position": 0.46702907994191456,
+        "unseen_move": 0.39699147335890084,
+        "unseen_position": 0.3043526827270358
+      },
+      "side:black": {
+        "brier": 0.7275444113923355,
+        "decisions": 13420,
+        "log_loss": 2.0662584562438955,
+        "predicted_unseen_move_mass": 0.40926806097250595,
+        "thin_position": 0.5088673621460507,
+        "unseen_move": 0.43293591654247393,
+        "unseen_position": 0.3368852459016393
+      },
+      "side:white": {
+        "brier": 0.7254479593778874,
+        "decisions": 13437,
+        "log_loss": 1.9878970526766646,
+        "predicted_unseen_move_mass": 0.34035690233175214,
+        "thin_position": 0.4252437299992558,
+        "unseen_move": 0.36109250576765645,
+        "unseen_position": 0.2718612785592022
+      },
+      "support:seen": {
+        "brier": 0.6360895627219657,
+        "decisions": 18683,
+        "log_loss": 1.548674046932899,
+        "predicted_unseen_move_mass": 0.10125531632408166,
+        "thin_position": 0.2338489535941765,
+        "unseen_move": 0.13316919124337634,
+        "unseen_position": 0.0
+      },
+      "support:unseen": {
+        "brier": 0.9331329741511397,
+        "decisions": 8174,
+        "log_loss": 3.1204653732275736,
+        "predicted_unseen_move_mass": 1.0,
+        "thin_position": 1.0,
+        "unseen_move": 1.0,
+        "unseen_position": 1.0
+      }
+    },
+    "token_only": {
+      "event:Blitz": {
+        "brier": 0.9228453294702177,
+        "decisions": 8973,
+        "log_loss": 2.9251921205968556,
+        "predicted_unseen_move_mass": 0.7674243896400403,
+        "thin_position": 0.46907388833166164,
+        "unseen_move": 0.4005349381477767,
+        "unseen_position": 0.3056948623648724
+      },
+      "event:Classical": {
+        "brier": 0.9221396888181215,
+        "decisions": 8928,
+        "log_loss": 2.9233863849924857,
+        "predicted_unseen_move_mass": 0.7612076354087249,
+        "thin_position": 0.44388440860215056,
+        "unseen_move": 0.36727150537634407,
+        "unseen_position": 0.27889784946236557
+      },
+      "event:Rapid": {
+        "brier": 0.9223017274684683,
+        "decisions": 8956,
+        "log_loss": 2.923439497835843,
+        "predicted_unseen_move_mass": 0.7715873244102788,
+        "thin_position": 0.4880527020991514,
+        "unseen_move": 0.42306833407771327,
+        "unseen_position": 0.328383206788745
+      },
+      "pooled": {
+        "brier": 0.9224294803705477,
+        "decisions": 26857,
+        "log_loss": 2.924007397920266,
+        "predicted_unseen_move_mass": 0.7667459840856287,
+        "thin_position": 0.46702907994191456,
+        "unseen_move": 0.39699147335890084,
+        "unseen_position": 0.3043526827270358
+      },
+      "side:black": {
+        "brier": 0.9195899418622386,
+        "decisions": 13420,
+        "log_loss": 2.900625176993021,
+        "predicted_unseen_move_mass": 0.7901695044816787,
+        "thin_position": 0.5088673621460507,
+        "unseen_move": 0.43293591654247393,
+        "unseen_position": 0.3368852459016393
+      },
+      "side:white": {
+        "brier": 0.9252654263987982,
+        "decisions": 13437,
+        "log_loss": 2.947360036518626,
+        "predicted_unseen_move_mass": 0.7433520982691885,
+        "thin_position": 0.4252437299992558,
+        "unseen_move": 0.36109250576765645,
+        "unseen_position": 0.2718612785592022
+      },
+      "support:seen": {
+        "brier": 0.9177465944227551,
+        "decisions": 18683,
+        "log_loss": 2.838055062098461,
+        "predicted_unseen_move_mass": 0.6646950112180472,
+        "thin_position": 0.2338489535941765,
+        "unseen_move": 0.13316919124337634,
+        "unseen_position": 0.0
+      },
+      "support:unseen": {
+        "brier": 0.9331329741511397,
+        "decisions": 8174,
+        "log_loss": 3.1204653732275736,
+        "predicted_unseen_move_mass": 1.0,
+        "thin_position": 1.0,
+        "unseen_move": 1.0,
+        "unseen_position": 1.0
+      }
+    },
+    "tuned_position": {
+      "event:Blitz": {
+        "brier": 0.7400456597585209,
+        "decisions": 8973,
+        "log_loss": 2.1983326842355537,
+        "predicted_unseen_move_mass": 0.38065467377516393,
+        "thin_position": 0.46907388833166164,
+        "unseen_move": 0.4005349381477767,
+        "unseen_position": 0.3056948623648724
+      },
+      "event:Classical": {
+        "brier": 0.7133847528507079,
+        "decisions": 8928,
+        "log_loss": 2.076257214988848,
+        "predicted_unseen_move_mass": 0.35567953617187026,
+        "thin_position": 0.44388440860215056,
+        "unseen_move": 0.36727150537634407,
+        "unseen_position": 0.27889784946236557
+      },
+      "event:Rapid": {
+        "brier": 0.754773518542086,
+        "decisions": 8956,
+        "log_loss": 2.2650275870829994,
+        "predicted_unseen_move_mass": 0.40014657858084623,
+        "thin_position": 0.4880527020991514,
+        "unseen_move": 0.42306833407771327,
+        "unseen_position": 0.328383206788745
+      },
+      "pooled": {
+        "brier": 0.7360941434459156,
+        "decisions": 26857,
+        "log_loss": 2.1799922054205307,
+        "predicted_unseen_move_mass": 0.3788522189558577,
+        "thin_position": 0.46702907994191456,
+        "unseen_move": 0.39699147335890084,
+        "unseen_position": 0.3043526827270358
+      },
+      "side:black": {
+        "brier": 0.7388677598417711,
+        "decisions": 13420,
+        "log_loss": 2.2371837840166826,
+        "predicted_unseen_move_mass": 0.41361059135605427,
+        "thin_position": 0.5088673621460507,
+        "unseen_move": 0.43293591654247393,
+        "unseen_position": 0.3368852459016393
+      },
+      "side:white": {
+        "brier": 0.7333240361279066,
+        "decisions": 13437,
+        "log_loss": 2.122872983513911,
+        "predicted_unseen_move_mass": 0.344137821574675,
+        "thin_position": 0.4252437299992558,
+        "unseen_move": 0.36109250576765645,
+        "unseen_position": 0.2718612785592022
+      },
+      "support:seen": {
+        "brier": 0.6375579999071213,
+        "decisions": 18683,
+        "log_loss": 1.6146142748640648,
+        "predicted_unseen_move_mass": 0.10709383099593867,
+        "thin_position": 0.2338489535941765,
+        "unseen_move": 0.13316919124337634,
+        "unseen_position": 0.0
+      },
+      "support:unseen": {
+        "brier": 0.9613144480379916,
+        "decisions": 8174,
+        "log_loss": 3.472254974760823,
+        "predicted_unseen_move_mass": 1.0,
+        "thin_position": 1.0,
+        "unseen_move": 1.0,
+        "unseen_position": 1.0
+      }
+    },
+    "uniform_legal": {
+      "event:Blitz": {
+        "brier": 0.9650173071218512,
+        "decisions": 8973,
+        "log_loss": 3.4669645981868014,
+        "predicted_unseen_move_mass": 0.8642189956927739,
+        "thin_position": 0.46907388833166164,
+        "unseen_move": 0.4005349381477767,
+        "unseen_position": 0.3056948623648724
+      },
+      "event:Classical": {
+        "brier": 0.9638438739569039,
+        "decisions": 8928,
+        "log_loss": 3.453757090630635,
+        "predicted_unseen_move_mass": 0.8606136510989673,
+        "thin_position": 0.44388440860215056,
+        "unseen_move": 0.36727150537634407,
+        "unseen_position": 0.27889784946236557
+      },
+      "event:Rapid": {
+        "brier": 0.9635034815143299,
+        "decisions": 8956,
+        "log_loss": 3.449917828295095,
+        "predicted_unseen_move_mass": 0.8668180194560896,
+        "thin_position": 0.4880527020991514,
+        "unseen_move": 0.42306833407771327,
+        "unseen_position": 0.328383206788745
+      },
+      "pooled": {
+        "brier": 0.9641224106912784,
+        "decisions": 26857,
+        "log_loss": 3.45688947815828,
+        "predicted_unseen_move_mass": 0.8638871768108907,
+        "thin_position": 0.46702907994191456,
+        "unseen_move": 0.39699147335890084,
+        "unseen_position": 0.3043526827270358
+      },
+      "side:black": {
+        "brier": 0.9617676160538233,
+        "decisions": 13420,
+        "log_loss": 3.430080093432931,
+        "predicted_unseen_move_mass": 0.873979425920544,
+        "thin_position": 0.5088673621460507,
+        "unseen_move": 0.43293591654247393,
+        "unseen_position": 0.3368852459016393
+      },
+      "side:white": {
+        "brier": 0.9664742261287352,
+        "decisions": 13437,
+        "log_loss": 3.48366494463214,
+        "predicted_unseen_move_mass": 0.8538076960450259,
+        "thin_position": 0.4252437299992558,
+        "unseen_move": 0.36109250576765645,
+        "unseen_position": 0.2718612785592022
+      },
+      "support:seen": {
+        "brier": 0.9653509225323621,
+        "decisions": 18683,
+        "log_loss": 3.4501669191884092,
+        "predicted_unseen_move_mass": 0.8043364506562277,
+        "thin_position": 0.2338489535941765,
+        "unseen_move": 0.13316919124337634,
+        "unseen_position": 0.0
+      },
+      "support:unseen": {
+        "brier": 0.9613144480379916,
+        "decisions": 8174,
+        "log_loss": 3.472254974760823,
+        "predicted_unseen_move_mass": 1.0,
+        "thin_position": 1.0,
+        "unseen_move": 1.0,
+        "unseen_position": 1.0
+      }
+    }
+  },
+  "test_game_scores_sha256": "3bdbebfe6f2b9191097712c0e089e81e278d5314625b1c764c7df8162d7942ab"
+}

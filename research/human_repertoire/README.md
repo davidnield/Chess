@@ -112,3 +112,56 @@ Additional outputs are all in `_artifacts/m2/`:
 
 The pre-extraction system check is `_artifacts/resource_check_m2.json`. Original
 milestone-1 snapshots and results remain separate and unchanged.
+
+## Milestone 3: shared fallback prediction across dates
+
+The [fixed plan](../../docs/human_repertoire/milestone3_plan.md) and
+[config](../../docs/human_repertoire/milestone3_config.json) define three spread
+frames per event/month, at most 2,250 games each for January fitting, February
+tuning and March testing. The population and twelve-ply opening window match
+milestone 2. Exact frames and footer fingerprints are tracked separately.
+
+After checking memory headroom and active workloads, use the isolated interpreter:
+
+```powershell
+& $researchPython -B -m unittest research.human_repertoire.test_model research.human_repertoire.test_real research.human_repertoire.test_cohort research.human_repertoire.test_empirical research.human_repertoire.test_shared_fallback -v
+& $researchPython -B -m research.human_repertoire.date_cohort --discover
+& $researchPython -B -m research.human_repertoire.date_cohort --extract
+& $researchPython -B -m research.human_repertoire.shared_fallback --tune
+& $researchPython -B -m research.human_repertoire.shared_fallback --test
+& $researchPython -B -m research.human_repertoire.verify_shared_fallback
+```
+
+Discovery reads Parquet footers only. Extraction caps decoded rows at four million
+plus batch rounding, projected row-group bytes at 512 MiB and selected games at
+250 per 65,536-row frame. No engine lookup or process is needed for this check.
+The 360-second extraction guard is checked before each row-group read; prediction
+checks its 360-second guard before each game. These are not hard process timeouts.
+Scoring permits at most 30,000 decisions and 50,000 cached positions per split.
+
+Tuning reads January/February only and freezes the selected settings and January
+counts. Final scoring verifies the frozen identity before opening March games.
+All model families are evaluated on the same recorded decisions; final results
+are predictive checks, not counterfactual outcomes or repertoire recommendations.
+Reuse verifies identity and skips completed stages. Preserve the old artifact
+directory before an explicitly revised experiment; do not bypass a drift error.
+
+Additional outputs under `_artifacts/m3/`:
+
+| File | Contents |
+|---|---|
+| `frames.json` | Frozen row windows, footer dates, source inventory and config |
+| `cohort_manifest.json` | Source/code identities, frame audits, snapshot hashes and player overlap |
+| `{train,tune,test}_games.json` | Replayed bounded game snapshots |
+| `fitted_counts.json` | January exact-position/UCI and shared-token counts |
+| `tuning_scores.json` | Every fixed grid setting's February diagnostics |
+| `frozen_model.json` | Selected parameters and fitted/tuning/plan/code hashes |
+| `test_results.json` | All final comparisons, paired differences and component bootstrap |
+| `test_game_scores.json` | Paired per-game sufficient statistics for audit |
+| `verification.json` | Snapshot/selection checks, score reconstruction and parity with the unchanged milestone-2 diagnostic |
+| `preflight_tests.txt` | Recorded 40-test verification before real extraction |
+
+The system check is `_artifacts/resource_check_m3.json`. Code remains separate
+from the existing evaluator/optimiser and earlier frozen experiments.
+See the [completed report](../../docs/human_repertoire/milestone3_report.md) for
+the final predictive pass and the remaining graph/engine-coverage limitations.

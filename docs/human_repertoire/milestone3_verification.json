@@ -1,0 +1,73 @@
+{
+  "decisions": {
+    "test": 26857,
+    "train": 26914,
+    "tune": 26903
+  },
+  "game_counts": {
+    "test": 2250,
+    "train": 2250,
+    "tune": 2250
+  },
+  "observed_endings": {
+    "test": 35,
+    "train": 21,
+    "tune": 32
+  },
+  "previous_diagnostic_differences": {
+    "event:Blitz": {
+      "brier": 1.2434497875801753e-14,
+      "decisions": 0,
+      "log_loss": 2.930988785010413e-14,
+      "thin_position": 0.0,
+      "unseen_move": 0.0,
+      "unseen_position": 0.0
+    },
+    "event:Classical": {
+      "brier": 1.2656542480726785e-14,
+      "decisions": 0,
+      "log_loss": 3.197442310920451e-14,
+      "thin_position": 0.0,
+      "unseen_move": 0.0,
+      "unseen_position": 0.0
+    },
+    "event:Rapid": {
+      "brier": 1.354472090042691e-14,
+      "decisions": 0,
+      "log_loss": 2.842170943040401e-14,
+      "thin_position": 0.0,
+      "unseen_move": 0.0,
+      "unseen_position": 0.0
+    },
+    "pooled": {
+      "brier": 2.220446049250313e-16,
+      "decisions": 0,
+      "log_loss": -4.6629367034256575e-14,
+      "thin_position": 0.0,
+      "unseen_move": 0.0,
+      "unseen_position": 0.0
+    }
+  },
+  "rating_range": {
+    "test": [
+      1800,
+      3000
+    ],
+    "train": [
+      1800,
+      2956
+    ],
+    "tune": [
+      1800,
+      2950
+    ]
+  },
+  "status": "passed",
+  "test_results_sha256": "41b3166c01bac30f18914b05d0cfc900ca0ebb2094bc979028e453470270ddca",
+  "verification_code_sha256": "8fe814502b73b4e7a58972030f3745fa3868110bdfa5212bb0e52df1150fb9f5",
+  "zero_decision_games": {
+    "test": 1,
+    "train": 1,
+    "tune": 0
+  }
+}

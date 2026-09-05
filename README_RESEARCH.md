@@ -21,3 +21,11 @@ Classical (rating gap <=200), a twelve-ply horizon, and separate January/Februar
 but sparse continuation support leaves book comparisons unresolved. Next work
 should improve and validate fallback prediction and engine coverage on a sample
 spread across dates before expanding optimisation or recommending a repertoire.
+
+Milestone 3 is complete: [shared fallback and date-spread test](docs/human_repertoire/milestone3_report.md).
+It freezes 6,750 games across January fitting, February tuning and March testing.
+A simple shared move prior improves March log loss from 2.180 to 2.027 across
+26,857 decisions, with gains in all three time controls and at unseen positions.
+The 40-test suite and independent baseline parity audit pass. This supports
+bounded integration into a common graph and an influential-position engine audit;
+unresolved continuations still prevent a repertoire recommendation.
