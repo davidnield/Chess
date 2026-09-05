@@ -165,3 +165,72 @@ The system check is `_artifacts/resource_check_m3.json`. Code remains separate
 from the existing evaluator/optimiser and earlier frozen experiments.
 See the [completed report](../../docs/human_repertoire/milestone3_report.md) for
 the final predictive pass and the remaining graph/engine-coverage limitations.
+
+## Milestone 4: common graph and bounded engine audit
+
+The fixed protocol is `docs/human_repertoire/milestone4_plan.md`, with resource
+caps and search limits in `milestone4_config.json`. It uses only frozen January
+training games/counts and the February-selected priors. No new game extraction
+or model fitting occurs. The existing source projection and two-card plan are
+compared at recall .85; this is not a new optimisation run.
+
+After checking commit headroom and active workloads, run:
+
+```powershell
+& $researchPython -B -m unittest research.human_repertoire.test_model research.human_repertoire.test_real research.human_repertoire.test_cohort research.human_repertoire.test_empirical research.human_repertoire.test_shared_fallback research.human_repertoire.test_common_graph -v
+& $researchPython -B -m research.human_repertoire.continuation_audit --prepare
+& $researchPython -B -m research.human_repertoire.continuation_audit --engine
+& $researchPython -B -m research.human_repertoire.continuation_audit --compare
+& $researchPython -B -m research.human_repertoire.verify_continuation
+```
+
+Preparation creates the common observed graph and a bounded extension of 64
+missing edges, with two further plies at unsupported children. Both policies use
+identical explicit branches and keep omitted probability in aggregate frontiers.
+It checks parity with the unchanged previous builder, verifies the external eval
+arrays with `adopt=False`, and freezes sparse lookups, engine identity and targets.
+No external database, repertoire or cache is written.
+
+The engine phase uses the already installed Stockfish binary with one thread and
+32 MiB hash. Initial searches cover at most 256 positions at 100,000 nodes/1 second;
+32 fixed targets get 400,000 nodes/2 seconds. Both limits apply; actual work and
+depth are recorded. Hash and game state are reset for each position. A 420-second
+guard applies before requests, with a separate 10-second protocol timeout.
+The last completed non-bound score is retained within each cap, with interrupted
+final iterations and total work recorded separately. Partial progress is saved
+every 16 positions and can resume only with matching
+identities. Only a complete audit can enter the comparison.
+
+Comparison reads isolated snapshots and uses the existing exact evaluator for
+all fixed plans, policies, graph variants and evaluation maps. Source-only,
+mixed-source overlay and homogeneous audited-only evidence are labelled
+separately. Uncertified prepared moves are reported without relaxing gates.
+The 360-second guard is checked between evaluations; each evaluation retains its
+200,000-history-state cap. The independent path oracle checks real predictions
+at a bounded six-ply horizon.
+
+Outputs under `_artifacts/m4/`:
+
+| File | Contents |
+|---|---|
+| `preparation.json` | Code/config/source identities, parity check, graph counts, books and engine identity |
+| `templates.json`, `graphs.json` | Shared legal topology and both frozen probability kernels |
+| `source_evals.json` | Sparse frozen canonical lookups with explicit missing values |
+| `engine_selection.json` | Fixed target/deeper lists, mandatory gates and reach priorities |
+| `engine_audit.json` | Resumable isolated UCI results, actual limits/work and provenance |
+| `results.json` | Fixed-plan model predictions, observation bounds, gates and score disagreements |
+| `preflight_tests.txt` | Recorded 49-test result before real preparation |
+| `final_tests.txt` | Recorded 50-test result including first-gap accounting |
+| `verification.json` | First-gap partitions, gate stability, engine work and frozen-hash checks |
+
+The resource check is `_artifacts/resource_check_m4.json`. Do not bypass drift
+checks, increase frozen work caps silently, or interpret model predictions as
+observed benefits from studying a book.
+
+The [completed report](../../docs/human_repertoire/milestone4_report.md) identifies
+aggregate omitted moves as the dominant observation gap. The verifier also
+checks identical snapshot hashes against the preserved initial preparation in
+`_artifacts/m4_before_score_stream_fix/`; retain that small experiment snapshot
+when moving the research artifacts. The intermediate UCI trace and preparation
+are in `_artifacts/m4_before_completed_iteration_fix/`. These do not contain a
+completed alternative experiment or altered graph/target selection.

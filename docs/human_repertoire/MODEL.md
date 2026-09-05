@@ -188,3 +188,29 @@ semantics. Those remain the milestone-2 evaluator's definitions. A future common
 graph adapter must explicitly preserve missing-evaluation and truncated-branch
 mass before any book comparison can use the new prior. Lower held-out move loss
 alone says nothing about achievable early advantage or human learning benefit.
+
+## Milestone 4 common-graph integration
+
+`common_graph.py` preserves a single explicit legal topology for both frozen
+milestone-3 priors. The observed variant reproduces the milestone-2 uniform
+adapter on the same January games. Expansion selects 64 missing legal edges by
+maximum finite-horizon expected traversal count across the fixed policies/plans,
+without using engine scores. Unsupported children gain two plies of the union
+of each policy's three most likely moves; remaining legal probability stays at
+an aggregate unknown frontier. Existing transpositions use one position key and
+one study card. New unsupported nodes assume zero human-ending hazard and the
+existing W/D/L prior; those values are model assumptions.
+
+Forward visit counts ignore repetition and soundness gates only when allocating
+bounded graph/engine work. They can count repeated visits and are not first-hit
+probabilities. Final predictions still use the original history-aware evaluator,
+repetition semantics, soundness gates and independent recall with re-entry.
+
+Evaluation evidence is varied without changing probabilities or edges: frozen
+canonical scores, an explicitly mixed-source audited overlay, or only positions
+audited by the same Stockfish binary and exact board terminals. The last map
+leaves unaudited positions unknown. Parent and prescribed child scores use the
+same selected map. The targeted engine pass records actual depth/nodes, mate
+status and fixed-budget sensitivity; consistent work caps do not certify score
+accuracy. No source propagated value or engine W/D/L replaces the empirical
+outcome prediction in this experiment.

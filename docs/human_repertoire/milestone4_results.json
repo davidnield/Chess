@@ -1,0 +1,2614 @@
+{
+  "completed_utc": "2026-09-05T14:47:48.161173+00:00",
+  "elapsed_seconds": 45.5,
+  "engine_comparison": {
+    "deeper_marker_changes": 0,
+    "deeper_sensitivity": [
+      {
+        "base_cp": 17,
+        "deeper_cp": 20,
+        "marker_changed": false,
+        "position": "-1232502424588948607"
+      },
+      {
+        "base_cp": 22,
+        "deeper_cp": 25,
+        "marker_changed": false,
+        "position": "-1282149275871325830"
+      },
+      {
+        "base_cp": 66,
+        "deeper_cp": 62,
+        "marker_changed": false,
+        "position": "-1409245162509307996"
+      },
+      {
+        "base_cp": 38,
+        "deeper_cp": 36,
+        "marker_changed": false,
+        "position": "-1436759193943917468"
+      },
+      {
+        "base_cp": 34,
+        "deeper_cp": 16,
+        "marker_changed": false,
+        "position": "-1717997547902961428"
+      },
+      {
+        "base_cp": 12,
+        "deeper_cp": 15,
+        "marker_changed": false,
+        "position": "-2203400219207920216"
+      },
+      {
+        "base_cp": 21,
+        "deeper_cp": 22,
+        "marker_changed": false,
+        "position": "-3410639789297704900"
+      },
+      {
+        "base_cp": 24,
+        "deeper_cp": 24,
+        "marker_changed": false,
+        "position": "-4559419749024248259"
+      },
+      {
+        "base_cp": 22,
+        "deeper_cp": 17,
+        "marker_changed": false,
+        "position": "-4757902768255381284"
+      },
+      {
+        "base_cp": 16,
+        "deeper_cp": 30,
+        "marker_changed": false,
+        "position": "-5304299737603489349"
+      },
+      {
+        "base_cp": 49,
+        "deeper_cp": 41,
+        "marker_changed": false,
+        "position": "-6275826479234191381"
+      },
+      {
+        "base_cp": 30,
+        "deeper_cp": 22,
+        "marker_changed": false,
+        "position": "-6877797627662551727"
+      },
+      {
+        "base_cp": 14,
+        "deeper_cp": 32,
+        "marker_changed": false,
+        "position": "-6987580233745946646"
+      },
+      {
+        "base_cp": 44,
+        "deeper_cp": 43,
+        "marker_changed": false,
+        "position": "-7357607102456064319"
+      },
+      {
+        "base_cp": 24,
+        "deeper_cp": 31,
+        "marker_changed": false,
+        "position": "-7476048997210037241"
+      },
+      {
+        "base_cp": 35,
+        "deeper_cp": 18,
+        "marker_changed": false,
+        "position": "-8365278499798919729"
+      },
+      {
+        "base_cp": 19,
+        "deeper_cp": 17,
+        "marker_changed": false,
+        "position": "-8981655757801783481"
+      },
+      {
+        "base_cp": 55,
+        "deeper_cp": 37,
+        "marker_changed": false,
+        "position": "1224207606016225163"
+      },
+      {
+        "base_cp": 69,
+        "deeper_cp": 60,
+        "marker_changed": false,
+        "position": "1436694351892742572"
+      },
+      {
+        "base_cp": 28,
+        "deeper_cp": 18,
+        "marker_changed": false,
+        "position": "1944688136365447025"
+      },
+      {
+        "base_cp": 20,
+        "deeper_cp": 16,
+        "marker_changed": false,
+        "position": "1981041941088873272"
+      },
+      {
+        "base_cp": -3,
+        "deeper_cp": 9,
+        "marker_changed": false,
+        "position": "2223374119297668089"
+      },
+      {
+        "base_cp": 42,
+        "deeper_cp": 14,
+        "marker_changed": false,
+        "position": "2776049323298866377"
+      },
+      {
+        "base_cp": 112,
+        "deeper_cp": 114,
+        "marker_changed": false,
+        "position": "3047458686509828289"
+      },
+      {
+        "base_cp": 38,
+        "deeper_cp": 35,
+        "marker_changed": false,
+        "position": "4652262204718639790"
+      },
+      {
+        "base_cp": 37,
+        "deeper_cp": 14,
+        "marker_changed": false,
+        "position": "4689055884960126695"
+      },
+      {
+        "base_cp": -2,
+        "deeper_cp": 6,
+        "marker_changed": false,
+        "position": "4986951600073511535"
+      },
+      {
+        "base_cp": 35,
+        "deeper_cp": 40,
+        "marker_changed": false,
+        "position": "5409798013178080797"
+      },
+      {
+        "base_cp": -19,
+        "deeper_cp": -18,
+        "marker_changed": false,
+        "position": "5790638177660259151"
+      },
+      {
+        "base_cp": 25,
+        "deeper_cp": 25,
+        "marker_changed": false,
+        "position": "6232515489653759556"
+      },
+      {
+        "base_cp": 65,
+        "deeper_cp": 58,
+        "marker_changed": false,
+        "position": "8262382109317900144"
+      },
+      {
+        "base_cp": 39,
+        "deeper_cp": 47,
+        "marker_changed": false,
+        "position": "8704797333742910878"
+      }
+    ],
+    "known": [
+      {
+        "audited_cp": 38,
+        "difference": 25,
+        "marker_changed": false,
+        "position": "-1032245532078517306",
+        "source_cp": 13
+      },
+      {
+        "audited_cp": 20,
+        "difference": -5,
+        "marker_changed": false,
+        "position": "-1232502424588948607",
+        "source_cp": 25
+      },
+      {
+        "audited_cp": 25,
+        "difference": 16,
+        "marker_changed": false,
+        "position": "-1282149275871325830",
+        "source_cp": 9
+      },
+      {
+        "audited_cp": 21,
+        "difference": 21,
+        "marker_changed": false,
+        "position": "-136339563541734267",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 62,
+        "difference": -1,
+        "marker_changed": false,
+        "position": "-1409245162509307996",
+        "source_cp": 63
+      },
+      {
+        "audited_cp": 9,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "-1426691652565574329",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 36,
+        "difference": 14,
+        "marker_changed": false,
+        "position": "-1436759193943917468",
+        "source_cp": 22
+      },
+      {
+        "audited_cp": 11,
+        "difference": 11,
+        "marker_changed": false,
+        "position": "-1544284441363614805",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 16,
+        "difference": -4,
+        "marker_changed": false,
+        "position": "-1717997547902961428",
+        "source_cp": 20
+      },
+      {
+        "audited_cp": 12,
+        "difference": 12,
+        "marker_changed": false,
+        "position": "-1771945275319712187",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 7,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "-1850442052421407974",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 103,
+        "difference": 22,
+        "marker_changed": false,
+        "position": "-1867097936539676342",
+        "source_cp": 81
+      },
+      {
+        "audited_cp": 68,
+        "difference": 36,
+        "marker_changed": false,
+        "position": "-1869500742899530594",
+        "source_cp": 32
+      },
+      {
+        "audited_cp": 36,
+        "difference": 36,
+        "marker_changed": false,
+        "position": "-2170518782471980000",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 15,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "-2203400219207920216",
+        "source_cp": 6
+      },
+      {
+        "audited_cp": 23,
+        "difference": 23,
+        "marker_changed": false,
+        "position": "-2385449692419516484",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 137,
+        "difference": -18,
+        "marker_changed": false,
+        "position": "-2671478956410242931",
+        "source_cp": 155
+      },
+      {
+        "audited_cp": 27,
+        "difference": 20,
+        "marker_changed": false,
+        "position": "-2831485049317376303",
+        "source_cp": 7
+      },
+      {
+        "audited_cp": 80,
+        "difference": 21,
+        "marker_changed": false,
+        "position": "-2899617322335020166",
+        "source_cp": 59
+      },
+      {
+        "audited_cp": 35,
+        "difference": 21,
+        "marker_changed": false,
+        "position": "-3224727718695677048",
+        "source_cp": 14
+      },
+      {
+        "audited_cp": 116,
+        "difference": 19,
+        "marker_changed": false,
+        "position": "-3324317169353078248",
+        "source_cp": 97
+      },
+      {
+        "audited_cp": 54,
+        "difference": 19,
+        "marker_changed": false,
+        "position": "-3329690412710264465",
+        "source_cp": 35
+      },
+      {
+        "audited_cp": 22,
+        "difference": 2,
+        "marker_changed": false,
+        "position": "-3410639789297704900",
+        "source_cp": 20
+      },
+      {
+        "audited_cp": 42,
+        "difference": 18,
+        "marker_changed": false,
+        "position": "-362372742550258197",
+        "source_cp": 24
+      },
+      {
+        "audited_cp": 13,
+        "difference": 13,
+        "marker_changed": false,
+        "position": "-3977877264197892358",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 17,
+        "difference": 4,
+        "marker_changed": false,
+        "position": "-4028984122293511509",
+        "source_cp": 13
+      },
+      {
+        "audited_cp": 22,
+        "difference": 4,
+        "marker_changed": false,
+        "position": "-4243307599588870404",
+        "source_cp": 18
+      },
+      {
+        "audited_cp": 24,
+        "difference": 15,
+        "marker_changed": false,
+        "position": "-4559419749024248259",
+        "source_cp": 9
+      },
+      {
+        "audited_cp": 66,
+        "difference": -12,
+        "marker_changed": false,
+        "position": "-4677696794443489767",
+        "source_cp": 78
+      },
+      {
+        "audited_cp": 17,
+        "difference": 10,
+        "marker_changed": false,
+        "position": "-4757902768255381284",
+        "source_cp": 7
+      },
+      {
+        "audited_cp": -28,
+        "difference": -28,
+        "marker_changed": false,
+        "position": "-4969933907859838857",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 32,
+        "difference": 12,
+        "marker_changed": false,
+        "position": "-5066091421950091407",
+        "source_cp": 20
+      },
+      {
+        "audited_cp": 17,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "-5098358306065309900",
+        "source_cp": 8
+      },
+      {
+        "audited_cp": 16,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "-5134463116067063520",
+        "source_cp": 7
+      },
+      {
+        "audited_cp": 64,
+        "difference": 19,
+        "marker_changed": false,
+        "position": "-5216066211247912398",
+        "source_cp": 45
+      },
+      {
+        "audited_cp": 30,
+        "difference": 10,
+        "marker_changed": false,
+        "position": "-5304299737603489349",
+        "source_cp": 20
+      },
+      {
+        "audited_cp": 34,
+        "difference": 34,
+        "marker_changed": false,
+        "position": "-5406590733743481302",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 32,
+        "difference": 18,
+        "marker_changed": false,
+        "position": "-5541313175143893350",
+        "source_cp": 14
+      },
+      {
+        "audited_cp": 56,
+        "difference": 18,
+        "marker_changed": false,
+        "position": "-5576649429309388802",
+        "source_cp": 38
+      },
+      {
+        "audited_cp": 115,
+        "difference": -13,
+        "marker_changed": false,
+        "position": "-5670099893936456569",
+        "source_cp": 128
+      },
+      {
+        "audited_cp": 45,
+        "difference": 1,
+        "marker_changed": false,
+        "position": "-5738494092789057051",
+        "source_cp": 44
+      },
+      {
+        "audited_cp": 68,
+        "difference": 11,
+        "marker_changed": false,
+        "position": "-5740365261209908908",
+        "source_cp": 57
+      },
+      {
+        "audited_cp": 41,
+        "difference": 30,
+        "marker_changed": false,
+        "position": "-6275826479234191381",
+        "source_cp": 11
+      },
+      {
+        "audited_cp": 32,
+        "difference": 30,
+        "marker_changed": false,
+        "position": "-6361973598956063044",
+        "source_cp": 2
+      },
+      {
+        "audited_cp": 22,
+        "difference": 22,
+        "marker_changed": false,
+        "position": "-6877797627662551727",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 32,
+        "difference": 11,
+        "marker_changed": false,
+        "position": "-6987580233745946646",
+        "source_cp": 21
+      },
+      {
+        "audited_cp": 24,
+        "difference": 10,
+        "marker_changed": false,
+        "position": "-6993374654250322070",
+        "source_cp": 14
+      },
+      {
+        "audited_cp": 54,
+        "difference": 1,
+        "marker_changed": false,
+        "position": "-7174768290746356036",
+        "source_cp": 53
+      },
+      {
+        "audited_cp": 23,
+        "difference": 10,
+        "marker_changed": false,
+        "position": "-7253158179545542741",
+        "source_cp": 13
+      },
+      {
+        "audited_cp": 43,
+        "difference": 22,
+        "marker_changed": false,
+        "position": "-7357607102456064319",
+        "source_cp": 21
+      },
+      {
+        "audited_cp": 45,
+        "difference": 27,
+        "marker_changed": false,
+        "position": "-7456400468987276357",
+        "source_cp": 18
+      },
+      {
+        "audited_cp": 55,
+        "difference": 25,
+        "marker_changed": false,
+        "position": "-7459287205394587762",
+        "source_cp": 30
+      },
+      {
+        "audited_cp": 31,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "-7476048997210037241",
+        "source_cp": 25
+      },
+      {
+        "audited_cp": 153,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "-756050272955430191",
+        "source_cp": 146
+      },
+      {
+        "audited_cp": 26,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "-7784444759556498627",
+        "source_cp": 20
+      },
+      {
+        "audited_cp": 17,
+        "difference": 17,
+        "marker_changed": false,
+        "position": "-7842767982301127636",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": -9,
+        "difference": 1,
+        "marker_changed": false,
+        "position": "-7961286341934657057",
+        "source_cp": -10
+      },
+      {
+        "audited_cp": 121,
+        "difference": 17,
+        "marker_changed": false,
+        "position": "-8137593586313558298",
+        "source_cp": 104
+      },
+      {
+        "audited_cp": 20,
+        "difference": 4,
+        "marker_changed": false,
+        "position": "-8251572186380700307",
+        "source_cp": 16
+      },
+      {
+        "audited_cp": 12,
+        "difference": 22,
+        "marker_changed": false,
+        "position": "-8325925320426956211",
+        "source_cp": -10
+      },
+      {
+        "audited_cp": 18,
+        "difference": 3,
+        "marker_changed": false,
+        "position": "-8365278499798919729",
+        "source_cp": 15
+      },
+      {
+        "audited_cp": 115,
+        "difference": 27,
+        "marker_changed": false,
+        "position": "-8488278350798779506",
+        "source_cp": 88
+      },
+      {
+        "audited_cp": 75,
+        "difference": 19,
+        "marker_changed": false,
+        "position": "-8536194583982972371",
+        "source_cp": 56
+      },
+      {
+        "audited_cp": 80,
+        "difference": 13,
+        "marker_changed": false,
+        "position": "-8916530477222717007",
+        "source_cp": 67
+      },
+      {
+        "audited_cp": 17,
+        "difference": 11,
+        "marker_changed": false,
+        "position": "-8981655757801783481",
+        "source_cp": 6
+      },
+      {
+        "audited_cp": 63,
+        "difference": 14,
+        "marker_changed": false,
+        "position": "-8989376477210731181",
+        "source_cp": 49
+      },
+      {
+        "audited_cp": 49,
+        "difference": 21,
+        "marker_changed": false,
+        "position": "-933936288573477251",
+        "source_cp": 28
+      },
+      {
+        "audited_cp": 90,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "-99514462121209969",
+        "source_cp": 84
+      },
+      {
+        "audited_cp": -21,
+        "difference": -8,
+        "marker_changed": false,
+        "position": "1015385342199689752",
+        "source_cp": -13
+      },
+      {
+        "audited_cp": 55,
+        "difference": 21,
+        "marker_changed": false,
+        "position": "1131072876945541033",
+        "source_cp": 34
+      },
+      {
+        "audited_cp": 7,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "1148247470456333379",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 37,
+        "difference": 20,
+        "marker_changed": false,
+        "position": "1224207606016225163",
+        "source_cp": 17
+      },
+      {
+        "audited_cp": 60,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "1436694351892742572",
+        "source_cp": 54
+      },
+      {
+        "audited_cp": 74,
+        "difference": 35,
+        "marker_changed": false,
+        "position": "1497644933325636161",
+        "source_cp": 39
+      },
+      {
+        "audited_cp": 16,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "1592720841146794740",
+        "source_cp": 9
+      },
+      {
+        "audited_cp": 29,
+        "difference": 29,
+        "marker_changed": false,
+        "position": "1604062147375403530",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 28,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "1785559229527161455",
+        "source_cp": 22
+      },
+      {
+        "audited_cp": 53,
+        "difference": 5,
+        "marker_changed": false,
+        "position": "1792399150345072321",
+        "source_cp": 48
+      },
+      {
+        "audited_cp": 18,
+        "difference": 8,
+        "marker_changed": false,
+        "position": "1944688136365447025",
+        "source_cp": 10
+      },
+      {
+        "audited_cp": 47,
+        "difference": 17,
+        "marker_changed": false,
+        "position": "1953433255277185324",
+        "source_cp": 30
+      },
+      {
+        "audited_cp": 16,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "1981041941088873272",
+        "source_cp": 7
+      },
+      {
+        "audited_cp": -28,
+        "difference": -28,
+        "marker_changed": false,
+        "position": "2059872162009066911",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": -31,
+        "difference": -17,
+        "marker_changed": false,
+        "position": "2188035964489547277",
+        "source_cp": -14
+      },
+      {
+        "audited_cp": -32,
+        "difference": -24,
+        "marker_changed": false,
+        "position": "2209098083882412156",
+        "source_cp": -8
+      },
+      {
+        "audited_cp": 9,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "2223374119297668089",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 136,
+        "difference": -34,
+        "marker_changed": false,
+        "position": "2412267668043135572",
+        "source_cp": 170
+      },
+      {
+        "audited_cp": 51,
+        "difference": 15,
+        "marker_changed": false,
+        "position": "2505273836702327381",
+        "source_cp": 36
+      },
+      {
+        "audited_cp": -6,
+        "difference": -1,
+        "marker_changed": false,
+        "position": "2556580720565404303",
+        "source_cp": -5
+      },
+      {
+        "audited_cp": 14,
+        "difference": 10,
+        "marker_changed": false,
+        "position": "2776049323298866377",
+        "source_cp": 4
+      },
+      {
+        "audited_cp": 18,
+        "difference": 12,
+        "marker_changed": false,
+        "position": "2894295219877961098",
+        "source_cp": 6
+      },
+      {
+        "audited_cp": 114,
+        "difference": 23,
+        "marker_changed": false,
+        "position": "3047458686509828289",
+        "source_cp": 91
+      },
+      {
+        "audited_cp": 75,
+        "difference": 29,
+        "marker_changed": false,
+        "position": "3334911087892174276",
+        "source_cp": 46
+      },
+      {
+        "audited_cp": 46,
+        "difference": 9,
+        "marker_changed": false,
+        "position": "3631208940911009449",
+        "source_cp": 37
+      },
+      {
+        "audited_cp": 15,
+        "difference": 0,
+        "marker_changed": false,
+        "position": "3828896756147654276",
+        "source_cp": 15
+      },
+      {
+        "audited_cp": 20,
+        "difference": 5,
+        "marker_changed": false,
+        "position": "3887548509920474239",
+        "source_cp": 15
+      },
+      {
+        "audited_cp": 45,
+        "difference": 16,
+        "marker_changed": false,
+        "position": "3921818047079820496",
+        "source_cp": 29
+      },
+      {
+        "audited_cp": 30,
+        "difference": 17,
+        "marker_changed": false,
+        "position": "4421650179806683369",
+        "source_cp": 13
+      },
+      {
+        "audited_cp": -37,
+        "difference": -17,
+        "marker_changed": false,
+        "position": "4532130751231635902",
+        "source_cp": -20
+      },
+      {
+        "audited_cp": 35,
+        "difference": 13,
+        "marker_changed": false,
+        "position": "4652262204718639790",
+        "source_cp": 22
+      },
+      {
+        "audited_cp": 14,
+        "difference": 8,
+        "marker_changed": false,
+        "position": "4689055884960126695",
+        "source_cp": 6
+      },
+      {
+        "audited_cp": 35,
+        "difference": 25,
+        "marker_changed": false,
+        "position": "4839575596358482937",
+        "source_cp": 10
+      },
+      {
+        "audited_cp": 6,
+        "difference": 6,
+        "marker_changed": false,
+        "position": "4986951600073511535",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 103,
+        "difference": 80,
+        "marker_changed": false,
+        "position": "5055926909966849290",
+        "source_cp": 23
+      },
+      {
+        "audited_cp": 25,
+        "difference": 12,
+        "marker_changed": false,
+        "position": "5285967602387090444",
+        "source_cp": 13
+      },
+      {
+        "audited_cp": 40,
+        "difference": 25,
+        "marker_changed": false,
+        "position": "5409798013178080797",
+        "source_cp": 15
+      },
+      {
+        "audited_cp": 53,
+        "difference": 27,
+        "marker_changed": false,
+        "position": "5509792917845901099",
+        "source_cp": 26
+      },
+      {
+        "audited_cp": 16,
+        "difference": 4,
+        "marker_changed": false,
+        "position": "5617202455357997922",
+        "source_cp": 12
+      },
+      {
+        "audited_cp": -18,
+        "difference": -7,
+        "marker_changed": false,
+        "position": "5790638177660259151",
+        "source_cp": -11
+      },
+      {
+        "audited_cp": 43,
+        "difference": 3,
+        "marker_changed": false,
+        "position": "5906829219494182654",
+        "source_cp": 40
+      },
+      {
+        "audited_cp": 4,
+        "difference": 4,
+        "marker_changed": false,
+        "position": "5941221247910312855",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": -20,
+        "difference": -7,
+        "marker_changed": false,
+        "position": "6169988691626937609",
+        "source_cp": -13
+      },
+      {
+        "audited_cp": 25,
+        "difference": 20,
+        "marker_changed": false,
+        "position": "6232515489653759556",
+        "source_cp": 5
+      },
+      {
+        "audited_cp": 13,
+        "difference": 13,
+        "marker_changed": false,
+        "position": "6801197100818309865",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 98,
+        "difference": -19,
+        "marker_changed": false,
+        "position": "6858177610420186618",
+        "source_cp": 117
+      },
+      {
+        "audited_cp": -26,
+        "difference": -26,
+        "marker_changed": false,
+        "position": "6966639604551846121",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 14,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "7253089485997200575",
+        "source_cp": 7
+      },
+      {
+        "audited_cp": 5,
+        "difference": 5,
+        "marker_changed": false,
+        "position": "7528674563853121133",
+        "source_cp": 0
+      },
+      {
+        "audited_cp": 41,
+        "difference": 30,
+        "marker_changed": false,
+        "position": "7964679028221047963",
+        "source_cp": 11
+      },
+      {
+        "audited_cp": -147,
+        "difference": -18,
+        "marker_changed": false,
+        "position": "8094204327431617645",
+        "source_cp": -129
+      },
+      {
+        "audited_cp": 36,
+        "difference": 37,
+        "marker_changed": false,
+        "position": "8173547388014124481",
+        "source_cp": -1
+      },
+      {
+        "audited_cp": 58,
+        "difference": 19,
+        "marker_changed": false,
+        "position": "8262382109317900144",
+        "source_cp": 39
+      },
+      {
+        "audited_cp": 58,
+        "difference": 16,
+        "marker_changed": false,
+        "position": "8480738642557920293",
+        "source_cp": 42
+      },
+      {
+        "audited_cp": 39,
+        "difference": 18,
+        "marker_changed": false,
+        "position": "8682556407983504046",
+        "source_cp": 21
+      },
+      {
+        "audited_cp": 151,
+        "difference": -44,
+        "marker_changed": false,
+        "position": "8690083567040149047",
+        "source_cp": 195
+      },
+      {
+        "audited_cp": 59,
+        "difference": -4,
+        "marker_changed": false,
+        "position": "8694279456681402250",
+        "source_cp": 63
+      },
+      {
+        "audited_cp": 47,
+        "difference": 25,
+        "marker_changed": false,
+        "position": "8704797333742910878",
+        "source_cp": 22
+      },
+      {
+        "audited_cp": 25,
+        "difference": 7,
+        "marker_changed": false,
+        "position": "885466006037789970",
+        "source_cp": 18
+      },
+      {
+        "audited_cp": 40,
+        "difference": -1,
+        "marker_changed": false,
+        "position": "8975568981914737410",
+        "source_cp": 41
+      },
+      {
+        "audited_cp": 38,
+        "difference": 16,
+        "marker_changed": false,
+        "position": "9015079630327873242",
+        "source_cp": 22
+      },
+      {
+        "audited_cp": 12,
+        "difference": 12,
+        "marker_changed": false,
+        "position": "9196935406180300189",
+        "source_cp": 0
+      }
+    ],
+    "median_absolute_cp_difference": 13.5,
+    "source_marker_changes": 0
+  },
+  "identity": {
+    "engine_audit_sha256": "b211c607fcc316f3982f273895e6ef8c8bf34a2ab1275693a2ae0e44f42d14aa",
+    "preparation_sha256": "262bf2c0b3741b3a0c9523941eae2864a0d68fd0e5fe90182bcd0578284d1482"
+  },
+  "oracle_checks": [
+    {
+      "horizon": 6,
+      "max_error": 1.887379141862766e-15,
+      "model": "shared_position"
+    },
+    {
+      "horizon": 6,
+      "max_error": 1.5543122344752192e-15,
+      "model": "tuned_position"
+    }
+  ],
+  "resolved_config": {
+    "discount": 0.99,
+    "fallback": {},
+    "horizon": 12,
+    "max_books": 200000,
+    "max_disadvantage": 0.4,
+    "max_engine_loss_cp": 150,
+    "max_states": 200000,
+    "min_points": 0.48,
+    "opponent": {},
+    "recall": 0.85,
+    "recall_by_position": {},
+    "reentry": true,
+    "repetition_visits": 3,
+    "soundness_floor_cp": -100,
+    "threshold_cp": 300
+  },
+  "rows": [
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.013958173888832826,
+        "certain_advantage_mass": 0.013882470019864892,
+        "certain_early_advantage": 0.012878383693571045,
+        "conversion_given_advantage": 0.47937074909139854,
+        "disadvantage": 0.007919136638489612,
+        "draw": 0.10275048540655869,
+        "early_advantage": 0.012946727374562388,
+        "frontier_before_horizon_mass": 0.8193230524694421,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.44845149027210834,
+        "no_hit": 0.9781226894726773,
+        "observation_bounds": {
+          "advantage_lower": 0.013882470019864892,
+          "advantage_upper": 0.8753671837689588,
+          "discounted_lower": 0.012878383693571045,
+          "discounted_upper": 0.874363097442665
+        },
+        "points": 0.5001732670246124,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.8794673712546823,
+        "unresolved_first_hit_mass": 0.861484713749094,
+        "unresolved_no_hit_mass": 0.8037713124202153,
+        "win": 0.4487980243213331,
+        "win_after_advantage": 0.006691140273037791
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.027653523182664737,
+        "certain_advantage_mass": 0.027421302602005707,
+        "certain_early_advantage": 0.02554404005548019,
+        "conversion_given_advantage": 0.4672971851471251,
+        "disadvantage": 0.010481256370195906,
+        "draw": 0.09995960377837579,
+        "early_advantage": 0.025754752635971042,
+        "frontier_before_horizon_mass": 0.8154206071455276,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.4501406019361779,
+        "no_hit": 0.9618652204471394,
+        "observation_bounds": {
+          "advantage_lower": 0.027421302602005707,
+          "advantage_upper": 0.8758518057045835,
+          "discounted_lower": 0.02554404005548019,
+          "discounted_upper": 0.873974543158058
+        },
+        "points": 0.4998795961746343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.8813583114186851,
+        "unresolved_first_hit_mass": 0.8484305031025778,
+        "unresolved_no_hit_mass": 0.7858750569290711,
+        "win": 0.4498997942854464,
+        "win_after_advantage": 0.01292241354266
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.030040985650973177,
+        "certain_advantage_mass": 0.029869374012645916,
+        "certain_early_advantage": 0.027993820388056742,
+        "conversion_given_advantage": 0.45514591809219546,
+        "disadvantage": 0.006449040826690069,
+        "draw": 0.09993101668328354,
+        "early_advantage": 0.02815050607516844,
+        "frontier_before_horizon_mass": 0.8124976826929435,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.451127494862685,
+        "no_hit": 0.9635099735223367,
+        "observation_bounds": {
+          "advantage_lower": 0.029869374012645916,
+          "advantage_upper": 0.8798664118118668,
+          "discounted_lower": 0.027993820388056742,
+          "discounted_upper": 0.8779908581872776
+        },
+        "points": 0.4989069967956732,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.8834622757991191,
+        "unresolved_first_hit_mass": 0.8499970377992209,
+        "unresolved_no_hit_mass": 0.7814694879541033,
+        "win": 0.4489414884540314,
+        "win_after_advantage": 0.013673031994506656
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.013104910504443942,
+        "certain_advantage_mass": 0.013033144149286694,
+        "certain_early_advantage": 0.01209385858678886,
+        "conversion_given_advantage": 0.4814340757161482,
+        "disadvantage": 0.0072523775041866455,
+        "draw": 0.10272723739909598,
+        "early_advantage": 0.012158602564377993,
+        "frontier_before_horizon_mass": 0.8308729163603065,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.4484660198918241,
+        "no_hit": 0.9796427119913694,
+        "observation_bounds": {
+          "advantage_lower": 0.013033144149286694,
+          "advantage_upper": 0.8842078654925002,
+          "discounted_lower": 0.01209385858678886,
+          "discounted_upper": 0.8832685799300024
+        },
+        "points": 0.5001703614086279,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.8879678044299781,
+        "unresolved_first_hit_mass": 0.8711747213432135,
+        "unresolved_no_hit_mass": 0.8163606088214198,
+        "win": 0.4488067427090799,
+        "win_after_advantage": 0.006309150476049811
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.02523486036599204,
+        "certain_advantage_mass": 0.025019193271422976,
+        "certain_early_advantage": 0.023310897893404327,
+        "conversion_given_advantage": 0.4700209579497992,
+        "disadvantage": 0.008330896780235169,
+        "draw": 0.09998347865823425,
+        "early_advantage": 0.023506420800977923,
+        "frontier_before_horizon_mass": 0.8266912369320393,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.45013300513690413,
+        "no_hit": 0.9664342428537726,
+        "observation_bounds": {
+          "advantage_lower": 0.025019193271422976,
+          "advantage_upper": 0.8857265304846063,
+          "discounted_lower": 0.023310897893404327,
+          "discounted_upper": 0.8840182351065876
+        },
+        "points": 0.4998752555339786,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.8897212270003687,
+        "unresolved_first_hit_mass": 0.8607073372131833,
+        "unresolved_no_hit_mass": 0.8008452991554408,
+        "win": 0.4498835162048615,
+        "win_after_advantage": 0.011860913242952999
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.02644345212860138,
+        "certain_advantage_mass": 0.026293714295555916,
+        "certain_early_advantage": 0.02466420390950472,
+        "conversion_given_advantage": 0.45584335524215897,
+        "disadvantage": 0.004259374100658691,
+        "draw": 0.0999628089429436,
+        "early_advantage": 0.024800731827186524,
+        "frontier_before_horizon_mass": 0.8242186381191691,
+        "frontier_mass": 0.9953502123716296,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115093902937464,
+        "no_hit": 0.9692971737707398,
+        "observation_bounds": {
+          "advantage_lower": 0.026293714295555916,
+          "advantage_upper": 0.8900340515017816,
+          "discounted_lower": 0.02466420390950472,
+          "discounted_upper": 0.8884045411157304
+        },
+        "points": 0.49886765649915343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.8919700466109917,
+        "unresolved_first_hit_mass": 0.8637403372062257,
+        "unresolved_no_hit_mass": 0.7982777530201617,
+        "win": 0.4488862520276816,
+        "win_after_advantage": 0.012054071942487064
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.014878556824184309,
+        "certain_advantage_mass": 0.014873994224186228,
+        "certain_early_advantage": 0.01378195203385232,
+        "conversion_given_advantage": 0.4803097987928145,
+        "disadvantage": 0.008412669012813264,
+        "draw": 0.10275048540655869,
+        "early_advantage": 0.01378603615745892,
+        "frontier_before_horizon_mass": 0.8193230524694421,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.44845149027210834,
+        "no_hit": 0.9767087741630022,
+        "observation_bounds": {
+          "advantage_lower": 0.014873994224186228,
+          "advantage_upper": 0.8741767953264155,
+          "discounted_lower": 0.01378195203385232,
+          "discounted_upper": 0.8730847531360816
+        },
+        "points": 0.5001732670246124,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.8783748514138974,
+        "unresolved_first_hit_mass": 0.8593028011022292,
+        "unresolved_no_hit_mass": 0.8028549699575889,
+        "win": 0.4487980243213331,
+        "win_after_advantage": 0.0071463166345514225
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0298398549972783,
+        "certain_advantage_mass": 0.029836715726885985,
+        "certain_early_advantage": 0.02774033676614526,
+        "conversion_given_advantage": 0.4698449292173615,
+        "disadvantage": 0.011352455508265745,
+        "draw": 0.09995960377837579,
+        "early_advantage": 0.027743142773314654,
+        "frontier_before_horizon_mass": 0.8154206071455276,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.4501406019361779,
+        "no_hit": 0.9588076894944558,
+        "observation_bounds": {
+          "advantage_lower": 0.029836715726885985,
+          "advantage_upper": 0.8722121922662934,
+          "discounted_lower": 0.02774033676614526,
+          "discounted_upper": 0.8701158133055528
+        },
+        "points": 0.4998795961746343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.8770716652409107,
+        "unresolved_first_hit_mass": 0.8423754765394075,
+        "unresolved_no_hit_mass": 0.7842142911734137,
+        "win": 0.4498997942854464,
+        "win_after_advantage": 0.014020104559052553
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.03236327193393543,
+        "certain_advantage_mass": 0.03235842296855857,
+        "certain_early_advantage": 0.03025640271822834,
+        "conversion_given_advantage": 0.456040990602501,
+        "disadvantage": 0.006783164284162059,
+        "draw": 0.09993101668328354,
+        "early_advantage": 0.030260736305131732,
+        "frontier_before_horizon_mass": 0.8124976826929435,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.451127494862685,
+        "no_hit": 0.9608535637819026,
+        "observation_bounds": {
+          "advantage_lower": 0.03235842296855857,
+          "advantage_upper": 0.8753104494953197,
+          "discounted_lower": 0.03025640271822834,
+          "discounted_upper": 0.8732084292449894
+        },
+        "points": 0.4989069967956732,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.8776116910584947,
+        "unresolved_first_hit_mass": 0.842952026526761,
+        "unresolved_no_hit_mass": 0.7799821220508398,
+        "win": 0.4489414884540314,
+        "win_after_advantage": 0.01475897859189003
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.013914578481731747,
+        "certain_advantage_mass": 0.01391032768419074,
+        "certain_early_advantage": 0.012892749557619166,
+        "conversion_given_advantage": 0.48229240623164743,
+        "disadvantage": 0.007725693711443616,
+        "draw": 0.10272723739909598,
+        "early_advantage": 0.012896555184693315,
+        "frontier_before_horizon_mass": 0.8308729163603065,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.4484660198918241,
+        "no_hit": 0.9783597278068247,
+        "observation_bounds": {
+          "advantage_lower": 0.01391032768419074,
+          "advantage_upper": 0.8830961176625173,
+          "discounted_lower": 0.012892749557619166,
+          "discounted_upper": 0.8820785395359457
+        },
+        "points": 0.5001703614086279,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.8869701013436401,
+        "unresolved_first_hit_mass": 0.8691857899783265,
+        "unresolved_no_hit_mass": 0.8155231526395044,
+        "win": 0.4488067427090799,
+        "win_after_advantage": 0.006710895537653507
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.026980130092657546,
+        "certain_advantage_mass": 0.026979273221241815,
+        "certain_early_advantage": 0.025089612902653765,
+        "conversion_given_advantage": 0.47260339912777954,
+        "disadvantage": 0.009144016336402222,
+        "draw": 0.09998347865823425,
+        "early_advantage": 0.025090378728614072,
+        "frontier_before_horizon_mass": 0.8266912369320393,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.45013300513690413,
+        "no_hit": 0.9638758535709402,
+        "observation_bounds": {
+          "advantage_lower": 0.026979273221241815,
+          "advantage_upper": 0.8824215195983778,
+          "discounted_lower": 0.025089612902653765,
+          "discounted_upper": 0.8805318592797897
+        },
+        "points": 0.4998752555339786,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.8858562027930811,
+        "unresolved_first_hit_mass": 0.855442246377136,
+        "unresolved_no_hit_mass": 0.7995420771559001,
+        "win": 0.4498835162048615,
+        "win_after_advantage": 0.01275090119069965
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.028127668270599187,
+        "certain_advantage_mass": 0.02812665867269014,
+        "certain_early_advantage": 0.026324238546846606,
+        "conversion_given_advantage": 0.4568300305813511,
+        "disadvantage": 0.004653921957683932,
+        "draw": 0.0999628089429436,
+        "early_advantage": 0.026325140193374032,
+        "frontier_before_horizon_mass": 0.8242186381191691,
+        "frontier_mass": 0.9953502123716296,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115093902937464,
+        "no_hit": 0.9672184097717167,
+        "observation_bounds": {
+          "advantage_lower": 0.02812665867269014,
+          "advantage_upper": 0.8858552613299755,
+          "discounted_lower": 0.026324238546846606,
+          "discounted_upper": 0.884052841204132
+        },
+        "points": 0.49886765649915343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.8867191866487767,
+        "unresolved_first_hit_mass": 0.8577286026572853,
+        "unresolved_no_hit_mass": 0.7971980805737808,
+        "win": 0.4488862520276816,
+        "win_after_advantage": 0.012849563556239925
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.001406254772638275,
+        "certain_advantage_mass": 9.542050470943651e-05,
+        "certain_early_advantage": 8.80967540972532e-05,
+        "conversion_given_advantage": 0.5603334986857204,
+        "disadvantage": 0.0008106932488438057,
+        "draw": 0.10275048540655869,
+        "early_advantage": 0.0012872981368062973,
+        "frontier_before_horizon_mass": 0.8193230524694421,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.44845149027210834,
+        "no_hit": 0.9977830519785177,
+        "observation_bounds": {
+          "advantage_lower": 9.542050470943651e-05,
+          "advantage_upper": 0.9982289479985145,
+          "discounted_lower": 8.80967540972532e-05,
+          "discounted_upper": 0.9982216242479023
+        },
+        "points": 0.5001732670246124,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.9982289479985144,
+        "unresolved_first_hit_mass": 0.998133527493805,
+        "unresolved_no_hit_mass": 0.8179555651915265,
+        "win": 0.4487980243213331,
+        "win_after_advantage": 0.0007879716567958969
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.004239100072220496,
+        "certain_advantage_mass": 0.0004738923597742853,
+        "certain_early_advantage": 0.00043751999441555666,
+        "conversion_given_advantage": 0.5638523195587983,
+        "disadvantage": 0.0017516742856924638,
+        "draw": 0.09995960377837579,
+        "early_advantage": 0.003890724311387824,
+        "frontier_before_horizon_mass": 0.8154206071455276,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.4501406019361779,
+        "no_hit": 0.9940092256420869,
+        "observation_bounds": {
+          "advantage_lower": 0.0004738923597742853,
+          "advantage_upper": 0.9972331612357053,
+          "discounted_lower": 0.00043751999441555666,
+          "discounted_upper": 0.9971967888703466
+        },
+        "points": 0.4998795961746343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.9972331612357054,
+        "unresolved_first_hit_mass": 0.996759268875931,
+        "unresolved_no_hit_mass": 0.8121144426564536,
+        "win": 0.4498997942854464,
+        "win_after_advantage": 0.0023902264085633963
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.003914768179690511,
+        "certain_advantage_mass": 0.0007939651418690315,
+        "certain_early_advantage": 0.0007330264294662615,
+        "conversion_given_advantage": 0.4766490281526977,
+        "disadvantage": 0.001268358848416723,
+        "draw": 0.09993101668328354,
+        "early_advantage": 0.003600694204028712,
+        "frontier_before_horizon_mass": 0.8124976826929435,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.451127494862685,
+        "no_hit": 0.9948168729718929,
+        "observation_bounds": {
+          "advantage_lower": 0.0007939651418690315,
+          "advantage_upper": 0.9957543226785576,
+          "discounted_lower": 0.0007330264294662615,
+          "discounted_upper": 0.9956933839661548
+        },
+        "points": 0.4989069967956732,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.9957543226785575,
+        "unresolved_first_hit_mass": 0.9949603575366885,
+        "unresolved_no_hit_mass": 0.8093133695529322,
+        "win": 0.4489414884540314,
+        "win_after_advantage": 0.0018659704482925873
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.001296860987081911,
+        "certain_advantage_mass": 3.1253878193172825e-05,
+        "certain_early_advantage": 2.890302803096671e-05,
+        "conversion_given_advantage": 0.573740291305184,
+        "disadvantage": 0.0008063061101266992,
+        "draw": 0.10272723739909598,
+        "early_advantage": 0.0011866416132077517,
+        "frontier_before_horizon_mass": 0.8308729163603065,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.4484660198918241,
+        "no_hit": 0.9978968329027912,
+        "observation_bounds": {
+          "advantage_lower": 3.1253878193172825e-05,
+          "advantage_upper": 0.9982294100913923,
+          "discounted_lower": 2.890302803096671e-05,
+          "discounted_upper": 0.9982270592412301
+        },
+        "points": 0.5001703614086279,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.9982294100913923,
+        "unresolved_first_hit_mass": 0.9981981562131992,
+        "unresolved_no_hit_mass": 0.8295611987894186,
+        "win": 0.4488067427090799,
+        "win_after_advantage": 0.0007440614005107041
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0037848241596113853,
+        "certain_advantage_mass": 0.00015523585553494252,
+        "certain_early_advantage": 0.00014355934505810055,
+        "conversion_given_advantage": 0.5838976565395291,
+        "disadvantage": 0.0018307886021683,
+        "draw": 0.09998347865823425,
+        "early_advantage": 0.0034720683882565693,
+        "frontier_before_horizon_mass": 0.8266912369320393,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.45013300513690413,
+        "no_hit": 0.9943843872382202,
+        "observation_bounds": {
+          "advantage_lower": 0.00015523585553494252,
+          "advantage_upper": 0.9972332414910186,
+          "discounted_lower": 0.00014355934505810055,
+          "discounted_upper": 0.9972215649805417
+        },
+        "points": 0.4998752555339786,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.9972332414910184,
+        "unresolved_first_hit_mass": 0.9970780056354837,
+        "unresolved_no_hit_mass": 0.8235843133207605,
+        "win": 0.4498835162048615,
+        "win_after_advantage": 0.0022099499572112804
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0031881090157915284,
+        "certain_advantage_mass": 0.0002601044823310582,
+        "certain_early_advantage": 0.00024053997706553005,
+        "conversion_given_advantage": 0.48310694070278815,
+        "disadvantage": 0.00162156173671243,
+        "draw": 0.0999628089429436,
+        "early_advantage": 0.002932955462893232,
+        "frontier_before_horizon_mass": 0.8242186381191691,
+        "frontier_mass": 0.9953502123716296,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115093902937464,
+        "no_hit": 0.9951903292474961,
+        "observation_bounds": {
+          "advantage_lower": 0.0002601044823310582,
+          "advantage_upper": 0.9957541280956888,
+          "discounted_lower": 0.00024053997706553005,
+          "discounted_upper": 0.9957345635904232
+        },
+        "points": 0.49886765649915343,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.9957541280956885,
+        "unresolved_first_hit_mass": 0.9954940236133577,
+        "unresolved_no_hit_mass": 0.8211359398386814,
+        "win": 0.4488862520276816,
+        "win_after_advantage": 0.0015401975932460223
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "expanded"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.01338714856489846,
+        "certain_advantage_mass": 0.013313917025127265,
+        "certain_early_advantage": 0.012348531292275826,
+        "conversion_given_advantage": 0.4806228288361777,
+        "disadvantage": 0.007446507777013549,
+        "draw": 0.10275057913600333,
+        "early_advantage": 0.012414590267273802,
+        "frontier_before_horizon_mass": 0.8194547282564776,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.4484518525690749,
+        "no_hit": 0.9791663436580877,
+        "observation_bounds": {
+          "advantage_lower": 0.013313917025127265,
+          "advantage_upper": 0.8758580379884067,
+          "discounted_lower": 0.012348531292275826,
+          "discounted_upper": 0.8748926522555552
+        },
+        "points": 0.5001728578629235,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.8795354151724472,
+        "unresolved_first_hit_mass": 0.8625441209632794,
+        "unresolved_no_hit_mass": 0.8048994620188771,
+        "win": 0.4487975682949219,
+        "win_after_advantage": 0.006434169213311674
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.024818115634551347,
+        "certain_advantage_mass": 0.024598173525073642,
+        "certain_early_advantage": 0.022913063350047187,
+        "conversion_given_advantage": 0.46927141136913314,
+        "disadvantage": 0.00833178583575216,
+        "draw": 0.09996006927232645,
+        "early_advantage": 0.02311242926330037,
+        "frontier_before_horizon_mass": 0.8160355612080157,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.45014240123251287,
+        "no_hit": 0.9668500985296965,
+        "observation_bounds": {
+          "advantage_lower": 0.024598173525073642,
+          "advantage_upper": 0.8780917898862063,
+          "discounted_lower": 0.022913063350047187,
+          "discounted_upper": 0.8764066797111798
+        },
+        "points": 0.499877564131324,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.8816941798259547,
+        "unresolved_first_hit_mass": 0.8534936163611326,
+        "unresolved_no_hit_mass": 0.7912492025537169,
+        "win": 0.44989752949516076,
+        "win_after_advantage": 0.01164643215134826
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.025294707030530796,
+        "certain_advantage_mass": 0.025143666895230208,
+        "certain_early_advantage": 0.023589713193691166,
+        "conversion_given_advantage": 0.45610831509263705,
+        "disadvantage": 0.003562366532184863,
+        "draw": 0.0999317949467408,
+        "early_advantage": 0.023727388533669628,
+        "frontier_before_horizon_mass": 0.8133687572268106,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.45113051117632874,
+        "no_hit": 0.9711429264372844,
+        "observation_bounds": {
+          "advantage_lower": 0.025143666895230208,
+          "advantage_upper": 0.8829044990580192,
+          "discounted_lower": 0.023589713193691166,
+          "discounted_upper": 0.8813505453564802
+        },
+        "points": 0.498903591350301,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.8839573029364288,
+        "unresolved_first_hit_mass": 0.857760832162789,
+        "unresolved_no_hit_mass": 0.7896305702609381,
+        "win": 0.4489376938769306,
+        "win_after_advantage": 0.011537126204457283
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.012902742208995828,
+        "certain_advantage_mass": 0.012831304746405274,
+        "certain_early_advantage": 0.011905268175122276,
+        "conversion_given_advantage": 0.481926368772909,
+        "disadvantage": 0.0070637537666853574,
+        "draw": 0.10272725699788367,
+        "early_advantage": 0.011969707549625825,
+        "frontier_before_horizon_mass": 0.8309002892652718,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.44846609757157335,
+        "no_hit": 0.9800335040243189,
+        "observation_bounds": {
+          "advantage_lower": 0.012831304746405274,
+          "advantage_upper": 0.8844005079249394,
+          "discounted_lower": 0.011905268175122276,
+          "discounted_upper": 0.8834744713536564
+        },
+        "points": 0.5001702739294849,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.8879787565111765,
+        "unresolved_first_hit_mass": 0.8715692031785341,
+        "unresolved_no_hit_mass": 0.8167721807638394,
+        "win": 0.448806645430543,
+        "win_after_advantage": 0.006218171699994302
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.024230807233347734,
+        "certain_advantage_mass": 0.024016773725454056,
+        "certain_early_advantage": 0.02237427533933524,
+        "conversion_given_advantage": 0.47084994356582927,
+        "disadvantage": 0.0075386114532150945,
+        "draw": 0.09998357600405981,
+        "early_advantage": 0.022568285304409446,
+        "frontier_before_horizon_mass": 0.826817216754022,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.4501333909668566,
+        "no_hit": 0.9682305813134372,
+        "observation_bounds": {
+          "advantage_lower": 0.024016773725454056,
+          "advantage_upper": 0.8865387763919734,
+          "discounted_lower": 0.02237427533933524,
+          "discounted_upper": 0.8848962780058546
+        },
+        "points": 0.4998748210311133,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.8897753167260632,
+        "unresolved_first_hit_mass": 0.8625220026665193,
+        "unresolved_no_hit_mass": 0.8027365337348167,
+        "win": 0.4498830330290834,
+        "win_after_advantage": 0.011409074218376268
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "source",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0247723687749085,
+        "certain_advantage_mass": 0.024625368087962958,
+        "certain_early_advantage": 0.02310542661893402,
+        "conversion_given_advantage": 0.45623651134716603,
+        "disadvantage": 0.003311560749642408,
+        "draw": 0.0999629717687752,
+        "early_advantage": 0.02323941953512249,
+        "frontier_before_horizon_mass": 0.8243888738634866,
+        "frontier_mass": 0.9953502123716297,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115158576382797,
+        "no_hit": 0.971916070475449,
+        "observation_bounds": {
+          "advantage_lower": 0.024625368087962958,
+          "advantage_upper": 0.8910152691741836,
+          "discounted_lower": 0.02310542661893402,
+          "discounted_upper": 0.8894953277051546
+        },
+        "points": 0.4988669283517843,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.892043976311857,
+        "unresolved_first_hit_mass": 0.8663899010862206,
+        "unresolved_no_hit_mass": 0.8010216036802229,
+        "win": 0.4488854424673967,
+        "win_after_advantage": 0.011302059107669724
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.014213909686283879,
+        "certain_advantage_mass": 0.014209856782728139,
+        "certain_early_advantage": 0.013163851601838982,
+        "conversion_given_advantage": 0.4817264151571187,
+        "disadvantage": 0.007845431924169017,
+        "draw": 0.10275057913600333,
+        "early_advantage": 0.013167480321433257,
+        "frontier_before_horizon_mass": 0.8194547282564776,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.4484518525690749,
+        "no_hit": 0.977940658389547,
+        "observation_bounds": {
+          "advantage_lower": 0.014209856782728139,
+          "advantage_upper": 0.8747629807713434,
+          "discounted_lower": 0.013163851601838982,
+          "discounted_upper": 0.8737169755904542
+        },
+        "points": 0.5001728578629235,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.8784450739943469,
+        "unresolved_first_hit_mass": 0.8605531239886153,
+        "unresolved_no_hit_mass": 0.8041594009813258,
+        "win": 0.4487975682949219,
+        "win_after_advantage": 0.006847215758540579
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.02653948803104167,
+        "certain_advantage_mass": 0.026538880095508307,
+        "certain_early_advantage": 0.0246710887724835,
+        "conversion_given_advantage": 0.4723109735547286,
+        "disadvantage": 0.008833000157892588,
+        "draw": 0.09996006927232645,
+        "early_advantage": 0.024671633080422643,
+        "frontier_before_horizon_mass": 0.8160355612080157,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.45014240123251287,
+        "no_hit": 0.9646275118110658,
+        "observation_bounds": {
+          "advantage_lower": 0.026538880095508307,
+          "advantage_upper": 0.874825751932091,
+          "discounted_lower": 0.0246710887724835,
+          "discounted_upper": 0.8729579606090662
+        },
+        "points": 0.499877564131324,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.8774183536664135,
+        "unresolved_first_hit_mass": 0.8482868718365827,
+        "unresolved_no_hit_mass": 0.7903640399305593,
+        "win": 0.44989752949516076,
+        "win_after_advantage": 0.012534891429585358
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.02683854445013586,
+        "certain_advantage_mass": 0.0268379365146025,
+        "certain_early_advantage": 0.0251185178005833,
+        "conversion_given_advantage": 0.4572815353728247,
+        "disadvantage": 0.0036767272854037678,
+        "draw": 0.0999317949467408,
+        "early_advantage": 0.025119062108522442,
+        "frontier_before_horizon_mass": 0.8133687572268106,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.45113051117632874,
+        "no_hit": 0.9694847282644604,
+        "observation_bounds": {
+          "advantage_lower": 0.0268379365146025,
+          "advantage_upper": 0.8785743152958739,
+          "discounted_lower": 0.0251185178005833,
+          "discounted_upper": 0.8768548965818547
+        },
+        "points": 0.498903591350301,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.8781248289633241,
+        "unresolved_first_hit_mass": 0.8517363787812714,
+        "unresolved_no_hit_mass": 0.7890419951071578,
+        "win": 0.4489376938769306,
+        "win_after_advantage": 0.01227277081332993
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0136813960054847,
+        "certain_advantage_mass": 0.013677190724847703,
+        "certain_early_advantage": 0.012675215814031145,
+        "conversion_given_advantage": 0.4828425679360668,
+        "disadvantage": 0.007440669115241093,
+        "draw": 0.10272725699788367,
+        "early_advantage": 0.012678980962655342,
+        "frontier_before_horizon_mass": 0.8309002892652718,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.44846609757157335,
+        "no_hit": 0.9788779348792742,
+        "observation_bounds": {
+          "advantage_lower": 0.013677190724847703,
+          "advantage_upper": 0.8833853359073747,
+          "discounted_lower": 0.012675215814031145,
+          "discounted_upper": 0.8823833609965581
+        },
+        "points": 0.5001702739294849,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.8869814726653316,
+        "unresolved_first_hit_mass": 0.8697081451825269,
+        "unresolved_no_hit_mass": 0.8160605009285402,
+        "win": 0.448806645430543,
+        "win_after_advantage": 0.006605960380238479
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.025822031664889215,
+        "certain_advantage_mass": 0.025821400872793665,
+        "certain_early_advantage": 0.024009230816884775,
+        "conversion_given_advantage": 0.4736165589923802,
+        "disadvantage": 0.008015847103991728,
+        "draw": 0.09998357600405981,
+        "early_advantage": 0.024009795589178404,
+        "frontier_before_horizon_mass": 0.826817216754022,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.4501333909668566,
+        "no_hit": 0.966162121231119,
+        "observation_bounds": {
+          "advantage_lower": 0.025821400872793665,
+          "advantage_upper": 0.8835705183941687,
+          "discounted_lower": 0.024009230816884775,
+          "discounted_upper": 0.8817583483382598
+        },
+        "points": 0.4998748210311133,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.8859123748573644,
+        "unresolved_first_hit_mass": 0.8577491175213751,
+        "unresolved_no_hit_mass": 0.8019151016613543,
+        "win": 0.4498830330290834,
+        "win_after_advantage": 0.012229741783317113
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_overlay",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.026198621827917382,
+        "certain_advantage_mass": 0.026197991035821835,
+        "certain_early_advantage": 0.024524721092568574,
+        "conversion_given_advantage": 0.4573319699821026,
+        "disadvantage": 0.0034200672824816155,
+        "draw": 0.0999629717687752,
+        "early_advantage": 0.024525285864862204,
+        "frontier_before_horizon_mass": 0.8243888738634866,
+        "frontier_mass": 0.9953502123716297,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115158576382797,
+        "no_hit": 0.970381310889601,
+        "observation_bounds": {
+          "advantage_lower": 0.026197991035821835,
+          "advantage_upper": 0.8871239763457375,
+          "discounted_lower": 0.024524721092568574,
+          "discounted_upper": 0.8854507064024841
+        },
+        "points": 0.4988669283517843,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.8867966028967219,
+        "unresolved_first_hit_mass": 0.8609259853099156,
+        "unresolved_no_hit_mass": 0.8004722979358294,
+        "win": 0.4488854424673967,
+        "win_after_advantage": 0.01198146733137757
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0013106703259178152,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.5683798900764938,
+        "disadvantage": 0.0006931950294723007,
+        "draw": 0.10275057913600333,
+        "early_advantage": 0.0011990501060881785,
+        "frontier_before_horizon_mass": 0.8194547282564776,
+        "frontier_mass": 0.9961879451559441,
+        "horizon_mass": 4.798158766138457e-05,
+        "human_end_mass": 0.0035571895925468897,
+        "loss": 0.4484518525690749,
+        "no_hit": 0.9979961346446096,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9982289479985144,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9982289479985144
+        },
+        "points": 0.5001728578629235,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00020688366384752875,
+        "unknown_eval_mass": 0.9982289479985144,
+        "unresolved_first_hit_mass": 0.9982289479985144,
+        "unresolved_no_hit_mass": 0.8182862658920977,
+        "win": 0.4487975682949219,
+        "win_after_advantage": 0.0007449586557716901
+      },
+      "model": "shared_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0037643935177748816,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.5782095970533534,
+        "disadvantage": 0.001268009580377875,
+        "draw": 0.09996006927232645,
+        "early_advantage": 0.0034524530231590674,
+        "frontier_before_horizon_mass": 0.8160355612080157,
+        "frontier_mass": 0.9961221777230055,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.003203411848913202,
+        "loss": 0.45014240123251287,
+        "no_hit": 0.9949675969018472,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9972331612357054,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9972331612357054
+        },
+        "points": 0.499877564131324,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.000667213189932096,
+        "unknown_eval_mass": 0.9972331612357054,
+        "unresolved_first_hit_mass": 0.9972331612357054,
+        "unresolved_no_hit_mass": 0.813617952150832,
+        "win": 0.44989752949516076,
+        "win_after_advantage": 0.0021766084590628698
+      },
+      "model": "shared_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.0031199888431501497,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.48343754502869435,
+        "disadvantage": 0.0008581498234246696,
+        "draw": 0.0999317949467408,
+        "early_advantage": 0.00286691648074925,
+        "frontier_before_horizon_mass": 0.8133687572268106,
+        "frontier_mass": 0.9953487530610483,
+        "horizon_mass": 7.197238149207687e-06,
+        "human_end_mass": 0.004534431211173793,
+        "loss": 0.45113051117632874,
+        "no_hit": 0.9960218613334251,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9957543226785575,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9957543226785575
+        },
+        "points": 0.498903591350301,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00010961848962874734,
+        "unknown_eval_mass": 0.9957543226785575,
+        "unresolved_first_hit_mass": 0.9957543226785575,
+        "unresolved_no_hit_mass": 0.8112724765207282,
+        "win": 0.4489376938769306,
+        "win_after_advantage": 0.0015083197468494245
+      },
+      "model": "shared_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {},
+      "cards": 0,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.001265563430620289,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.5768004056068461,
+        "disadvantage": 0.0006426633289089888,
+        "draw": 0.10272725699788367,
+        "early_advantage": 0.0011576982812863117,
+        "frontier_before_horizon_mass": 0.8309002892652718,
+        "frontier_mass": 0.9962370634276376,
+        "horizon_mass": 4.013497732563915e-05,
+        "human_end_mass": 0.003499502501181916,
+        "loss": 0.44846609757157335,
+        "no_hit": 0.9980917732404706,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9982294100913923,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9982294100913923
+        },
+        "points": 0.5001702739294849,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00022329909385466624,
+        "unknown_eval_mass": 0.9982294100913923,
+        "unresolved_first_hit_mass": 0.9982294100913923,
+        "unresolved_no_hit_mass": 0.8297814578802216,
+        "win": 0.448806645430543,
+        "win_after_advantage": 0.0007299775001029743
+      },
+      "model": "tuned_position",
+      "plan": "empty",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "8704797333742910878": "d4"
+      },
+      "cards": 1,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.00362937135713216,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.5896327450455777,
+        "disadvantage": 0.0011609187093384289,
+        "draw": 0.09998357600405981,
+        "early_advantage": 0.00332830885655666,
+        "frontier_before_horizon_mass": 0.826817216754022,
+        "frontier_mass": 0.9960838836265575,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.0031812845578112294,
+        "loss": 0.4501333909668566,
+        "no_hit": 0.9952097099335293,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9972332414910184,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9972332414910184
+        },
+        "points": 0.4998748210311133,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.0007288115690323034,
+        "unknown_eval_mass": 0.9972332414910184,
+        "unresolved_first_hit_mass": 0.9972332414910184,
+        "unresolved_no_hit_mass": 0.8245254130076534,
+        "win": 0.4498830330290834,
+        "win_after_advantage": 0.0021399961960956292
+      },
+      "model": "tuned_position",
+      "plan": "source_one_card",
+      "rejected_gates": [],
+      "variant": "observed"
+    },
+    {
+      "book": {
+        "2776049323298866377": "Nxd4",
+        "8704797333742910878": "d4"
+      },
+      "cards": 2,
+      "evidence": "audited_only",
+      "feasible": true,
+      "metrics": {
+        "advantage": 0.002927787586516187,
+        "certain_advantage_mass": 0.0,
+        "certain_early_advantage": 0.0,
+        "conversion_given_advantage": 0.4860506126284346,
+        "disadvantage": 0.0007759145846254209,
+        "draw": 0.0999629717687752,
+        "early_advantage": 0.002692215299185893,
+        "frontier_before_horizon_mass": 0.8243888738634866,
+        "frontier_mass": 0.9953502123716297,
+        "horizon_mass": 6.0202465988458744e-06,
+        "human_end_mass": 0.004524379444239351,
+        "loss": 0.45115158576382797,
+        "no_hit": 0.9962962978288583,
+        "observation_bounds": {
+          "advantage_lower": 0.0,
+          "advantage_upper": 0.9957541280956888,
+          "discounted_lower": 0.0,
+          "discounted_upper": 0.9957541280956888
+        },
+        "points": 0.4988669283517843,
+        "repetition_mass": 0.0,
+        "terminal_mass": 0.00011938793753215994,
+        "unknown_eval_mass": 0.9957541280956888,
+        "unresolved_first_hit_mass": 0.9957541280956888,
+        "unresolved_no_hit_mass": 0.8223950512124917,
+        "win": 0.4488854424673967,
+        "win_after_advantage": 0.0014230529500721186
+      },
+      "model": "tuned_position",
+      "plan": "two_cards",
+      "rejected_gates": [],
+      "variant": "observed"
+    }
+  ]
+}

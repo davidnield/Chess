@@ -15,6 +15,7 @@ from .model import Config, Edge, Graph, Node, evaluate
 from .oracle import path_evaluate
 from .shared_fallback import fit, spec
 from .test_cohort import row
+from .verify_continuation import first_gap_partition
 
 
 class CommonGraphTests(unittest.TestCase):
@@ -158,6 +159,22 @@ class CommonGraphTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "executable drift"):
                 engine_audit(self.c)
             launch.assert_not_called()
+
+    def test_first_gap_partition_matches_uncertainty_and_horizon(self):
+        graph = Graph("r", {"r": Node("opp", (Edge("hit", "hit", .1), Edge("missing", "missing", .2),
+                                                Edge("omitted", "unknown:r", .3), Edge("cut", "cut", .4)), cp=0),
+            "hit": Node("opp", (Edge("later_gap", "missing", 1),), cp=350),
+            "missing": Node("frontier"), "unknown:r": Node("frontier"), "cut": Node("frontier", cp=0)})
+        cfg = Config(horizon=2)
+        gap = first_gap_partition(graph, {}, cfg)
+        self.assertAlmostEqual(gap["missing_real_eval"], .2)
+        self.assertAlmostEqual(gap["omitted_legal_move"], .3)
+        self.assertAlmostEqual(gap["unexpanded_real_position"], .4)
+        self.assertAlmostEqual(gap["known_first_hit"], .1)
+        self.assertAlmostEqual(evaluate(graph, {}, cfg).unresolved_first_hit_mass, .9)
+        gap = first_gap_partition(graph, {}, replace(cfg, horizon=1))
+        self.assertAlmostEqual(gap["unexpanded_real_position"], 0)
+        self.assertAlmostEqual(gap["fully_observed_no_hit"], .4)
 
 
 if __name__ == "__main__":

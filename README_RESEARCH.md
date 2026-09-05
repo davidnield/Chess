@@ -29,3 +29,11 @@ A simple shared move prior improves March log loss from 2.180 to 2.027 across
 The 40-test suite and independent baseline parity audit pass. This supports
 bounded integration into a common graph and an influential-position engine audit;
 unresolved continuations still prevent a repertoire recommendation.
+
+Milestone 4 is complete: [common graph and targeted engine audit](docs/human_repertoire/milestone4_report.md).
+Both frozen priors now share a legal topology, with 64 missing-edge extensions
+and 256 Stockfish targets plus 32 deeper checks. All 50 tests and real path-oracle
+checks pass. The two-card shared-prior first-hit interval remains [3.24%,87.53%];
+99.5% of unresolved mass first encounters an aggregate omitted-move frontier.
+Next work should test bounded full-horizon trajectory sampling with explicit
+engine coverage and Monte Carlo error, before any new book optimisation.
