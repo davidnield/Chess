@@ -113,7 +113,8 @@ def prepare(c):
         'engine_selection.json': selection, 'inherited_records.json': kept}.items()}
     p = {'identity': identity(c), 'snapshots': snapshots, 'gates': gates, 'books': prep['books'], 'evaluator_config': c6['config'],
         'sampling_seconds': time.monotonic()-started,
-        **{k: prep[k] for k in ('engine_identity', 'engine_path', 'engine_options')}}
+        'engine_identity': prep['engine_identity'], 'engine_path': c4['engine_path'],
+        'engine_options': {**c4['engine_options'], 'SyzygyPath': ''}}
     save('case_manifest.json', p)
     print(json.dumps({'local': local, 'targets': {k: len(v['targets']) for k, v in selection.items()}}, indent=2), flush=True)
 
