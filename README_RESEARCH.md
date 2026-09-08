@@ -89,3 +89,11 @@ PV plies and exports all 22 severe positions as annotated PGN. No new engines,
 source scans or model fitting were used. Next priority is a January-only cost
 pilot and prospective protocol for M8 plus legal-exchange/check-response
 features, with fresh May validation only after freezing development.
+
+Milestone 10 is in progress: [pilot and protocol status](docs/human_repertoire/milestone10_status.md).
+The thirteen-feature January cost pilot passes: 1,000 alternatives in 0.727
+seconds, 5,903 exchange nodes, about 71 MiB peak working set. All 92 tests pass,
+and exact pilot replay reproduces every vector. The small pilot covers three
+games and does not guarantee full-phase cost. The prospective May protocol is
+established; no fitting or May extraction has run. Next priority is implementing
+and testing the bounded runner before January/February development and freezing.

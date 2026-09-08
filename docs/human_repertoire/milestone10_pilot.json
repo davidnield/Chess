@@ -1,0 +1,34 @@
+{
+  "completed_alternatives": 1000,
+  "distinct_games": 3,
+  "distinct_positions": 29,
+  "error": null,
+  "exchange_nodes": 5903,
+  "identity": {
+    "alternatives": 1000,
+    "code_sha256": "f685f9d28b7fb389e2d7a8a5a208eddd824325dd2628fdb1f0d33a72509c4fa1",
+    "exchange_code_sha256": "2eaeeffbb7a09a0b6d36384714b5e07433b880ca2fe046aaf8673d6ac2ea4da2",
+    "model_sha256": "865d1463a1f1ad4e06583e34446d07b8f9a9e97d5ef2413e2281213103115799",
+    "node_cap_per_child": 20000,
+    "panel_sha256": "d423ba647286c187c98eb3879a6706f196286676e051618a194f0c2b4d2e92b6",
+    "private_memory_cap_bytes": 268435456,
+    "seconds_cap": 30
+  },
+  "max_child_nodes": 40,
+  "max_sampled_private_bytes": 52301824,
+  "memory_after": {
+    "peak_pagefile_bytes": 57970688,
+    "peak_working_set_bytes": 74194944,
+    "private_bytes": 52310016,
+    "working_set_bytes": 68780032
+  },
+  "memory_before": {
+    "peak_pagefile_bytes": 57970688,
+    "peak_working_set_bytes": 74194944,
+    "private_bytes": 52301824,
+    "working_set_bytes": 68653056
+  },
+  "rows_sha256": "af60196fda6566093f460dc318d7727f26536e3187c084b13ffdb973932c5a06",
+  "seconds": 0.7271416999865323,
+  "status": "passed"
+}

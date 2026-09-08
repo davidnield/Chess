@@ -452,3 +452,22 @@ See the [report](../../docs/human_repertoire/milestone9_report.md) for observed
 blind spots, false-positive signals and the specified next candidate. The
 next step is a January-only cost pilot and a prospective protocol; this audit
 does not fit a replacement or validate one on fresh data.
+
+## Milestone 10: cost pilot and prospective protocol
+
+```powershell
+$env:OPENBLAS_NUM_THREADS='1'
+$env:OMP_NUM_THREADS='1'
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.exchange_prior
+```
+
+This command runs only the fixed 1,000-alternative January pilot and writes
+`_artifacts/m10/pilot.json` and `pilot_rows.json`. It does not fit coefficients
+or open May. `exchange_prior.features` returns thirteen features and actual
+exchange-node count. The pilot records Windows process memory and preserves
+failed-run metadata if a declared bound is hit.
+
+The [status](../../docs/human_repertoire/milestone10_status.md) records the passed
+pilot and 92-test suite. The [prospective plan](../../docs/human_repertoire/milestone10_plan.md)
+defines the full benchmark, which still requires a new tested runner. Do not
+invoke the frozen ten-weight M8 fitter with thirteen-dimensional arrays.
