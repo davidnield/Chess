@@ -320,3 +320,19 @@ against the just-moved piece, and immediate legal check count to M8. It requires
 a bounded January cost pilot, separate prospective protocol, January/February
 development and fresh May evaluation after freezing. M9 itself provides no
 new candidate fit or fresh validation. See `milestone9_report.md`.
+
+## Maia-2 at the user's chosen fallback rating
+
+The pretrained Maia-2 policy now supplies an optional fallback kernel at self
+rating 1400 (1400-1499 bucket), chosen by the user as a proxy for intuitive moves.
+It is not an estimate of their strength, measured calculation effort or recall.
+The opponent-rating conditioning input uses the actual supplied rating. The
+evaluator adapter applies Maia on our turns only and preserves the separate
+opponent kernel. Recall mixes the prepared action and fallback as before.
+
+Use the Blitz checkpoint for Blitz and Rapid for Rapid/Classical, explicitly
+labeling Classical transfer. Preserve all legal probability mass with unrounded
+masked softmax and no engine filtering. Stockfish soundness and study/recall
+constraints remain separate. M8 diagnostic likelihood at 1400 is descriptive
+under this chosen policy assumption, not a target that overrides the preference.
+See `maia_integration.md` for verified artifacts and remaining repertoire work.

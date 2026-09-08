@@ -1,0 +1,101 @@
+{
+  "adapter_sha256": "76d8cb33c7328bceaca5eaf9013bdcadaf2392503f79e9caed6b9edb460d148d",
+  "by_event": {
+    "Blitz": {
+      "cases": 32,
+      "mean_entropy_nats": 1.5811925807643785,
+      "mean_log_loss_against_actual_1800plus_moves": 1.532787556306893
+    },
+    "Classical": {
+      "cases": 32,
+      "mean_entropy_nats": 1.6377433445576015,
+      "mean_log_loss_against_actual_1800plus_moves": 1.6717172231642226
+    },
+    "Rapid": {
+      "cases": 32,
+      "mean_entropy_nats": 1.3265989402262257,
+      "mean_log_loss_against_actual_1800plus_moves": 1.440794912504425
+    }
+  },
+  "checkpoints": {
+    "blitz": {
+      "bytes": 279704570,
+      "parameters": 23297486,
+      "sha256": "5090d5d0d49dc29787c08d13febbed5b2da81a18c2ddcd8a90070cd3b43c44b2"
+    },
+    "rapid": {
+      "bytes": 279704570,
+      "parameters": 23297486,
+      "sha256": "65aae8465eed5e65df66a24ea7370715579f9e5435098d06fe18bdb1e267e997"
+    }
+  },
+  "config": {
+    "checkpoint_sha256": {
+      "blitz": "5090d5d0d49dc29787c08d13febbed5b2da81a18c2ddcd8a90070cd3b43c44b2",
+      "rapid": "65aae8465eed5e65df66a24ea7370715579f9e5435098d06fe18bdb1e267e997"
+    },
+    "classical_model": "rapid",
+    "device": "cpu",
+    "fallback_rating": 1400,
+    "maia2_version": "0.11.0",
+    "opponent_rating": "actual opponent rating supplied by caller",
+    "probability_temperature": 1,
+    "schema_version": 1,
+    "threads": 1,
+    "top_p": 1,
+    "torch_version": "2.8.0+cpu"
+  },
+  "config_sha256": "a7d3e3ab3276860972d9535dba6cff110363f864f6691490417ff7a5d5fc657b",
+  "diagnostic_cases": 96,
+  "diagnostic_rows_sha256": "6acc76e6569dc0a2d82924ff7d6c5a934a442401148884afe89c369e4b503bd1",
+  "diagnostic_seconds": 3.7660000000032596,
+  "diagnostic_source_sha256": "01c3b343ab636f75352369f04934fce21b6e464d626a2a40b7e333ec79c3305a",
+  "interpretation": "Retrospective integration diagnostic. Maia self rating 1400 is a user-chosen fallback assumption, not a fit to >=1800 human behavior or measured intuitiveness.",
+  "max_upstream_round_difference": 4.942493156848181e-05,
+  "mirror_and_upstream_probability_checks": 112,
+  "packages": {
+    "Jinja2": "3.1.6",
+    "MarkupSafe": "3.0.3",
+    "PySocks": "1.7.1",
+    "PyYAML": "6.0.3",
+    "backports.zstd": "1.7.0",
+    "beautifulsoup4": "4.15.0",
+    "certifi": "2026.7.22",
+    "charset-normalizer": "3.5.1",
+    "chess": "1.11.2",
+    "colorama": "0.4.6",
+    "einops": "0.8.2",
+    "filelock": "3.32.3",
+    "fsspec": "2026.7.0",
+    "gdown": "5.2.2",
+    "idna": "3.19",
+    "maia2": "0.11.0",
+    "mpmath": "1.3.0",
+    "networkx": "3.6.1",
+    "numpy": "2.4.6",
+    "pandas": "2.3.3",
+    "python-dateutil": "2.9.0.post0",
+    "pytz": "2026.3.post1",
+    "pyzstd": "0.19.1",
+    "requests": "2.34.2",
+    "six": "1.17.0",
+    "soupsieve": "2.9.2",
+    "sympy": "1.14.0",
+    "torch": "2.8.0+cpu",
+    "tqdm": "4.70.0",
+    "typing_extensions": "4.16.0",
+    "tzdata": "2026.3",
+    "urllib3": "2.7.0"
+  },
+  "smoke_sha256": "26250b16c05ef3691ea41308030a87c1a58a041e5ed55ee5b1994b37a8e2b973",
+  "status": "passed",
+  "terminal_fixtures": 3,
+  "total_seconds": 8.844000000040978,
+  "upstream_source_sha256": {
+    "inference.py": "21223bd69bd9fbc8feb5a40a6faf3158b49cb6a9152501f9b0796bf013309d70",
+    "main.py": "b4e26c99a3a919218971be443d4c27065b65714c20a075f35fb074d14f723665",
+    "model.py": "be0d8c59775be9cfaa1c86af3bb401812c6b68210427687b1ab2172eb5b8046b",
+    "train.py": "e53cf2429d2e54011c162c9254b954d69bb63e954e4e7376130847c3ce91ef88",
+    "utils.py": "17b06f923a5d2c7dad47d248f6ecd07e21661bd8ce1995c013a2dfc77b3d808f"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "maia2_version": "0.11.0",
+  "torch_version": "2.8.0+cpu",
+  "device": "cpu",
+  "threads": 1,
+  "fallback_rating": 1400,
+  "opponent_rating": "actual opponent rating supplied by caller",
+  "classical_model": "rapid",
+  "probability_temperature": 1,
+  "top_p": 1,
+  "checkpoint_sha256": {
+    "blitz": "5090d5d0d49dc29787c08d13febbed5b2da81a18c2ddcd8a90070cd3b43c44b2",
+    "rapid": "65aae8465eed5e65df66a24ea7370715579f9e5435098d06fe18bdb1e267e997"
+  }
+}

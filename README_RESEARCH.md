@@ -3,9 +3,11 @@
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
 **Current direction:** [use a pretrained Maia human policy](docs/human_repertoire/maia_direction.md).
-The custom M10 benchmark is paused after its cost pilot. Next is a bounded
-Maia-2 integration/calibration, then a return to concrete repertoire decisions
-under fallback and recall sensitivity. Maia-3's documented training period
+The custom M10 benchmark is paused after its cost pilot. [Maia-2 integration](docs/human_repertoire/maia_integration.md)
+is now working at the user's chosen **1400 fallback rating**, with actual
+opponent conditioning and unchanged opponent behavior. All 98 tests pass and
+both real checkpoints pass 96-case diagnostic inference. Next is a bounded
+repertoire comparison under fallback and recall sensitivity. Maia-3's documented training period
 overlaps our 2024 samples; do not call those samples held out for that model.
 
 Start with [the research brief](docs/human_repertoire/human_repertoire_start_here.md). Its proposed workspace has now been created here. Context documents are copied into this worktree; their original paths and SHA-256 hashes are in [bootstrap.json](docs/human_repertoire/bootstrap.json).

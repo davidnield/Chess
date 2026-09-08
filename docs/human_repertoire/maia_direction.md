@@ -87,3 +87,9 @@ development loop is not the default next step.
 
 Status: upstream feasibility checked and direction recorded; Maia has not yet
 been installed, downloaded or evaluated locally.
+
+**Update:** [the integration is complete](maia_integration.md). The user selected
+self rating 1400 as an ease/intuitiveness proxy despite a higher actual rating.
+Opponent conditioning retains the supplied actual rating; opponent policy is
+not downgraded. The above pre-integration status is historical. Both checkpoints
+are installed and verified, and the 96-case integration diagnostic passes.

@@ -471,3 +471,19 @@ The [status](../../docs/human_repertoire/milestone10_status.md) records the pass
 pilot and 92-test suite. The [prospective plan](../../docs/human_repertoire/milestone10_plan.md)
 defines the full benchmark, which still requires a new tested runner. Do not
 invoke the frozen ten-weight M8 fitter with thirteen-dimensional arrays.
+
+## Maia-2 fallback integration
+
+`maia_policy.MaiaPolicy` provides full legal UCI probabilities with self rating
+1400 and caller-supplied opponent rating. `MaiaFallbackKernels` matches the
+existing evaluator's `get(key, fen)` interface, uses Maia only on our turns and
+delegates opponent turns to the existing supplied policy. Select `maia1400` as
+the evaluator model name. No frozen evaluator module was edited.
+
+Use `_artifacts/maia2/venv/Scripts/python.exe`, not the original research venv,
+for `python -B -m research.human_repertoire.maia_smoke`. The latter verifies both
+real checkpoints and writes full probabilities for the 96 frozen diagnostic
+parents. The [integration report](../../docs/human_repertoire/maia_integration.md)
+documents setup, semantics, provenance and transfer limits. No training or
+May data extraction is required. Ordinary contract tests remain runnable in
+the original research environment without installing torch or maia2 there.
