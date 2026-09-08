@@ -1,0 +1,2210 @@
+{
+  "completed_utc": "2026-09-08T04:18:30.907624+00:00",
+  "contrasts": {
+    "audited_only": {
+      "shared_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.4081235322337887,
+            0.4051938447337887
+          ],
+          "sample_difference_interval": [
+            -0.3232421875,
+            0.3203125
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.0038608286524967773,
+          "mc_se": 0.0018006694621788115,
+          "mean": 0.003605556508736376
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.4081235322337887,
+            0.4051938447337887
+          ],
+          "sample_difference_interval": [
+            -0.3232421875,
+            0.3203125
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015306905487724844,
+          "mc_se": 0.0008827786612981114,
+          "mean": -0.0015428501949816494
+        }
+      },
+      "tuned_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.4081235322337887,
+            0.4051938447337887
+          ],
+          "sample_difference_interval": [
+            -0.3232421875,
+            0.3203125
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.0037353469920960525,
+          "mc_se": 0.000865610226285287,
+          "mean": 0.0008656102262852825
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.4081235322337887,
+            0.4051938447337887
+          ],
+          "sample_difference_interval": [
+            -0.3232421875,
+            0.3203125
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015237869394904367,
+          "mc_se": 0.0008765958056527592,
+          "mean": -0.0015355016219061736
+        }
+      }
+    },
+    "audited_overlay": {
+      "shared_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3008713033590912,
+            0.30443826110848626
+          ],
+          "sample_difference_interval": [
+            -0.21598995862530246,
+            0.21955691637469757
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.012616418219406445,
+          "mc_se": 0.006622213488531457,
+          "mean": 0.003643226994823295
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3007016572337887,
+            0.3046079072337887
+          ],
+          "sample_difference_interval": [
+            -0.2158203125,
+            0.2197265625
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015306905487724844,
+          "mc_se": 0.0008827786612981114,
+          "mean": -0.0015428501949816494
+        }
+      },
+      "tuned_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.31055466220826894,
+            0.31428615225930856
+          ],
+          "sample_difference_interval": [
+            -0.22567331747448022,
+            0.22940480752551984
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.011903880671893258,
+          "mc_se": 0.006805550600957718,
+          "mean": 0.004795432525519741
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3104672822337887,
+            0.3143735322337887
+          ],
+          "sample_difference_interval": [
+            -0.2255859375,
+            0.2294921875
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015237869394904367,
+          "mc_se": 0.0008765958056527592,
+          "mean": -0.0015355016219061736
+        }
+      }
+    },
+    "source": {
+      "shared_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3074065473678276,
+            0.30669207959974987
+          ],
+          "sample_difference_interval": [
+            -0.22252520263403885,
+            0.22181073486596115
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.012487841805062891,
+          "mc_se": 0.0064348547112058705,
+          "mean": 0.0009297771730826613
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3075375947337887,
+            0.3065610322337887
+          ],
+          "sample_difference_interval": [
+            -0.22265625,
+            0.2216796875
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015306905487724844,
+          "mc_se": 0.0008827786612981114,
+          "mean": -0.0015428501949816494
+        }
+      },
+      "tuned_position": {
+        "discounted_first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3123968349345542,
+            0.3153736670330233
+          ],
+          "sample_difference_interval": [
+            -0.2275154902007655,
+            0.23049232229923453
+          ]
+        },
+        "early_advantage": {
+          "independence_assumed_se": 0.011822517886865743,
+          "mc_se": 0.006750769463344169,
+          "mean": 0.003929822299234459
+        },
+        "first_advantage": {
+          "hoeffding_margin": 0.08488134473378872,
+          "mc_outer_95": [
+            -0.3124204072337887,
+            0.3153500947337887
+          ],
+          "sample_difference_interval": [
+            -0.2275390625,
+            0.23046875
+          ]
+        },
+        "identical_position_sequences": 693,
+        "points": {
+          "independence_assumed_se": 0.0015237869394904367,
+          "mc_se": 0.0008765958056527592,
+          "mean": -0.0015355016219061736
+        }
+      }
+    }
+  },
+  "counts": {
+    "arms": 6,
+    "missing_overlay_evals": 14875,
+    "missing_source_evals": 14918,
+    "new_engine_targets_seen_in_final": 12,
+    "trajectories_per_arm": 1024,
+    "visited_positions": 20279
+  },
+  "eval_sources": [
+    {
+      "mtime_ns": 1785902882763251000,
+      "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+      "size": 3199991680
+    },
+    {
+      "mtime_ns": 1785902883307954800,
+      "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+      "size": 799998016
+    },
+    {
+      "mtime_ns": 1785993454057331100,
+      "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+      "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+      "size": 137
+    },
+    {
+      "mtime_ns": 1785532993604486400,
+      "path": "E:\\chess\\unified_eval_db.parquet",
+      "size": 3804112433
+    }
+  ],
+  "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+  "generation_seconds": 23.312000000005355,
+  "identity": {
+    "engine_audit_sha256": "254e29b30607070faf8bd79c88296f5bf0260012f9f61b5703d98b74d589cb5d",
+    "pilot_manifest_sha256": "e34a49bc1bc1ea93d3cda1ed962e0ab3ac3a8499f32d0fd341d9668af5d5dab2"
+  },
+  "primary_contrast": {
+    "hoeffding_margin": 0.08488134473378872,
+    "mc_outer_95": [
+      -0.3008713033590912,
+      0.30443826110848626
+    ],
+    "sample_difference_interval": [
+      -0.21598995862530246,
+      0.21955691637469757
+    ]
+  },
+  "primary_outer_excludes_zero": false,
+  "snapshots": {
+    "m5/control.json": "92340b72bb3c5070bbfc74d4723a8b511294dcde2ef7169adcbba50d3ac6b8cc",
+    "m5/final_fens.json": "7a127cd7e2c6ba7f7e6d5c9cd1d5b63357cdece34bd8a257ce97dc99ae4c23f7",
+    "m5/final_source_evals.json": "9ae552b76a64baebe60de2310cd42d6baee134cae9ea80f1507eeb3c094f4f6f",
+    "m5/final_traces.json": "ba94ad072cc24c62b2ec9b68ca8a2d04dbbda728a46ab45b6a34ccf70ccdbdb3"
+  },
+  "summaries": {
+    "audited_only": {
+      "shared_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              1.0
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010351472546172255,
+            "mean": 0.10364876137975206
+          },
+          "early_advantage": {
+            "mc_se": 0.0012737500938573617,
+            "mean": 0.0018022357313045314
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              1.0
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.0009082865641209482,
+            "mean": 0.44876525327528083
+          },
+          "no_hit": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.9951171875
+          },
+          "points": {
+            "mc_se": 0.0007675373600886692,
+            "mean": 0.499410366034836
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0,
+            "mean": 1.0
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 1.0
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009428720141524633,
+            "mean": 0.447585985344953
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0006211767411907764,
+            "mean": 0.00087890625
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.0025761534175185426,
+            "mean": 0.0068359375
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.001950259077693175,
+            "mean": 0.00390625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.998046875
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005882275981495095,
+            "mean": 0.10016377648712879
+          },
+          "early_advantage": {
+            "mc_se": 0.0024195903225771873,
+            "mean": 0.006418977732604136
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.998046875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "loss": {
+            "mc_se": 0.0009647733872154092,
+            "mean": 0.4503283340692041
+          },
+          "no_hit": {
+            "mc_se": 0.003223022161737136,
+            "mean": 0.9892578125
+          },
+          "points": {
+            "mc_se": 0.000904236574453981,
+            "mean": 0.4995897776872245
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009367527582525635,
+            "mean": 0.4495078894436532
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0011691477614931254,
+            "mean": 0.003101748511904762
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.003223022161737136,
+            "mean": 0.0107421875
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.9951171875
+            ]
+          },
+          "draw": {
+            "mc_se": 0.000606383963872657,
+            "mean": 0.09991031504820544
+          },
+          "early_advantage": {
+            "mc_se": 0.0030085844769311204,
+            "mean": 0.010024534241340512
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.9951171875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.005859375
+          },
+          "loss": {
+            "mc_se": 0.0013367182715351652,
+            "mean": 0.45199791498364755
+          },
+          "no_hit": {
+            "mc_se": 0.003364674879742613,
+            "mean": 0.98828125
+          },
+          "points": {
+            "mc_se": 0.001235058611370788,
+            "mean": 0.4980469274922429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.9951171875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.9951171875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0012032350416303832,
+            "mean": 0.4480917699681333
+          },
+          "win_after_advantage": {
+            "mc_se": 0.001466073173907681,
+            "mean": 0.004885137648809525
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.001950259077693175,
+            "mean": 0.00390625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              1.0
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010819857649274718,
+            "mean": 0.10414731004575985
+          },
+          "early_advantage": {
+            "mc_se": 0.0018052540477816533,
+            "mean": 0.003614671536244684
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              1.0
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "loss": {
+            "mc_se": 0.0009159907245026831,
+            "mean": 0.4480725427362726
+          },
+          "no_hit": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "points": {
+            "mc_se": 0.0007618429937385367,
+            "mean": 0.4998538022408401
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0,
+            "mean": 1.0
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 1.0
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009524269444922818,
+            "mean": 0.4477801472179529
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0012366817584128212,
+            "mean": 0.002294921875
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.002752669519862786,
+            "mean": 0.0078125
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.998046875
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005889049829104314,
+            "mean": 0.10024923903183042
+          },
+          "early_advantage": {
+            "mc_se": 0.0025705912330584828,
+            "mean": 0.007293331496528665
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.998046875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.000959880445236491,
+            "mean": 0.4497936417461285
+          },
+          "no_hit": {
+            "mc_se": 0.003223022161737136,
+            "mean": 0.9892578125
+          },
+          "points": {
+            "mc_se": 0.0008992685456362109,
+            "mean": 0.500081738737949
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009324172374223638,
+            "mean": 0.4499571192220269
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0015214003108066723,
+            "mean": 0.004078311011904762
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.002918209737947917,
+            "mean": 0.0087890625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "disadvantage": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.9951171875
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0006084376490878391,
+            "mean": 0.10001191394183892
+          },
+          "early_advantage": {
+            "mc_se": 0.0027101435135217277,
+            "mean": 0.008158941722813947
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0,
+              1
+            ],
+            "sample_observation_interval": [
+              0.0,
+              0.9951171875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.0048828125
+          },
+          "loss": {
+            "mc_se": 0.0013318910405941576,
+            "mean": 0.4514478059130306
+          },
+          "no_hit": {
+            "mc_se": 0.003364674879742613,
+            "mean": 0.98828125
+          },
+          "points": {
+            "mc_se": 0.001230139309099163,
+            "mean": 0.4985462371160429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.9951171875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.9951171875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0011990203843057776,
+            "mean": 0.4485402801451165
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0015897181487344615,
+            "mean": 0.004543340773809524
+          }
+        },
+        "trajectories": 1024
+      }
+    },
+    "audited_overlay": {
+      "shared_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.008293829364759926,
+            "mean": 0.076171875
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.008145654105813064,
+            "mean": 0.0732421875
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.007556144059575898,
+            "mean": 0.06792552089286505
+          },
+          "disadvantage": {
+            "mc_se": 0.005834742102826016,
+            "mean": 0.0361328125
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.025484848525970688,
+              0.8418115057597593
+            ],
+            "sample_observation_interval": [
+              0.06792552089286505,
+              0.799370833392865
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010351472546172255,
+            "mean": 0.10364876137975206
+          },
+          "early_advantage": {
+            "mc_se": 0.007691320862308173,
+            "mean": 0.07062095020540807
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.03080151513310564,
+              0.8471281723668944
+            ],
+            "sample_observation_interval": [
+              0.0732421875,
+              0.8046875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.0009082865641209482,
+            "mean": 0.44876525327528083
+          },
+          "no_hit": {
+            "mc_se": 0.009871725902929451,
+            "mean": 0.8876953125
+          },
+          "points": {
+            "mc_se": 0.0007675373600886692,
+            "mean": 0.499410366034836
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011660973201488406,
+            "mean": 0.8330078125
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013857008464997066,
+            "mean": 0.7314453125
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009428720141524633,
+            "mean": 0.447585985344953
+          },
+          "win_after_advantage": {
+            "mc_se": 0.003825959394661685,
+            "mean": 0.03479352678571428
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.00948450416823793,
+            "mean": 0.1025390625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.00940395741851657,
+            "mean": 0.1005859375
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.008775421203220288,
+            "mean": 0.09382895684196738
+          },
+          "disadvantage": {
+            "mc_se": 0.007285374628970534,
+            "mean": 0.0576171875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.051388284475073015,
+              0.8237696292088614
+            ],
+            "sample_observation_interval": [
+              0.09382895684196738,
+              0.781328956841967
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005882275981495095,
+            "mean": 0.10016377648712879
+          },
+          "early_advantage": {
+            "mc_se": 0.008847100151544912,
+            "mean": 0.09561326032774542
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.05814526513310564,
+              0.8305266098668944
+            ],
+            "sample_observation_interval": [
+              0.1005859375,
+              0.7880859375
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "loss": {
+            "mc_se": 0.0009647733872154092,
+            "mean": 0.4503283340692041
+          },
+          "no_hit": {
+            "mc_se": 0.011466566026829555,
+            "mean": 0.83984375
+          },
+          "points": {
+            "mc_se": 0.000904236574453981,
+            "mean": 0.4995897776872245
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011742114568595299,
+            "mean": 0.830078125
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.01449184049250526,
+            "mean": 0.6875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009367527582525635,
+            "mean": 0.4495078894436532
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004354046166803148,
+            "mean": 0.04671435335497841
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.0096424195149569,
+            "mean": 0.1064453125
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.009524375292504623,
+            "mean": 0.103515625
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.008890395495956643,
+            "mean": 0.0965889982166649
+          },
+          "disadvantage": {
+            "mc_se": 0.006801484844715222,
+            "mean": 0.0498046875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.05414832584977054,
+              0.8245765455835588
+            ],
+            "sample_observation_interval": [
+              0.0965889982166649,
+              0.7821358732166644
+            ]
+          },
+          "draw": {
+            "mc_se": 0.000606383963872657,
+            "mean": 0.09991031504820544
+          },
+          "early_advantage": {
+            "mc_se": 0.008994599913031424,
+            "mean": 0.09925648732256873
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.06107495263310564,
+              0.8315031723668944
+            ],
+            "sample_observation_interval": [
+              0.103515625,
+              0.7890625
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.005859375
+          },
+          "loss": {
+            "mc_se": 0.0013367182715351652,
+            "mean": 0.45199791498364755
+          },
+          "no_hit": {
+            "mc_se": 0.011352175305386314,
+            "mean": 0.84375
+          },
+          "points": {
+            "mc_se": 0.001235058611370788,
+            "mean": 0.4980469274922429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011848337298292114,
+            "mean": 0.826171875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.014516393038231126,
+            "mean": 0.685546875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0012032350416303832,
+            "mean": 0.4480917699681333
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004423108275328185,
+            "mean": 0.04846772693452388
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.007784767187098094,
+            "mean": 0.06640625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.007568116870257544,
+            "mean": 0.0625
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0070348774898192,
+            "mean": 0.05807877900942243
+          },
+          "disadvantage": {
+            "mc_se": 0.005758268998847354,
+            "mean": 0.03515625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.01563810664252807,
+              0.861261638876317
+            ],
+            "sample_observation_interval": [
+              0.05807877900942243,
+              0.8188209665094226
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010819857649274718,
+            "mean": 0.10414731004575985
+          },
+          "early_advantage": {
+            "mc_se": 0.007230104980764761,
+            "mean": 0.06165648637030376
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.02005932763310564,
+              0.8656828598668944
+            ],
+            "sample_observation_interval": [
+              0.0625,
+              0.8232421875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "loss": {
+            "mc_se": 0.0009159907245026831,
+            "mean": 0.4480725427362726
+          },
+          "no_hit": {
+            "mc_se": 0.009444366016639555,
+            "mean": 0.8984375
+          },
+          "points": {
+            "mc_se": 0.0007618429937385367,
+            "mean": 0.4998538022408401
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011085564724920505,
+            "mean": 0.8525390625
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013338715128097551,
+            "mean": 0.7607421875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009524269444922818,
+            "mean": 0.4477801472179529
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0036146554382700765,
+            "mean": 0.03049432663690473
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.00889659344153528,
+            "mean": 0.0888671875
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.00876277149733554,
+            "mean": 0.0859375
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0081849603422686,
+            "mean": 0.08023862489790479
+          },
+          "disadvantage": {
+            "mc_se": 0.006200727065010998,
+            "mean": 0.041015625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.037797952531010426,
+              0.8599839847647988
+            ],
+            "sample_observation_interval": [
+              0.08023862489790479,
+              0.8175433123979043
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005889049829104314,
+            "mean": 0.10024923903183042
+          },
+          "early_advantage": {
+            "mc_se": 0.008304068537711632,
+            "mean": 0.08291521439313383
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04349682763310564,
+              0.8656828598668944
+            ],
+            "sample_observation_interval": [
+              0.0859375,
+              0.8232421875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.000959880445236491,
+            "mean": 0.4497936417461285
+          },
+          "no_hit": {
+            "mc_se": 0.010510585248452865,
+            "mean": 0.8701171875
+          },
+          "points": {
+            "mc_se": 0.0008992685456362109,
+            "mean": 0.500081738737949
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.010962779791609112,
+            "mean": 0.8564453125
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013759791156805846,
+            "mean": 0.7373046875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009324172374223638,
+            "mean": 0.4499571192220269
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004102594478591216,
+            "mean": 0.040629650297619065
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.009113219507655975,
+            "mean": 0.09375
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.00898418200138554,
+            "mean": 0.0908203125
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.00841462631087975,
+            "mean": 0.08503405742342453
+          },
+          "disadvantage": {
+            "mc_se": 0.006270915633515059,
+            "mean": 0.0419921875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04259338505653017,
+              0.8589200422903183
+            ],
+            "sample_observation_interval": [
+              0.08503405742342453,
+              0.816479369923424
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0006084376490878391,
+            "mean": 0.10001191394183892
+          },
+          "early_advantage": {
+            "mc_se": 0.008529057437469964,
+            "mean": 0.08771064691865357
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04837964013310564,
+              0.8647062973668944
+            ],
+            "sample_observation_interval": [
+              0.0908203125,
+              0.822265625
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.0048828125
+          },
+          "loss": {
+            "mc_se": 0.0013318910405941576,
+            "mean": 0.4514478059130306
+          },
+          "no_hit": {
+            "mc_se": 0.010708811202609409,
+            "mean": 0.8642578125
+          },
+          "points": {
+            "mc_se": 0.001230139309099163,
+            "mean": 0.4985462371160429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.010931654882347373,
+            "mean": 0.857421875
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013857008464997066,
+            "mean": 0.7314453125
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0011990203843057776,
+            "mean": 0.4485402801451165
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004194943595676894,
+            "mean": 0.04280133928571433
+          }
+        },
+        "trajectories": 1024
+      }
+    },
+    "source": {
+      "shared_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.008195457289511114,
+            "mean": 0.07421875
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.008044775240396446,
+            "mean": 0.0712890625
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.0074636354868377166,
+            "mean": 0.06612328516156052
+          },
+          "disadvantage": {
+            "mc_se": 0.005680602419969711,
+            "mean": 0.0341796875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.023682612794666158,
+              0.8448920825284547
+            ],
+            "sample_observation_interval": [
+              0.06612328516156052,
+              0.8024514101615604
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010351472546172255,
+            "mean": 0.10364876137975206
+          },
+          "early_advantage": {
+            "mc_se": 0.007601082515114338,
+            "mean": 0.06881871447410352
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.02884839013310564,
+              0.8500578598668944
+            ],
+            "sample_observation_interval": [
+              0.0712890625,
+              0.8076171875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.0009082865641209482,
+            "mean": 0.44876525327528083
+          },
+          "no_hit": {
+            "mc_se": 0.009719839746594116,
+            "mean": 0.8916015625
+          },
+          "points": {
+            "mc_se": 0.0007675373600886692,
+            "mean": 0.499410366034836
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011606162213186104,
+            "mean": 0.8349609375
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013776210860164664,
+            "mean": 0.736328125
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009428720141524633,
+            "mean": 0.447585985344953
+          },
+          "win_after_advantage": {
+            "mc_se": 0.003782906284828157,
+            "mean": 0.03391462053571427
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.009444366016639555,
+            "mean": 0.1015625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.009363274872413646,
+            "mean": 0.099609375
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.008738404681108355,
+            "mean": 0.09292783897631511
+          },
+          "disadvantage": {
+            "mc_se": 0.007108761088051085,
+            "mean": 0.0546875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.05048716660942075,
+              0.830681011343209
+            ],
+            "sample_observation_interval": [
+              0.09292783897631511,
+              0.7882403389763147
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005882275981495095,
+            "mean": 0.10016377648712879
+          },
+          "early_advantage": {
+            "mc_se": 0.008810563183180475,
+            "mean": 0.09471214246209315
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.05716870263310564,
+              0.8373625473668944
+            ],
+            "sample_observation_interval": [
+              0.099609375,
+              0.794921875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.0029296875
+          },
+          "loss": {
+            "mc_se": 0.0009647733872154092,
+            "mean": 0.4503283340692041
+          },
+          "no_hit": {
+            "mc_se": 0.011352175305386314,
+            "mean": 0.84375
+          },
+          "points": {
+            "mc_se": 0.000904236574453981,
+            "mean": 0.4995897776872245
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011578538650295768,
+            "mean": 0.8359375
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.01439062049749023,
+            "mean": 0.6953125
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009367527582525635,
+            "mean": 0.4495078894436532
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004336398951218435,
+            "mean": 0.046274900229978405
+          }
+        },
+        "trajectories": 1024
+      },
+      "shared_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.00948450416823793,
+            "mean": 0.1025390625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.009322314791807668,
+            "mean": 0.0986328125
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.008706455656082036,
+            "mean": 0.09208232384227627
+          },
+          "disadvantage": {
+            "mc_se": 0.006801484844715222,
+            "mean": 0.0498046875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04964165147538191,
+              0.8308120587091701
+            ],
+            "sample_observation_interval": [
+              0.09208232384227627,
+              0.7883713863422757
+            ]
+          },
+          "draw": {
+            "mc_se": 0.000606383963872657,
+            "mean": 0.09991031504820544
+          },
+          "early_advantage": {
+            "mc_se": 0.008849868323509742,
+            "mean": 0.09564191963517583
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.05619214013310564,
+              0.8373625473668944
+            ],
+            "sample_observation_interval": [
+              0.0986328125,
+              0.794921875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.005859375
+          },
+          "loss": {
+            "mc_se": 0.0013367182715351652,
+            "mean": 0.45199791498364755
+          },
+          "no_hit": {
+            "mc_se": 0.011235292627525834,
+            "mean": 0.84765625
+          },
+          "points": {
+            "mc_se": 0.001235058611370788,
+            "mean": 0.4980469274922429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011633640053537337,
+            "mean": 0.833984375
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.014377626121390206,
+            "mean": 0.6962890625
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0012032350416303832,
+            "mean": 0.4480917699681333
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004351250076906636,
+            "mean": 0.0466843377976191
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/empty": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.007623040171717089,
+            "mean": 0.0634765625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.007400145989990295,
+            "mean": 0.0595703125
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.006876542768756798,
+            "mean": 0.055338461237102274
+          },
+          "disadvantage": {
+            "mc_se": 0.005680602419969711,
+            "mean": 0.0341796875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.012897788870207913,
+              0.8634041336039968
+            ],
+            "sample_observation_interval": [
+              0.055338461237102274,
+              0.8209634612371025
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0010819857649274718,
+            "mean": 0.10414731004575985
+          },
+          "early_advantage": {
+            "mc_se": 0.007077494221102102,
+            "mean": 0.058916168597983605
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.01712964013310564,
+              0.8676359848668944
+            ],
+            "sample_observation_interval": [
+              0.0595703125,
+              0.8251953125
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.998046875
+          },
+          "human_end_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "loss": {
+            "mc_se": 0.0009159907245026831,
+            "mean": 0.4480725427362726
+          },
+          "no_hit": {
+            "mc_se": 0.009281073502177568,
+            "mean": 0.90234375
+          },
+          "points": {
+            "mc_se": 0.0007618429937385367,
+            "mean": 0.4998538022408401
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.011055122832492851,
+            "mean": 0.853515625
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.0132442045229507,
+            "mean": 0.765625
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009524269444922818,
+            "mean": 0.4477801472179529
+          },
+          "win_after_advantage": {
+            "mc_se": 0.0035443911593826607,
+            "mean": 0.02917596726190473
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/source_one_card": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.008852316221197016,
+            "mean": 0.087890625
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.008717493821785318,
+            "mean": 0.0849609375
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.00814379104426635,
+            "mean": 0.07933750703225252
+          },
+          "disadvantage": {
+            "mc_se": 0.006129582768911721,
+            "mean": 0.0400390625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.03689683466535816,
+              0.8639656793991466
+            ],
+            "sample_observation_interval": [
+              0.07933750703225252,
+              0.8215250070322522
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0005889049829104314,
+            "mean": 0.10024923903183042
+          },
+          "early_advantage": {
+            "mc_se": 0.008263777976107627,
+            "mean": 0.08201409652748157
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04252026513310564,
+              0.8695891098668944
+            ],
+            "sample_observation_interval": [
+              0.0849609375,
+              0.8271484375
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0016898016308042098,
+            "mean": 0.9970703125
+          },
+          "human_end_mass": {
+            "mc_se": 0.0013803927582017273,
+            "mean": 0.001953125
+          },
+          "loss": {
+            "mc_se": 0.000959880445236491,
+            "mean": 0.4497936417461285
+          },
+          "no_hit": {
+            "mc_se": 0.010442959741772534,
+            "mean": 0.8720703125
+          },
+          "points": {
+            "mc_se": 0.0008992685456362109,
+            "mean": 0.500081738737949
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.010837227726386338,
+            "mean": 0.8603515625
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013676374547595902,
+            "mean": 0.7421875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0009324172374223638,
+            "mean": 0.4499571192220269
+          },
+          "win_after_advantage": {
+            "mc_se": 0.00408322074465636,
+            "mean": 0.04019019717261906
+          }
+        },
+        "trajectories": 1024
+      },
+      "tuned_position/two_cards": {
+        "metrics": {
+          "advantage": {
+            "mc_se": 0.009027502712277103,
+            "mean": 0.091796875
+          },
+          "certain_advantage_mass": {
+            "mc_se": 0.00889659344153528,
+            "mean": 0.0888671875
+          },
+          "certain_early_advantage": {
+            "mc_se": 0.008338691321167933,
+            "mean": 0.08326732933148698
+          },
+          "disadvantage": {
+            "mc_se": 0.006270915633515059,
+            "mean": 0.0419921875
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04082665696459262,
+              0.8630126891983807
+            ],
+            "sample_observation_interval": [
+              0.08326732933148698,
+              0.8205720168314864
+            ]
+          },
+          "draw": {
+            "mc_se": 0.0006084376490878391,
+            "mean": 0.10001191394183892
+          },
+          "early_advantage": {
+            "mc_se": 0.00845469708191009,
+            "mean": 0.08594391882671602
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.04244067236689436,
+            "mc_outer_95": [
+              0.04642651513310564,
+              0.8686125473668944
+            ],
+            "sample_observation_interval": [
+              0.0888671875,
+              0.826171875
+            ]
+          },
+          "frontier_before_horizon_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "frontier_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "horizon_mass": {
+            "mc_se": 0.0023862269191521966,
+            "mean": 0.994140625
+          },
+          "human_end_mass": {
+            "mc_se": 0.0021793868226783358,
+            "mean": 0.0048828125
+          },
+          "loss": {
+            "mc_se": 0.0013318910405941576,
+            "mean": 0.4514478059130306
+          },
+          "no_hit": {
+            "mc_se": 0.010643496458749842,
+            "mean": 0.8662109375
+          },
+          "points": {
+            "mc_se": 0.001230139309099163,
+            "mean": 0.4985462371160429
+          },
+          "repetition_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "terminal_mass": {
+            "mc_se": 0.0009765625,
+            "mean": 0.0009765625
+          },
+          "unknown_eval_mass": {
+            "mc_se": 0.010708811202609409,
+            "mean": 0.8642578125
+          },
+          "unresolved_first_hit_mass": {
+            "mc_se": 0.013759791156805846,
+            "mean": 0.7373046875
+          },
+          "unresolved_no_hit_mass": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "win": {
+            "mc_se": 0.0011990203843057776,
+            "mean": 0.4485402801451165
+          },
+          "win_after_advantage": {
+            "mc_se": 0.004154836407371473,
+            "mean": 0.04189685639880956
+          }
+        },
+        "trajectories": 1024
+      }
+    }
+  }
+}

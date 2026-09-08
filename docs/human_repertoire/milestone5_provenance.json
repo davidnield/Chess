@@ -1,0 +1,343 @@
+{
+  "artifacts": {
+    "m5/control.json": {
+      "bytes": 39978,
+      "sha256": "92340b72bb3c5070bbfc74d4723a8b511294dcde2ef7169adcbba50d3ac6b8cc"
+    },
+    "m5/coverage_diagnostics.json": {
+      "bytes": 1166,
+      "sha256": "4dcdbcbaa73ea6dace6ad5077aaf851e11662b7e4354fa6c6ca19761f8e3a178"
+    },
+    "m5/engine_audit.json": {
+      "bytes": 430365,
+      "sha256": "254e29b30607070faf8bd79c88296f5bf0260012f9f61b5703d98b74d589cb5d"
+    },
+    "m5/engine_selection.json": {
+      "bytes": 91738,
+      "sha256": "a3054c37f70823ca3718e60d73d9e64f83bc9f59e9ad08ec4b413a8127aa722b"
+    },
+    "m5/final_fens.json": {
+      "bytes": 1932452,
+      "sha256": "7a127cd7e2c6ba7f7e6d5c9cd1d5b63357cdece34bd8a257ce97dc99ae4c23f7"
+    },
+    "m5/final_source_evals.json": {
+      "bytes": 647865,
+      "sha256": "9ae552b76a64baebe60de2310cd42d6baee134cae9ea80f1507eeb3c094f4f6f"
+    },
+    "m5/final_tests.txt": {
+      "bytes": 412,
+      "sha256": "a8f5ae26848eba98dae4c6c7c01d7be261e76e77d7e34f597dbd913030a22c93"
+    },
+    "m5/final_traces.json": {
+      "bytes": 5077306,
+      "sha256": "ba94ad072cc24c62b2ec9b68ca8a2d04dbbda728a46ab45b6a34ccf70ccdbdb3"
+    },
+    "m5/pilot_fens.json": {
+      "bytes": 552933,
+      "sha256": "f4340e27b9a33fd15183289fce7768a1aa6e24d72a63a7fd81acbefb37da775c"
+    },
+    "m5/pilot_manifest.json": {
+      "bytes": 7345,
+      "sha256": "e34a49bc1bc1ea93d3cda1ed962e0ab3ac3a8499f32d0fd341d9668af5d5dab2"
+    },
+    "m5/pilot_source_evals.json": {
+      "bytes": 184881,
+      "sha256": "8d08de262402922435e800acf3703185455257733a71e686dd119706e717b2d9"
+    },
+    "m5/pilot_traces.json": {
+      "bytes": 1266315,
+      "sha256": "b22739871195d924b3e89c3500a9023ce2cf1db560626d285d3fb68e3fa31b67"
+    },
+    "m5/results.json": {
+      "bytes": 64998,
+      "sha256": "0d053378e86fa4c76a45e1dd95bdce7bf059f33afb2d5de340433d6fdfec76ce"
+    },
+    "m5/verification.json": {
+      "bytes": 5641,
+      "sha256": "3319ed369304b84ef0a550e665fe5760a6af213a8bdd131f110602b63ec4dacf"
+    }
+  },
+  "interpretation": "Frozen-model computational experiment; no new human validation, policy tuning or book optimisation. Coverage diagnostic is post-experiment and descriptive.",
+  "pilot_manifest": {
+    "engine_identity": {
+      "binary": {
+        "mtime_ns": 1769897604000000000,
+        "path": "C:\\Users\\David\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+        "sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+        "size": 114007552
+      },
+      "id": {
+        "author": "the Stockfish developers (see AUTHORS file)",
+        "name": "Stockfish 18"
+      },
+      "options": {
+        "Clear Hash": {
+          "default": null,
+          "max": null,
+          "min": null,
+          "type": "button",
+          "var": []
+        },
+        "Debug Log File": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFile": {
+          "default": "nn-c288c895ea92.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFileSmall": {
+          "default": "nn-37f18f62d772.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Hash": {
+          "default": 16,
+          "max": 33554432,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "Move Overhead": {
+          "default": 10,
+          "max": 5000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "MultiPV": {
+          "default": 1,
+          "max": 256,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "NumaPolicy": {
+          "default": "auto",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Ponder": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "Skill Level": {
+          "default": 20,
+          "max": 20,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Syzygy50MoveRule": {
+          "default": true,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "SyzygyPath": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "SyzygyProbeDepth": {
+          "default": 1,
+          "max": 100,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "SyzygyProbeLimit": {
+          "default": 7,
+          "max": 7,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Threads": {
+          "default": 1,
+          "max": 1024,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_Chess960": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_Elo": {
+          "default": 1320,
+          "max": 3190,
+          "min": 1320,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_LimitStrength": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_ShowWDL": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "nodestime": {
+          "default": 0,
+          "max": 10000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        }
+      }
+    },
+    "engine_targets": 512,
+    "eval_sources": [
+      {
+        "mtime_ns": 1785902882763251000,
+        "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+        "size": 3199991680
+      },
+      {
+        "mtime_ns": 1785902883307954800,
+        "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+        "size": 799998016
+      },
+      {
+        "mtime_ns": 1785993454057331100,
+        "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+        "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+        "size": 137
+      },
+      {
+        "mtime_ns": 1785532993604486400,
+        "path": "E:\\chess\\unified_eval_db.parquet",
+        "size": 3804112433
+      }
+    ],
+    "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+    "frozen_utc": "2026-09-08T04:14:32.029891+00:00",
+    "gates": [
+      {
+        "child_cp": 14,
+        "move": "Nxd4",
+        "parent_cp": 14,
+        "position": "2776049323298866377"
+      },
+      {
+        "child_cp": 17,
+        "move": "d4",
+        "parent_cp": 47,
+        "position": "8704797333742910878"
+      }
+    ],
+    "generation_seconds": 6.312000000005355,
+    "identity": {
+      "code_sha256": {
+        "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
+        "continuation_audit.py": "b864e32d2f36c92be4a793976e8d338bd7e9d90fb14c80b2d533bde013f34494",
+        "empirical.py": "d274ef8ee11fd94fbd2927f02f5d5c8e522359208c3284b73950b7457305a5c9",
+        "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+        "rollout_experiment.py": "84f42d319728fb7c9d3a5b28cc8f93361747e53f9a5d2f6e4c89dcf60b053a6c",
+        "shared_fallback.py": "e86fbeb5fe83930cee37a863cdf2fe47b4b4498b6647a95de7acfc9e3a501696",
+        "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9"
+      },
+      "config": {
+        "config": {
+          "discount": 0.99,
+          "horizon": 12,
+          "max_disadvantage": 0.4,
+          "max_engine_loss_cp": 150,
+          "max_states": 200000,
+          "min_points": 0.48,
+          "recall": 0.85,
+          "reentry": true,
+          "repetition_visits": 3,
+          "soundness_floor_cp": -100,
+          "threshold_cp": 300
+        },
+        "control_seed": "human-repertoire-m5-control-v1",
+        "control_trajectories_per_arm": 4096,
+        "deeper_nodes": 400000,
+        "deeper_time_seconds": 2.0,
+        "engine_deeper_positions": 32,
+        "engine_nodes": 100000,
+        "engine_positions": 512,
+        "engine_runtime_seconds": 600,
+        "engine_time_seconds": 1.0,
+        "final_seed": "human-repertoire-m5-final-v1",
+        "final_trajectories_per_arm": 1024,
+        "max_final_positions": 80000,
+        "max_pilot_positions": 20000,
+        "monte_carlo_alpha": 0.05,
+        "pilot_seed": "human-repertoire-m5-pilot-v1",
+        "pilot_trajectories_per_arm": 256,
+        "sampling_runtime_seconds": 300,
+        "schema_version": 1
+      },
+      "m4_engine_sha256": "b211c607fcc316f3982f273895e6ef8c8bf34a2ab1275693a2ae0e44f42d14aa",
+      "m4_preparation_sha256": "262bf2c0b3741b3a0c9523941eae2864a0d68fd0e5fe90182bcd0578284d1482",
+      "m4_results_sha256": "8f4802946d26d0c376448bec3578fd9d007211811f02621fcaaf39d247986b30",
+      "plan_sha256": "afb64a4c964aed8f4b990f9321eef1c22f6fdbcfd88bd0afb7ab8a33632c894e",
+      "python_chess_version": "1.11.2"
+    },
+    "missing_source_evals": 3900,
+    "snapshots": {
+      "m5/engine_selection.json": "a3054c37f70823ca3718e60d73d9e64f83bc9f59e9ad08ec4b413a8127aa722b",
+      "m5/pilot_fens.json": "f4340e27b9a33fd15183289fce7768a1aa6e24d72a63a7fd81acbefb37da775c",
+      "m5/pilot_source_evals.json": "8d08de262402922435e800acf3703185455257733a71e686dd119706e717b2d9",
+      "m5/pilot_traces.json": "b22739871195d924b3e89c3500a9023ce2cf1db560626d285d3fb68e3fa31b67"
+    },
+    "visited_positions": 5807
+  },
+  "previous_milestone_commit": "6d3f5cf8033f7a36353f6a4b9deb61e79a49fa6f",
+  "protocol_commit": "1f1050d7bc7e7f490b27b65baa3a3c3f38655816",
+  "resource_check": {
+    "captured_utc": "2026-09-08T03:55:01.8761789Z",
+    "commit_limit_kib": 222157148,
+    "free_commit_kib": 194256272,
+    "free_physical_kib": 110548148,
+    "processes": [
+      {
+        "CommandLine": ".venv\\Scripts\\python.exe  scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 240 ",
+        "Name": "python.exe",
+        "ProcessId": 7656,
+        "WorkingSetSize": 4304896
+      },
+      {
+        "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 240 ",
+        "Name": "python.exe",
+        "ProcessId": 4612,
+        "WorkingSetSize": 1383645184
+      }
+    ]
+  },
+  "tests": {
+    "command": "python -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'",
+    "count": 61,
+    "result": "passed"
+  },
+  "verification_code_sha256": "643918f3524733ce649f4bb8a62992355b78c5bc70f785aaa45451cb105c3145"
+}

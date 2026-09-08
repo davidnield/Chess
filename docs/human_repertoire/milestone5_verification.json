@@ -1,0 +1,184 @@
+{
+  "completed_utc": "2026-09-08T04:24:12.469766+00:00",
+  "control_max_error_over_tolerance": 0.45731654421435647,
+  "control_metric_checks": 120,
+  "deeper_marker_changes": 1,
+  "deeper_max_cp_difference": 157,
+  "deeper_median_cp_difference": 8.5,
+  "elapsed_seconds": 28.09299999999348,
+  "engine_work": {
+    "base": {
+      "engine_seconds": 54.46199999999993,
+      "interrupted_final_bound": 172,
+      "max_depth": 245,
+      "median_depth": 16.0,
+      "min_depth": 11,
+      "nodes": 50964133,
+      "positions": 512
+    },
+    "deeper": {
+      "engine_seconds": 13.267999999999997,
+      "interrupted_final_bound": 11,
+      "max_depth": 21,
+      "median_depth": 18.0,
+      "min_depth": 16,
+      "nodes": 12808463,
+      "positions": 32
+    }
+  },
+  "independent_metric_checks": 368640,
+  "new_target_markers": {
+    "-1": 89,
+    "0": 316,
+    "1": 107
+  },
+  "phases": {
+    "final": {
+      "arms": {
+        "shared_position/empty": {
+          "arrivals": 13295,
+          "decisions": 12271,
+          "decisions_without_training_moves": 3541,
+          "horizon": 1022,
+          "human_end": 2
+        },
+        "shared_position/source_one_card": {
+          "arrivals": 13289,
+          "decisions": 12265,
+          "decisions_without_training_moves": 3343,
+          "horizon": 1021,
+          "human_end": 3
+        },
+        "shared_position/two_cards": {
+          "arrivals": 13265,
+          "decisions": 12241,
+          "decisions_without_training_moves": 3279,
+          "horizon": 1018,
+          "human_end": 6
+        },
+        "tuned_position/empty": {
+          "arrivals": 13301,
+          "decisions": 12277,
+          "decisions_without_training_moves": 3697,
+          "horizon": 1022,
+          "human_end": 1,
+          "terminal": 1
+        },
+        "tuned_position/source_one_card": {
+          "arrivals": 13295,
+          "decisions": 12271,
+          "decisions_without_training_moves": 3512,
+          "horizon": 1021,
+          "human_end": 2,
+          "terminal": 1
+        },
+        "tuned_position/two_cards": {
+          "arrivals": 13271,
+          "decisions": 12247,
+          "decisions_without_training_moves": 3439,
+          "horizon": 1018,
+          "human_end": 5,
+          "terminal": 1
+        }
+      },
+      "counts": {
+        "arrivals": 79716,
+        "horizon": 6122,
+        "human_end": 19,
+        "terminal": 3,
+        "trajectories": 6144
+      },
+      "visited_positions": 20279
+    },
+    "pilot": {
+      "arms": {
+        "shared_position/empty": {
+          "arrivals": 3310,
+          "decisions": 3054,
+          "decisions_without_training_moves": 964,
+          "horizon": 254,
+          "human_end": 2
+        },
+        "shared_position/source_one_card": {
+          "arrivals": 3312,
+          "decisions": 3056,
+          "decisions_without_training_moves": 895,
+          "horizon": 254,
+          "human_end": 2
+        },
+        "shared_position/two_cards": {
+          "arrivals": 3312,
+          "decisions": 3056,
+          "decisions_without_training_moves": 878,
+          "horizon": 254,
+          "human_end": 2
+        },
+        "tuned_position/empty": {
+          "arrivals": 3310,
+          "decisions": 3054,
+          "decisions_without_training_moves": 996,
+          "horizon": 254,
+          "human_end": 2
+        },
+        "tuned_position/source_one_card": {
+          "arrivals": 3312,
+          "decisions": 3056,
+          "decisions_without_training_moves": 933,
+          "horizon": 254,
+          "human_end": 2
+        },
+        "tuned_position/two_cards": {
+          "arrivals": 3312,
+          "decisions": 3056,
+          "decisions_without_training_moves": 916,
+          "horizon": 254,
+          "human_end": 2
+        }
+      },
+      "counts": {
+        "arrivals": 19868,
+        "horizon": 1524,
+        "human_end": 12,
+        "trajectories": 1536
+      },
+      "visited_positions": 5807
+    }
+  },
+  "post_experiment_coverage_diagnostic": {
+    "shared_position/empty": {
+      "additional_m5_resolved_fraction": 0.0,
+      "m4_overlay_unresolved_on_final": 0.7314453125,
+      "m5_overlay_unresolved_on_final": 0.7314453125
+    },
+    "shared_position/source_one_card": {
+      "additional_m5_resolved_fraction": 0.001953125,
+      "m4_overlay_unresolved_on_final": 0.689453125,
+      "m5_overlay_unresolved_on_final": 0.6875
+    },
+    "shared_position/two_cards": {
+      "additional_m5_resolved_fraction": 0.00390625,
+      "m4_overlay_unresolved_on_final": 0.689453125,
+      "m5_overlay_unresolved_on_final": 0.685546875
+    },
+    "tuned_position/empty": {
+      "additional_m5_resolved_fraction": 0.0009765625,
+      "m4_overlay_unresolved_on_final": 0.76171875,
+      "m5_overlay_unresolved_on_final": 0.7607421875
+    },
+    "tuned_position/source_one_card": {
+      "additional_m5_resolved_fraction": 0.0009765625,
+      "m4_overlay_unresolved_on_final": 0.73828125,
+      "m5_overlay_unresolved_on_final": 0.7373046875
+    },
+    "tuned_position/two_cards": {
+      "additional_m5_resolved_fraction": 0.0,
+      "m4_overlay_unresolved_on_final": 0.7314453125,
+      "m5_overlay_unresolved_on_final": 0.7314453125
+    }
+  },
+  "reconstructed_paired_contrasts": 6,
+  "reconstructed_summaries": 18,
+  "result_sha256": "0d053378e86fa4c76a45e1dd95bdce7bf059f33afb2d5de340433d6fdfec76ce",
+  "status": "passed",
+  "verifier_sha256": "643918f3524733ce649f4bb8a62992355b78c5bc70f785aaa45451cb105c3145"
+}

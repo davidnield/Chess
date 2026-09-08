@@ -234,3 +234,59 @@ checks identical snapshot hashes against the preserved initial preparation in
 when moving the research artifacts. The intermediate UCI trace and preparation
 are in `_artifacts/m4_before_completed_iteration_fix/`. These do not contain a
 completed alternative experiment or altered graph/target selection.
+
+## Milestone 5: full legal trajectories with Monte Carlo error
+
+The frozen [protocol](../../docs/human_repertoire/milestone5_plan.md) and
+`milestone5_config.json` retain the two policies, three fixed books and existing
+evaluator assumptions. No fitting, new game extraction or optimisation occurs.
+The sampler generates legal children on demand without an omitted-move frontier.
+It uses the same random draws across plans, with distinct pilot/control/final
+streams. Source scores do not influence trajectory generation.
+
+After checking system headroom and active workloads, run in this worktree:
+
+```powershell
+& $researchPython -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
+& $researchPython -B -m research.human_repertoire.rollout_experiment --pilot
+& $researchPython -B -m research.human_repertoire.rollout_experiment --engine
+& $researchPython -B -m research.human_repertoire.rollout_experiment --final
+& $researchPython -B -m research.human_repertoire.verify_rollout
+```
+
+The pilot uses 256 trajectories per arm and selects at most 512 additional
+missing-evaluation targets, with 32 deeper checks. The installed Stockfish binary
+must match milestone 4 before its audited scores can be reused. Search uses one
+thread and 32 MiB hash, 100,000 nodes/1 second initially and 400,000 nodes/2 seconds
+for the deeper subset. The engine phase has a 600-second guard between requests
+and the existing per-request timeout. Pilot targets and completed engine scores
+freeze before the independent 1,024-trajectory-per-arm final sample.
+
+Sampling phases have a 300-second guard. Distinct-position caps are 20,000 for
+the pilot and 80,000 for the final sample, above their maximum possible arrival
+counts. The final phase first checks 4,096 control trajectories per arm against
+the unchanged milestone-4 exact graph metrics. Source lookups remain sparse and
+read-only, with source identity checks before/after and across sampling phases.
+
+Missing-evaluation intervals and Monte Carlo error are separate. The primary
+paired contrast is two cards minus one under the shared prior and mixed-source
+audited overlay. Identical position sequences have exactly zero first-hit
+difference despite missing scores. The reported Hoeffding envelopes condition
+on the frozen model and evidence maps, not human-performance or engine accuracy.
+
+Outputs under `_artifacts/m5/`:
+
+| File | Contents |
+|------|----------|
+| `pilot_manifest.json` | Frozen protocol/code/input hashes, source identity, gates and engine identity |
+| `{pilot,final}_traces.json` | All legal moves, position sequences, stop reasons and endpoint W/D/L |
+| `{pilot,final}_fens.json`, `{pilot,final}_source_evals.json` | Visited positions and sparse source scores |
+| `engine_selection.json`, `engine_audit.json` | Pilot-only target ranking and completed bounded searches |
+| `control.json` | Every sampled metric versus the prior exact result |
+| `results.json` | All 18 model/evidence/plan summaries, Monte Carlo errors and paired contrasts |
+| `verification.json` | Complete legal replay, independent per-path score reconstruction and engine work |
+
+The resource check is `_artifacts/resource_check_m5.json`. Reuse validates frozen
+hashes and skips completed work; do not bypass drift checks. See the
+[completed report](../../docs/human_repertoire/milestone5_report.md) for results
+and the next bounded priority.

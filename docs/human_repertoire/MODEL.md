@@ -214,3 +214,34 @@ same selected map. The targeted engine pass records actual depth/nodes, mate
 status and fixed-budget sensitivity; consistent work caps do not certify score
 accuracy. No source propagated value or engine W/D/L replaces the empirical
 outcome prediction in this experiment.
+
+## Milestone 5 legal-trajectory inference
+
+`trajectory.py` samples the frozen complete legal kernels on demand, preserving
+the exact evaluator's recall, first-hit, repetition and stop-priority semantics.
+Only visited children are registered. Consequently the computational frontier
+mass is zero, while missing evaluations can still obscure the first hit.
+Human-ending hazards use endings/(endings+continued decisions), excluding
+censored arrivals. With no uncensored observations the hazard is zero; observed
+endings without continued moves give hazard one. This explicitly extends the
+stationary hazard assumption to positions truncated in the earlier graph.
+Outcomes use the unchanged empirical/prior endpoint vectors, without drawing
+extra W/D/L outcomes or substituting engine W/D/L.
+
+Recall, ending and fallback selection use separate pseudo-random channels;
+trajectory indices share draws across plans and policies. This coupling changes
+contrast variance but preserves each arm's marginal policy. The pilot selects
+bounded missing-evaluation work; independent final trajectories are generated
+only after that engine map is complete and frozen. Neither stream changes the
+fitted move prior, books or study cost.
+
+Each final path supplies lower/upper first-advantage observations and an observed
+marker score. Means and standard errors quantify Monte Carlo error conditional
+on the frozen inputs. A joint two-endpoint 95% Hoeffding envelope adds/subtracts
+sqrt(log(2/.05)/(2N)) around the sample observation interval. Paired two-minus-one
+endpoints lie in [-1,1], so their margin is twice as large. Identical position
+sequences imply identical true first-hit values even with missing evaluations,
+and receive zero contrast endpoints. These bounds address missing observations
+and simulation error, not uncertainty about real human play, recall, engine
+accuracy or training-sample representativeness. Full continuation prediction
+can extrapolate far beyond the positions on which the prior was validated.

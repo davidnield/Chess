@@ -37,3 +37,13 @@ checks pass. The two-card shared-prior first-hit interval remains [3.24%,87.53%]
 99.5% of unresolved mass first encounters an aggregate omitted-move frontier.
 Next work should test bounded full-horizon trajectory sampling with explicit
 engine coverage and Monte Carlo error, before any new book optimisation.
+
+Milestone 5 is complete: [full legal trajectory experiment](docs/human_repertoire/milestone5_report.md).
+The tested sampler removes computational frontiers with 6,144 final trajectories,
+while separating missing scores from Monte Carlo error. All 61 tests, 24,576
+exact-graph control trajectories and complete pilot/final replay checks pass.
+The shared two-card first-hit interval is [10.35%,78.91%]; the primary discounted
+two-minus-one contrast remains unresolved at [-30.09,+30.44] percentage points
+including conservative simulation error. Only 12 of 512 new pilot engine targets
+recur in the final sample. Next work should test complete engine coverage of a
+small preselected paired path panel before expanding optimisation.
