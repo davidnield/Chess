@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "pilot_trajectories_per_arm": 256,
+  "final_trajectories_per_arm": 1024,
+  "pilot_seed": "human-repertoire-m5-pilot-v1",
+  "final_seed": "human-repertoire-m5-final-v1",
+  "max_pilot_positions": 20000,
+  "max_final_positions": 80000,
+  "sampling_runtime_seconds": 300,
+  "engine_positions": 512,
+  "engine_deeper_positions": 32,
+  "engine_nodes": 100000,
+  "engine_time_seconds": 1.0,
+  "deeper_nodes": 400000,
+  "deeper_time_seconds": 2.0,
+  "engine_runtime_seconds": 600,
+  "monte_carlo_alpha": 0.05,
+  "control_trajectories_per_arm": 4096,
+  "control_seed": "human-repertoire-m5-control-v1",
+  "config": {
+    "horizon": 12,
+    "recall": 0.85,
+    "reentry": true,
+    "repetition_visits": 3,
+    "threshold_cp": 300,
+    "discount": 0.99,
+    "soundness_floor_cp": -100,
+    "max_engine_loss_cp": 150,
+    "min_points": 0.48,
+    "max_disadvantage": 0.4,
+    "max_states": 200000
+  }
+}
