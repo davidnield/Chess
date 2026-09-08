@@ -305,3 +305,18 @@ unchanged in the 48-case support subset. This does not validate counterfactual
 rollouts or actual unprepared human behavior. Keep the candidate as a diagnostic
 benchmark pending stronger tactical support. April becomes consumed diagnostic
 data for any revision informed by M8. See `milestone8_report.md` for evidence.
+
+## M9 residual diagnostics
+
+M9 changes no policy. It audits every frozen April calibration case using
+existing child PVs and a bounded legal same-square exchange feature. The latter
+permits stopping even in check and excludes noncapture replies, other-square
+captures and compensation; it is not a forced tactical proof or an engine loss.
+Positive exchange exposure occurs in both severe model draws and actual human
+moves. It is a possible learned feature, never a validated hard rejection rule.
+
+The specified next candidate appends best opponent exchange gain, exchange gain
+against the just-moved piece, and immediate legal check count to M8. It requires
+a bounded January cost pilot, separate prospective protocol, January/February
+development and fresh May evaluation after freezing. M9 itself provides no
+new candidate fit or fresh validation. See `milestone9_report.md`.

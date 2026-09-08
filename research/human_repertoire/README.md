@@ -432,3 +432,23 @@ better likelihood but an unresolved tactical mismatch at unseen positions.
 Resource checks are `_artifacts/resource_check_m8*.json`. Next work should audit
 residual failures before choosing a stronger candidate; April cannot be called
 fresh validation for a revision informed by these results.
+
+## Milestone 9: retrospective residual audit
+
+```powershell
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.residual_audit
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_residual_audit
+```
+
+Uses only frozen M8 cases and engine records. Outputs under `_artifacts/m9/`
+are `residual_cases.json`, `results.json`, `verification.json` and
+`severe_cases.pgn` (all 22 severe draws, actual-human alternatives and engine
+continuations). No new engine requests or canonical scans occur. The six-ply
+legal same-square capture game permits optional stopping even in check; it is
+a material feature, not a forced tactical evaluator. Nodes cap at 20,000 per
+child and exhaustion fails visibly without dropping cases.
+
+See the [report](../../docs/human_repertoire/milestone9_report.md) for observed
+blind spots, false-positive signals and the specified next candidate. The
+next step is a January-only cost pilot and a prospective protocol; this audit
+does not fit a replacement or validate one on fresh data.

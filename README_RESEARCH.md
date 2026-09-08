@@ -78,3 +78,14 @@ approximate paired 95% interval [-10.66,+6.82]. All 84 tests and independent
 verification pass, with complete engine coverage. Next priority is a bounded
 residual-error audit to specify a stronger board-aware candidate. April is now
 consumed diagnostic evidence for revisions; broader book comparisons still wait.
+
+Milestone 9 is complete: [residual tactical audit](docs/human_repertoire/milestone9_report.md).
+Among 22 severe candidate draws, 15 frozen engine lines begin with a capture,
+while only three trigger the moving-piece hanging feature. A bounded legal
+exchange diagnostic finds positive exposure in 16, but also in 16/96 actual
+human moves; it must not be a hard veto. The candidate resolves 10 reference
+failures and introduces eight. All 89 tests pass; verification replays 1,516
+PV plies and exports all 22 severe positions as annotated PGN. No new engines,
+source scans or model fitting were used. Next priority is a January-only cost
+pilot and prospective protocol for M8 plus legal-exchange/check-response
+features, with fresh May validation only after freezing development.

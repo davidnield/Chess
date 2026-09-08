@@ -1,0 +1,9 @@
+{
+  "cases": 96,
+  "legal_pv_plies": 1516,
+  "pgn_cases": 22,
+  "pgn_sha256": "2fbb94f65a7c90b6607fd70d711c321e9ded4a9a5ed14d7db43f09aee13481c1",
+  "results_sha256": "53e6852f0edcf664a26c25ff5f38d5fe81de1acbfc98f61902f780b32b57d2fc",
+  "status": "passed",
+  "verifier_sha256": "7bd8abae459fdd218b54612dff0f124c89843c91b6fd7a560f9781545286e25e"
+}

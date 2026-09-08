@@ -1,0 +1,83 @@
+{
+  "exchange_nodes": 1187,
+  "identity": {
+    "code_sha256": "2eaeeffbb7a09a0b6d36384714b5e07433b880ca2fe046aaf8673d6ac2ea4da2",
+    "diagnostic_only": true,
+    "exchange_capture_plies": 6,
+    "m8_calibration_results_sha256": "815cf5a8c8ab20212ef04e71667d3a6909660926ddc96657b047ad6d33493629",
+    "m8_model_sha256": "865d1463a1f1ad4e06583e34446d07b8f9a9e97d5ef2413e2281213103115799",
+    "per_child_node_cap": 20000
+  },
+  "rows_sha256": "9f2ddd9324abc7c3c09b2c3d19ffc44b9983229cf26af695a93c1c28b34c95cb",
+  "summary": {
+    "all": {
+      "candidate_geometric_hanging_any": 20,
+      "candidate_geometric_hanging_mover": 7,
+      "candidate_higher_correction_than_human": 33,
+      "cases": 96,
+      "first_pv_reply_capture": 30,
+      "first_pv_reply_check": 6,
+      "roles": {
+        "candidate": {
+          "exchange_gain_at_least_1": 34,
+          "exchange_gain_at_least_3": 9,
+          "free_nonpawn_capture": 6
+        },
+        "human": {
+          "exchange_gain_at_least_1": 16,
+          "exchange_gain_at_least_3": 6,
+          "free_nonpawn_capture": 5
+        }
+      },
+      "unseen": 48
+    },
+    "candidate_nonsevere": {
+      "candidate_geometric_hanging_any": 11,
+      "candidate_geometric_hanging_mover": 4,
+      "candidate_higher_correction_than_human": 25,
+      "cases": 74,
+      "first_pv_reply_capture": 15,
+      "first_pv_reply_check": 3,
+      "roles": {
+        "candidate": {
+          "exchange_gain_at_least_1": 18,
+          "exchange_gain_at_least_3": 2,
+          "free_nonpawn_capture": 2
+        },
+        "human": {
+          "exchange_gain_at_least_1": 9,
+          "exchange_gain_at_least_3": 3,
+          "free_nonpawn_capture": 3
+        }
+      },
+      "unseen": 27
+    },
+    "candidate_severe": {
+      "candidate_geometric_hanging_any": 9,
+      "candidate_geometric_hanging_mover": 3,
+      "candidate_higher_correction_than_human": 8,
+      "cases": 22,
+      "first_pv_reply_capture": 15,
+      "first_pv_reply_check": 3,
+      "roles": {
+        "candidate": {
+          "exchange_gain_at_least_1": 16,
+          "exchange_gain_at_least_3": 7,
+          "free_nonpawn_capture": 4
+        },
+        "human": {
+          "exchange_gain_at_least_1": 7,
+          "exchange_gain_at_least_3": 3,
+          "free_nonpawn_capture": 2
+        }
+      },
+      "unseen": 21
+    }
+  },
+  "transitions": {
+    "both": 14,
+    "introduced": 8,
+    "neither": 64,
+    "resolved": 10
+  }
+}
