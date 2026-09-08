@@ -1,5 +1,10 @@
 # M10 status: cost pilot passed; prospective protocol established
 
+**Direction update:** the custom benchmark is paused following the user's Maia
+suggestion. The [Maia checkpoint](maia_direction.md) is the current next priority.
+The below pilot results remain valid; the previously planned custom development
+and May experiment have not run.
+
 The next bounded step is complete: the thirteen-feature implementation and
 January cost pilot are tested, and the [prospective protocol](milestone10_plan.md)
 and [configuration](milestone10_config.json) are established. **The full M10
