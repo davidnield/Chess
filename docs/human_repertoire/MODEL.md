@@ -245,3 +245,25 @@ and receive zero contrast endpoints. These bounds address missing observations
 and simulation error, not uncertainty about real human play, recall, engine
 accuracy or training-sample representativeness. Full continuation prediction
 can extrapolate far beyond the positions on which the prior was validated.
+
+## Milestone 6 complete paired-panel evidence
+
+`paired_panel.py` freezes a fresh 64-pair one-card/two-card panel and audits every
+visited nonterminal position at one engine budget. A fixed 16-pair subset gets
+complete coverage at a deeper budget. Matching cached records are reused by
+budget; deeper scores never replace base scores in the base comparison. The
+canonical map appears only as labelled diagnostic evidence. Selection depends
+on frozen path order and gate requirements, not new scores.
+
+Complete coverage collapses the sample first-hit observation intervals to
+points, while Monte Carlo error, engine-budget uncertainty and human-policy
+extrapolation remain. The nested subset tests budget sensitivity on identical
+paths; it is not an independent replication. A fixed sequence of partial engine
+budgets shows missing-information bounds without changing paths or stopping on
+results. Identical paired paths may identify their difference before all
+individual first hits are known, but the full panel still completes both arms.
+
+These changes concern measurement coverage and inference, not the optimiser,
+recall model, study cost or human move policy. Small complete samples cannot by
+themselves validate a repertoire or the tactical-error distribution induced by
+the frozen fallback prior.

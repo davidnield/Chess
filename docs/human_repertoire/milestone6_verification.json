@@ -1,0 +1,89 @@
+{
+  "completed_utc": "2026-09-08T04:38:51.440509+00:00",
+  "deeper_marker_changes": [
+    {
+      "base_cp": 267,
+      "deeper_cp": 303,
+      "position": "9145010596282057386"
+    }
+  ],
+  "deeper_max_abs_cp_change": 60,
+  "deeper_median_abs_cp_change": 7.0,
+  "deeper_path_sensitivity": {
+    "shared_position/source_one_card": {
+      "changed_event_or_ply": 0,
+      "changed_event_sign": 0,
+      "pairs_in_subset": 16
+    },
+    "shared_position/two_cards": {
+      "changed_event_or_ply": 0,
+      "changed_event_sign": 0,
+      "pairs_in_subset": 16
+    }
+  },
+  "elapsed_seconds": 1.5,
+  "engine_work": {
+    "base": {
+      "new_engine_seconds": 57.464,
+      "new_interrupted_final_bound": 247,
+      "new_max_depth": 26,
+      "new_median_depth": 15.0,
+      "new_min_depth": 10,
+      "new_nodes": 52231374,
+      "new_positions": 522,
+      "new_time_at_least_limit": 0,
+      "required_positions": 603,
+      "reused_positions": 81
+    },
+    "deeper": {
+      "new_engine_seconds": 64.72999999999999,
+      "new_interrupted_final_bound": 79,
+      "new_max_depth": 21,
+      "new_median_depth": 18,
+      "new_min_depth": 15,
+      "new_nodes": 60436966,
+      "new_positions": 151,
+      "new_time_at_least_limit": 0,
+      "required_positions": 172,
+      "reused_positions": 21
+    }
+  },
+  "position_markers": {
+    "base": {
+      "-1": 40,
+      "0": 483,
+      "1": 80
+    },
+    "deeper": {
+      "-1": 19,
+      "0": 135,
+      "1": 18
+    }
+  },
+  "reconstructed_comparisons": 11,
+  "replay": {
+    "arms": {
+      "shared_position/source_one_card": {
+        "arrivals": 832,
+        "decisions": 768,
+        "decisions_without_training_moves": 192,
+        "horizon": 64
+      },
+      "shared_position/two_cards": {
+        "arrivals": 832,
+        "decisions": 768,
+        "decisions_without_training_moves": 184,
+        "horizon": 64
+      }
+    },
+    "counts": {
+      "arrivals": 1664,
+      "horizon": 128,
+      "trajectories": 128
+    },
+    "visited_positions": 603
+  },
+  "result_sha256": "6eeacafddcaf3852f5e1911f9362a8117862a3f18369bfd8382100757f3455a8",
+  "status": "passed",
+  "verifier_sha256": "6305706adcbe03fa8547e4eeb3791fc014c37157dccb942a36b2f8e03014b96c"
+}

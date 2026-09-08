@@ -47,3 +47,13 @@ two-minus-one contrast remains unresolved at [-30.09,+30.44] percentage points
 including conservative simulation error. Only 12 of 512 new pilot engine targets
 recur in the final sample. Next work should test complete engine coverage of a
 small preselected paired path panel before expanding optimisation.
+
+Milestone 6 is complete: [complete engine coverage of a paired panel](docs/human_repertoire/milestone6_report.md).
+All 64 pairs have complete base-budget evaluations, and a fixed 16-pair subset
+also has complete deeper evaluations. The 69 tests and independent replay pass.
+The discounted two-minus-one estimate is -4.18 percentage points (MC SE 3.70),
+with conservative 95% bounds [-38.14,+29.77]; no book ranking follows. New engine
+work took about 130 seconds. Missing-score uncertainty is eliminated on this
+panel, while simulation precision and fallback extrapolation remain limiting.
+Next work should calibrate engine-loss predictions against a bounded held-out
+human decision sample before investing in a larger book comparison.

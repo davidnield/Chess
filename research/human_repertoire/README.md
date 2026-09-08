@@ -290,3 +290,57 @@ The resource check is `_artifacts/resource_check_m5.json`. Reuse validates froze
 hashes and skips completed work; do not bypass drift checks. See the
 [completed report](../../docs/human_repertoire/milestone5_report.md) for results
 and the next bounded priority.
+
+## Milestone 6: complete paired-panel engine coverage
+
+The frozen [protocol](../../docs/human_repertoire/milestone6_plan.md) and config
+use 64 coupled one-card/two-card paths under the shared prior, with a fixed
+16-pair subset for deeper-budget sensitivity. The existing legal sampler,
+recall, horizon, endpoints and outcome assumptions remain unchanged.
+
+After checking headroom and active workloads, use the isolated interpreter:
+
+```powershell
+& $researchPython -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
+& $researchPython -B -m research.human_repertoire.paired_panel --prepare
+& $researchPython -B -m research.human_repertoire.paired_panel --engine
+& $researchPython -B -m research.human_repertoire.paired_panel --compare
+& $researchPython -B -m research.human_repertoire.verify_panel
+```
+
+Preparation freezes every path and both complete-position target lists before
+new scores. Matching cached engine records are copied in bounded form; base
+100,000-node/1-second records and deeper 400,000-node/2-second records remain
+separate. The installed binary must match M4/M5. Canonical scores only enter
+labelled diagnostics and never select targets. No source artifact is written.
+
+At most 1,664 positions can be visited; four additional mandatory gate positions
+give an absolute base cap of 1,668. The deeper subset/gate cap is 420. Every
+visited nonterminal position is covered, including identical paths and arrivals
+after a first hit. Sampling has a 60-second guard. Engine work uses one thread,
+32 MiB hash and a 900-second session guard between requests, plus the existing
+per-request timeout. Partial progress is saved every 16 searches. A stopped
+audit keeps all paths; `--compare` writes explicit `partial_results.json` until
+the audit is complete. Resume only with matching identities.
+
+The final comparison uses a homogeneous base-budget map for all 64 pairs and
+two complete budget maps on the same fixed 16-pair subset. A predeclared budget
+curve shows missing-information intervals as ordered targets are added. The
+independent verifier checks legal replay, complete position sets, cache budgets,
+engine principal variations, source identities, all metrics and the curve.
+
+Outputs under `_artifacts/m6/`:
+
+| File | Contents |
+|------|----------|
+| `panel_manifest.json` | Frozen code/config/input identities, gates, search options and target counts |
+| `panel_traces.json`, `panel_fens.json` | Every paired trajectory and visited FEN |
+| `engine_fens.json`, `engine_selection.json` | Full base/deeper requirements, reused/new targets and gate positions |
+| `source_evals.json`, `inherited_overlay.json` | Labelled pre-audit evidence on the fixed panel |
+| `inherited_records.json`, `engine_audit.json` | Matching cached and new base/deeper engine records |
+| `results.json` | Full and subset comparisons, budget curve, gates and Monte Carlo uncertainty |
+| `verification.json` | Independent reconstruction, complete coverage, actual engine work and depth sensitivity |
+
+The resource check is `_artifacts/resource_check_m6.json`. The
+[completed report](../../docs/human_repertoire/milestone6_report.md) separates
+resolved coverage from the remaining simulation and human-model limitations.

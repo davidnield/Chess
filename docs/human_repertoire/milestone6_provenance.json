@@ -1,0 +1,361 @@
+{
+  "artifacts": {
+    "m6/engine_audit.json": {
+      "bytes": 542436,
+      "sha256": "d15d741344b2cd6501b55d5979942dc49682d06f1a64d79d0621721124074390"
+    },
+    "m6/engine_fens.json": {
+      "bytes": 56863,
+      "sha256": "1f003f0c1c2ed704714cccebe0906ba7f72ef7c859c239e8290e80867438af98"
+    },
+    "m6/engine_selection.json": {
+      "bytes": 47447,
+      "sha256": "3e4bf4b737d678195266f76f2223c98173bd66bfa5dbe805e64777563f92022c"
+    },
+    "m6/final_tests.txt": {
+      "bytes": 420,
+      "sha256": "161a6eb61a540892d2a34b00dc19dcbc192317dae44cf628b7cb2deb3df24d51"
+    },
+    "m6/inherited_overlay.json": {
+      "bytes": 2487,
+      "sha256": "0a0b7e4f6077d641223c36cd3116947b4ad6a160c35c9b5bf7a9ec9f090ed5bb"
+    },
+    "m6/inherited_records.json": {
+      "bytes": 77845,
+      "sha256": "2587f97f39882c35b6522aa045442cabb22fa59fb499dd17c79acbeded2224fb"
+    },
+    "m6/panel_fens.json": {
+      "bytes": 56863,
+      "sha256": "1f003f0c1c2ed704714cccebe0906ba7f72ef7c859c239e8290e80867438af98"
+    },
+    "m6/panel_manifest.json": {
+      "bytes": 8223,
+      "sha256": "6b134511b9e5ad5347196a5addddd774984f4d55150edd744b834339a3ed9569"
+    },
+    "m6/panel_traces.json": {
+      "bytes": 105827,
+      "sha256": "bf1877138a0cfd30f255fc486e7be3844af55fd06bf5083cfad726be922526d6"
+    },
+    "m6/results.json": {
+      "bytes": 85012,
+      "sha256": "6eeacafddcaf3852f5e1911f9362a8117862a3f18369bfd8382100757f3455a8"
+    },
+    "m6/source_evals.json": {
+      "bytes": 18942,
+      "sha256": "be8c2e3b76a0efb61ff26646e8003cd5a7810f3083b7a071776c41071a69526c"
+    },
+    "m6/verification.json": {
+      "bytes": 2301,
+      "sha256": "a0081ecf1961416259cfe9641631e76bdb37d007efe481851e6605f93419fd3d"
+    }
+  },
+  "interpretation": "Frozen-model coverage and variance experiment. No new human validation, fitting, policy tuning or book optimisation. The deeper subset is nested, not an independent replication.",
+  "panel_manifest": {
+    "counts": {
+      "base_targets": 522,
+      "deeper_targets": 151,
+      "pairs": 64,
+      "visited_positions": 603
+    },
+    "elapsed_seconds": 0.9070000000065193,
+    "engine_identity": {
+      "binary": {
+        "mtime_ns": 1769897604000000000,
+        "path": "C:\\Users\\David\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+        "sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+        "size": 114007552
+      },
+      "id": {
+        "author": "the Stockfish developers (see AUTHORS file)",
+        "name": "Stockfish 18"
+      },
+      "options": {
+        "Clear Hash": {
+          "default": null,
+          "max": null,
+          "min": null,
+          "type": "button",
+          "var": []
+        },
+        "Debug Log File": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFile": {
+          "default": "nn-c288c895ea92.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFileSmall": {
+          "default": "nn-37f18f62d772.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Hash": {
+          "default": 16,
+          "max": 33554432,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "Move Overhead": {
+          "default": 10,
+          "max": 5000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "MultiPV": {
+          "default": 1,
+          "max": 256,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "NumaPolicy": {
+          "default": "auto",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Ponder": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "Skill Level": {
+          "default": 20,
+          "max": 20,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Syzygy50MoveRule": {
+          "default": true,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "SyzygyPath": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "SyzygyProbeDepth": {
+          "default": 1,
+          "max": 100,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "SyzygyProbeLimit": {
+          "default": 7,
+          "max": 7,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Threads": {
+          "default": 1,
+          "max": 1024,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_Chess960": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_Elo": {
+          "default": 1320,
+          "max": 3190,
+          "min": 1320,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_LimitStrength": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_ShowWDL": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "nodestime": {
+          "default": 0,
+          "max": 10000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        }
+      }
+    },
+    "engine_options": {
+      "Hash": 32,
+      "Skill Level": 20,
+      "SyzygyPath": "",
+      "Threads": 1,
+      "UCI_LimitStrength": false,
+      "UCI_ShowWDL": true
+    },
+    "engine_path": "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe",
+    "eval_sources": [
+      {
+        "mtime_ns": 1785902882763251000,
+        "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+        "size": 3199991680
+      },
+      {
+        "mtime_ns": 1785902883307954800,
+        "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+        "size": 799998016
+      },
+      {
+        "mtime_ns": 1785993454057331100,
+        "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+        "sha256": "b319ec86813c26fce6734ecb00eaa9e78b75ca91048a5b3b433353ffd461cd32",
+        "size": 137
+      },
+      {
+        "mtime_ns": 1785532993604486400,
+        "path": "E:\\chess\\unified_eval_db.parquet",
+        "size": 3804112433
+      }
+    ],
+    "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+    "frozen_utc": "2026-09-08T04:36:08.750630+00:00",
+    "gates": [
+      {
+        "child": "4689055884960126695",
+        "move": "Nxd4",
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "-4757902768255381284",
+        "move": "d4",
+        "position": "8704797333742910878"
+      }
+    ],
+    "identity": {
+      "code_sha256": {
+        "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
+        "continuation_audit.py": "b864e32d2f36c92be4a793976e8d338bd7e9d90fb14c80b2d533bde013f34494",
+        "empirical.py": "d274ef8ee11fd94fbd2927f02f5d5c8e522359208c3284b73950b7457305a5c9",
+        "io.py": "a990051265c78a1a4b3cd2e53d06207b48e51099bd8ae65ed0ef44768a037e6a",
+        "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+        "paired_panel.py": "3c9e32ac8c9ea27657cb16c691e7f5aed8853b6937aa6f0738af635d2a11d340",
+        "rollout_experiment.py": "84f42d319728fb7c9d3a5b28cc8f93361747e53f9a5d2f6e4c89dcf60b053a6c",
+        "shared_fallback.py": "e86fbeb5fe83930cee37a863cdf2fe47b4b4498b6647a95de7acfc9e3a501696",
+        "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9",
+        "verify_rollout.py": "643918f3524733ce649f4bb8a62992355b78c5bc70f785aaa45451cb105c3145"
+      },
+      "config": {
+        "budget_checkpoints": [
+          0,
+          64,
+          128,
+          256,
+          512,
+          1024,
+          1668
+        ],
+        "config": {
+          "discount": 0.99,
+          "horizon": 12,
+          "max_disadvantage": 0.4,
+          "max_engine_loss_cp": 150,
+          "max_states": 200000,
+          "min_points": 0.48,
+          "recall": 0.85,
+          "reentry": true,
+          "repetition_visits": 3,
+          "soundness_floor_cp": -100,
+          "threshold_cp": 300
+        },
+        "deeper_nodes": 400000,
+        "deeper_pairs": 16,
+        "deeper_time_seconds": 2.0,
+        "engine_nodes": 100000,
+        "engine_runtime_seconds": 900,
+        "engine_time_seconds": 1.0,
+        "max_base_positions": 1668,
+        "max_deeper_positions": 420,
+        "max_panel_positions": 1664,
+        "model": "shared_position",
+        "monte_carlo_alpha": 0.05,
+        "panel_seed": "human-repertoire-m6-panel-v1",
+        "panel_trajectories_per_arm": 64,
+        "plans": [
+          "source_one_card",
+          "two_cards"
+        ],
+        "sampling_runtime_seconds": 60,
+        "schema_version": 1
+      },
+      "m5_engine_sha256": "254e29b30607070faf8bd79c88296f5bf0260012f9f61b5703d98b74d589cb5d",
+      "m5_manifest_sha256": "e34a49bc1bc1ea93d3cda1ed962e0ab3ac3a8499f32d0fd341d9668af5d5dab2",
+      "m5_results_sha256": "0d053378e86fa4c76a45e1dd95bdce7bf059f33afb2d5de340433d6fdfec76ce",
+      "plan_sha256": "152494c0304cb2864f9aad40740da3c25704d0621a6cb8a36527a47bbc385574",
+      "python_chess_version": "1.11.2"
+    },
+    "snapshots": {
+      "m6/engine_fens.json": "1f003f0c1c2ed704714cccebe0906ba7f72ef7c859c239e8290e80867438af98",
+      "m6/engine_selection.json": "3e4bf4b737d678195266f76f2223c98173bd66bfa5dbe805e64777563f92022c",
+      "m6/inherited_overlay.json": "0a0b7e4f6077d641223c36cd3116947b4ad6a160c35c9b5bf7a9ec9f090ed5bb",
+      "m6/inherited_records.json": "2587f97f39882c35b6522aa045442cabb22fa59fb499dd17c79acbeded2224fb",
+      "m6/panel_fens.json": "1f003f0c1c2ed704714cccebe0906ba7f72ef7c859c239e8290e80867438af98",
+      "m6/panel_traces.json": "bf1877138a0cfd30f255fc486e7be3844af55fd06bf5083cfad726be922526d6",
+      "m6/source_evals.json": "be8c2e3b76a0efb61ff26646e8003cd5a7810f3083b7a071776c41071a69526c"
+    }
+  },
+  "previous_milestone_commit": "9b2ce04265b10fc1ab0842a6136373f4e1b056bb",
+  "protocol_commit": "e3574ff036a0e2ba185c445edc3a5f2dea260efd",
+  "resource_check": {
+    "captured_utc": "2026-09-08T04:30:05.5278497Z",
+    "commit_limit_kib": 222157148,
+    "free_commit_kib": 193739852,
+    "free_physical_kib": 110255792,
+    "processes": [
+      {
+        "CommandLine": ".venv\\Scripts\\python.exe  scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 224.3 ",
+        "Name": "python.exe",
+        "ProcessId": 42640,
+        "WorkingSetSize": 4243456
+      },
+      {
+        "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 224.3 ",
+        "Name": "python.exe",
+        "ProcessId": 36724,
+        "WorkingSetSize": 1773326336
+      }
+    ]
+  },
+  "tests": {
+    "command": "python -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'",
+    "count": 69,
+    "result": "passed"
+  },
+  "verification_code_sha256": "6305706adcbe03fa8547e4eeb3791fc014c37157dccb942a36b2f8e03014b96c"
+}
