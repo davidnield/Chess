@@ -267,3 +267,23 @@ These changes concern measurement coverage and inference, not the optimiser,
 recall model, study cost or human move policy. Small complete samples cannot by
 themselves validate a repertoire or the tactical-error distribution induced by
 the frozen fallback prior.
+
+## Milestone 7 one-decision tactical calibration
+
+`loss_calibration.py` compares an observed human move with one sampled fallback
+move at the same human-reached board. Selection is balanced over time control
+and zero/positive January position count, with equal game weight within strata.
+The target is a diagnostic mixture, not the original decision-frequency mix.
+Training-unseen does not imply the human player was unprepared.
+
+Engine evidence uses matching budgets for parent and both children. Mover-oriented
+parent-to-child cp loss is clipped at zero for >=150/300-cp markers and capped
+at 1,000 cp for the reported mean; raw/signed values remain available. This is a
+bounded-search proxy, not an exact best-move loss. The paired connected-player
+bootstrap preserves cross-stratum dependencies with fixed stratum weights and
+reports unavailable intervals if resampling loses a required stratum.
+
+This retrospective March diagnostic changes no fallback parameters, recall,
+study cost or book utility. Its large mismatch at unseen positions limits trust
+in downstream rollouts. Any replacement needs separate development and new
+held-out validation; March cannot be retuned on and reused as a fresh test.

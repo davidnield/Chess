@@ -1,0 +1,313 @@
+{
+  "artifacts": {
+    "m7/case_manifest.json": {
+      "bytes": 6981,
+      "sha256": "b41580829a41299f20b0aa75d241ed36c58fe18c6b7b2079a3f0b309a7b00025"
+    },
+    "m7/cases.json": {
+      "bytes": 189627,
+      "sha256": "356518dec80efe8e1d923b9c726b4d26a88afdf51caa2533d4903f105928552a"
+    },
+    "m7/engine_audit.json": {
+      "bytes": 377815,
+      "sha256": "e94511fd94e27518e63d8942285aa72b319c18ed97d09efd2758010d30ad3b36"
+    },
+    "m7/engine_selection.json": {
+      "bytes": 32454,
+      "sha256": "a993b9d10b8d59ba019f1bda24634d0585b4e2b0bda6ad87bda770cbbebc1ac6"
+    },
+    "m7/fens.json": {
+      "bytes": 45046,
+      "sha256": "1987f5af3800fbb3edd876a90e4834c96689ec579c8df7de1255118acc32db8f"
+    },
+    "m7/final_tests.txt": {
+      "bytes": 427,
+      "sha256": "24cd1e834a0415a59f241f6143022aa072959b36d7be413a6386cae0f98019ce"
+    },
+    "m7/inherited_records.json": {
+      "bytes": 45683,
+      "sha256": "3de47bcee7b8ad634574c2d611aba3312c9e3b3c5e8b4ea982de1ce1ab3ce278"
+    },
+    "m7/results.json": {
+      "bytes": 36081,
+      "sha256": "31156fc24d9b98dfed12c88379f3f1d7203318b5a267f37cf78e6ffcd958f0b3"
+    },
+    "m7/scored_cases.json": {
+      "bytes": 165690,
+      "sha256": "e66203e460b37fb42dfbe738b8d598f95487d9da7c886a2e86ca278509acfdf4"
+    },
+    "m7/selection_frame.json": {
+      "bytes": 638,
+      "sha256": "66719487a5b5ac7ba685e2488c43346c26b9104793aac3ce76c579ebcd308a08"
+    },
+    "m7/verification.json": {
+      "bytes": 3843,
+      "sha256": "ffa803bd1dc06551919362583f2d408f6f83c456ecd5e1fa97f4f340aae928c9"
+    }
+  },
+  "case_manifest": {
+    "counts": {
+      "base_targets": 416,
+      "cases": 192,
+      "deeper_targets": 54,
+      "positions": 467,
+      "unique_games": 190
+    },
+    "engine_identity": {
+      "binary": {
+        "mtime_ns": 1769897604000000000,
+        "path": "C:\\Users\\David\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+        "sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+        "size": 114007552
+      },
+      "id": {
+        "author": "the Stockfish developers (see AUTHORS file)",
+        "name": "Stockfish 18"
+      },
+      "options": {
+        "Clear Hash": {
+          "default": null,
+          "max": null,
+          "min": null,
+          "type": "button",
+          "var": []
+        },
+        "Debug Log File": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFile": {
+          "default": "nn-c288c895ea92.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "EvalFileSmall": {
+          "default": "nn-37f18f62d772.nnue",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Hash": {
+          "default": 16,
+          "max": 33554432,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "Move Overhead": {
+          "default": 10,
+          "max": 5000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "MultiPV": {
+          "default": 1,
+          "max": 256,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "NumaPolicy": {
+          "default": "auto",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "Ponder": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "Skill Level": {
+          "default": 20,
+          "max": 20,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Syzygy50MoveRule": {
+          "default": true,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "SyzygyPath": {
+          "default": "<empty>",
+          "max": null,
+          "min": null,
+          "type": "string",
+          "var": []
+        },
+        "SyzygyProbeDepth": {
+          "default": 1,
+          "max": 100,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "SyzygyProbeLimit": {
+          "default": 7,
+          "max": 7,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        },
+        "Threads": {
+          "default": 1,
+          "max": 1024,
+          "min": 1,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_Chess960": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_Elo": {
+          "default": 1320,
+          "max": 3190,
+          "min": 1320,
+          "type": "spin",
+          "var": []
+        },
+        "UCI_LimitStrength": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "UCI_ShowWDL": {
+          "default": false,
+          "max": null,
+          "min": null,
+          "type": "check",
+          "var": []
+        },
+        "nodestime": {
+          "default": 0,
+          "max": 10000,
+          "min": 0,
+          "type": "spin",
+          "var": []
+        }
+      }
+    },
+    "engine_options": {
+      "Hash": 32,
+      "Skill Level": 20,
+      "SyzygyPath": "",
+      "Threads": 1,
+      "UCI_LimitStrength": false,
+      "UCI_ShowWDL": true
+    },
+    "engine_path": "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe",
+    "frozen_utc": "2026-09-08T05:21:27.095870+00:00",
+    "generation_seconds": 1.25,
+    "identity": {
+      "code_sha256": {
+        "calibration_experiment.py": "703c5a61559397686eae1ef17cad2e9b1539dd1a7902e25488ae5a7a6f3dda65",
+        "common_graph.py": "ac76506207eea6c5868865dd3bb6568e143ef9c5402f76f990398d83734c9a7a",
+        "io.py": "a990051265c78a1a4b3cd2e53d06207b48e51099bd8ae65ed0ef44768a037e6a",
+        "loss_calibration.py": "e1556b72103c61620f71087b9896462fe212861f433167b827d519a6d264513b",
+        "paired_panel.py": "3c9e32ac8c9ea27657cb16c691e7f5aed8853b6937aa6f0738af635d2a11d340",
+        "shared_fallback.py": "e86fbeb5fe83930cee37a863cdf2fe47b4b4498b6647a95de7acfc9e3a501696",
+        "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9"
+      },
+      "cohort_manifest_sha256": "0dff453a35f5b3b913966e5aa856cc8cf7329db9973a5cb8c3b27513a67f6bbe",
+      "config": {
+        "bootstrap_draws": 2000,
+        "bootstrap_seed": 20240908,
+        "cases_per_stratum": 32,
+        "deeper_cases_per_stratum": 4,
+        "deeper_nodes": 400000,
+        "deeper_time_seconds": 2.0,
+        "draw_seed": "human-repertoire-m7-moves-v1",
+        "engine_nodes": 100000,
+        "engine_runtime_seconds": 600,
+        "engine_time_seconds": 1.0,
+        "events": [
+          "Blitz",
+          "Rapid",
+          "Classical"
+        ],
+        "max_base_positions": 576,
+        "max_decisions": 30000,
+        "max_deeper_positions": 72,
+        "max_games": 2250,
+        "max_rating_gap": 200,
+        "mean_loss_cap_cp": 1000,
+        "min_rating": 1800,
+        "model": "shared_position",
+        "prepare_runtime_seconds": 60,
+        "primary_loss_cp": 150,
+        "schema_version": 1,
+        "secondary_loss_cp": 300,
+        "selection_seed": "human-repertoire-m7-games-v1",
+        "supports": [
+          "unseen",
+          "seen"
+        ],
+        "test_month": "2024-03",
+        "within_game_seed": "human-repertoire-m7-decisions-v1"
+      },
+      "fitted_counts_sha256": "51ffe1f37d5748dcb92525c2de835f33788068dec159a5719f2f8a85aedcea77",
+      "m6_engine_sha256": "d15d741344b2cd6501b55d5979942dc49682d06f1a64d79d0621721124074390",
+      "m6_manifest_sha256": "6b134511b9e5ad5347196a5addddd774984f4d55150edd744b834339a3ed9569",
+      "m6_results_sha256": "6eeacafddcaf3852f5e1911f9362a8117862a3f18369bfd8382100757f3455a8",
+      "plan_sha256": "f2b4f294c6ded11b9b2f46b62b019e3f3cd311f5f31bce39caa344201fc2a830",
+      "python_chess_version": "1.11.2",
+      "test_games_sha256": "e52c0d23b62e14a9352fb510e96d30261802b79422c3010ddb013ddacd8a5014"
+    },
+    "snapshots": {
+      "m7/cases.json": "356518dec80efe8e1d923b9c726b4d26a88afdf51caa2533d4903f105928552a",
+      "m7/engine_selection.json": "a993b9d10b8d59ba019f1bda24634d0585b4e2b0bda6ad87bda770cbbebc1ac6",
+      "m7/fens.json": "1987f5af3800fbb3edd876a90e4834c96689ec579c8df7de1255118acc32db8f",
+      "m7/inherited_records.json": "3de47bcee7b8ad634574c2d611aba3312c9e3b3c5e8b4ea982de1ce1ab3ce278",
+      "m7/selection_frame.json": "66719487a5b5ac7ba685e2488c43346c26b9104793aac3ce76c579ebcd308a08"
+    }
+  },
+  "interpretation": "Retrospective March diagnostic with frozen January/February model, balanced support/time-control sampling and approximate paired component intervals. No new validation, fitting or book optimisation.",
+  "previous_milestone_commit": "8b0b84b219058dd9e4ab3488d53ba3d884e5d9c6",
+  "protocol_commit": "67e09704cae8f721fb9e174b86380e2ced4addd6",
+  "resource_check": {
+    "captured_utc": "2026-09-08T05:12:38.0446279Z",
+    "commit_limit_kib": 222157148,
+    "free_commit_kib": 192689812,
+    "free_physical_kib": 112047252,
+    "processes": [
+      {
+        "CommandLine": ".venv\\Scripts\\python.exe  scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 224.3 ",
+        "Name": "python.exe",
+        "ProcessId": 42640,
+        "WorkingSetSize": 4243456
+      },
+      {
+        "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" scratch\\python\\chesscom_crawl.py --out E:\\chess\\chesscom\\pilot --hours 224.3 ",
+        "Name": "python.exe",
+        "ProcessId": 36724,
+        "WorkingSetSize": 1775468544
+      }
+    ]
+  },
+  "tests": {
+    "command": "python -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'",
+    "count": 76,
+    "result": "passed"
+  },
+  "verification_code_sha256": "ae80599b999ab224d837fd5ff8eda8dc165d71f4c9312f811d19feb7542f79bd"
+}

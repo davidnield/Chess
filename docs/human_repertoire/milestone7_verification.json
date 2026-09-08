@@ -1,0 +1,153 @@
+{
+  "bootstrap_empty_draws": {
+    "balanced": 0,
+    "event:Blitz": 0,
+    "event:Classical": 0,
+    "event:Rapid": 0,
+    "stratum:Blitz/seen": 0,
+    "stratum:Blitz/unseen": 0,
+    "stratum:Classical/seen": 0,
+    "stratum:Classical/unseen": 0,
+    "stratum:Rapid/seen": 0,
+    "stratum:Rapid/unseen": 0,
+    "support:seen": 0,
+    "support:unseen": 0
+  },
+  "cases_replayed": 192,
+  "completed_utc": "2026-09-08T14:03:51.416662+00:00",
+  "deeper_category_changes": {
+    "human": {
+      "loss_primary": 0,
+      "loss_secondary": 0
+    },
+    "model": {
+      "loss_primary": 0,
+      "loss_secondary": 0
+    }
+  },
+  "deeper_max_abs_cp_change": 29,
+  "deeper_median_abs_cp_change": 7,
+  "elapsed_seconds": 2.2960000000020955,
+  "engine_work": {
+    "base": {
+      "interrupted_final_bound": 266,
+      "max_depth": 245,
+      "median_depth": 15.0,
+      "min_depth": 11,
+      "new_engine_seconds": 48.54799999999996,
+      "new_nodes": 41536555,
+      "new_positions": 416,
+      "required_positions": 467,
+      "reused_positions": 51,
+      "time_at_least_limit": 0
+    },
+    "deeper": {
+      "interrupted_final_bound": 39,
+      "max_depth": 23,
+      "median_depth": 18.0,
+      "min_depth": 14,
+      "new_engine_seconds": 23.511000000000006,
+      "new_nodes": 21613900,
+      "new_positions": 54,
+      "required_positions": 63,
+      "reused_positions": 9,
+      "time_at_least_limit": 0
+    }
+  },
+  "independent_scalar_checks": 2400,
+  "result_sha256": "31156fc24d9b98dfed12c88379f3f1d7203318b5a267f37cf78e6ffcd958f0b3",
+  "selected_metadata": {
+    "Blitz/seen": {
+      "cases": 32,
+      "median_ply_after_root": 2.5,
+      "median_training_move_count": 8.0,
+      "training_move_count_range": [
+        1,
+        2249
+      ],
+      "white_to_move": 17
+    },
+    "Blitz/unseen": {
+      "cases": 32,
+      "median_ply_after_root": 10.0,
+      "median_training_move_count": 0.0,
+      "training_move_count_range": [
+        0,
+        0
+      ],
+      "white_to_move": 13
+    },
+    "Classical/seen": {
+      "cases": 32,
+      "median_ply_after_root": 4.0,
+      "median_training_move_count": 64.5,
+      "training_move_count_range": [
+        1,
+        2249
+      ],
+      "white_to_move": 14
+    },
+    "Classical/unseen": {
+      "cases": 32,
+      "median_ply_after_root": 9.5,
+      "median_training_move_count": 0.0,
+      "training_move_count_range": [
+        0,
+        0
+      ],
+      "white_to_move": 11
+    },
+    "Rapid/seen": {
+      "cases": 32,
+      "median_ply_after_root": 3.0,
+      "median_training_move_count": 53.5,
+      "training_move_count_range": [
+        1,
+        2249
+      ],
+      "white_to_move": 10
+    },
+    "Rapid/unseen": {
+      "cases": 32,
+      "median_ply_after_root": 10.0,
+      "median_training_move_count": 0.0,
+      "training_move_count_range": [
+        0,
+        0
+      ],
+      "white_to_move": 11
+    }
+  },
+  "source_frame": {
+    "decisions": 26857,
+    "games": 2250,
+    "strata": {
+      "Blitz/seen": {
+        "eligible_decisions": 6230,
+        "eligible_games": 749
+      },
+      "Blitz/unseen": {
+        "eligible_decisions": 2743,
+        "eligible_games": 625
+      },
+      "Classical/seen": {
+        "eligible_decisions": 6438,
+        "eligible_games": 750
+      },
+      "Classical/unseen": {
+        "eligible_decisions": 2490,
+        "eligible_games": 596
+      },
+      "Rapid/seen": {
+        "eligible_decisions": 6015,
+        "eligible_games": 750
+      },
+      "Rapid/unseen": {
+        "eligible_decisions": 2941,
+        "eligible_games": 634
+      }
+    }
+  },
+  "status": "passed",
+  "verifier_sha256": "ae80599b999ab224d837fd5ff8eda8dc165d71f4c9312f811d19feb7542f79bd"
+}

@@ -1,0 +1,1276 @@
+{
+  "completed_utc": "2026-09-08T14:01:52.628308+00:00",
+  "deeper_subset": {
+    "base": {
+      "groups": {
+        "balanced": {
+          "cases": 24,
+          "human_negative_signed": 4,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 72.04166666666666,
+              "human": 34.208333333333336,
+              "model": 106.25
+            },
+            "loss_primary": {
+              "difference": 0.20833333333333334,
+              "human": 0.041666666666666664,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            }
+          },
+          "model_negative_signed": 2,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/seen",
+            "Blitz/unseen",
+            "Classical/seen",
+            "Classical/unseen",
+            "Rapid/seen",
+            "Rapid/unseen"
+          ]
+        },
+        "event:Blitz": {
+          "cases": 8,
+          "human_negative_signed": 2,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 135.875,
+              "human": 15.375,
+              "model": 151.25
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.375,
+          "strata": [
+            "Blitz/seen",
+            "Blitz/unseen"
+          ]
+        },
+        "event:Classical": {
+          "cases": 8,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 65.625,
+              "human": 27.0,
+              "model": 92.625
+            },
+            "loss_primary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            },
+            "loss_secondary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.125,
+          "strata": [
+            "Classical/seen",
+            "Classical/unseen"
+          ]
+        },
+        "event:Rapid": {
+          "cases": 8,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 14.625,
+              "human": 60.25,
+              "model": 74.875
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.125,
+              "model": 0.375
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Rapid/seen",
+            "Rapid/unseen"
+          ]
+        },
+        "stratum:Blitz/seen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": -0.75,
+              "human": 12.0,
+              "model": 11.25
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.5,
+          "strata": [
+            "Blitz/seen"
+          ]
+        },
+        "stratum:Blitz/unseen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 272.5,
+              "human": 18.75,
+              "model": 291.25
+            },
+            "loss_primary": {
+              "difference": 0.5,
+              "human": 0.0,
+              "model": 0.5
+            },
+            "loss_secondary": {
+              "difference": 0.5,
+              "human": 0.0,
+              "model": 0.5
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/unseen"
+          ]
+        },
+        "stratum:Classical/seen": {
+          "cases": 4,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 1.25,
+              "human": 38.75,
+              "model": 40.0
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Classical/seen"
+          ]
+        },
+        "stratum:Classical/unseen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 130.0,
+              "human": 15.25,
+              "model": 145.25
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.0,
+          "strata": [
+            "Classical/unseen"
+          ]
+        },
+        "stratum:Rapid/seen": {
+          "cases": 4,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": -41.75,
+              "human": 57.25,
+              "model": 15.5
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.0,
+          "strata": [
+            "Rapid/seen"
+          ]
+        },
+        "stratum:Rapid/unseen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 71.0,
+              "human": 63.25,
+              "model": 134.25
+            },
+            "loss_primary": {
+              "difference": 0.5,
+              "human": 0.25,
+              "model": 0.75
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.5,
+          "strata": [
+            "Rapid/unseen"
+          ]
+        },
+        "support:seen": {
+          "cases": 12,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": -13.75,
+              "human": 36.0,
+              "model": 22.25
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 2,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/seen",
+            "Classical/seen",
+            "Rapid/seen"
+          ]
+        },
+        "support:unseen": {
+          "cases": 12,
+          "human_negative_signed": 3,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 157.83333333333334,
+              "human": 32.416666666666664,
+              "model": 190.25
+            },
+            "loss_primary": {
+              "difference": 0.4166666666666667,
+              "human": 0.08333333333333333,
+              "model": 0.5
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/unseen",
+            "Classical/unseen",
+            "Rapid/unseen"
+          ]
+        }
+      }
+    },
+    "deeper": {
+      "groups": {
+        "balanced": {
+          "cases": 24,
+          "human_negative_signed": 3,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 77.95833333333333,
+              "human": 30.166666666666668,
+              "model": 108.125
+            },
+            "loss_primary": {
+              "difference": 0.20833333333333334,
+              "human": 0.041666666666666664,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            }
+          },
+          "model_negative_signed": 2,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/seen",
+            "Blitz/unseen",
+            "Classical/seen",
+            "Classical/unseen",
+            "Rapid/seen",
+            "Rapid/unseen"
+          ]
+        },
+        "event:Blitz": {
+          "cases": 8,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 143.0,
+              "human": 11.0,
+              "model": 154.0
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.375,
+          "strata": [
+            "Blitz/seen",
+            "Blitz/unseen"
+          ]
+        },
+        "event:Classical": {
+          "cases": 8,
+          "human_negative_signed": 2,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 68.75,
+              "human": 21.75,
+              "model": 90.5
+            },
+            "loss_primary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            },
+            "loss_secondary": {
+              "difference": 0.125,
+              "human": 0.0,
+              "model": 0.125
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.125,
+          "strata": [
+            "Classical/seen",
+            "Classical/unseen"
+          ]
+        },
+        "event:Rapid": {
+          "cases": 8,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 22.125,
+              "human": 57.75,
+              "model": 79.875
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.125,
+              "model": 0.375
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Rapid/seen",
+            "Rapid/unseen"
+          ]
+        },
+        "stratum:Blitz/seen": {
+          "cases": 4,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 2.0,
+              "human": 6.5,
+              "model": 8.5
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.5,
+          "strata": [
+            "Blitz/seen"
+          ]
+        },
+        "stratum:Blitz/unseen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 284.0,
+              "human": 15.5,
+              "model": 299.5
+            },
+            "loss_primary": {
+              "difference": 0.5,
+              "human": 0.0,
+              "model": 0.5
+            },
+            "loss_secondary": {
+              "difference": 0.5,
+              "human": 0.0,
+              "model": 0.5
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/unseen"
+          ]
+        },
+        "stratum:Classical/seen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 5.25,
+              "human": 30.5,
+              "model": 35.75
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Classical/seen"
+          ]
+        },
+        "stratum:Classical/unseen": {
+          "cases": 4,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 132.25,
+              "human": 13.0,
+              "model": 145.25
+            },
+            "loss_primary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.0,
+          "strata": [
+            "Classical/unseen"
+          ]
+        },
+        "stratum:Rapid/seen": {
+          "cases": 4,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": -35.5,
+              "human": 42.5,
+              "model": 7.0
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 1,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.0,
+          "strata": [
+            "Rapid/seen"
+          ]
+        },
+        "stratum:Rapid/unseen": {
+          "cases": 4,
+          "human_negative_signed": 0,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 79.75,
+              "human": 73.0,
+              "model": 152.75
+            },
+            "loss_primary": {
+              "difference": 0.5,
+              "human": 0.25,
+              "model": 0.75
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.5,
+          "strata": [
+            "Rapid/unseen"
+          ]
+        },
+        "support:seen": {
+          "cases": 12,
+          "human_negative_signed": 1,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": -9.416666666666668,
+              "human": 26.5,
+              "model": 17.083333333333332
+            },
+            "loss_primary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            },
+            "loss_secondary": {
+              "difference": 0.0,
+              "human": 0.0,
+              "model": 0.0
+            }
+          },
+          "model_negative_signed": 2,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/seen",
+            "Classical/seen",
+            "Rapid/seen"
+          ]
+        },
+        "support:unseen": {
+          "cases": 12,
+          "human_negative_signed": 2,
+          "human_over_cap": 0,
+          "mate_cases": 0,
+          "metrics": {
+            "capped_loss_cp": {
+              "difference": 165.33333333333331,
+              "human": 33.833333333333336,
+              "model": 199.16666666666666
+            },
+            "loss_primary": {
+              "difference": 0.4166666666666667,
+              "human": 0.08333333333333333,
+              "model": 0.5
+            },
+            "loss_secondary": {
+              "difference": 0.25,
+              "human": 0.0,
+              "model": 0.25
+            }
+          },
+          "model_negative_signed": 0,
+          "model_over_cap": 0,
+          "same_move_fraction": 0.25,
+          "strata": [
+            "Blitz/unseen",
+            "Classical/unseen",
+            "Rapid/unseen"
+          ]
+        }
+      }
+    }
+  },
+  "identity": {
+    "case_manifest_sha256": "b41580829a41299f20b0aa75d241ed36c58fe18c6b7b2079a3f0b309a7b00025",
+    "engine_audit_sha256": "e94511fd94e27518e63d8942285aa72b319c18ed97d09efd2758010d30ad3b36"
+  },
+  "primary": {
+    "component_percentile_95": [
+      0.17891484582779651,
+      0.28897895445097416
+    ],
+    "difference": 0.23437499999999997,
+    "human": 0.036458333333333336,
+    "model": 0.2708333333333333
+  },
+  "scored_cases_sha256": "e66203e460b37fb42dfbe738b8d598f95487d9da7c886a2e86ca278509acfdf4",
+  "summary": {
+    "bootstrap": {
+      "components": 181,
+      "draws": 2000,
+      "largest_component_cases": 3,
+      "largest_component_games": 3,
+      "scope": "Approximate paired component resampling conditional on fitted model and selected diagnostic frame; no exact population coverage claim.",
+      "seed": 20240908,
+      "unique_games": 190
+    },
+    "groups": {
+      "balanced": {
+        "cases": 192,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 33,
+        "human_over_cap": 0,
+        "mate_cases": 1,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              81.12188368881628,
+              128.35683041138697
+            ],
+            "difference": 104.09374999999999,
+            "human": 30.510416666666668,
+            "model": 134.60416666666666
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.17891484582779651,
+              0.28897895445097416
+            ],
+            "difference": 0.23437499999999997,
+            "human": 0.036458333333333336,
+            "model": 0.2708333333333333
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.10645027106507182,
+              0.20011866275231086
+            ],
+            "difference": 0.15104166666666666,
+            "human": 0.0,
+            "model": 0.15104166666666666
+          }
+        },
+        "model_negative_signed": 12,
+        "model_over_cap": 1,
+        "same_move_fraction": 0.21875,
+        "strata": [
+          "Blitz/seen",
+          "Blitz/unseen",
+          "Classical/seen",
+          "Classical/unseen",
+          "Rapid/seen",
+          "Rapid/unseen"
+        ]
+      },
+      "event:Blitz": {
+        "cases": 64,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 11,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              44.84189319150909,
+              129.6752392004547
+            ],
+            "difference": 85.71875,
+            "human": 31.09375,
+            "model": 116.8125
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.08214285714285716,
+              0.2675598061805367
+            ],
+            "difference": 0.171875,
+            "human": 0.015625,
+            "model": 0.1875
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.08064516129032258,
+              0.24074074074074073
+            ],
+            "difference": 0.15625,
+            "human": 0.0,
+            "model": 0.15625
+          }
+        },
+        "model_negative_signed": 4,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.25,
+        "strata": [
+          "Blitz/seen",
+          "Blitz/unseen"
+        ]
+      },
+      "event:Classical": {
+        "cases": 64,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 13,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              61.81005418719212,
+              136.1847164209664
+            ],
+            "difference": 96.6875,
+            "human": 30.734375,
+            "model": 127.421875
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.14661971093422704,
+              0.35057634767253637
+            ],
+            "difference": 0.25,
+            "human": 0.046875,
+            "model": 0.296875
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.05,
+              0.20798681541582148
+            ],
+            "difference": 0.125,
+            "human": 0.0,
+            "model": 0.125
+          }
+        },
+        "model_negative_signed": 5,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.203125,
+        "strata": [
+          "Classical/seen",
+          "Classical/unseen"
+        ]
+      },
+      "event:Rapid": {
+        "cases": 64,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 9,
+        "human_over_cap": 0,
+        "mate_cases": 1,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              86.35267109465738,
+              178.02435661764704
+            ],
+            "difference": 129.875,
+            "human": 29.703125,
+            "model": 159.578125
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.18229166666666666,
+              0.384721453673501
+            ],
+            "difference": 0.28125,
+            "human": 0.046875,
+            "model": 0.328125
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.09375,
+              0.265625
+            ],
+            "difference": 0.171875,
+            "human": 0.0,
+            "model": 0.171875
+          }
+        },
+        "model_negative_signed": 3,
+        "model_over_cap": 1,
+        "same_move_fraction": 0.203125,
+        "strata": [
+          "Rapid/seen",
+          "Rapid/unseen"
+        ]
+      },
+      "stratum:Blitz/seen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 6,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              -17.46172297297297,
+              29.161833333333323
+            ],
+            "difference": 6.46875,
+            "human": 34.375,
+            "model": 40.84375
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              -0.06896551724137931,
+              0.142962184873949
+            ],
+            "difference": 0.03125,
+            "human": 0.03125,
+            "model": 0.0625
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.0,
+              0.0
+            ],
+            "difference": 0.0,
+            "human": 0.0,
+            "model": 0.0
+          }
+        },
+        "model_negative_signed": 3,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.34375,
+        "strata": [
+          "Blitz/seen"
+        ]
+      },
+      "stratum:Blitz/unseen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 5,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              87.31666666666666,
+              250.9168269230769
+            ],
+            "difference": 164.96875,
+            "human": 27.8125,
+            "model": 192.78125
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.16129032258064516,
+              0.48148148148148145
+            ],
+            "difference": 0.3125,
+            "human": 0.0,
+            "model": 0.3125
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.16129032258064516,
+              0.48148148148148145
+            ],
+            "difference": 0.3125,
+            "human": 0.0,
+            "model": 0.3125
+          }
+        },
+        "model_negative_signed": 1,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.15625,
+        "strata": [
+          "Blitz/unseen"
+        ]
+      },
+      "stratum:Classical/seen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 1,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              -15.806878557874763,
+              32.48541055718474
+            ],
+            "difference": 5.84375,
+            "human": 37.8125,
+            "model": 43.65625
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              -0.15789473684210525,
+              0.07407407407407407
+            ],
+            "difference": -0.03125,
+            "human": 0.09375,
+            "model": 0.0625
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.0,
+              0.10344827586206896
+            ],
+            "difference": 0.03125,
+            "human": 0.0,
+            "model": 0.03125
+          }
+        },
+        "model_negative_signed": 4,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.34375,
+        "strata": [
+          "Classical/seen"
+        ]
+      },
+      "stratum:Classical/unseen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 12,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              124.92905491698595,
+              266.78800940438873
+            ],
+            "difference": 187.53125,
+            "human": 23.65625,
+            "model": 211.1875
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.37037037037037035,
+              0.6976744186046512
+            ],
+            "difference": 0.53125,
+            "human": 0.0,
+            "model": 0.53125
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.08327702702702702,
+              0.36666666666666664
+            ],
+            "difference": 0.21875,
+            "human": 0.0,
+            "model": 0.21875
+          }
+        },
+        "model_negative_signed": 1,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.0625,
+        "strata": [
+          "Classical/unseen"
+        ]
+      },
+      "stratum:Rapid/seen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 4,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              1.9229166666666668,
+              64.74588709677417
+            ],
+            "difference": 28.34375,
+            "human": 25.0,
+            "model": 53.34375
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.0,
+              0.16666666666666666
+            ],
+            "difference": 0.0625,
+            "human": 0.0,
+            "model": 0.0625
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.0,
+              0.10344827586206896
+            ],
+            "difference": 0.03125,
+            "human": 0.0,
+            "model": 0.03125
+          }
+        },
+        "model_negative_signed": 3,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.3125,
+        "strata": [
+          "Rapid/seen"
+        ]
+      },
+      "stratum:Rapid/unseen": {
+        "cases": 32,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 5,
+        "human_over_cap": 0,
+        "mate_cases": 1,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              147.93703547297298,
+              321.04647058823525
+            ],
+            "difference": 231.40625,
+            "human": 34.40625,
+            "model": 265.8125
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.3225806451612903,
+              0.6785714285714286
+            ],
+            "difference": 0.5,
+            "human": 0.09375,
+            "model": 0.59375
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.16653225806451613,
+              0.5
+            ],
+            "difference": 0.3125,
+            "human": 0.0,
+            "model": 0.3125
+          }
+        },
+        "model_negative_signed": 0,
+        "model_over_cap": 1,
+        "same_move_fraction": 0.09375,
+        "strata": [
+          "Rapid/unseen"
+        ]
+      },
+      "support:seen": {
+        "cases": 96,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 11,
+        "human_over_cap": 0,
+        "mate_cases": 0,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              -1.2768140479876162,
+              30.23882617223134
+            ],
+            "difference": 13.552083333333329,
+            "human": 32.395833333333336,
+            "model": 45.947916666666664
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              -0.03927106291324384,
+              0.07855131777545567
+            ],
+            "difference": 0.020833333333333336,
+            "human": 0.041666666666666664,
+            "model": 0.0625
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.0,
+              0.0531711822660098
+            ],
+            "difference": 0.020833333333333332,
+            "human": 0.0,
+            "model": 0.020833333333333332
+          }
+        },
+        "model_negative_signed": 10,
+        "model_over_cap": 0,
+        "same_move_fraction": 0.3333333333333333,
+        "strata": [
+          "Blitz/seen",
+          "Classical/seen",
+          "Rapid/seen"
+        ]
+      },
+      "support:unseen": {
+        "cases": 96,
+        "empty_stratum_draws": 0,
+        "human_negative_signed": 22,
+        "human_over_cap": 0,
+        "mate_cases": 1,
+        "metrics": {
+          "capped_loss_cp": {
+            "component_percentile_95": [
+              152.36286897130648,
+              240.17400238536308
+            ],
+            "difference": 194.63541666666666,
+            "human": 28.625,
+            "model": 223.26041666666666
+          },
+          "loss_primary": {
+            "component_percentile_95": [
+              0.3567650462962963,
+              0.5427931316862766
+            ],
+            "difference": 0.4479166666666667,
+            "human": 0.03125,
+            "model": 0.4791666666666667
+          },
+          "loss_secondary": {
+            "component_percentile_95": [
+              0.19530635530843074,
+              0.3750863713637275
+            ],
+            "difference": 0.28125,
+            "human": 0.0,
+            "model": 0.28125
+          }
+        },
+        "model_negative_signed": 2,
+        "model_over_cap": 1,
+        "same_move_fraction": 0.10416666666666667,
+        "strata": [
+          "Blitz/unseen",
+          "Classical/unseen",
+          "Rapid/unseen"
+        ]
+      }
+    }
+  }
+}

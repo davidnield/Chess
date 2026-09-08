@@ -344,3 +344,53 @@ Outputs under `_artifacts/m6/`:
 The resource check is `_artifacts/resource_check_m6.json`. The
 [completed report](../../docs/human_repertoire/milestone6_report.md) separates
 resolved coverage from the remaining simulation and human-model limitations.
+
+## Milestone 7: human/model engine-loss calibration
+
+The frozen [protocol](../../docs/human_repertoire/milestone7_plan.md) and config
+select 32 actual March decisions per time-control/support stratum, 192 total.
+One case per game/support pair is selected with independent fixed hashes for
+the within-game decision and game selection. One frozen-prior move is sampled
+at each actual parent board. No March tuning, new extraction or book optimisation
+occurs. This is retrospective use of the existing final cohort.
+
+After checking headroom and active workloads, use the isolated interpreter:
+
+```powershell
+& $researchPython -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
+& $researchPython -B -m research.human_repertoire.calibration_experiment --prepare
+& $researchPython -B -m research.human_repertoire.calibration_experiment --engine
+& $researchPython -B -m research.human_repertoire.calibration_experiment --compare
+& $researchPython -B -m research.human_repertoire.verify_calibration
+```
+
+All cases/draws/targets freeze before scores. Parent and human/model children
+receive a homogeneous 100,000-node/1-second audit, at most 576 positions. The
+first four cases per stratum form a fixed 24-case deeper subset, at most 72
+positions at 400,000 nodes/2 seconds. Matching M4-M6 records are reused by budget.
+The binary and one-thread/32 MiB options must match previous audits. There is no
+canonical eval lookup. Preparation caps 2,250 games / 30,000 decisions / 60 seconds;
+engine work has a 600-second session guard and existing per-request timeouts.
+Partial scores are saved every 16 requests. No complete comparison is claimed
+until every case has coverage; do not drop cases or bypass identity checks.
+
+Loss uses the mover's perspective, clips apparent improvements at zero, and
+reports >=150/300-cp markers plus a mean capped at 1,000 cp. Balanced stratum
+means and paired connected-player bootstrap intervals retain cross-stratum
+dependence. Empty-stratum bootstrap draws make the affected interval unavailable.
+Intervals remain approximate diagnostic summaries, not population guarantees.
+
+Outputs under `_artifacts/m7/`:
+
+| File | Contents |
+|------|----------|
+| `case_manifest.json` | Frozen identities, counts, engine options and snapshot hashes |
+| `cases.json`, `selection_frame.json` | Selected human/model decisions and complete eligible-frame counts |
+| `fens.json`, `engine_selection.json` | Parent/child FENs and frozen base/deeper target lists |
+| `inherited_records.json`, `engine_audit.json` | Matching cached and new search records |
+| `scored_cases.json`, `results.json` | Per-case losses, balanced summaries, resampling and subset sensitivity |
+| `verification.json` | Original-game replay, regenerated draws, independent losses, PVs and hash checks |
+
+Resource check: `_artifacts/resource_check_m7.json`. The
+[completed report](../../docs/human_repertoire/milestone7_report.md) identifies
+unsupported-position tactical calibration as a limitation of the current prior.

@@ -57,3 +57,14 @@ work took about 130 seconds. Missing-score uncertainty is eliminated on this
 panel, while simulation precision and fallback extrapolation remain limiting.
 Next work should calibrate engine-loss predictions against a bounded held-out
 human decision sample before investing in a larger book comparison.
+
+Milestone 7 is complete: [human-versus-model engine-loss calibration](docs/human_repertoire/milestone7_report.md).
+The frozen 192-case March diagnostic shows >=150-cp loss in 27.08% of model draws
+versus 3.65% of human moves at the same boards. The mismatch is concentrated in
+training-unseen positions: 47.92% versus 3.13%, difference +44.79 percentage
+points with approximate component-bootstrap bounds [+35.68,+54.28]. The fixed
+deeper subset changes no loss classifications. All 76 tests and independent
+verification pass. Next work should benchmark a board-aware fallback replacement
+with new held-out validation; larger book comparisons should wait for improved
+human-policy credibility. March is retrospective diagnostic data, not a fresh
+test set for tuning a replacement.
