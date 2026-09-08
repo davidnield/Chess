@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "pairs": 32,
+  "deeper_pairs": 4,
+  "recalls": [0.5, 0.85, 1.0],
+  "policies": ["shared_position", "maia_blitz", "maia_rapid"],
+  "plans": ["source_one_card", "two_cards"],
+  "opponent_rating_input": 2000,
+  "seed": "human-repertoire-maia-study-v1",
+  "max_positions": 7500,
+  "max_deeper_positions": 950,
+  "sampling_seconds": 360,
+  "engine_nodes": 100000,
+  "engine_time_seconds": 1.0,
+  "deeper_nodes": 400000,
+  "deeper_time_seconds": 2.0,
+  "engine_runtime_seconds": 900,
+  "alpha": 0.05
+}
