@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "model": "shared_position",
+  "plans": ["source_one_card", "two_cards"],
+  "panel_trajectories_per_arm": 64,
+  "deeper_pairs": 16,
+  "panel_seed": "human-repertoire-m6-panel-v1",
+  "max_panel_positions": 1664,
+  "max_base_positions": 1668,
+  "max_deeper_positions": 420,
+  "sampling_runtime_seconds": 60,
+  "engine_runtime_seconds": 900,
+  "engine_nodes": 100000,
+  "engine_time_seconds": 1.0,
+  "deeper_nodes": 400000,
+  "deeper_time_seconds": 2.0,
+  "budget_checkpoints": [0, 64, 128, 256, 512, 1024, 1668],
+  "monte_carlo_alpha": 0.05,
+  "config": {
+    "horizon": 12,
+    "recall": 0.85,
+    "reentry": true,
+    "repetition_visits": 3,
+    "threshold_cp": 300,
+    "discount": 0.99,
+    "soundness_floor_cp": -100,
+    "max_engine_loss_cp": 150,
+    "min_points": 0.48,
+    "max_disadvantage": 0.4,
+    "max_states": 200000
+  }
+}
