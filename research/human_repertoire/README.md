@@ -394,3 +394,41 @@ Outputs under `_artifacts/m7/`:
 Resource check: `_artifacts/resource_check_m7.json`. The
 [completed report](../../docs/human_repertoire/milestone7_report.md) identifies
 unsupported-position tactical calibration as a limitation of the current prior.
+
+## Milestone 8: board-aware benchmark
+
+The [frozen plan](../../docs/human_repertoire/milestone8_plan.md) adds ten geometric
+board features to the existing legal token prior. Counts and alpha remain common.
+January fits coefficients; February selects correction strength; April is opened
+only after model freezing. Existing M3/M7 modules are reused in separate module
+instances with outputs mapped to M8; their normal globals and files are unchanged.
+
+Run these phases in order with the isolated venv and one BLAS thread:
+
+```powershell
+$env:OPENBLAS_NUM_THREADS='1'
+$env:OMP_NUM_THREADS='1'
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark develop
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark holdout
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark test
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark engine
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.board_benchmark compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_board_benchmark
+```
+
+Use a fresh shell for thread limits so other processes are unaffected. Do not
+change frozen code/config or bypass hash checks to reuse outputs for a revision.
+Development artifacts include coefficient/feature identity, training arrays,
+sample IDs and every beta's scores. `cohort/` holds April frame metadata and
+games. `test_results.json` and `test_game_scores.json` hold likelihood evidence.
+`calibration/` holds the 96 paired cases, complete base/deeper engine records,
+summaries and scalar scores. In candidate-versus-reference summaries only,
+the reused `human` field means reference draw and `model` means candidate draw.
+`verification.json` records weight reproduction, replay and independent checks.
+
+The [completed report](../../docs/human_repertoire/milestone8_report.md) finds
+better likelihood but an unresolved tactical mismatch at unseen positions.
+Resource checks are `_artifacts/resource_check_m8*.json`. Next work should audit
+residual failures before choosing a stronger candidate; April cannot be called
+fresh validation for a revision informed by these results.

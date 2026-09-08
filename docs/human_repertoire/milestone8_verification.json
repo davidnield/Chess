@@ -1,0 +1,58 @@
+{
+  "calibration_cases": 96,
+  "calibration_results_sha256": "815cf5a8c8ab20212ef04e71667d3a6909660926ddc96657b047ad6d33493629",
+  "deeper_category_changes": {
+    "candidate": {
+      "human": {
+        "loss_primary": 0,
+        "loss_secondary": 0
+      },
+      "model": {
+        "loss_primary": 0,
+        "loss_secondary": 0
+      }
+    },
+    "reference": {
+      "human": {
+        "loss_primary": 0,
+        "loss_secondary": 0
+      },
+      "model": {
+        "loss_primary": 0,
+        "loss_secondary": 0
+      }
+    }
+  },
+  "engine_work": {
+    "base": {
+      "depth_range": [
+        11,
+        36
+      ],
+      "new": 234,
+      "new_engine_seconds": 26.297000000000004,
+      "nodes": 23405438,
+      "required": 278,
+      "reused": 44,
+      "time_at_least_limit": 0
+    },
+    "deeper": {
+      "depth_range": [
+        16,
+        20
+      ],
+      "new": 30,
+      "new_engine_seconds": 13.551000000000002,
+      "nodes": 12007463,
+      "required": 38,
+      "reused": 8,
+      "time_at_least_limit": 0
+    }
+  },
+  "games": 900,
+  "probability_checks": 384,
+  "scalar_checks": 3600,
+  "status": "passed",
+  "test_results_sha256": "dd42607279cca8f526aa774dd73275b68060e7d31df07e37a3ff1f1a49aa034a",
+  "verifier_sha256": "78520d6ed236f5f405dff974c582496f1f0e0b7b09368d7d22b0133979024680"
+}

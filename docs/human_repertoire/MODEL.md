@@ -287,3 +287,21 @@ This retrospective March diagnostic changes no fallback parameters, recall,
 study cost or book utility. Its large mismatch at unseen positions limits trust
 in downstream rollouts. Any replacement needs separate development and new
 held-out validation; March cannot be retuned on and reused as a fresh test.
+
+## M8 board-aware prior and validation boundary
+
+M8 preserves M3 position counts, token prior and alpha, and multiplies the prior
+by `exp(beta*w.features)` before legal normalization. The ten features are
+engine-free, color-symmetric geometric board descriptors, including attacks and
+hanging material. A positive prior keeps every legal action available. Beta=0
+recovers M3; this isolates a change in fallback assumptions from optimisation,
+recall, study cost, horizon and terminal semantics.
+
+Coefficients use a fixed January panel and declared regularized softmax updates;
+February selects beta. A frozen April holdout tests likelihood, followed by
+paired actual/reference/candidate move-loss calibration at human-reached boards.
+The candidate improves likelihood but leaves the unseen >=150-cp draw count
+unchanged in the 48-case support subset. This does not validate counterfactual
+rollouts or actual unprepared human behavior. Keep the candidate as a diagnostic
+benchmark pending stronger tactical support. April becomes consumed diagnostic
+data for any revision informed by M8. See `milestone8_report.md` for evidence.

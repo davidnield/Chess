@@ -1,0 +1,309 @@
+{
+  "config": {
+    "batch_rows": 8192,
+    "bootstrap_replicates": 500,
+    "bootstrap_seed": 20240906,
+    "events": [
+      "Blitz",
+      "Rapid",
+      "Classical"
+    ],
+    "extract_runtime_seconds": 360,
+    "frame_rows": 65536,
+    "frames_per_stratum": 3,
+    "games_per_frame": 100,
+    "horizon": 12,
+    "max_cached_positions": 50000,
+    "max_decisions_per_split": 30000,
+    "max_decoded_rows": 2000000,
+    "max_files_per_stratum": 256,
+    "max_projected_row_group_bytes": 536870912,
+    "max_rating_gap": 200,
+    "max_row_group_rows": 1000000,
+    "min_rating": 1800,
+    "model_runtime_seconds": 360,
+    "months": {
+      "test": 4
+    },
+    "move_token_pseudocount": 1.0,
+    "prior_strengths": [
+      0.1,
+      1.0,
+      5.0,
+      20.0
+    ],
+    "rank_seed": "human-repertoire-m8-april-v1",
+    "root_san": [
+      "e4",
+      "e5",
+      "Nf3",
+      "Nc6"
+    ],
+    "schema_version": 1,
+    "source_root": "D:/data/chess/standard-chess-games-compressed",
+    "token_temperatures": [
+      0.5,
+      1.0
+    ],
+    "year": 2024
+  },
+  "created_utc": "2026-09-08T14:39:29.024140+00:00",
+  "discovery_code_sha256": "3e420cabab9766165e911790ce01cddd40c40e1f014ae754967150b2ce64a06f",
+  "frames": [
+    {
+      "date_max": "2024-04-06",
+      "date_min": "2024-04-05",
+      "event": "Blitz",
+      "frame_id": "test_Blitz_0",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-3.parquet",
+      "projected_uncompressed_bytes": 460786328,
+      "row_group": 0,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-17",
+      "date_min": "2024-04-16",
+      "event": "Blitz",
+      "frame_id": "test_Blitz_1",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-10.parquet",
+      "projected_uncompressed_bytes": 461751830,
+      "row_group": 0,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-27",
+      "date_min": "2024-04-26",
+      "event": "Blitz",
+      "frame_id": "test_Blitz_2",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-16.parquet",
+      "projected_uncompressed_bytes": 460119594,
+      "row_group": 1,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-08",
+      "date_min": "2024-04-06",
+      "event": "Rapid",
+      "frame_id": "test_Rapid_0",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-1.parquet",
+      "projected_uncompressed_bytes": 447185987,
+      "row_group": 0,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-18",
+      "date_min": "2024-04-16",
+      "event": "Rapid",
+      "frame_id": "test_Rapid_1",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-3.parquet",
+      "projected_uncompressed_bytes": 446681083,
+      "row_group": 0,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-28",
+      "date_min": "2024-04-26",
+      "event": "Rapid",
+      "frame_id": "test_Rapid_2",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-5.parquet",
+      "projected_uncompressed_bytes": 445020586,
+      "row_group": 0,
+      "row_group_rows": 1000000,
+      "rows": 65536,
+      "split": "test",
+      "start": 0
+    },
+    {
+      "date_max": "2024-04-30",
+      "date_min": "2024-04-01",
+      "event": "Classical",
+      "frame_id": "test_Classical_0",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Classical\\part-0.parquet",
+      "projected_uncompressed_bytes": 218843625,
+      "row_group": 0,
+      "row_group_rows": 507046,
+      "rows": 65536,
+      "split": "test",
+      "start": 51739
+    },
+    {
+      "date_max": "2024-04-30",
+      "date_min": "2024-04-01",
+      "event": "Classical",
+      "frame_id": "test_Classical_1",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Classical\\part-0.parquet",
+      "projected_uncompressed_bytes": 218843625,
+      "row_group": 0,
+      "row_group_rows": 507046,
+      "rows": 65536,
+      "split": "test",
+      "start": 220755
+    },
+    {
+      "date_max": "2024-04-30",
+      "date_min": "2024-04-01",
+      "event": "Classical",
+      "frame_id": "test_Classical_2",
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Classical\\part-0.parquet",
+      "projected_uncompressed_bytes": 218843625,
+      "row_group": 0,
+      "row_group_rows": 507046,
+      "rows": 65536,
+      "split": "test",
+      "start": 389770
+    }
+  ],
+  "inventory": [
+    {
+      "mtime_ns": 1784430105177923900,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-0.parquet",
+      "size": 327427275
+    },
+    {
+      "mtime_ns": 1784430972801760400,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-1.parquet",
+      "size": 327734046
+    },
+    {
+      "mtime_ns": 1784431832982379500,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-2.parquet",
+      "size": 326517378
+    },
+    {
+      "mtime_ns": 1784433077882118500,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-3.parquet",
+      "size": 327691507
+    },
+    {
+      "mtime_ns": 1784433580749998800,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-4.parquet",
+      "size": 327968115
+    },
+    {
+      "mtime_ns": 1784434557775870600,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-5.parquet",
+      "size": 327016304
+    },
+    {
+      "mtime_ns": 1784435949585630500,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-6.parquet",
+      "size": 326022428
+    },
+    {
+      "mtime_ns": 1784436927344376000,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-7.parquet",
+      "size": 326648712
+    },
+    {
+      "mtime_ns": 1784437906382108800,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-8.parquet",
+      "size": 328401928
+    },
+    {
+      "mtime_ns": 1784438879499041900,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-9.parquet",
+      "size": 326766252
+    },
+    {
+      "mtime_ns": 1784439843401009800,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-10.parquet",
+      "size": 327028816
+    },
+    {
+      "mtime_ns": 1784440791725889500,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-11.parquet",
+      "size": 326122125
+    },
+    {
+      "mtime_ns": 1784441624790663300,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-12.parquet",
+      "size": 327419078
+    },
+    {
+      "mtime_ns": 1784442814113374000,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-13.parquet",
+      "size": 326993542
+    },
+    {
+      "mtime_ns": 1784443275364125200,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-14.parquet",
+      "size": 328250007
+    },
+    {
+      "mtime_ns": 1784444133206714900,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-15.parquet",
+      "size": 326491099
+    },
+    {
+      "mtime_ns": 1784445361861867500,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-16.parquet",
+      "size": 327288052
+    },
+    {
+      "mtime_ns": 1784446182344229400,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-17.parquet",
+      "size": 327032842
+    },
+    {
+      "mtime_ns": 1784446993297628800,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-18.parquet",
+      "size": 327960754
+    },
+    {
+      "mtime_ns": 1784447257709460300,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Blitz\\part-19.parquet",
+      "size": 185916602
+    },
+    {
+      "mtime_ns": 1784432241483791000,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-0.parquet",
+      "size": 323234857
+    },
+    {
+      "mtime_ns": 1784435469960607400,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-1.parquet",
+      "size": 322549101
+    },
+    {
+      "mtime_ns": 1784438424473535000,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-2.parquet",
+      "size": 322824639
+    },
+    {
+      "mtime_ns": 1784441997348490300,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-3.parquet",
+      "size": 322494684
+    },
+    {
+      "mtime_ns": 1784444934730200400,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-4.parquet",
+      "size": 322878000
+    },
+    {
+      "mtime_ns": 1784447775487420800,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Rapid\\part-5.parquet",
+      "size": 310950228
+    },
+    {
+      "mtime_ns": 1784447869116341400,
+      "path": "D:\\data\\chess\\standard-chess-games-compressed\\year=2024\\month=4\\event=Classical\\part-0.parquet",
+      "size": 81197276
+    }
+  ],
+  "max_decoded_rows_used": 848522
+}

@@ -68,3 +68,13 @@ verification pass. Next work should benchmark a board-aware fallback replacement
 with new held-out validation; larger book comparisons should wait for improved
 human-policy credibility. March is retrospective diagnostic data, not a fresh
 test set for tuning a replacement.
+
+Milestone 8 is complete: [board-aware fallback benchmark](docs/human_repertoire/milestone8_report.md).
+The frozen candidate improves log loss from 1.987 to 1.895 on 900 fresh April
+games, across Blitz/Rapid/Classical and seen/unseen positions. Tactical credibility
+remains insufficient: both models lose >=150 cp in 21/48 unseen-position draws,
+versus 0/48 actual moves. Overall candidate/reference difference is -2.08 pp,
+approximate paired 95% interval [-10.66,+6.82]. All 84 tests and independent
+verification pass, with complete engine coverage. Next priority is a bounded
+residual-error audit to specify a stronger board-aware candidate. April is now
+consumed diagnostic evidence for revisions; broader book comparisons still wait.
