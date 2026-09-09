@@ -394,3 +394,16 @@ Reported exposure/recall is exact for this truncated graph and excludes possible
 later re-entry through cutoffs. Coverage intervals freeze that solved policy;
 they are not guarantees for the full self-consistent recall model. See
 `followthrough_report.md` for the unresolved comparison and independent audit.
+
+## Single-card intervention bounds
+
+`signed_continuation.py` evaluates deterministic prescription minus fallback
+using signed probability flow under a shared future policy. Known first hits
+are fixed payoffs; missing scores and pre-horizon frontiers absorb uncertain
+flow immediately. Only matching position/remaining-horizon states with clean
+no-hit histories can cancel. Negative uncertainty coefficients use the upper
+payoff bound in the pessimistic contrast, and positive coefficients use zero.
+The Be3 runner scales the local effect by inherited recall, clean arrival mass
+and the global first-hit discount. It separately reports unresolved earlier
+arrival routes. The resulting recommendation is conditional on that boundary
+model and does not certify full-graph recall recalibration.

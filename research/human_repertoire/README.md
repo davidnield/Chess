@@ -584,3 +584,18 @@ the frozen snapshots. Earlier experiments remain unchanged.
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough_diagnostics
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough_pgn
 ```
+
+## Focused 5.Be3 intervention
+
+The [report](../../docs/human_repertoire/be3_focus_report.md) resolves the extra
+card's benefit conditional on the frozen boundary model. Preparation reuses
+verified inputs and bounded projected query batches. Outputs are isolated under
+`_artifacts/be3_focus/`, with query caches under `queries/`. Check shared resource
+headroom before preparing; the engine audit is separately bounded/resumable.
+
+```powershell
+& research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe -B -m research.human_repertoire.be3_focus prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.be3_focus engine
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.be3_focus compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_be3_focus
+```

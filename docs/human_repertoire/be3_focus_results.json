@@ -1,0 +1,278 @@
+{
+  "identity": {
+    "engine_sha256": "9696cd9c4dbfc3137a2329275bc4751eb9fa9f0ab2b0b253f2992d8549a1760c",
+    "manifest_sha256": "83b59ee30f8c3104db63c49712f094406e6c77582ca9fb1ae76ca2d2e06175d1"
+  },
+  "results": {
+    "Blitz": {
+      "fallback_bounds": {
+        "absolute_unresolved_mass": {
+          "cutoff": 0.010080647711041703,
+          "missing_score": 0.01196682942629264
+        },
+        "interval": [
+          0.019684954406026082,
+          0.04099310422927849
+        ],
+        "known_contribution": 0.019684954406026082,
+        "uncertainty_width": 0.02130814982325241,
+        "visited_states": 4279
+      },
+      "raw_intervention": {
+        "absolute_unresolved_mass": {
+          "cutoff": 0.011948563815133819,
+          "missing_score": 0.014502726836437661
+        },
+        "interval": [
+          0.00982380923754025,
+          0.035384446728203144
+        ],
+        "known_contribution": 0.029457426481385957,
+        "uncertainty_width": 0.025560637490662893,
+        "visited_states": 4279
+      },
+      "scenarios": {
+        "0.001": {
+          "all_games_difference_interval": [
+            1.9473725346369513e-06,
+            7.014254658825241e-06
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.2089276921416043,
+            0.2178893193350665
+          ],
+          "opening_conditional_difference_interval": [
+            0.0019473725346369514,
+            0.007014254658825241
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.2904605647729095,
+            "total": 0.2904605647729095,
+            "unresolved_prefix_upper_mass": 0.21087506467624126
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.005230249783820956,
+              "missing_score": 0.006747014400133572
+            },
+            "interval": [
+              0.04061335147733443,
+              0.05218347803397598
+            ],
+            "known_contribution": 0.04061335147733443,
+            "uncertainty_width": 0.01157012655664155,
+            "visited_states": 4279
+          },
+          "recall": 0.7104625071213505,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.1982298808485971
+        },
+        "0.01": {
+          "all_games_difference_interval": [
+            2.70438454814285e-05,
+            9.740941488425795e-05
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.19718094111730503,
+            0.20962626715387367
+          ],
+          "opening_conditional_difference_interval": [
+            0.00270438454814285,
+            0.009740941488425794
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.2960970016243993,
+            "total": 0.2960970016243993,
+            "unresolved_prefix_upper_mass": 0.19988532566544787
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.0034729534050283693,
+              "missing_score": 0.004855878418906461
+            },
+            "interval": [
+              0.04819569769700161,
+              0.05623774402604446
+            ],
+            "known_contribution": 0.04819569769700161,
+            "uncertainty_width": 0.008042046329042844,
+            "visited_states": 4279
+          },
+          "recall": 0.9678626647508165,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.27528878897693165
+        },
+        "0.1": {
+          "all_games_difference_interval": [
+            0.00027943207865066425,
+            0.0010064883450079298
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.19686418560945368,
+            0.20972338984603964
+          ],
+          "opening_conditional_difference_interval": [
+            0.0027943207865066422,
+            0.010064883450079297
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.29621525461473974,
+            "total": 0.29621525461473974,
+            "unresolved_prefix_upper_mass": 0.19965850639596033
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.003255935416928866,
+              "missing_score": 0.004622331857938485
+            },
+            "interval": [
+              0.049132082442070346,
+              0.05673842715464874
+            ],
+            "known_contribution": 0.049132082442070346,
+            "uncertainty_width": 0.007606344712578394,
+            "visited_states": 4279
+          },
+          "recall": 0.9996503956193122,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.28444371413774544
+        }
+      }
+    },
+    "Rapid": {
+      "fallback_bounds": {
+        "absolute_unresolved_mass": {
+          "cutoff": 0.00998656920386405,
+          "missing_score": 0.011870556008208208
+        },
+        "interval": [
+          0.02895107887001634,
+          0.050071798764511954
+        ],
+        "known_contribution": 0.02895107887001634,
+        "uncertainty_width": 0.02112071989449562,
+        "visited_states": 4279
+      },
+      "raw_intervention": {
+        "absolute_unresolved_mass": {
+          "cutoff": 0.01025367151569473,
+          "missing_score": 0.01208451902770411
+        },
+        "interval": [
+          0.003209290894029923,
+          0.02479524395585417
+        ],
+        "known_contribution": 0.019965282228832627,
+        "uncertainty_width": 0.02158595306182425,
+        "visited_states": 4279
+      },
+      "scenarios": {
+        "0.001": {
+          "all_games_difference_interval": [
+            6.390493345338622e-07,
+            4.937347430570947e-06
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.21153686765108357,
+            0.2171132644161884
+          ],
+          "opening_conditional_difference_interval": [
+            0.0006390493345338621,
+            0.004937347430570947
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.29169321610684906,
+            "total": 0.29169321610684906,
+            "unresolved_prefix_upper_mass": 0.21217591698561744
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.005825245001222797,
+              "missing_score": 0.007266121182744007
+            },
+            "interval": [
+              0.04313948625147419,
+              0.055784925677649505
+            ],
+            "known_contribution": 0.04313948625147419,
+            "uncertainty_width": 0.012645439426175313,
+            "visited_states": 4279
+          },
+          "recall": 0.7106539851947523,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.19912477729041403
+        },
+        "0.01": {
+          "all_games_difference_interval": [
+            8.835727139490268e-06,
+            6.826555061075122e-05
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.2016350984545416,
+            0.20934522622956578
+          ],
+          "opening_conditional_difference_interval": [
+            0.0008835727139490269,
+            0.006826555061075122
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.2961257560050961,
+            "total": 0.2961257560050961,
+            "unresolved_prefix_upper_mass": 0.20251867116849065
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.00431909427583216,
+              "missing_score": 0.005599590887415145
+            },
+            "interval": [
+              0.04827484197698028,
+              0.05785273626520469
+            ],
+            "known_contribution": 0.04827484197698028,
+            "uncertainty_width": 0.00957789428822441,
+            "visited_states": 4279
+          },
+          "recall": 0.9678682667985401,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.2753171161868471
+        },
+        "0.1": {
+          "all_games_difference_interval": [
+            9.128632294750895e-05,
+            0.0007052855979889461
+          ],
+          "including_prefix_uncertainty_interval": [
+            -0.20141086750835202,
+            0.20937658671771658
+          ],
+          "opening_conditional_difference_interval": [
+            0.0009128632294750895,
+            0.00705285597988946
+          ],
+          "prefix": {
+            "clean_at_ply4": 0.29621545171170294,
+            "total": 0.29621545171170294,
+            "unresolved_prefix_upper_mass": 0.2023237307378271
+          },
+          "prepared_local_bounds": {
+            "absolute_unresolved_mass": {
+              "cutoff": 0.004132990002075199,
+              "missing_score": 0.00539366965717061
+            },
+            "interval": [
+              0.048909381157998255,
+              0.058108240831365655
+            ],
+            "known_contribution": 0.048909381157998255,
+            "uncertainty_width": 0.0091988596733674,
+            "visited_states": 4279
+          },
+          "recall": 0.9996503960840247,
+          "resolved_at_fixed_boundary": true,
+          "scale": 0.28444390353434196
+        }
+      }
+    }
+  }
+}

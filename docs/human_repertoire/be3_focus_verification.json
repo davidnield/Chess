@@ -1,0 +1,8 @@
+{
+  "independent_checks": 100,
+  "legal_edges": 12498,
+  "passed": true,
+  "results_sha256": "664e8028888f99ed79f2bdf373d4c5c1b954f20c4fad8a981af76009271945ed",
+  "scenarios": 6,
+  "verifier_sha256": "2361b4ed7e656369a38c14438ab1be5ffc47bd4330c7f24416b2a83f451f6102"
+}

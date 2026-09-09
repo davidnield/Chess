@@ -2,7 +2,16 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current result:** [eight-ply empirical follow-through](docs/human_repertoire/followthrough_report.md)
+**Current result:** [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
+supports adding 5.Be3 to d4/Nxd4 under the frozen opening-entry/recall model.
+All six local benefit intervals have positive lower bounds; targeted expansion
+and score coverage reduced comparison uncertainty by about 90%. All 132 tests
+pass, with independent legal-edge and path-coefficient verification. This is a
+conditional local recommendation, not a certified whole-opening ranking:
+earlier unresolved routes and exposure recalibration remain separate limitations.
+Annotated two-versus-three-card PGNs and full bounds are in the report.
+
+Previous result: [eight-ply empirical follow-through](docs/human_repertoire/followthrough_report.md)
 compares seven fixed packages, including equal four-position breadth/sequence
 books. All 126 tests and 42 independently verified cases pass; all cards pass
 base/deeper soundness gates. 5.Be3 is the leading added-card candidate on covered

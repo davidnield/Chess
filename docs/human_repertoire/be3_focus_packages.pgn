@@ -1,0 +1,18 @@
+[Event "Baseline: d4 and Nxd4"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "2"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. }
+3... exd4 4. Nxd4 { STUDY: prescribed White move. } *
+
+[Event "Recommended addition under the fixed-boundary model: Be3"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "3"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. }
+3... exd4 4. Nxd4 { STUDY: prescribed White move. } 4... Bc5
+5. Be3 { STUDY: additional White move supported by the focused comparison. } *

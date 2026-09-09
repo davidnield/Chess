@@ -1,0 +1,60 @@
+{
+  "Blitz": {
+    "current_local_bound": {
+      "absolute_unresolved_mass": {
+        "cutoff": 0.011948563815133819,
+        "missing_score": 0.014502726836437661
+      },
+      "interval": [
+        0.00982380923754025,
+        0.035384446728203144
+      ],
+      "known_contribution": 0.029457426481385957,
+      "uncertainty_width": 0.025560637490662893,
+      "visited_states": 4279
+    },
+    "previous_local_bound": {
+      "absolute_unresolved_mass": {
+        "cutoff": 0.30242739522789686,
+        "missing_score": 0.0032297937910705423
+      },
+      "interval": [
+        -0.16487665787728628,
+        0.13296255409207328
+      ],
+      "known_contribution": 0.028468309135390907,
+      "uncertainty_width": 0.2978392119693596,
+      "visited_states": 719
+    },
+    "width_reduction_fraction": 0.9141797437561967
+  },
+  "Rapid": {
+    "current_local_bound": {
+      "absolute_unresolved_mass": {
+        "cutoff": 0.01025367151569473,
+        "missing_score": 0.01208451902770411
+      },
+      "interval": [
+        0.003209290894029923,
+        0.02479524395585417
+      ],
+      "known_contribution": 0.019965282228832627,
+      "uncertainty_width": 0.02158595306182425,
+      "visited_states": 4279
+    },
+    "previous_local_bound": {
+      "absolute_unresolved_mass": {
+        "cutoff": 0.21740857669469393,
+        "missing_score": 0.00205040261708347
+      },
+      "interval": [
+        -0.12365675680643665,
+        0.09042919387120985
+      ],
+      "known_contribution": 0.019889445546665878,
+      "uncertainty_width": 0.21408595067764652,
+      "visited_states": 719
+    },
+    "width_reduction_fraction": 0.899171557061553
+  }
+}
