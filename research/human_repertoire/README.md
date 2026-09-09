@@ -487,3 +487,22 @@ parents. The [integration report](../../docs/human_repertoire/maia_integration.m
 documents setup, semantics, provenance and transfer limits. No training or
 May data extraction is required. Ordinary contract tests remain runnable in
 the original research environment without installing torch or maia2 there.
+
+## Maia study-card comparison
+
+```powershell
+$env:OPENBLAS_NUM_THREADS='1'
+$env:OMP_NUM_THREADS='1'
+& research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe -B -m research.human_repertoire.maia_comparison prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.maia_comparison engine
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.maia_comparison compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_maia_comparison
+```
+
+The Maia environment also needs `pyarrow==24.0.0` for existing adapters.
+Preparation verifies the frozen identity on reuse; do not overwrite the Maia
+integration verification snapshot it fingerprints. Outputs are exclusively
+under `_artifacts/maia_compare/`. The [report](../../docs/human_repertoire/maia_comparison_report.md)
+records the completed 576-path comparison, bounded engine work, all nine
+contexts and unresolved book ranking. The independent verifier uses frozen
+probabilities and needs neither checkpoint loading nor fresh engine calls.

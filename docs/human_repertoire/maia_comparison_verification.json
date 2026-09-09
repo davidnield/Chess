@@ -1,0 +1,22 @@
+{
+  "engine_work": {
+    "base": {
+      "engine_seconds": 113.92099999999986,
+      "new": 1080,
+      "required": 1205,
+      "reused": 125
+    },
+    "deeper": {
+      "engine_seconds": 53.80900000000001,
+      "new": 136,
+      "required": 158,
+      "reused": 22
+    }
+  },
+  "moves_replayed": 6912,
+  "paths_replayed": 576,
+  "results_sha256": "07d17b628f12f564694c43818e3aca186a17f6286950a17e137cc571a8753c45",
+  "scalar_checks": 2880,
+  "status": "passed",
+  "verifier_sha256": "029ab2bbafeab87b03555a2653e06f26ef9c01c37f0d0cd9d120deb75b87daa9"
+}
