@@ -2,7 +2,14 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current direction:** [use a pretrained Maia human policy](docs/human_repertoire/maia_direction.md).
+**Current direction:** [full empirical opponent distributions](docs/human_repertoire/empirical_opponent_direction.md),
+with Maia-1400 for our own fallback. The user clarified that the large existing
+positions dataset should drive opponent moves. The research-sample prior's
+sparsity must not be mistaken for absence in that database. Maia-2000 opponent
+work is diagnostic only; connect a bounded snapshot of authoritative empirical
+counts before further opponent modeling.
+
+Earlier Maia work: [use a pretrained Maia human policy](docs/human_repertoire/maia_direction.md).
 The custom M10 benchmark is paused after its cost pilot. [Maia-2 integration](docs/human_repertoire/maia_integration.md)
 is now working at the user's chosen **1400 fallback rating**, with actual
 opponent conditioning and unchanged opponent behavior. The first
