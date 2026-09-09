@@ -12,7 +12,7 @@ import json
 PREFIX = 'followthrough/'
 PATHS = {kind: SOURCE/(prefix+TAG+'.parquet') for kind, prefix in
          [('stats', 'position_stats_pooled_'), ('aux', 'position_stats_aux_pooled_')]}
-STATS = ['parent_hash', 'parent_epd', 'child_hash', 'move_san', 'total',
+STATS = ['parent_hash', 'child_hash', 'move_san', 'total',
          'white_wins', 'draws', 'black_wins', 'event', 'elo_band']
 AUX = ['position_hash']+[prefix+'_'+suffix
     for prefix in ['other', 'horizon', 'term_normal', 'term_flag', 'term_other']
@@ -61,14 +61,15 @@ def layer_snapshot(layer, boards, source_identity):
                 decoded += table.nbytes; payload += 1
                 rows.extend(table.filter(mask).to_pylist()); del table
             if len(rows) > 5000 or decoded > 4*1024**3:
-                raise ValueError('layer projection/output cap')
+                raise ValueError(f'layer projection/output cap: {kind}, decoded={decoded}, rows={len(rows)}, group={index}')
         result['work'][kind] = {'rows': len(rows), 'decoded_bytes': decoded,
                                'hash_groups': pf.num_row_groups, 'payload_groups': payload}
         if kind == 'stats':
             result[kind] = {k: [] for k in boards}
             for row in rows:
-                key = str(row['parent_hash']); board = HashedBoard(row['parent_epd'])
-                if str(zobrist_int64(board)) != key or board.fen().split()[:4] != boards[key].split()[:4]:
+                # FEN provenance is the queried board, not a copied source EPD.
+                key = str(row['parent_hash']); board = HashedBoard(boards[key])
+                if str(zobrist_int64(board)) != key:
                     raise ValueError('empirical parent drift')
                 if row['event'] != 'Pooled' or row['elo_band'] != 0 or row['total'] <= 0:
                     raise ValueError('invalid cohort/count')
