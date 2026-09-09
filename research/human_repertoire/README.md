@@ -554,3 +554,15 @@ Frozen snapshots can be compared and verified without loading Maia or engines.
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_exposure
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
 ```
+
+## Familiar-tabiya recall comparison
+
+The [contextual recall report](../../docs/human_repertoire/context_recall_report.md)
+adds the user's familiar opening context and depth decay. Reuses frozen empirical
+snapshots without data scanning, Maia loading or engines. New outputs stay under
+`_artifacts/context_recall/`; the original exposure experiment is preserved.
+
+```powershell
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.context_comparison compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_context
+```

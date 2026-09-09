@@ -2,7 +2,15 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current result:** [empirical opponents and encounter-based recall](docs/human_repertoire/exposure_report.md)
+**Current result:** [familiar tabiya and depth-aware recall](docs/human_repertoire/context_recall_report.md)
+is implemented: 123 tests pass and 30 comparison/sensitivity cases pass independent
+verification. The user's familiar position after 2...Nc6 now gives nearby 4.Nc3
+about 97.1% predicted recall under the stated entry scenario. This is a personal
+calibration assumption, not measured memory. Context fades with branch distance
+and absolute ply; unfamiliar early branches receive no automatic boost. Next
+priority remains bounded continuation beyond the studied follow-ups.
+
+Previous result: [empirical opponents and encounter-based recall](docs/human_repertoire/exposure_report.md)
 are implemented and independently verified: 117 tests pass, with 24 exact
 scenario/book comparisons. A synthetic one-card example changes the preferred
 study choice. The real example establishes exposure, but its short horizon

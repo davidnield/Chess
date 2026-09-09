@@ -370,3 +370,15 @@ mass and ending hazards, Maia-1400 only for our fallback, and declared boundary
 entry scenarios. It compares fixed books rather than claiming a general
 frequency-dependent optimiser. See `exposure_report.md` for completed results,
 cohort caveats, neutral horizon outcomes and the unresolved real book ranking.
+
+## Familiar context and depth
+
+`context_recall.py` extends the preserved frequency solver with explicit personal
+tabiya anchors, branch-distance decay and absolute-depth attenuation. It pools
+route-specific support by arrival probability, then uses one recall policy per
+position. The latest declared anchor replaces previous context on a route.
+This initial version requires a DAG and rejects cycles. Profile familiarity is
+distinct from current exposure, and anchors do not automatically prescribe
+moves or reduce distinct-position study cost. The user's 4.Nc3 example is a
+qualitative calibration constraint, not validation data. See
+`context_recall_report.md` for the equations, assumptions and 30 verified cases.

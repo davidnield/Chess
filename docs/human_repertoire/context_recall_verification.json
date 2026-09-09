@@ -1,0 +1,7 @@
+{
+  "cases": 30,
+  "results_sha256": "8c2254bb70bfb942cb44bee8ddc9c9e116e5808746a2aab95b4b3f6675a0bb83",
+  "scalar_checks": 822,
+  "status": "passed",
+  "verifier_sha256": "8537022bbb1c46c97a0b209700fb1a0eefa280fa7c01d216a55981051ecb4ee0"
+}

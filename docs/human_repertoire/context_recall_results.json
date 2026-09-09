@@ -1,0 +1,2815 @@
+{
+  "books": {
+    "Nf6_Nc3": {
+      "-1867097936539676342": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "d4_only": {
+      "8704797333742910878": "d4"
+    },
+    "d6_Nc3": {
+      "-8916530477222717007": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "exd4_Nxd4": {
+      "2776049323298866377": "Nxd4",
+      "8704797333742910878": "d4"
+    }
+  },
+  "identity": {
+    "anchors": {
+      "8704797333742910878": 0.99
+    },
+    "code": {
+      "context_comparison.py": "6f1670770c92be48532c7b3f2312c139b5e4d67fd3cddaf5c947db07efc8e00c",
+      "context_recall.py": "d3f2f3971c31085394154629b4e21d24be8157a199ac7d814f5f78562b67348f"
+    },
+    "curve": {
+      "ceiling": 0.98,
+      "depth_half_life_plies": 8.0,
+      "frequency": {
+        "midpoint": 0.001,
+        "power": 2.0
+      },
+      "local_grace_plies": 2,
+      "local_half_life_plies": 4.0,
+      "shallow_through_ply": 8
+    },
+    "plan_sha256": "f7d3a80a6ead0d9d8299d12551c1d8f66904f1663a46d4c22d1ca891a0b4b0f5",
+    "root_ply": 4,
+    "source_manifest_sha256": "b9249e8dd548279687e892d8ac5da44cc149b31314d2813adbf0569810ef49fa",
+    "source_results_sha256": "1ab4c4c0420e8a3bd7269af7a98245d76123487c7dd69f6f0aceeffbba720db5"
+  },
+  "results": {
+    "Blitz": {
+      "0.001": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9701999999999998,
+                "frequency_recall": 0.0003702087752856865,
+                "mean_support": 0.9899999999999999
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031924088465450744,
+              "certain_advantage_mass": 0.0031924088465450744,
+              "certain_early_advantage": 0.0031288534596120203,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0014292215487928521,
+              "draw": 0.9992712313588741,
+              "early_advantage": 0.0031288534596120203,
+              "early_interval": [
+                0.0031288534596120203,
+                0.003343605176954185
+              ],
+              "frontier_before_horizon_mass": 4.166423784609898e-05,
+              "frontier_mass": 0.9991913177045784,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008086822954217626,
+              "loss": 0.0004019762737191664,
+              "no_hit": 0.9953783696046621,
+              "points": 0.4999624080468439,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0002448507685242022,
+              "unresolved_first_hit_mass": 0.00021475171734216473,
+              "unresolved_no_hit_mass": 3.740645783980542e-05,
+              "win": 0.00032679236740683104,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-1867097936539676342": 1.92443726990663e-05,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.1288534596120203e-06,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9702110322215034,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001981208292304271,
+              "certain_advantage_mass": 0.001981208292304271,
+              "certain_early_advantage": 0.0019417434965222163,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.005555759652635218,
+              "draw": 0.9991467405072286,
+              "early_advantage": 0.0019417434965222163,
+              "early_interval": [
+                0.0019417434965222163,
+                0.006718844588578115
+              ],
+              "frontier_before_horizon_mass": 0.001294678938094241,
+              "frontier_mass": 0.9990476697390505,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0009523302609497095,
+              "loss": 0.0005012870334920193,
+              "no_hit": 0.9924630320550605,
+              "points": 0.4999253427128938,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0050535678596749225,
+              "unresolved_first_hit_mass": 0.004777101092055898,
+              "unresolved_no_hit_mass": 0.0011518004143931154,
+              "win": 0.00035197245927947625,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-1867097936539676342": 1.1840308911095658e-05,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.9417434965222164e-06,
+            "recall": {
+              "-1867097936539676342": 0.00014017326381169696,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031924088465450744,
+              "certain_advantage_mass": 0.0031924088465450744,
+              "certain_early_advantage": 0.0031288534596120203,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0014309173402178967,
+              "draw": 0.9992712313588741,
+              "early_advantage": 0.0031288534596120203,
+              "early_interval": [
+                0.0031288534596120203,
+                0.003350899657818376
+              ],
+              "frontier_before_horizon_mass": 4.166423784609898e-05,
+              "frontier_mass": 0.9991913177045784,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008086822954217626,
+              "loss": 0.0004019762737191664,
+              "no_hit": 0.9953766738132369,
+              "points": 0.4999624080468439,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0002521452493883929,
+              "unresolved_first_hit_mass": 0.00022204619820635543,
+              "unresolved_no_hit_mass": 3.740645783980542e-05,
+              "win": 0.00032679236740683104,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.1288534596120203e-06,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001981208292304271,
+              "certain_advantage_mass": 0.001981208292304271,
+              "certain_early_advantage": 0.0019417434965222163,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.005555759803375973,
+              "draw": 0.9991467405072285,
+              "early_advantage": 0.0019417434965222163,
+              "early_interval": [
+                0.0019417434965222163,
+                0.006718845236992498
+              ],
+              "frontier_before_horizon_mass": 0.001294678938094241,
+              "frontier_mass": 0.9990476697390505,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0009523302609497095,
+              "loss": 0.0005012870334920193,
+              "no_hit": 0.9924630319043196,
+              "points": 0.49992534271289374,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.005053568508089306,
+              "unresolved_first_hit_mass": 0.004777101740470282,
+              "unresolved_no_hit_mass": 0.0011518004143931154,
+              "win": 0.00035197245927947625,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.9417434965222164e-06,
+            "recall": {
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9701999999999998,
+                "frequency_recall": 0.0015419278637422184,
+                "mean_support": 0.9899999999999999
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031924088465450744,
+              "certain_advantage_mass": 0.0031924088465450744,
+              "certain_early_advantage": 0.0031288534596120203,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0014265236081257842,
+              "draw": 0.9992712313588741,
+              "early_advantage": 0.0031288534596120203,
+              "early_interval": [
+                0.0031288534596120203,
+                0.003349270221519406
+              ],
+              "frontier_before_horizon_mass": 4.166423784609898e-05,
+              "frontier_mass": 0.9991913177045784,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008086822954217626,
+              "loss": 0.0004019762737191664,
+              "no_hit": 0.9953810675453292,
+              "points": 0.4999624080468439,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00025051581308942303,
+              "unresolved_first_hit_mass": 0.00022041676190738557,
+              "unresolved_no_hit_mass": 3.740645783980542e-05,
+              "win": 0.00032679236740683104,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-8916530477222717007": 3.9297698112461746e-05,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.1288534596120203e-06,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9702459494503394,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001981208292304271,
+              "certain_advantage_mass": 0.001981208292304271,
+              "certain_early_advantage": 0.0019417434965222163,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00555575817554252,
+              "draw": 0.9991467405072285,
+              "early_advantage": 0.0019417434965222163,
+              "early_interval": [
+                0.0019417434965222163,
+                0.006718844633302773
+              ],
+              "frontier_before_horizon_mass": 0.001294678938094241,
+              "frontier_mass": 0.9990476697390505,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0009523302609497095,
+              "loss": 0.0005012870334920193,
+              "no_hit": 0.9924630335321531,
+              "points": 0.49992534271289374,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.005053567904399583,
+              "unresolved_first_hit_mass": 0.004777101136780557,
+              "unresolved_no_hit_mass": 0.0011518004143931154,
+              "win": 0.00035197245927947625,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-8916530477222717007": 2.4178334748687504e-05,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.9417434965222164e-06,
+            "recall": {
+              "-8916530477222717007": 0.000584250323229872,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9702,
+                "frequency_recall": 0.4399913006299918,
+                "mean_support": 0.99
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031924088465450744,
+              "certain_advantage_mass": 0.0031924088465450744,
+              "certain_early_advantage": 0.0031288534596120203,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0001899157388487187,
+              "draw": 0.9992712313588743,
+              "early_advantage": 0.0031288534596120203,
+              "early_interval": [
+                0.0031288534596120203,
+                0.003344979795620501
+              ],
+              "frontier_before_horizon_mass": 4.166423784609898e-05,
+              "frontier_mass": 0.9991913177045786,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008086822954217626,
+              "loss": 0.0004019762737191664,
+              "no_hit": 0.9966176754146064,
+              "points": 0.499962408046844,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00024622538719051834,
+              "unresolved_first_hit_mass": 0.00021612633600848083,
+              "unresolved_no_hit_mass": 3.740645783980542e-05,
+              "win": 0.00032679236740683104,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "2776049323298866377": 0.0008863896128718891,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.1288534596120203e-06,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.9833117407587738,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001981208292304271,
+              "certain_advantage_mass": 0.001981208292304271,
+              "certain_early_advantage": 0.0019417434965222163,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00537775644522423,
+              "draw": 0.9991467405072285,
+              "early_advantage": 0.0019417434965222163,
+              "early_interval": [
+                0.0019417434965222163,
+                0.006717996120158278
+              ],
+              "frontier_before_horizon_mass": 0.001294678938094241,
+              "frontier_mass": 0.9990476697390503,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0009523302609497095,
+              "loss": 0.0005012870334920193,
+              "no_hit": 0.9926410352624716,
+              "points": 0.49992534271289374,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.005052719391255087,
+              "unresolved_first_hit_mass": 0.004776252623636061,
+              "unresolved_no_hit_mass": 0.0011518004143931154,
+              "win": 0.00035197245927947625,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "2776049323298866377": 0.0005453608177365461,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.9417434965222164e-06,
+            "recall": {
+              "2776049323298866377": 0.22923863002755132,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        }
+      },
+      "0.01": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.03651380059319625,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003228876972132952,
+              "certain_advantage_mass": 0.003228876972132952,
+              "certain_early_advantage": 0.003164596239838633,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013050046530687135,
+              "draw": 0.9992749796629815,
+              "early_advantage": 0.003164596239838633,
+              "early_interval": [
+                0.003164596239838633,
+                0.003242106055462581
+              ],
+              "frontier_before_horizon_mass": 3.937127094611165e-06,
+              "frontier_mass": 0.9991956428116213,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043571883790237,
+              "loss": 0.0003989861188295048,
+              "no_hit": 0.9954661183747984,
+              "points": 0.49996352404967986,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010019096331150258,
+              "unresolved_first_hit_mass": 7.750981562394816e-05,
+              "unresolved_no_hit_mass": 3.853089143213583e-06,
+              "win": 0.0003260342181890894,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-1867097936539676342": 0.00019467302194214707,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164596239838633e-05,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9713815980374216,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032048904040852403,
+              "certain_advantage_mass": 0.0032048904040852403,
+              "certain_early_advantage": 0.0031410867609087635,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013883472290588078,
+              "draw": 0.9992725142510612,
+              "early_advantage": 0.0031410867609087635,
+              "early_interval": [
+                0.0031410867609087635,
+                0.0033159209728401604
+              ],
+              "frontier_before_horizon_mass": 2.8751780842127386e-05,
+              "frontier_mass": 0.9991927980129726,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008072019870277588,
+              "loss": 0.0004009528652026144,
+              "no_hit": 0.9954067623668561,
+              "points": 0.4999627900092669,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00020239441616692292,
+              "unresolved_first_hit_mass": 0.00017483421193139711,
+              "unresolved_no_hit_mass": 2.5922503145075388e-05,
+              "win": 0.0003265328837362905,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-1867097936539676342": 0.00019320672406721693,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1410867609087634e-05,
+            "recall": {
+              "-1867097936539676342": 0.03598553983003861,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003228876972132952,
+              "certain_advantage_mass": 0.003228876972132952,
+              "certain_early_advantage": 0.003164596239838633,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.001306722158462099,
+              "draw": 0.9992749796629815,
+              "early_advantage": 0.003164596239838633,
+              "early_interval": [
+                0.003164596239838633,
+                0.0032494939393975762
+              ],
+              "frontier_before_horizon_mass": 3.937127094611165e-06,
+              "frontier_mass": 0.9991956428116213,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043571883790237,
+              "loss": 0.0003989861188295048,
+              "no_hit": 0.9954644008694049,
+              "points": 0.49996352404967986,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010757884724649794,
+              "unresolved_first_hit_mass": 8.489769955894354e-05,
+              "unresolved_no_hit_mass": 3.853089143213583e-06,
+              "win": 0.0003260342181890894,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164596239838633e-05,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032048904040852403,
+              "certain_advantage_mass": 0.0032048904040852403,
+              "certain_early_advantage": 0.0031410867609087635,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013884103760592663,
+              "draw": 0.9992725142510612,
+              "early_advantage": 0.0031410867609087635,
+              "early_interval": [
+                0.0031410867609087635,
+                0.003316192600930544
+              ],
+              "frontier_before_horizon_mass": 2.8751780842127386e-05,
+              "frontier_mass": 0.9991927980129726,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008072019870277588,
+              "loss": 0.0004009528652026144,
+              "no_hit": 0.9954066992198554,
+              "points": 0.4999627900092669,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0002026660442573064,
+              "unresolved_first_hit_mass": 0.0001751058400217806,
+              "unresolved_no_hit_mass": 2.5922503145075388e-05,
+              "win": 0.0003265328837362905,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1410867609087634e-05,
+            "recall": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.13646416211626564,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003228876972132952,
+              "certain_advantage_mass": 0.003228876972132952,
+              "certain_early_advantage": 0.003164596239838633,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.001302258726465967,
+              "draw": 0.9992749796629815,
+              "early_advantage": 0.003164596239838633,
+              "early_interval": [
+                0.003164596239838633,
+                0.0032478386545599924
+              ],
+              "frontier_before_horizon_mass": 3.937127094611165e-06,
+              "frontier_mass": 0.9991956428116213,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043571883790237,
+              "loss": 0.0003989861188295048,
+              "no_hit": 0.995468864301401,
+              "points": 0.49996352404967986,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010592356240891376,
+              "unresolved_first_hit_mass": 8.324241472135937e-05,
+              "unresolved_no_hit_mass": 3.853089143213583e-06,
+              "win": 0.0003260342181890894,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-8916530477222717007": 0.00039752928123733077,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164596239838633e-05,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9743504206569188,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032048904040852403,
+              "certain_advantage_mass": 0.0032048904040852403,
+              "certain_early_advantage": 0.0031410867609087635,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.001387798008610614,
+              "draw": 0.9992725142510612,
+              "early_advantage": 0.0031410867609087635,
+              "early_interval": [
+                0.0031410867609087635,
+                0.0033159655015698587
+              ],
+              "frontier_before_horizon_mass": 2.8751780842127386e-05,
+              "frontier_mass": 0.9991927980129726,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008072019870277588,
+              "loss": 0.0004009528652026144,
+              "no_hit": 0.9954073115873041,
+              "points": 0.4999627900092669,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00020243894489662095,
+              "unresolved_first_hit_mass": 0.00017487874066109515,
+              "unresolved_no_hit_mass": 2.5922503145075388e-05,
+              "win": 0.0003265328837362905,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-8916530477222717007": 0.00039453504847469334,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1410867609087634e-05,
+            "recall": {
+              "-8916530477222717007": 0.13469202596390453,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9877149120085396,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003228876972132952,
+              "certain_advantage_mass": 0.003228876972132952,
+              "certain_early_advantage": 0.003164596239838633,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 3.0504868405307057e-05,
+              "draw": 0.9992749796629815,
+              "early_advantage": 0.003164596239838633,
+              "early_interval": [
+                0.003164596239838633,
+                0.0032434060902897703
+              ],
+              "frontier_before_horizon_mass": 3.937127094611165e-06,
+              "frontier_mass": 0.9991956428116212,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043571883790237,
+              "loss": 0.0003989861188295048,
+              "no_hit": 0.9967406181594618,
+              "points": 0.49996352404967986,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010149099813869194,
+              "unresolved_first_hit_mass": 7.880985045113753e-05,
+              "unresolved_no_hit_mass": 3.853089143213583e-06,
+              "win": 0.0003260342181890894,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "2776049323298866377": 0.008966576736703535,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164596239838633e-05,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.9996350963962932,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032048904040852403,
+              "certain_advantage_mass": 0.0032048904040852403,
+              "certain_early_advantage": 0.0031410867609087635,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00013714357165107223,
+              "draw": 0.9992725142510612,
+              "early_advantage": 0.0031410867609087635,
+              "early_interval": [
+                0.0031410867609087635,
+                0.0033102237713603815
+              ],
+              "frontier_before_horizon_mass": 2.8751780842127386e-05,
+              "frontier_mass": 0.9991927980129724,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008072019870277588,
+              "loss": 0.0004009528652026144,
+              "no_hit": 0.9966579660242636,
+              "points": 0.4999627900092669,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00019669721468714384,
+              "unresolved_first_hit_mass": 0.000169137010451618,
+              "unresolved_no_hit_mass": 2.5922503145075388e-05,
+              "win": 0.0003265328837362905,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "2776049323298866377": 0.008899039528500472,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1410867609087634e-05,
+            "recall": {
+              "2776049323298866377": 0.9875300688276202,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        }
+      },
+      "0.1": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9799020097990201,
+                "frequency_recall": 0.7912968467872616,
+                "mean_support": 0.9999000099990001
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003229606237251946,
+              "certain_advantage_mass": 0.003229606237251946,
+              "certain_early_advantage": 0.0031653109999875287,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013024774938993516,
+              "draw": 0.9992750546190533,
+              "early_advantage": 0.0031653109999875287,
+              "early_interval": [
+                0.0031653109999875287,
+                0.003239890720638005
+              ],
+              "frontier_before_horizon_mass": 3.1826856346246294e-06,
+              "frontier_mass": 0.9991957293022113,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042706977889171,
+              "loss": 0.00039892632371730017,
+              "no_hit": 0.9954679162688487,
+              "points": 0.4999635463667561,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.71125300785949e-05,
+              "unresolved_first_hit_mass": 7.45797206504763e-05,
+              "unresolved_no_hit_mass": 3.1821113778164547e-06,
+              "win": 0.00032601905722946843,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-1867097936539676342": 0.0019471760188756134,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031653109999875287,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9958054860718167,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032293615992013474,
+              "certain_advantage_mass": 0.0032293615992013474,
+              "certain_early_advantage": 0.0031650712277498105,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00130367245681861,
+              "draw": 0.9992750294744155,
+              "early_advantage": 0.0031650712277498105,
+              "early_interval": [
+                0.0031650712277498105,
+                0.0032421273882347044
+              ],
+              "frontier_before_horizon_mass": 3.435769298239523e-06,
+              "frontier_mass": 0.9991957002882234,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042997117768448,
+              "loss": 0.000398946382485098,
+              "no_hit": 0.9954669659439801,
+              "points": 0.49996353888030726,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.963873121610024e-05,
+              "unresolved_first_hit_mass": 7.705616048489401e-05,
+              "unresolved_no_hit_mass": 3.407196450784039e-06,
+              "win": 0.00032602414309949054,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-1867097936539676342": 0.0019470264717403143,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003165071227749811,
+            "recall": {
+              "-1867097936539676342": 0.7912714775483786,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003229606237251946,
+              "certain_advantage_mass": 0.003229606237251946,
+              "certain_early_advantage": 0.0031653109999875287,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013042385865059975,
+              "draw": 0.9992750546190533,
+              "early_advantage": 0.0031653109999875287,
+              "early_interval": [
+                0.0031653109999875287,
+                0.003247466095846017
+              ],
+              "frontier_before_horizon_mass": 3.1826856346246294e-06,
+              "frontier_mass": 0.9991957293022113,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042706977889171,
+              "loss": 0.00039892632371730017,
+              "no_hit": 0.9954661551762418,
+              "points": 0.4999635463667561,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0001046879052866069,
+              "unresolved_first_hit_mass": 8.21550958584883e-05,
+              "unresolved_no_hit_mass": 3.1821113778164547e-06,
+              "win": 0.00032601905722946843,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031653109999875287,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032293615992013474,
+              "certain_advantage_mass": 0.0032293615992013474,
+              "certain_early_advantage": 0.0031650712277498105,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013050717213784,
+              "draw": 0.9992750294744154,
+              "early_advantage": 0.0031650712277498105,
+              "early_interval": [
+                0.0031650712277498105,
+                0.0032481463528341147
+              ],
+              "frontier_before_horizon_mass": 3.435769298239523e-06,
+              "frontier_mass": 0.9991957002882234,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042997117768448,
+              "loss": 0.000398946382485098,
+              "no_hit": 0.9954655666794202,
+              "points": 0.4999635388803072,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010565769581551062,
+              "unresolved_first_hit_mass": 8.307512508430438e-05,
+              "unresolved_no_hit_mass": 3.407196450784039e-06,
+              "win": 0.00032602414309949054,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003165071227749811,
+            "recall": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9405122779117431,
+                "mean_support": 0.9999000099990002
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003229606237251946,
+              "certain_advantage_mass": 0.003229606237251946,
+              "certain_early_advantage": 0.0031653109999875287,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0012996620846693905,
+              "draw": 0.9992750546190533,
+              "early_advantage": 0.0031653109999875287,
+              "early_interval": [
+                0.0031653109999875287,
+                0.003245768878524038
+              ],
+              "frontier_before_horizon_mass": 3.1826856346246294e-06,
+              "frontier_mass": 0.9991957293022113,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042706977889171,
+              "loss": 0.00039892632371730017,
+              "no_hit": 0.9954707316780786,
+              "points": 0.4999635463667561,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010299068796462769,
+              "unresolved_first_hit_mass": 8.045787853650906e-05,
+              "unresolved_no_hit_mass": 3.1821113778164547e-06,
+              "win": 0.00032601905722946843,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-8916530477222717007": 0.003976203150820892,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031653109999875287,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9988044163443917,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032293615992013474,
+              "certain_advantage_mass": 0.0032293615992013474,
+              "certain_early_advantage": 0.0031650712277498105,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0013007626833029928,
+              "draw": 0.9992750294744154,
+              "early_advantage": 0.0031650712277498105,
+              "early_interval": [
+                0.0031650712277498105,
+                0.0032465483257112697
+              ],
+              "frontier_before_horizon_mass": 3.435769298239523e-06,
+              "frontier_mass": 0.9991957002882234,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042997117768448,
+              "loss": 0.000398946382485098,
+              "no_hit": 0.9954698757174957,
+              "points": 0.4999635388803072,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010405966869266529,
+              "unresolved_first_hit_mass": 8.147709796145905e-05,
+              "unresolved_no_hit_mass": 3.407196450784039e-06,
+              "win": 0.00032602414309949054,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-8916530477222717007": 0.00397589777021595,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003165071227749811,
+            "recall": {
+              "-8916530477222717007": 0.9405036830131764,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.999875693514299,
+                "mean_support": 0.9999000099990002
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.003229606237251946,
+              "certain_advantage_mass": 0.003229606237251946,
+              "certain_early_advantage": 0.0031653109999875287,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 2.7266261161469352e-05,
+              "draw": 0.9992750546190533,
+              "early_advantage": 0.0031653109999875287,
+              "early_interval": [
+                0.0031653109999875287,
+                0.0032413746450467604
+              ],
+              "frontier_before_horizon_mass": 3.1826856346246294e-06,
+              "frontier_mass": 0.9991957293022112,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042706977889171,
+              "loss": 0.00039892632371730017,
+              "no_hit": 0.9967431275015864,
+              "points": 0.4999635463667561,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.859645448735022e-05,
+              "unresolved_first_hit_mass": 7.60636450592316e-05,
+              "unresolved_no_hit_mass": 3.1821113778164547e-06,
+              "win": 0.00032601905722946843,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "2776049323298866377": 0.08968630074641619,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031653109999875287,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.9999975016894684,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032293615992013474,
+              "certain_advantage_mass": 0.0032293615992013474,
+              "certain_early_advantage": 0.0031650712277498105,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 2.8353028634367373e-05,
+              "draw": 0.9992750294744154,
+              "early_advantage": 0.0031650712277498105,
+              "early_interval": [
+                0.0031650712277498105,
+                0.00324205611192052
+              ],
+              "frontier_before_horizon_mass": 3.435769298239523e-06,
+              "frontier_mass": 0.9991957002882234,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042997117768448,
+              "loss": 0.000398946382485098,
+              "no_hit": 0.9967422853721646,
+              "points": 0.4999635388803072,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.95674549019158e-05,
+              "unresolved_first_hit_mass": 7.698488417070951e-05,
+              "unresolved_no_hit_mass": 3.407196450784039e-06,
+              "win": 0.00032602414309949054,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "2776049323298866377": 0.08967941265349486,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003165071227749811,
+            "recall": {
+              "2776049323298866377": 0.999875674420484,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        }
+      }
+    },
+    "Rapid": {
+      "0.001": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9701999999999998,
+                "frequency_recall": 0.00036862664872054667,
+                "mean_support": 0.9899999999999999
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031851715894775415,
+              "certain_advantage_mass": 0.0031851715894775415,
+              "certain_early_advantage": 0.003121762954645234,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0020203491396128537,
+              "draw": 0.9992671591266472,
+              "early_advantage": 0.003121762954645234,
+              "early_interval": [
+                0.003121762954645234,
+                0.003412360970788245
+              ],
+              "frontier_before_horizon_mass": 7.578244653813188e-05,
+              "frontier_mass": 0.9991868428695915,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008131571304088264,
+              "loss": 0.0004056475686108102,
+              "no_hit": 0.9947944792709099,
+              "points": 0.4999607728680657,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0003225070567423647,
+              "unresolved_first_hit_mass": 0.0002905980161430109,
+              "unresolved_no_hit_mass": 6.900636550411735e-05,
+              "win": 0.0003271933047420472,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-1867097936539676342": 1.920319203768532e-05,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.121762954645234e-06,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9702109850741317,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001749550544275908,
+              "certain_advantage_mass": 0.001749550544275908,
+              "certain_early_advantage": 0.0017146775685761902,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0102236044456834,
+              "draw": 0.999010088419079,
+              "early_advantage": 0.0017146775685761902,
+              "early_interval": [
+                0.0017146775685761902,
+                0.00924610340409799
+              ],
+              "frontier_before_horizon_mass": 0.002439585270041653,
+              "frontier_mass": 0.9988975074911622,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.001102492508837752,
+              "loss": 0.000624484848647852,
+              "no_hit": 0.9880268450100409,
+              "points": 0.4998704709418128,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.008058884585041603,
+              "unresolved_first_hit_mass": 0.007531425835521799,
+              "unresolved_no_hit_mass": 0.00221220000044385,
+              "win": 0.00036542673227330695,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-1867097936539676342": 1.0458407522471898e-05,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.7146775685761902e-06,
+            "recall": {
+              "-1867097936539676342": 0.00010936632560464754,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031851715894775415,
+              "certain_advantage_mass": 0.0031851715894775415,
+              "certain_early_advantage": 0.003121762954645234,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.002021670837971088,
+              "draw": 0.9992671591266473,
+              "early_advantage": 0.003121762954645234,
+              "early_interval": [
+                0.003121762954645234,
+                0.003426617368388192
+              ],
+              "frontier_before_horizon_mass": 7.578244653813188e-05,
+              "frontier_mass": 0.9991868428695915,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008131571304088264,
+              "loss": 0.0004056475686108102,
+              "no_hit": 0.9947931575725516,
+              "points": 0.49996077286806573,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0003367634543423117,
+              "unresolved_first_hit_mass": 0.00030485441374295794,
+              "unresolved_no_hit_mass": 6.900636550411735e-05,
+              "win": 0.0003271933047420472,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.121762954645234e-06,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001749550544275908,
+              "certain_advantage_mass": 0.001749550544275908,
+              "certain_early_advantage": 0.0017146775685761902,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.010223604526824692,
+              "draw": 0.999010088419079,
+              "early_advantage": 0.0017146775685761902,
+              "early_interval": [
+                0.0017146775685761902,
+                0.00924610427932229
+              ],
+              "frontier_before_horizon_mass": 0.002439585270041653,
+              "frontier_mass": 0.9988975074911622,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.001102492508837752,
+              "loss": 0.000624484848647852,
+              "no_hit": 0.9880268449288996,
+              "points": 0.4998704709418128,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.008058885460265905,
+              "unresolved_first_hit_mass": 0.007531426710746101,
+              "unresolved_no_hit_mass": 0.00221220000044385,
+              "win": 0.00036542673227330695,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.7146775685761902e-06,
+            "recall": {
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9702,
+                "frequency_recall": 0.001535345962104919,
+                "mean_support": 0.99
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031851715894775415,
+              "certain_advantage_mass": 0.0031851715894775415,
+              "certain_early_advantage": 0.003121762954645234,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00201651057330009,
+              "draw": 0.9992671591266473,
+              "early_advantage": 0.003121762954645234,
+              "early_interval": [
+                0.003121762954645234,
+                0.0034255448522421536
+              ],
+              "frontier_before_horizon_mass": 7.578244653813188e-05,
+              "frontier_mass": 0.9991868428695915,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008131571304088264,
+              "loss": 0.0004056475686108102,
+              "no_hit": 0.9947983178372225,
+              "points": 0.49996077286806573,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00033569093819627325,
+              "unresolved_first_hit_mass": 0.00030378189759691946,
+              "unresolved_no_hit_mass": 6.900636550411735e-05,
+              "win": 0.0003271933047420472,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-8916530477222717007": 3.9213605727413525e-05,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.121762954645234e-06,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9702457533096707,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001749550544275908,
+              "certain_advantage_mass": 0.001749550544275908,
+              "certain_early_advantage": 0.0017146775685761902,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.010223603206313296,
+              "draw": 0.999010088419079,
+              "early_advantage": 0.0017146775685761902,
+              "early_interval": [
+                0.0017146775685761902,
+                0.00924610400486548
+              ],
+              "frontier_before_horizon_mass": 0.002439585270041653,
+              "frontier_mass": 0.9988975074911622,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.001102492508837752,
+              "loss": 0.000624484848647852,
+              "no_hit": 0.988026846249411,
+              "points": 0.4998704709418128,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.008058885185809092,
+              "unresolved_first_hit_mass": 0.007531426436289289,
+              "unresolved_no_hit_mass": 0.00221220000044385,
+              "win": 0.00036542673227330695,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "-8916530477222717007": 2.1356442632974995e-05,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.7146775685761902e-06,
+            "recall": {
+              "-8916530477222717007": 0.0004558897117130569,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.001
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.99
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9702,
+                "frequency_recall": 0.4389359149548289,
+                "mean_support": 0.99
+              },
+              "8704797333742910878": {
+                "boost": 0.9702,
+                "frequency_recall": 0.5,
+                "mean_support": 0.99
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0031851715894775415,
+              "certain_advantage_mass": 0.0031851715894775415,
+              "certain_early_advantage": 0.003121762954645234,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.00033040395249064663,
+              "draw": 0.999267159126647,
+              "early_advantage": 0.003121762954645234,
+              "early_interval": [
+                0.003121762954645234,
+                0.003419642276465567
+              ],
+              "frontier_before_horizon_mass": 7.578244653813188e-05,
+              "frontier_mass": 0.9991868428695911,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008131571304088264,
+              "loss": 0.0004056475686108102,
+              "no_hit": 0.9964844244580316,
+              "points": 0.49996077286806556,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0003297883624196867,
+              "unresolved_first_hit_mass": 0.00029787932182033283,
+              "unresolved_no_hit_mass": 6.900636550411735e-05,
+              "win": 0.0003271933047420472,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "2776049323298866377": 0.0008844928448623468,
+              "8704797333742910878": 0.001
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.121762954645234e-06,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.9832802902656539,
+              "8704797333742910878": 0.9851
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.001749550544275908,
+              "certain_advantage_mass": 0.001749550544275908,
+              "certain_early_advantage": 0.0017146775685761902,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.010047174230654463,
+              "draw": 0.999010088419079,
+              "early_advantage": 0.0017146775685761902,
+              "early_interval": [
+                0.0017146775685761902,
+                0.0092453766487252
+              ],
+              "frontier_before_horizon_mass": 0.002439585270041653,
+              "frontier_mass": 0.9988975074911622,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.001102492508837752,
+              "loss": 0.000624484848647852,
+              "no_hit": 0.9882032752250697,
+              "points": 0.4998704709418128,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.008058157829668814,
+              "unresolved_first_hit_mass": 0.00753069908014901,
+              "unresolved_no_hit_mass": 0.00221220000044385,
+              "win": 0.00036542673227330695,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.001,
+            "frequencies": {
+              "2776049323298866377": 0.0004817108845304213,
+              "8704797333742910878": 0.001
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 1.7146775685761902e-06,
+            "recall": {
+              "2776049323298866377": 0.18834158282111166,
+              "8704797333742910878": 0.5
+            },
+            "residual": 0.0
+          }
+        }
+      },
+      "0.01": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.03651086291258638,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032283968079516445,
+              "certain_advantage_mass": 0.0032283968079516445,
+              "certain_early_advantage": 0.0031641289908828883,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017733767831663804,
+              "draw": 0.9992748992872802,
+              "early_advantage": 0.0031641289908828883,
+              "early_interval": [
+                0.0031641289908828883,
+                0.003236928709174224
+              ],
+              "frontier_before_horizon_mass": 4.610535387100559e-06,
+              "frontier_mass": 0.9991955544895464,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008044455104540486,
+              "loss": 0.00039905858102840046,
+              "no_hit": 0.9949982264088821,
+              "points": 0.49996349177533156,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 8.978821665953562e-05,
+              "unresolved_first_hit_mass": 7.279971829133602e-05,
+              "unresolved_no_hit_mass": 4.47679245821253e-06,
+              "win": 0.00032604213169148743,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-1867097936539676342": 0.00019466489390731548,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164128990882888e-05,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9713815107795818,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0031999658253444407,
+              "certain_advantage_mass": 0.0031999658253444407,
+              "certain_early_advantage": 0.0031362631273446724,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.001937099873516993,
+              "draw": 0.9992698082691176,
+              "early_advantage": 0.0031362631273446724,
+              "early_interval": [
+                0.0031362631273446724,
+                0.003366117095691089
+              ],
+              "frontier_before_horizon_mass": 5.142319335593753e-05,
+              "frontier_mass": 0.9991898245031133,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008101754968869279,
+              "loss": 0.0004033924258987695,
+              "no_hit": 0.9948629343011387,
+              "points": 0.4999617034395425,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00025665631362248396,
+              "unresolved_first_hit_mass": 0.00022985396834641623,
+              "unresolved_no_hit_mass": 4.692051475004043e-05,
+              "win": 0.00032679930498369315,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-1867097936539676342": 0.00019293308022788548,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1362631273446726e-05,
+            "recall": {
+              "-1867097936539676342": 0.035887333024525535,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032283968079516445,
+              "certain_advantage_mass": 0.0032283968079516445,
+              "certain_early_advantage": 0.0031641289908828883,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017747182199415795,
+              "draw": 0.9992748992872802,
+              "early_advantage": 0.0031641289908828883,
+              "early_interval": [
+                0.0031641289908828883,
+                0.003251398013689348
+              ],
+              "frontier_before_horizon_mass": 4.610535387100559e-06,
+              "frontier_mass": 0.9991955544895464,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008044455104540486,
+              "loss": 0.00039905858102840046,
+              "no_hit": 0.9949968849721069,
+              "points": 0.49996349177533156,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0001042575211746591,
+              "unresolved_first_hit_mass": 8.726902280645951e-05,
+              "unresolved_no_hit_mass": 4.47679245821253e-06,
+              "win": 0.00032604213169148743,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164128990882888e-05,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0031999658253444407,
+              "certain_advantage_mass": 0.0031999658253444407,
+              "certain_early_advantage": 0.0031362631273446724,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0019371489915108871,
+              "draw": 0.9992698082691176,
+              "early_advantage": 0.0031362631273446724,
+              "early_interval": [
+                0.0031362631273446724,
+                0.003366646903151247
+              ],
+              "frontier_before_horizon_mass": 5.142319335593753e-05,
+              "frontier_mass": 0.9991898245031133,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008101754968869279,
+              "loss": 0.0004033924258987695,
+              "no_hit": 0.9948628851831448,
+              "points": 0.4999617034395425,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.0002571861210826421,
+              "unresolved_first_hit_mass": 0.00023038377580657447,
+              "unresolved_no_hit_mass": 4.692051475004043e-05,
+              "win": 0.00032679930498369315,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1362631273446726e-05,
+            "recall": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.13645432190001622,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032283968079516445,
+              "certain_advantage_mass": 0.0032283968079516445,
+              "certain_early_advantage": 0.0031641289908828883,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017694650737655343,
+              "draw": 0.9992748992872802,
+              "early_advantage": 0.0031641289908828883,
+              "early_interval": [
+                0.0031641289908828883,
+                0.003250306192930042
+              ],
+              "frontier_before_horizon_mass": 4.610535387100559e-06,
+              "frontier_mass": 0.9991955544895464,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008044455104540486,
+              "loss": 0.00039905858102840046,
+              "no_hit": 0.9950021381182829,
+              "points": 0.49996349177533156,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010316570041535316,
+              "unresolved_first_hit_mass": 8.617720204715357e-05,
+              "unresolved_no_hit_mass": 4.47679245821253e-06,
+              "win": 0.00032604213169148743,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-8916530477222717007": 0.0003975126834991735,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164128990882888e-05,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9743501283732676,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0031999658253444407,
+              "certain_advantage_mass": 0.0031999658253444407,
+              "certain_early_advantage": 0.0031362631273446724,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0019364310320538385,
+              "draw": 0.9992698082691176,
+              "early_advantage": 0.0031362631273446724,
+              "early_interval": [
+                0.0031362631273446724,
+                0.003366497681520385
+              ],
+              "frontier_before_horizon_mass": 5.142319335593753e-05,
+              "frontier_mass": 0.9991898245031133,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008101754968869279,
+              "loss": 0.0004033924258987695,
+              "no_hit": 0.9948636031426017,
+              "points": 0.4999617034395425,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00025703689945178,
+              "unresolved_first_hit_mass": 0.00023023455417571246,
+              "unresolved_no_hit_mass": 4.692051475004043e-05,
+              "win": 0.00032679930498369315,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "-8916530477222717007": 0.0003939762579567305,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1362631273446726e-05,
+            "recall": {
+              "-8916530477222717007": 0.13436198794014212,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.01
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9900990099009901
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9877138986889991,
+                "mean_support": 0.9900990099009901
+              },
+              "8704797333742910878": {
+                "boost": 0.9702970297029703,
+                "frequency_recall": 0.9900990099009901,
+                "mean_support": 0.9900990099009901
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032283968079516445,
+              "certain_advantage_mass": 0.0032283968079516445,
+              "certain_early_advantage": 0.0031641289908828883,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 3.174583439919121e-05,
+              "draw": 0.9992748992872801,
+              "early_advantage": 0.0031641289908828883,
+              "early_interval": [
+                0.0031641289908828883,
+                0.0032442096788900757
+              ],
+              "frontier_before_horizon_mass": 4.610535387100559e-06,
+              "frontier_mass": 0.9991955544895463,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008044455104540486,
+              "loss": 0.00039905858102840046,
+              "no_hit": 0.9967398573576491,
+              "points": 0.4999634917753315,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.70691863753872e-05,
+              "unresolved_first_hit_mass": 8.008068800718758e-05,
+              "unresolved_no_hit_mass": 4.47679245821253e-06,
+              "win": 0.00032604213169148743,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "2776049323298866377": 0.008966202362035134,
+              "8704797333742910878": 0.01
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 3.164128990882888e-05,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.999635066297693,
+              "8704797333742910878": 0.9997059111851779
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0031999658253444407,
+              "certain_advantage_mass": 0.0031999658253444407,
+              "certain_early_advantage": 0.0031362631273446724,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0002306617727282765,
+              "draw": 0.9992698082691176,
+              "early_advantage": 0.0031362631273446724,
+              "early_interval": [
+                0.0031362631273446724,
+                0.0033596090398086958
+              ],
+              "frontier_before_horizon_mass": 5.142319335593753e-05,
+              "frontier_mass": 0.9991898245031133,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008101754968869279,
+              "loss": 0.0004033924258987695,
+              "no_hit": 0.9965693724019273,
+              "points": 0.4999617034395425,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00025014825774009094,
+              "unresolved_first_hit_mass": 0.00022334591246402332,
+              "unresolved_no_hit_mass": 4.692051475004043e-05,
+              "win": 0.00032679930498369315,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.01,
+            "frequencies": {
+              "2776049323298866377": 0.008886435581330942,
+              "8704797333742910878": 0.01
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 3.1362631273446726e-05,
+            "recall": {
+              "2776049323298866377": 0.9874951132999134,
+              "8704797333742910878": 0.9900990099009901
+            },
+            "residual": 0.0
+          }
+        }
+      },
+      "0.1": {
+        "Nf6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "-1867097936539676342": {
+                "boost": 0.9799020097990201,
+                "frequency_recall": 0.7912967525745261,
+                "mean_support": 0.9999000099990001
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032292611968826883,
+              "certain_advantage_mass": 0.0032292611968826883,
+              "certain_early_advantage": 0.0031649761984637583,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017684042898990387,
+              "draw": 0.9992750540698218,
+              "early_advantage": 0.0031649761984637583,
+              "early_interval": [
+                0.0031649761984637583,
+                0.003233056968415452
+              ],
+              "frontier_before_horizon_mass": 3.187287237712427e-06,
+              "frontier_mass": 0.9991957286986799,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042713013204411,
+              "loss": 0.0003989268188734809,
+              "no_hit": 0.9950023345132184,
+              "points": 0.4999635461462157,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 8.477089732247437e-05,
+              "unresolved_first_hit_mass": 6.808076995169387e-05,
+              "unresolved_no_hit_mass": 3.1863733317189807e-06,
+              "win": 0.00032601911130483024,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-1867097936539676342": 0.0019471754634623436,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031649761984637583,
+            "processed_states": 8468,
+            "recall": {
+              "-1867097936539676342": 0.9958054841783301,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032289712304253036,
+              "certain_advantage_mass": 0.0032289712304253036,
+              "certain_early_advantage": 0.0031646919956332133,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017703435496881745,
+              "draw": 0.9992750021467307,
+              "early_advantage": 0.0031646919956332133,
+              "early_interval": [
+                0.0031646919956332133,
+                0.0032372810060776656
+              ],
+              "frontier_before_horizon_mass": 3.664727668791988e-06,
+              "frontier_mass": 0.9991956702587769,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043297412234779,
+              "loss": 0.0003989710195844193,
+              "no_hit": 0.9950006852198867,
+              "points": 0.4999635279070504,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 8.937922884833251e-05,
+              "unresolved_first_hit_mass": 7.258901044445236e-05,
+              "unresolved_no_hit_mass": 3.6192551621230866e-06,
+              "win": 0.0003260268336850307,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-1867097936539676342": 0.0019469988364760682,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003164691995633214,
+            "recall": {
+              "-1867097936539676342": 0.7912667890286886,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "d4_only": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032292611968826883,
+              "certain_advantage_mass": 0.0032292611968826883,
+              "certain_early_advantage": 0.0031649761984637583,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017697798270993358,
+              "draw": 0.9992750540698218,
+              "early_advantage": 0.0031649761984637583,
+              "early_interval": [
+                0.0031649761984637583,
+                0.0032478940945409227
+              ],
+              "frontier_before_horizon_mass": 3.187287237712427e-06,
+              "frontier_mass": 0.9991957286986799,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042713013204411,
+              "loss": 0.0003989268188734809,
+              "no_hit": 0.9950009589760181,
+              "points": 0.4999635461462157,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.960802344794495e-05,
+              "unresolved_first_hit_mass": 8.291789607716446e-05,
+              "unresolved_no_hit_mass": 3.1863733317189807e-06,
+              "win": 0.00032601911130483024,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031649761984637583,
+            "processed_states": 8468,
+            "recall": {
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032289712304253036,
+              "certain_advantage_mass": 0.0032289712304253036,
+              "certain_early_advantage": 0.0031646919956332133,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017714364520585565,
+              "draw": 0.9992750021467307,
+              "early_advantage": 0.0031646919956332133,
+              "early_interval": [
+                0.0031646919956332133,
+                0.0032490695133668046
+              ],
+              "frontier_before_horizon_mass": 3.664727668791988e-06,
+              "frontier_mass": 0.9991956702587769,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043297412234779,
+              "loss": 0.0003989710195844193,
+              "no_hit": 0.9949995923175163,
+              "points": 0.4999635279070504,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010116773613747148,
+              "unresolved_first_hit_mass": 8.437751773359136e-05,
+              "unresolved_no_hit_mass": 3.6192551621230866e-06,
+              "win": 0.0003260268336850307,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003164691995633214,
+            "recall": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "-8916530477222717007": {
+                "boost": 0.9799020097990201,
+                "frequency_recall": 0.9405122459939383,
+                "mean_support": 0.9999000099990001
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032292611968826883,
+              "certain_advantage_mass": 0.0032292611968826883,
+              "certain_early_advantage": 0.0031649761984637583,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017643933806851732,
+              "draw": 0.9992750540698218,
+              "early_advantage": 0.0031649761984637583,
+              "early_interval": [
+                0.0031649761984637583,
+                0.0032467745684861007
+              ],
+              "frontier_before_horizon_mass": 3.187287237712427e-06,
+              "frontier_mass": 0.9991957286986799,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042713013204411,
+              "loss": 0.0003989268188734809,
+              "no_hit": 0.9950063454224323,
+              "points": 0.4999635461462157,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.848849739312285e-05,
+              "unresolved_first_hit_mass": 8.179837002234236e-05,
+              "unresolved_no_hit_mass": 3.1863733317189807e-06,
+              "win": 0.00032601911130483024,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-8916530477222717007": 0.003976202016647108,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031649761984637583,
+            "processed_states": 8468,
+            "recall": {
+              "-8916530477222717007": 0.9988044157029079,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032289712304253036,
+              "certain_advantage_mass": 0.0032289712304253036,
+              "certain_early_advantage": 0.0031646919956332133,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 0.0017663648839669809,
+              "draw": 0.9992750021467307,
+              "early_advantage": 0.0031646919956332133,
+              "early_interval": [
+                0.0031646919956332133,
+                0.0032480154320336284
+              ],
+              "frontier_before_horizon_mass": 3.664727668791988e-06,
+              "frontier_mass": 0.9991956702587769,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043297412234779,
+              "loss": 0.0003989710195844193,
+              "no_hit": 0.9950046638856078,
+              "points": 0.4999635279070504,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 0.00010011365480429515,
+              "unresolved_first_hit_mass": 8.332343640041499e-05,
+              "unresolved_no_hit_mass": 3.6192551621230866e-06,
+              "win": 0.0003260268336850307,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "-8916530477222717007": 0.003975841338016856,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003164691995633214,
+            "recall": {
+              "-8916530477222717007": 0.9405020945364474,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        },
+        "exd4_Nxd4": {
+          "contextual": {
+            "anchor_frequencies": {
+              "8704797333742910878": 0.1
+            },
+            "anchor_strengths": {
+              "8704797333742910878": 0.9999000099990001
+            },
+            "components": {
+              "2776049323298866377": {
+                "boost": 0.9799020097990201,
+                "frequency_recall": 0.9998756934433933,
+                "mean_support": 0.9999000099990001
+              },
+              "8704797333742910878": {
+                "boost": 0.9799020097990202,
+                "frequency_recall": 0.9999000099990001,
+                "mean_support": 0.9999000099990002
+              }
+            },
+            "conditional_metrics": {
+              "advantage": 0.0032292611968826883,
+              "certain_advantage_mass": 0.0032292611968826883,
+              "certain_early_advantage": 0.0031649761984637583,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 2.5703890634169582e-05,
+              "draw": 0.9992750540698216,
+              "early_advantage": 0.0031649761984637583,
+              "early_interval": [
+                0.0031649761984637583,
+                0.003240701208497141
+              ],
+              "frontier_before_horizon_mass": 3.187287237712427e-06,
+              "frontier_mass": 0.9991957286986798,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008042713013204411,
+              "loss": 0.0003989268188734809,
+              "no_hit": 0.9967450349124831,
+              "points": 0.49996354614621563,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.241513740416292e-05,
+              "unresolved_first_hit_mass": 7.572501003338243e-05,
+              "unresolved_no_hit_mass": 3.1863733317189807e-06,
+              "win": 0.00032601911130483024,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "2776049323298866377": 0.08968627516425973,
+              "8704797333742910878": 0.1
+            },
+            "method": "exact_dag_pooled_context",
+            "per_game_early_advantage_contribution": 0.00031649761984637583,
+            "processed_states": 8468,
+            "recall": {
+              "2776049323298866377": 0.9999975016880434,
+              "8704797333742910878": 0.9999979904019397
+            }
+          },
+          "frequency_only": {
+            "conditional_metrics": {
+              "advantage": 0.0032289712304253036,
+              "certain_advantage_mass": 0.0032289712304253036,
+              "certain_early_advantage": 0.0031646919956332133,
+              "conversion_given_advantage": 0.0,
+              "disadvantage": 2.7731182974252973e-05,
+              "draw": 0.9992750021467306,
+              "early_advantage": 0.0031646919956332133,
+              "early_interval": [
+                0.0031646919956332133,
+                0.003241878156022648
+              ],
+              "frontier_before_horizon_mass": 3.664727668791988e-06,
+              "frontier_mass": 0.9991956702587768,
+              "horizon_mass": 0.0,
+              "human_end_mass": 0.0008043297412234779,
+              "loss": 0.0003989710195844193,
+              "no_hit": 0.9967432975866005,
+              "points": 0.49996352790705034,
+              "repetition_mass": 0.0,
+              "terminal_mass": 0.0,
+              "unknown_eval_mass": 9.397637879331484e-05,
+              "unresolved_first_hit_mass": 7.71861603894347e-05,
+              "unresolved_no_hit_mass": 3.6192551621230866e-06,
+              "win": 0.0003260268336850307,
+              "win_after_advantage": 0.0
+            },
+            "entry_probability": 0.1,
+            "frequencies": {
+              "2776049323298866377": 0.08967813978211787,
+              "8704797333742910878": 0.1
+            },
+            "iterations": 1,
+            "method": "exact_dag",
+            "per_game_early_advantage_contribution": 0.0003164691995633214,
+            "recall": {
+              "2776049323298866377": 0.9998756708915991,
+              "8704797333742910878": 0.9999000099990001
+            },
+            "residual": 0.0
+          }
+        }
+      }
+    }
+  },
+  "sensitivity": {
+    "Blitz": {
+      "0.9": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.891089108910891,
+            "frequency_recall": 0.03647054932584638,
+            "mean_support": 0.99009900990099
+          },
+          "8704797333742910878": {
+            "boost": 0.8910891089108911,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.0032269188849453835,
+          "certain_advantage_mass": 0.0032269188849453835,
+          "certain_early_advantage": 0.0031626770987015006,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0013118089946840027,
+          "draw": 0.9992747784048656,
+          "early_advantage": 0.0031626770987015006,
+          "frontier_before_horizon_mass": 5.962813114816613e-06,
+          "frontier_mass": 0.9991954105831601,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.000804589416840145,
+          "loss": 0.0003991466695538403,
+          "no_hit": 0.9954612721203706,
+          "points": 0.49996346412801346,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 0.00010853782754085323,
+          "unresolved_first_hit_mass": 8.545838952285217e-05,
+          "unresolved_no_hit_mass": 5.6546739596921355e-06,
+          "win": 0.0003260749255806977,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.0001945533241564385,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.1626770987015006e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.8950611489364783,
+          "8704797333742910878": 0.9989216743456524
+        }
+      },
+      "0.95": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.9405940594059407,
+            "frequency_recall": 0.036497578705606194,
+            "mean_support": 0.9900990099009902
+          },
+          "8704797333742910878": {
+            "boost": 0.9405940594059405,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.0032281426894376136,
+          "certain_advantage_mass": 0.0032281426894376136,
+          "certain_early_advantage": 0.0031638765619122085,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0013075562992018556,
+          "draw": 0.9992749041911878,
+          "early_advantage": 0.0031638765619122085,
+          "frontier_before_horizon_mass": 4.696759352188172e-06,
+          "frontier_mass": 0.9991955557259482,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.0008044442740519442,
+          "loss": 0.00039904632535113055,
+          "no_hit": 0.9954643010113604,
+          "points": 0.49996350157905484,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 0.00010332111494276929,
+          "unresolved_first_hit_mass": 8.049060838129742e-05,
+          "unresolved_no_hit_mass": 4.528683449393009e-06,
+          "win": 0.0003260494834609425,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.00019462813527250635,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.163876561912209e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.9427622323983529,
+          "8704797333742910878": 0.9994118223703559
+        }
+      },
+      "0.98": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.9702970297029703,
+            "frequency_recall": 0.03651380059319625,
+            "mean_support": 0.9900990099009901
+          },
+          "8704797333742910878": {
+            "boost": 0.9702970297029703,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.003228876972132952,
+          "certain_advantage_mass": 0.003228876972132952,
+          "certain_early_advantage": 0.003164596239838633,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0013050046530687135,
+          "draw": 0.9992749796629815,
+          "early_advantage": 0.003164596239838633,
+          "frontier_before_horizon_mass": 3.937127094611165e-06,
+          "frontier_mass": 0.9991956428116213,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.0008043571883790237,
+          "loss": 0.0003989861188295048,
+          "no_hit": 0.9954661183747984,
+          "points": 0.49996352404967986,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 0.00010019096331150258,
+          "unresolved_first_hit_mass": 7.750981562394816e-05,
+          "unresolved_no_hit_mass": 3.853089143213583e-06,
+          "win": 0.0003260342181890894,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.00019467302194214707,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.164596239838633e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.9713815980374216,
+          "8704797333742910878": 0.9997059111851779
+        }
+      }
+    },
+    "Rapid": {
+      "0.9": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.8910891089108911,
+            "frequency_recall": 0.036459783999196665,
+            "mean_support": 0.9900990099009901
+          },
+          "8704797333742910878": {
+            "boost": 0.8910891089108911,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.003226075911412281,
+          "certain_advantage_mass": 0.003226075911412281,
+          "certain_early_advantage": 0.003161854226512422,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0017867427324547312,
+          "draw": 0.999274483693961,
+          "early_advantage": 0.003161854226512422,
+          "frontier_before_horizon_mass": 8.431976853944471e-06,
+          "frontier_mass": 0.9991950867355518,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.0008049132644485694,
+          "loss": 0.0003994123642831244,
+          "no_hit": 0.9949871813561334,
+          "points": 0.49996334578873664,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 0.00010341872107813082,
+          "unresolved_first_hit_mass": 8.562909235010521e-05,
+          "unresolved_no_hit_mass": 7.94158611468835e-06,
+          "win": 0.0003261039417561573,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.00019452352136205587,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.161854226512422e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.89505997647516,
+          "8704797333742910878": 0.9989216743456524
+        }
+      },
+      "0.95": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.9405940594059405,
+            "frequency_recall": 0.03649170460608495,
+            "mean_support": 0.9900990099009901
+          },
+          "8704797333742910878": {
+            "boost": 0.9405940594059405,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.003227526471749383,
+          "certain_advantage_mass": 0.003227526471749383,
+          "certain_early_advantage": 0.0031632759542439635,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0017783890307804255,
+          "draw": 0.9992747434397854,
+          "early_advantage": 0.0031632759542439635,
+          "frontier_before_horizon_mass": 6.043575937166957e-06,
+          "frontier_mass": 0.9991953790817983,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.0008046209182019939,
+          "loss": 0.000399191249748922,
+          "no_hit": 0.9949940844974705,
+          "points": 0.49996343703035845,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 9.489983520458225e-05,
+          "unresolved_first_hit_mass": 7.761091295144792e-05,
+          "unresolved_no_hit_mass": 5.7760900793909e-06,
+          "win": 0.00032606531046573873,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.00019461187920284315,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.1632759542439636e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.9427618834419456,
+          "8704797333742910878": 0.9994118223703559
+        }
+      },
+      "0.98": {
+        "anchor_frequencies": {
+          "8704797333742910878": 0.01
+        },
+        "anchor_strengths": {
+          "8704797333742910878": 0.9900990099009901
+        },
+        "components": {
+          "-1867097936539676342": {
+            "boost": 0.9702970297029703,
+            "frequency_recall": 0.03651086291258638,
+            "mean_support": 0.9900990099009901
+          },
+          "8704797333742910878": {
+            "boost": 0.9702970297029703,
+            "frequency_recall": 0.9900990099009901,
+            "mean_support": 0.9900990099009901
+          }
+        },
+        "conditional_metrics": {
+          "advantage": 0.0032283968079516445,
+          "certain_advantage_mass": 0.0032283968079516445,
+          "certain_early_advantage": 0.0031641289908828883,
+          "conversion_given_advantage": 0.0,
+          "disadvantage": 0.0017733767831663804,
+          "draw": 0.9992748992872802,
+          "early_advantage": 0.0031641289908828883,
+          "frontier_before_horizon_mass": 4.610535387100559e-06,
+          "frontier_mass": 0.9991955544895464,
+          "horizon_mass": 0.0,
+          "human_end_mass": 0.0008044455104540486,
+          "loss": 0.00039905858102840046,
+          "no_hit": 0.9949982264088821,
+          "points": 0.49996349177533156,
+          "repetition_mass": 0.0,
+          "terminal_mass": 0.0,
+          "unknown_eval_mass": 8.978821665953562e-05,
+          "unresolved_first_hit_mass": 7.279971829133602e-05,
+          "unresolved_no_hit_mass": 4.47679245821253e-06,
+          "win": 0.00032604213169148743,
+          "win_after_advantage": 0.0
+        },
+        "entry_probability": 0.01,
+        "frequencies": {
+          "-1867097936539676342": 0.00019466489390731548,
+          "8704797333742910878": 0.01
+        },
+        "method": "exact_dag_pooled_context",
+        "per_game_early_advantage_contribution": 3.164128990882888e-05,
+        "processed_states": 8468,
+        "recall": {
+          "-1867097936539676342": 0.9713815107795818,
+          "8704797333742910878": 0.9997059111851779
+        }
+      }
+    }
+  }
+}
