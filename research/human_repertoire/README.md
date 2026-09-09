@@ -539,3 +539,18 @@ embedded in the frozen manifest. Outputs stay under `_artifacts/maia_stratified/
 No frozen earlier runner is modified. New Maia chess backends should initialise
 with `HashedBoard` so pinned en-passant state survives FEN serialization and
 retains its Polyglot key. This changes serialization, not legal move support.
+
+## Empirical opponents and exposure recall
+
+The [report](../../docs/human_repertoire/exposure_report.md) records the completed
+exact comparison. All outputs stay under `_artifacts/exposure/`. Preparation
+uses existing read-only source tables and eval arrays, with bounded streaming
+and Maia inference; check shared workload headroom before preparing new inputs.
+Frozen snapshots can be compared and verified without loading Maia or engines.
+
+```powershell
+& research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe -B -m research.human_repertoire.exposure_real prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.exposure_real compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_exposure
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
+```

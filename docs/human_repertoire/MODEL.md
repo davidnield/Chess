@@ -353,3 +353,20 @@ X-FEN en-passant serialization. Polyglot retains the EP file for an adjacent
 pawn even if its capture is pinned; legal-only FEN loses that hash information.
 The adapter preserves legal moves and the existing key definition. Earlier
 frozen source and successful results remain intact.
+
+## Encounter-based recall
+
+`exposure_recall.py` replaces a constant recall scenario with the configurable
+curve r(f)=f²/(f²+.001²), where f is the probability of encountering a studied
+position at least once per all games. Exposure depends on the candidate book
+and upstream recall/fallback decisions. DAG probability flow merges incoming
+routes exactly. Cyclic graphs use bounded path-state exposure with two-start
+damped fixed-point checks; agreement is explicitly not a uniqueness proof.
+Recognition after deviations is enabled, and repeated visits count only once
+for exposure. The underlying evaluator still applies recall at each decision.
+
+`exposure_real.py` uses full empirical opponent counts with explicit omitted
+mass and ending hazards, Maia-1400 only for our fallback, and declared boundary
+entry scenarios. It compares fixed books rather than claiming a general
+frequency-dependent optimiser. See `exposure_report.md` for completed results,
+cohort caveats, neutral horizon outcomes and the unresolved real book ranking.

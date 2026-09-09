@@ -1,0 +1,68 @@
+{
+  "cohort": "Artifact tag 2013-2026 ge1800 brc; canonical pooler documents mean_elo>=1800 and pooled BRC. No generation sidecar found; not a claim of both-player/gap filtering.",
+  "extractor_sha256": "6e7ca5437ae89bfa608c827bd28cf69995d67af605204cbed93a236a38a98a15",
+  "requested": {
+    "-1177957030319473835": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPPKPPP/RNBQ1B1R b kq - 3 3",
+    "-1239853101460543974": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPPQPPP/RNB1KB1R b KQkq - 3 3",
+    "-1867097936539676342": "r1bqkb1r/pppp1ppp/2n2n2/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 1 4",
+    "-1986585343767608096": "r1bqkbnr/pppp1ppp/2n5/4p3/4P2P/5N2/PPPP1PP1/RNBQKB1R b KQkq - 0 3",
+    "-2629918731446873981": "r1bqkbnr/pppp1ppp/2n5/4p3/4P1P1/5N2/PPPP1P1P/RNBQKB1R b KQkq - 0 3",
+    "-2996753183883934134": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/3P1N2/PPP2PPP/RNBQKB1R b KQkq - 0 3",
+    "-3298655130849308230": "r1bqkbnr/pppp1ppp/2n5/4p3/1P2P3/5N2/P1PP1PPP/RNBQKB1R b KQkq - 0 3",
+    "-4139278692761347928": "r1bqkbnr/pppp1ppp/2n5/4N3/4P3/8/PPPP1PPP/RNBQKB1R b KQkq - 0 3",
+    "-4757902768255381284": "r1bqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3",
+    "-5192498777614879609": "r1bqkbnr/pppp1ppp/B1n5/4p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+    "-5525470167673343010": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/P4N2/1PPP1PPP/RNBQKB1R b KQkq - 0 3",
+    "-6653703443801891677": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 3 3",
+    "-797638329539701095": "r1bqkbnr/pppp1ppp/2n5/4p3/2P1P3/5N2/PP1P1PPP/RNBQKB1R b KQkq - 0 3",
+    "-8052864183783345044": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N1P/PPPP1PP1/RNBQKB1R b KQkq - 0 3",
+    "-834354113145858317": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/1P3N2/P1PP1PPP/RNBQKB1R b KQkq - 0 3",
+    "-8916530477222717007": "r1bqkbnr/ppp2ppp/2np4/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 4",
+    "-8981655757801783481": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/2N2N2/PPPP1PPP/R1BQKB1R b KQkq - 3 3",
+    "1015385342199689752": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/2P2N2/PP1P1PPP/RNBQKB1R b KQkq - 0 3",
+    "1370459753361221712": "r1bqkbnr/pppp1ppp/2n5/4p3/P3P3/5N2/1PPP1PPP/RNBQKB1R b KQkq - 0 3",
+    "1981041941088873272": "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+    "2776049323298866377": "r1bqkbnr/pppp1ppp/2n5/8/3pP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 4",
+    "3296642263811342317": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/3B1N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+    "3323452959627380026": "r1bqkbnr/pppp1ppp/2n5/4p1N1/4P3/8/PPPP1PPP/RNBQKB1R b KQkq - 3 3",
+    "480263392647169361": "r1bqkbnr/pppp1ppp/2n5/4p3/3NP3/8/PPPP1PPP/RNBQKB1R b KQkq - 3 3",
+    "5295778256282435385": "r1bqkbnr/pppp1ppp/2n5/4p3/4P2N/8/PPPP1PPP/RNBQKB1R b KQkq - 3 3",
+    "5409798013178080797": "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3",
+    "6064972452962018726": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5NP1/PPPP1P1P/RNBQKB1R b KQkq - 0 3",
+    "814347751279441725": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPPBPPP/RNBQK2R b KQkq - 3 3",
+    "8704797333742910878": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    "8988501844766418772": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKBR1 b Qkq - 3 3",
+    "9163549112339092048": "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/N4N2/PPPP1PPP/R1BQKB1R b KQkq - 3 3"
+  },
+  "seconds": 7.703000000037719,
+  "sources": {
+    "aux": {
+      "footer_sha256": "c6a719ae64c094f9638ebdaae6a803c7db5ca1b8bf64c7d6e7de7db240e8c742",
+      "mtime_ns": 1787630688619213700,
+      "path": "E:\\chess\\position-stats\\position_stats_aux_pooled_ge1800_2013_2026_brc.parquet",
+      "size": 307614770
+    },
+    "stats": {
+      "footer_sha256": "cd955451590201636ea1a935f71732d78b1822210a16a9b5ddd7921d4153ffff",
+      "mtime_ns": 1787624676436202100,
+      "path": "E:\\chess\\position-stats\\position_stats_pooled_ge1800_2013_2026_brc.parquet",
+      "size": 1365496715
+    }
+  },
+  "work": {
+    "aux": {
+      "decoded_bytes": 884587525,
+      "row_groups_read_hash": 147,
+      "row_groups_read_payload": 29,
+      "schema": "position_hash: int64\nterm_normal_total: int64\nterm_normal_white_wins: int64\nterm_normal_draws: int64\nterm_normal_black_wins: int64\nterm_flag_total: int64\nterm_flag_white_wins: int64\nterm_flag_draws: int64\nterm_flag_black_wins: int64\nterm_other_total: int64\nterm_other_white_wins: int64\nterm_other_draws: int64\nterm_other_black_wins: int64\nhorizon_total: int64\nhorizon_white_wins: int64\nhorizon_draws: int64\nhorizon_black_wins: int64\nother_total: int64\nother_white_wins: int64\nother_draws: int64\nother_black_wins: int64\nother_edges: int32\nother_eval_mean: double\nother_eval_min: double\nother_eval_max: double\nother_eval_cov: double",
+      "source_rows": 17788308
+    },
+    "stats": {
+      "decoded_bytes": 3425594201,
+      "row_groups_read_hash": 255,
+      "row_groups_read_payload": 159,
+      "schema": "parent_hash: int64\nmove_san: large_string\nparent_epd: large_string\nchild_hash: int64\nply: int32\nwhite_wins: int64\ndraws: int64\nblack_wins: int64\ntotal: int64\nevent: large_string\nelo_band: int64\nwhite_score_avg: double",
+      "source_rows": 31266115
+    }
+  }
+}

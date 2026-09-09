@@ -2,12 +2,20 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current direction:** [full empirical opponent distributions](docs/human_repertoire/empirical_opponent_direction.md),
+**Current result:** [empirical opponents and encounter-based recall](docs/human_repertoire/exposure_report.md)
+are implemented and independently verified: 117 tests pass, with 24 exact
+scenario/book comparisons. A synthetic one-card example changes the preferred
+study choice. The real example establishes exposure, but its short horizon
+does not resolve a package ranking. Next priority is a bounded continuation
+comparison beyond the studied follow-ups, preserving empirical opponent counts
+and explicit opening-entry sensitivity.
+
+Direction: [full empirical opponent distributions](docs/human_repertoire/empirical_opponent_direction.md),
 with Maia-1400 for our own fallback. The user clarified that the large existing
 positions dataset should drive opponent moves. The research-sample prior's
 sparsity must not be mistaken for absence in that database. Maia-2000 opponent
-work is diagnostic only; connect a bounded snapshot of authoritative empirical
-counts before further opponent modeling.
+work is diagnostic only. A bounded snapshot of authoritative empirical counts
+now drives the exposure comparison.
 
 Earlier Maia work: [use a pretrained Maia human policy](docs/human_repertoire/maia_direction.md).
 The custom M10 benchmark is paused after its cost pilot. [Maia-2 integration](docs/human_repertoire/maia_integration.md)

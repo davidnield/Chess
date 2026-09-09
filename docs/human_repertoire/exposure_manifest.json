@@ -1,0 +1,144 @@
+{
+  "books": {
+    "Nf6_Nc3": {
+      "-1867097936539676342": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "d4_only": {
+      "8704797333742910878": "d4"
+    },
+    "d6_Nc3": {
+      "-8916530477222717007": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "exd4_Nxd4": {
+      "2776049323298866377": "Nxd4",
+      "8704797333742910878": "d4"
+    }
+  },
+  "curve": {
+    "midpoint": 0.001,
+    "power": 2
+  },
+  "entries": [
+    0.1,
+    0.01,
+    0.001
+  ],
+  "eval_sources": {
+    "E:\\chess\\eval_arrays\\eval_arrays.meta.json": {
+      "mtime_ns": 1785993454057331100,
+      "path": "E:\\chess\\eval_arrays\\eval_arrays.meta.json",
+      "size": 137
+    },
+    "E:\\chess\\eval_arrays\\eval_cp.npy": {
+      "mtime_ns": 1785902883307954800,
+      "path": "E:\\chess\\eval_arrays\\eval_cp.npy",
+      "size": 799998016
+    },
+    "E:\\chess\\eval_arrays\\eval_hash.npy": {
+      "mtime_ns": 1785902882763251000,
+      "path": "E:\\chess\\eval_arrays\\eval_hash.npy",
+      "size": 3199991680
+    },
+    "E:\\chess\\unified_eval_db.parquet": {
+      "mtime_ns": 1785532993604486400,
+      "path": "E:\\chess\\unified_eval_db.parquet",
+      "size": 3804112433
+    }
+  },
+  "eval_verification": "verified against unified_eval_db.parquet (399,998,944 rows)",
+  "gates": {
+    "base": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 22,
+        "move": "d4",
+        "parent_cp": 39,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 37,
+        "move": "Nxd4",
+        "parent_cp": 42,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 4,
+        "move": "Nc3",
+        "parent_cp": 103,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 65,
+        "move": "Nc3",
+        "parent_cp": 80,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ],
+    "deeper": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 17,
+        "move": "d4",
+        "parent_cp": 47,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 14,
+        "move": "Nxd4",
+        "parent_cp": 14,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 17,
+        "move": "Nc3",
+        "parent_cp": 125,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 66,
+        "move": "Nc3",
+        "parent_cp": 90,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ]
+  },
+  "horizon": 3,
+  "identity": {
+    "code": {
+      "exposure_real.py": "8857756db74c554f66e7cf9a51ffa2a96c43b8b25fb621698df9162a5fe24723",
+      "exposure_recall.py": "f9672e0e4dce510157694cecc2fd8798456965790868261d355e6430d14a4b10",
+      "hashed_board.py": "d0fe960dfe20c3c53e061974c732e5afc2ca302b0863aa9e457b673898ae3afc",
+      "maia_policy.py": "76d8cb33c7328bceaca5eaf9013bdcadaf2392503f79e9caed6b9edb460d148d",
+      "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a"
+    },
+    "empirical_sha256": "93d05c0200498d27a8b0cdc61d82428f81915bb08a2c000403aecfe4fe5898a4",
+    "maia_config_sha256": "a7d3e3ab3276860972d9535dba6cff110363f864f6691490417ff7a5d5fc657b",
+    "plan_sha256": "96f6172515c0d0ce997d42a0bcc079bced7aa4c518afc9842756c150fa88d23f"
+  },
+  "inference_calls": 706,
+  "seconds": 62.5,
+  "snapshots": {
+    "accounting": "ab1c24dab61d2a2adb543ace239d1311e03481cde42f06cb335e33a7b7db6b43",
+    "fens": "2692c3b63086ae7e3b22f88918fb5c66e9570257ac8d0d4bc5d29f38bb6b6961",
+    "graphs": "d2d94133671f6f745c947005207722197cccfa0a42c26c1db6065bf72f0a0490",
+    "overlay": "71f2ae4e52e51dacf5fe03ed2c07bed0f33ffe025f39ae94ea6b35faf6bd7d32",
+    "policies": "45039ac56728f9e4730e5abe625005e5032ee822acebfa9a9eb106c06cd007d5",
+    "scores": "71383340911961ac946361d4528d3992a1d1eb840ad5275f8b77f018164430d2"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "independent_scalar_checks": 1092,
+  "legal_graph_edges_checked": 21408,
+  "results_sha256": "1ab4c4c0420e8a3bd7269af7a98245d76123487c7dd69f6f0aceeffbba720db5",
+  "scenario_books": 24,
+  "status": "passed",
+  "verifier_sha256": "8bd7e19b927b96b5573dd9d25fa687421b4881610bd6591c1d7d77faaa9eb58f"
+}
