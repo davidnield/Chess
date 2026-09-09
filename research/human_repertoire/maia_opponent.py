@@ -68,6 +68,11 @@ def runner():
         return MaiaFallbackKernels(policy,event,our_color,opponent_rating,opponent,opponent.name,cap)
     module.MaiaFallbackKernels=kernels
     module.identity=identity; module.source=source; module.config=config
+    def engine(c):
+        child=isolated('calibration_experiment.py','m7/',PREFIX)
+        child.verified_cases=lambda unused:module.verified(c)
+        child.engine(c)
+    module.engine=engine
     return module
 
 

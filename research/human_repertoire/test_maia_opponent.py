@@ -31,3 +31,12 @@ class OpponentTests(unittest.TestCase):
 
     def test_scenario_ratings_must_be_explicit(self):
         with self.assertRaises(ValueError): MaiaOpponentKernels(Mock(),'Rapid',chess.WHITE,None,2000)
+
+    def test_nested_engine_targets_opponent_artifacts_only(self):
+        from unittest.mock import patch
+        from .maia_opponent import runner, PREFIX
+        parent, child=Mock(),Mock()
+        with patch('research.human_repertoire.maia_opponent.isolated',side_effect=[parent,child]) as factory:
+            module=runner(); module.engine({'example':True})
+            self.assertEqual(factory.call_args.args,('calibration_experiment.py','m7/',PREFIX))
+            child.engine.assert_called_once_with({'example':True})
