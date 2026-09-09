@@ -9,6 +9,7 @@ from .board_benchmark import isolated
 from .io import ROOT, output_path, sha256, write_json
 from .maia_policy import MaiaPolicy, MaiaFallbackKernels
 from .model import Config
+from .hashed_board import HashedBoard
 from .trajectory import ChessBackend, uniform, score_trace
 from .stratified import enumerate_prefixes, conditional_prefix, continue_trace, weighted_summary
 
@@ -37,6 +38,7 @@ def source(c):
 
 def identity(c):
     return {'config':c, 'code_sha256':sha256(__file__), 'sampler_sha256':sha256(ROOT/'research/human_repertoire/stratified.py'),
+        'hashed_board_sha256':sha256(ROOT/'research/human_repertoire/hashed_board.py'),
         'plan_sha256':sha256(ROOT/'docs/human_repertoire/maia_stratified_plan.md'),
         'equal_identity':equal.identity(json.loads(equal.CONFIG.read_text())),
         'equal_manifest_sha256':sha256(output_path(equal.PREFIX+'case_manifest.json')),
@@ -73,6 +75,7 @@ def prepare(c):
     paths,tables,prefixes,weights={},{},{},{}; policy=MaiaPolicy(); start=time.monotonic()
     for name in c['policies']:
         backend=ChessBackend(root.fen(),fitted,specs,train,c4,c['max_positions'])
+        backend.initial=HashedBoard(root.fen())
         backend.kernels=MaiaFallbackKernels(policy,'Blitz' if name=='maia_blitz' else 'Rapid',chess.WHITE,c['opponent_rating_input'],backend.kernels,'shared_position',cap=c['max_positions'])
         ps=enumerate_prefixes(backend,'maia1400',books[c['reference']],cfg,cap=c['prefix_cap'])
         for book in books.values():

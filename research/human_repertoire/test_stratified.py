@@ -8,6 +8,17 @@ from .stratified import enumerate_prefixes, continue_trace, weighted_summary
 
 
 class StratifiedTests(unittest.TestCase):
+    def test_pinned_en_passant_keeps_polyglot_key_through_serialization_and_copy(self):
+        import chess
+        from python.zobrist import zobrist_int64
+        from .hashed_board import HashedBoard
+        b=HashedBoard('r1b1kbnr/p1p1q1pp/2P5/1B2Pp2/8/5N2/PPP2PPP/RNBQK2R w KQkq f6 0 8')
+        self.assertFalse(b.has_legal_en_passant()); self.assertTrue(b.has_pseudo_legal_en_passant())
+        self.assertEqual(zobrist_int64(b),zobrist_int64(chess.Board(b.fen())))
+        self.assertEqual(b.fen(),b.copy(stack=False).fen())
+        self.assertEqual(b.fen().split()[3],'f6')
+        self.assertEqual(set(b.legal_moves),set(chess.Board(b.fen(en_passant='legal')).legal_moves))
+
     def test_exhaustive_prefixes_match_independent_book_oracle(self):
         for graph, book in [(demanding(), {'root':'demanding','d1':'remember1'}), (shared_reentry(), {'shared':'find'})]:
             for recall in [.4, 1]:
