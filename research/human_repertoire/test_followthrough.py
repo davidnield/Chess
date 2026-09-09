@@ -4,6 +4,12 @@ from .hashed_board import HashedBoard
 
 
 class FollowthroughTests(unittest.TestCase):
+    def test_pgn_roundtrip_preserves_every_prescription(self):
+        from .followthrough_pgn import export, verify
+        _,books,_,_=packages()
+        text=export(); verify(text,books)
+        self.assertIn('6. c3',text)
+
     def test_equal_budget_and_legal_reconstruction(self):
         root, books, forced, fens = packages()
         self.assertEqual(set(books), {'d4_only','exd4_Nxd4','Nf6_Nc3','d6_Nc3',

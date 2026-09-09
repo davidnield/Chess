@@ -382,3 +382,15 @@ distinct from current exposure, and anchors do not automatically prescribe
 moves or reduce distinct-position study cost. The user's 4.Nc3 example is a
 qualitative calibration constraint, not validation data. See
 `context_recall_report.md` for the equations, assumptions and 30 verified cases.
+
+## Bounded continuation and exposure caveat
+
+`followthrough.py` extends the empirical example to eight plies and seven fixed
+books, including equal-cost breadth and sequence packages. A common optimistic
+arrival envelope selects 64 expanded decision positions per ply; unexpanded
+nodes and empirical tails remain explicit frontiers. Earlier-layer transitions
+are cut off rather than duplicating study positions, preserving the DAG contract.
+Reported exposure/recall is exact for this truncated graph and excludes possible
+later re-entry through cutoffs. Coverage intervals freeze that solved policy;
+they are not guarantees for the full self-consistent recall model. See
+`followthrough_report.md` for the unresolved comparison and independent audit.

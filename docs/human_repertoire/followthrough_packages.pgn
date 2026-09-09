@@ -1,0 +1,76 @@
+[Event "d4_only"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "1"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } *
+
+[Event "exd4_Nxd4"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "2"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... exd4 4. Nxd4 { STUDY: prescribed White move. } *
+
+[Event "Nf6_Nc3"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "2"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... Nf6 4. Nc3 { STUDY: prescribed White move. } *
+
+[Event "d6_Nc3"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "2"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... d6 4. Nc3 { STUDY: prescribed White move. } *
+
+[Event "breadth4"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "4"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... exd4 ( 3... Nf6 4. Nc3 { STUDY: prescribed White move. } ) ( 3... d6 4. Nc3 { STUDY: prescribed White move. } ) 4. Nxd4 { STUDY: prescribed White move. } *
+
+[Event "sequence3"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "3"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... exd4 4. Nxd4 { STUDY: prescribed White move. } 4... Bc5 5. Be3 { STUDY: prescribed White move. } *
+
+[Event "sequence4"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[StudyPositions "4"]
+
+1. e4 e5 2. Nf3 Nc6 3. d4 { STUDY: prescribed White move. } 3... exd4 4. Nxd4 { STUDY: prescribed White move. } 4... Bc5 5. Be3 { STUDY: prescribed White move. } 5... Qf6 6. c3 { STUDY: prescribed White move. } *

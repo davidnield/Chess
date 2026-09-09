@@ -2,7 +2,17 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current result:** [familiar tabiya and depth-aware recall](docs/human_repertoire/context_recall_report.md)
+**Current result:** [eight-ply empirical follow-through](docs/human_repertoire/followthrough_report.md)
+compares seven fixed packages, including equal four-position breadth/sequence
+books. All 126 tests and 42 independently verified cases pass; all cards pass
+base/deeper soundness gates. 5.Be3 is the leading added-card candidate on covered
+mass, but 39–58% early computational cutoff mass prevents a firm study ranking.
+Empirical-tail mass is tiny: this is a graph expansion limit, not missing
+opponent data. Full annotated PGNs and branch-level cutoff diagnostics are
+available in the report. Next priority is reducing continuation uncertainty in
+the leading 5.Be3 contrast, especially omitted sixth-move replies.
+
+Previous result: [familiar tabiya and depth-aware recall](docs/human_repertoire/context_recall_report.md)
 is implemented: 123 tests pass and 30 comparison/sensitivity cases pass independent
 verification. The user's familiar position after 2...Nc6 now gives nearby 4.Nc3
 about 97.1% predicted recall under the stated entry scenario. This is a personal

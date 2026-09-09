@@ -1,0 +1,2146 @@
+{
+  "code_sha256": "66d7765305657b2d3f164cdb6b6f6968bf81ed3fcf0bb5054b0e482587495542",
+  "diagnostics": {
+    "Blitz": {
+      "Nf6_Nc3": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.0452297257790762,
+          "4": 0.08388230326355209,
+          "5": 0.08528763591649938,
+          "6": 0.17619483611750358,
+          "7": 0.17588602309243911
+        },
+        "by_reason": {
+          "beam": 0.5723290326418272,
+          "earlier_layer": 3.78903075839456e-07,
+          "empirical_tail": 0.0003867349414694885
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005641016653375408,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.005611183696523563,
+            "ply": 4,
+            "position": "4759649263386612098",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bc4",
+              "Qf6"
+            ]
+          },
+          {
+            "mass": 0.005272834878181002,
+            "ply": 6,
+            "position": "6419018903422452100",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.005230331958606372,
+            "ply": 6,
+            "position": "6973589887375593068",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "dxc3",
+              "Bc4",
+              "h6"
+            ]
+          },
+          {
+            "mass": 0.004992510903087777,
+            "ply": 6,
+            "position": "-2125330274083642127",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "e5",
+              "Ng4"
+            ]
+          },
+          {
+            "mass": 0.004870396327800988,
+            "ply": 6,
+            "position": "-6392828145417306617",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Bc4",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.004866667110368486,
+            "ply": 7,
+            "position": "6461883840184190190",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "Nxe4",
+              "Re1"
+            ]
+          },
+          {
+            "mass": 0.00484209607069186,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.00483533861909428,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004781586607086239,
+            "ply": 4,
+            "position": "-3083179405328710295",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "d5"
+            ]
+          }
+        ]
+      },
+      "breadth4": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.02955635314717384,
+          "4": 0.0233720638687094,
+          "5": 0.07850632768450867,
+          "6": 0.0788940515848078,
+          "7": 0.19873877696515838
+        },
+        "by_reason": {
+          "beam": 0.41504439528827436,
+          "earlier_layer": 7.146946291986405e-07,
+          "empirical_tail": 0.00025808558475635994
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.0057498448417407175,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005019745430681625,
+            "ply": 5,
+            "position": "8682556407983504046",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nb3"
+            ]
+          },
+          {
+            "mass": 0.004949207468378383,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.004602359069111907,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.0045461745500321935,
+            "ply": 5,
+            "position": "-4103184951192386593",
+            "reason": "beam",
+            "representative_continuation": [
+              "Nc3",
+              "d6",
+              "d4",
+              "Bg4",
+              "d5"
+            ]
+          },
+          {
+            "mass": 0.004245239122654587,
+            "ply": 6,
+            "position": "-6065619390985744954",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nf3",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.004218620325095043,
+            "ply": 7,
+            "position": "-3015003846347093816",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "Ne7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.004175234024397799,
+            "ply": 7,
+            "position": "8265111551481256057",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "d5",
+              "Nxc6",
+              "bxc6",
+              "exd5"
+            ]
+          },
+          {
+            "mass": 0.004134649817271677,
+            "ply": 7,
+            "position": "-8063712314666595400",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Qf6",
+              "Nxc6",
+              "Qxc6",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.004074353845053361,
+            "ply": 5,
+            "position": "-8878148043121369213",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nge7",
+              "Nc3"
+            ]
+          }
+        ]
+      },
+      "d4_only": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.047075320557983594,
+          "4": 0.08842509978524683,
+          "5": 0.0922952289296505,
+          "6": 0.17534430743807114,
+          "7": 0.17372047692557088
+        },
+        "by_reason": {
+          "beam": 0.5826975702998405,
+          "earlier_layer": 3.78903075839456e-07,
+          "empirical_tail": 0.00039810675090946207
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005641016653375408,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.005611183696523563,
+            "ply": 4,
+            "position": "4759649263386612098",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bc4",
+              "Qf6"
+            ]
+          },
+          {
+            "mass": 0.005285422092270554,
+            "ply": 6,
+            "position": "6419018903422452100",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.005230331958606372,
+            "ply": 6,
+            "position": "6973589887375593068",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "dxc3",
+              "Bc4",
+              "h6"
+            ]
+          },
+          {
+            "mass": 0.005012100161041658,
+            "ply": 6,
+            "position": "-2125330274083642127",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "e5",
+              "Ng4"
+            ]
+          },
+          {
+            "mass": 0.004885762591430271,
+            "ply": 7,
+            "position": "6461883840184190190",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "Nxe4",
+              "Re1"
+            ]
+          },
+          {
+            "mass": 0.004870396327800988,
+            "ply": 6,
+            "position": "-6392828145417306617",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Bc4",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.00484209607069186,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.00483533861909428,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004781586607086239,
+            "ply": 4,
+            "position": "-3083179405328710295",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "d5"
+            ]
+          }
+        ]
+      },
+      "d6_Nc3": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.04594451421641862,
+          "4": 0.0748275435573394,
+          "5": 0.08828234475998402,
+          "6": 0.17944178554704465,
+          "7": 0.1803407213682328
+        },
+        "by_reason": {
+          "beam": 0.5746712788199643,
+          "earlier_layer": 3.78903075839456e-07,
+          "empirical_tail": 0.0004008740432827465
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005611183696523563,
+            "ply": 4,
+            "position": "4759649263386612098",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bc4",
+              "Qf6"
+            ]
+          },
+          {
+            "mass": 0.00526101412095728,
+            "ply": 6,
+            "position": "6419018903422452100",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.005230331958606372,
+            "ply": 6,
+            "position": "6973589887375593068",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "dxc3",
+              "Bc4",
+              "h6"
+            ]
+          },
+          {
+            "mass": 0.005012100161041658,
+            "ply": 6,
+            "position": "-2125330274083642127",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "e5",
+              "Ng4"
+            ]
+          },
+          {
+            "mass": 0.004885762591430271,
+            "ply": 7,
+            "position": "6461883840184190190",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nf6",
+              "Bc4",
+              "exd4",
+              "O-O",
+              "Nxe4",
+              "Re1"
+            ]
+          },
+          {
+            "mass": 0.004870396327800988,
+            "ply": 6,
+            "position": "-6392828145417306617",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Bc4",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.004781586607086239,
+            "ply": 4,
+            "position": "-3083179405328710295",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "d5"
+            ]
+          },
+          {
+            "mass": 0.004678350581913777,
+            "ply": 6,
+            "position": "-3779938417435259372",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "c3",
+              "dxc3",
+              "Bc4",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.004609680904550976,
+            "ply": 5,
+            "position": "-8551943544072413560",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Bc5",
+              "Bc4",
+              "exd4",
+              "e5"
+            ]
+          },
+          {
+            "mass": 0.0045461745500321935,
+            "ply": 5,
+            "position": "-4103184951192386593",
+            "reason": "beam",
+            "representative_continuation": [
+              "Nc3",
+              "d6",
+              "d4",
+              "Bg4",
+              "d5"
+            ]
+          }
+        ]
+      },
+      "exd4_Nxd4": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.03253275426764624,
+          "4": 0.041512416618311586,
+          "5": 0.08952680486732632,
+          "6": 0.07394604479640172,
+          "7": 0.18995298635562832
+        },
+        "by_reason": {
+          "beam": 0.4334392244261638,
+          "earlier_layer": 7.146946291986405e-07,
+          "empirical_tail": 0.0002666901018230491
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.0057498448417407175,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005641016653375408,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.005019745430681625,
+            "ply": 5,
+            "position": "8682556407983504046",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nb3"
+            ]
+          },
+          {
+            "mass": 0.004949207468378383,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.00484209607069186,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.00483533861909428,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004602359069111907,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004245239122654587,
+            "ply": 6,
+            "position": "-6065619390985744954",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nf3",
+              "d6"
+            ]
+          },
+          {
+            "mass": 0.004218620325095043,
+            "ply": 7,
+            "position": "-3015003846347093816",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "Ne7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.004175234024397799,
+            "ply": 7,
+            "position": "8265111551481256057",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "d5",
+              "Nxc6",
+              "bxc6",
+              "exd5"
+            ]
+          }
+        ]
+      },
+      "sequence3": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.03253275426764624,
+          "4": 0.041512416618311586,
+          "5": 0.08114788489379401,
+          "6": 0.058014523655717076,
+          "7": 0.18921062230415853
+        },
+        "by_reason": {
+          "beam": 0.4084119426100118,
+          "earlier_layer": 7.146946291986405e-07,
+          "empirical_tail": 0.0002411667522871921
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.0057498448417407175,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005641016653375408,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.004949207468378383,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.00484209607069186,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.00483533861909428,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004605628158964636,
+            "ply": 7,
+            "position": "-1567522109773289550",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "d6",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.004602359069111907,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.0043755351028452625,
+            "ply": 7,
+            "position": "7878299222988119633",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Qf6",
+              "Nb5"
+            ]
+          },
+          {
+            "mass": 0.004314750554326818,
+            "ply": 7,
+            "position": "5222561360900030645",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Qe7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.004218620325095043,
+            "ply": 7,
+            "position": "-3015003846347093816",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "Ne7",
+              "Nc3"
+            ]
+          }
+        ]
+      },
+      "sequence4": {
+        "by_ply": {
+          "2": 0.00623562231730182,
+          "3": 0.03253275426764624,
+          "4": 0.041512416618311586,
+          "5": 0.08114788489379401,
+          "6": 0.058014523655717076,
+          "7": 0.17748976964778082
+        },
+        "by_reason": {
+          "beam": 0.396691089953634,
+          "earlier_layer": 7.146946291986405e-07,
+          "empirical_tail": 0.0002411667522871921
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.0057498448417407175,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005641016653375408,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.004949207468378383,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.00484209607069186,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.00483533861909428,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004605628158964636,
+            "ply": 7,
+            "position": "-1567522109773289550",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "d6",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.004602359069111907,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004314750554326818,
+            "ply": 7,
+            "position": "5222561360900030645",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Qe7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.004218620325095043,
+            "ply": 7,
+            "position": "-3015003846347093816",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "Ne7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.004175234024397799,
+            "ply": 7,
+            "position": "8265111551481256057",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "d5",
+              "Nxc6",
+              "bxc6",
+              "exd5"
+            ]
+          }
+        ]
+      }
+    },
+    "Rapid": {
+      "Nf6_Nc3": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.03916587253305743,
+          "4": 0.06174093306915603,
+          "5": 0.08126608310481663,
+          "6": 0.09493441031407818,
+          "7": 0.16530212154686388
+        },
+        "by_reason": {
+          "beam": 0.4482976325312425,
+          "earlier_layer": 2.868084312132068e-06,
+          "empirical_tail": 0.00034437252522581056
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005246120630038853,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.005236353494430629,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.004617846603238438,
+            "ply": 4,
+            "position": "-5168698804788576823",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bb5",
+              "Bc5"
+            ]
+          },
+          {
+            "mass": 0.004506624856520401,
+            "ply": 6,
+            "position": "-4522925410849623436",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6"
+            ]
+          },
+          {
+            "mass": 0.0044968436084434175,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004201910925616998,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0038914802298819955,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.0038805058443473696,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.003765391366306482,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.003718660972460523,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          }
+        ]
+      },
+      "breadth4": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.02938223897103559,
+          "4": 0.023340631245199223,
+          "5": 0.07898093621935846,
+          "6": 0.08757953433606275,
+          "7": 0.17829030011828162
+        },
+        "by_reason": {
+          "beam": 0.40352979762862806,
+          "earlier_layer": 3.1496424510934292e-06,
+          "empirical_tail": 0.00027614619166636123
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005750403216957691,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.004947261511793418,
+            "ply": 6,
+            "position": "-4522925410849623436",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6"
+            ]
+          },
+          {
+            "mass": 0.004614410033573366,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0042614528057534394,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.004259153925440599,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.004083719718608714,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004039600041858309,
+            "ply": 7,
+            "position": "1957611040034316433",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "b6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.003981518879389797,
+            "ply": 6,
+            "position": "4283122996023657241",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nf5",
+              "Qf6"
+            ]
+          },
+          {
+            "mass": 0.00371676591819641,
+            "ply": 4,
+            "position": "-2671478956410242931",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Qe7"
+            ]
+          },
+          {
+            "mass": 0.003714652729898187,
+            "ply": 6,
+            "position": "6346867292358916613",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Ne5",
+              "Bf4",
+              "Ng6"
+            ]
+          }
+        ]
+      },
+      "d4_only": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.04174706982776271,
+          "4": 0.06640416867214449,
+          "5": 0.08759517334101626,
+          "6": 0.09404524364510436,
+          "7": 0.16249641522607491
+        },
+        "by_reason": {
+          "beam": 0.45816546314979173,
+          "earlier_layer": 2.868084312132068e-06,
+          "empirical_tail": 0.0003551920508061377
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005246120630038853,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.005236353494430629,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.004617846603238438,
+            "ply": 4,
+            "position": "-5168698804788576823",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bb5",
+              "Bc5"
+            ]
+          },
+          {
+            "mass": 0.004506624856520401,
+            "ply": 6,
+            "position": "-4522925410849623436",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6"
+            ]
+          },
+          {
+            "mass": 0.0044968436084434175,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004201910925616998,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0038914802298819955,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.0038805058443473696,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.003765391366306482,
+            "ply": 5,
+            "position": "-4524589966752184796",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "d5",
+              "Nce7",
+              "Nc3"
+            ]
+          },
+          {
+            "mass": 0.003718660972460523,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          }
+        ]
+      },
+      "d6_Nc3": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.04021193728281822,
+          "4": 0.053172068076428276,
+          "5": 0.08464803111188536,
+          "6": 0.09807565580334271,
+          "7": 0.1692631041064944
+        },
+        "by_reason": {
+          "beam": 0.45124447224684594,
+          "earlier_layer": 2.868084312132068e-06,
+          "empirical_tail": 0.0003589086226192093
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005236353494430629,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.004617846603238438,
+            "ply": 4,
+            "position": "-5168698804788576823",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Bb5",
+              "Bc5"
+            ]
+          },
+          {
+            "mass": 0.004506624856520401,
+            "ply": 6,
+            "position": "-4522925410849623436",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6"
+            ]
+          },
+          {
+            "mass": 0.004201910925616998,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0038914802298819955,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.0038805058443473696,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.003718660972460523,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.0036908794504053742,
+            "ply": 7,
+            "position": "1957611040034316433",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "b6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.003625596242669131,
+            "ply": 6,
+            "position": "4283122996023657241",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nf5",
+              "Qf6"
+            ]
+          },
+          {
+            "mass": 0.0033864222104852573,
+            "ply": 7,
+            "position": "-3015003846347093816",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "Ne7",
+              "Nc3"
+            ]
+          }
+        ]
+      },
+      "exd4_Nxd4": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.03349856881068531,
+          "4": 0.04123596744390403,
+          "5": 0.088257168684689,
+          "6": 0.08265995550885058,
+          "7": 0.1687179049170727
+        },
+        "by_reason": {
+          "beam": 0.4203186191501247,
+          "earlier_layer": 3.1496424510934292e-06,
+          "empirical_tail": 0.00028324914543361677
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005750403216957691,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005246120630038853,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.004947261511793418,
+            "ply": 6,
+            "position": "-4522925410849623436",
+            "reason": "beam",
+            "representative_continuation": [
+              "c3",
+              "Bc5",
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6"
+            ]
+          },
+          {
+            "mass": 0.004614410033573366,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0044968436084434175,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.0042614528057534394,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.004259153925440599,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.004083719718608714,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004039600041858309,
+            "ply": 7,
+            "position": "1957611040034316433",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "b6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.003981518879389797,
+            "ply": 6,
+            "position": "4283122996023657241",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Nf5",
+              "Qf6"
+            ]
+          }
+        ]
+      },
+      "sequence3": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.03349856881068531,
+          "4": 0.04123596744390403,
+          "5": 0.08019567881947284,
+          "6": 0.06190227502290909,
+          "7": 0.17497381543626309
+        },
+        "by_reason": {
+          "beam": 0.3977907002273762,
+          "earlier_layer": 3.1496424510934292e-06,
+          "empirical_tail": 0.0002479082362140422
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005750403216957691,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005246120630038853,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.004614410033573366,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0044968436084434175,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004421635548184117,
+            "ply": 7,
+            "position": "659478408013070713",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Bb6",
+              "c3"
+            ]
+          },
+          {
+            "mass": 0.0042614528057534394,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.004259153925440599,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.004083719718608714,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004039600041858309,
+            "ply": 7,
+            "position": "1957611040034316433",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "b6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004031637768711655,
+            "ply": 7,
+            "position": "-40559752973513895",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Qe7",
+              "Nc3"
+            ]
+          }
+        ]
+      },
+      "sequence4": {
+        "by_ply": {
+          "2": 0.006235452572808273,
+          "3": 0.03349856881068531,
+          "4": 0.04123596744390403,
+          "5": 0.08019567881947284,
+          "6": 0.06190227502290909,
+          "7": 0.16579658066419795
+        },
+        "by_reason": {
+          "beam": 0.3886134654553112,
+          "earlier_layer": 3.1496424510934292e-06,
+          "empirical_tail": 0.0002479082362140422
+        },
+        "largest_cutoffs": [
+          {
+            "mass": 0.005750403216957691,
+            "ply": 4,
+            "position": "-6294189357308885844",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "g6"
+            ]
+          },
+          {
+            "mass": 0.005246120630038853,
+            "ply": 4,
+            "position": "1876923203704758315",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Bg4"
+            ]
+          },
+          {
+            "mass": 0.004614410033573366,
+            "ply": 5,
+            "position": "1827354014728024899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Be7",
+              "Nxc6"
+            ]
+          },
+          {
+            "mass": 0.0044968436084434175,
+            "ply": 4,
+            "position": "-679253694745735899",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "d6",
+              "dxe5",
+              "Nxe5"
+            ]
+          },
+          {
+            "mass": 0.004421635548184117,
+            "ply": 7,
+            "position": "659478408013070713",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Bb6",
+              "c3"
+            ]
+          },
+          {
+            "mass": 0.0042614528057534394,
+            "ply": 6,
+            "position": "-4005160945942011864",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Bg5",
+              "Be7"
+            ]
+          },
+          {
+            "mass": 0.004259153925440599,
+            "ply": 7,
+            "position": "4694001412045927729",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "c5",
+              "Qe3"
+            ]
+          },
+          {
+            "mass": 0.004083719718608714,
+            "ply": 7,
+            "position": "-1703702412767394967",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Nf6",
+              "Nxc6",
+              "bxc6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004039600041858309,
+            "ply": 7,
+            "position": "1957611040034316433",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "Nxd4",
+              "Nxd4",
+              "exd4",
+              "Qxd4",
+              "b6",
+              "Bc4"
+            ]
+          },
+          {
+            "mass": 0.004031637768711655,
+            "ply": 7,
+            "position": "-40559752973513895",
+            "reason": "beam",
+            "representative_continuation": [
+              "d4",
+              "exd4",
+              "Nxd4",
+              "Bc5",
+              "Be3",
+              "Qe7",
+              "Nc3"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "results_sha256": "bf2c1e15ca092e24f109334cc2a6f3cca3fe29591ecb3cf838bb2ba934d3ee22"
+}

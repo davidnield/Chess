@@ -566,3 +566,21 @@ snapshots without data scanning, Maia loading or engines. New outputs stay under
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.context_comparison compare
 & research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_context
 ```
+
+## Eight-ply empirical follow-through
+
+Read the [fixed protocol](../../docs/human_repertoire/followthrough_plan.md) and
+[completed report](../../docs/human_repertoire/followthrough_report.md). Preparation
+uses bounded read-only empirical projections and Maia inference, so check shared
+resource headroom first. The engine phase is separately bounded and resumable.
+All outputs stay under `_artifacts/followthrough/`; comparison/verification reuse
+the frozen snapshots. Earlier experiments remain unchanged.
+
+```powershell
+& research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough engine
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_followthrough
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough_diagnostics
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.followthrough_pgn
+```

@@ -1,0 +1,8 @@
+{
+  "eligible_cases_verified": 42,
+  "legal_edges": 19368,
+  "passed": true,
+  "results_sha256": "bf2c1e15ca092e24f109334cc2a6f3cca3fe29591ecb3cf838bb2ba934d3ee22",
+  "scalar_checks": 1206,
+  "verifier_sha256": "51af5d9534f5aa58f9acfaf29cbcdf6881473b8e4b8e10cca234ad6d0a380aa8"
+}
