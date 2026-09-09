@@ -1,0 +1,19 @@
+{
+  "pairs": 64,
+  "deeper_pairs": 8,
+  "recall": 0.85,
+  "policies": ["maia_blitz", "maia_rapid"],
+  "cards": {"exd4_Nxd4": ["exd4", "Nxd4"], "Nf6_Nc3": ["Nf6", "Nc3"], "d6_Nc3": ["d6", "Nc3"]},
+  "reference": "exd4_Nxd4",
+  "opponent_rating_input": 2000,
+  "seed": "human-repertoire-maia-equal-budget-v1",
+  "max_positions": 6000,
+  "max_deeper_positions": 1000,
+  "sampling_seconds": 360,
+  "engine_nodes": 100000,
+  "engine_time_seconds": 1.0,
+  "deeper_nodes": 400000,
+  "deeper_time_seconds": 2.0,
+  "engine_runtime_seconds": 900,
+  "alpha": 0.05
+}
