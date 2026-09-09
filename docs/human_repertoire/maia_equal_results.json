@@ -1,0 +1,934 @@
+{
+  "card_encounters": {
+    "maia_blitz/Nf6_Nc3": 0,
+    "maia_blitz/d6_Nc3": 2,
+    "maia_blitz/exd4_Nxd4": 53,
+    "maia_rapid/Nf6_Nc3": 0,
+    "maia_rapid/d6_Nc3": 2,
+    "maia_rapid/exd4_Nxd4": 52
+  },
+  "contexts": {
+    "base/maia_blitz": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "mc_se": 0.058397074018894594,
+            "mean": 0.6875
+          },
+          "disadvantage": {
+            "mc_se": 0.021921011700381302,
+            "mean": 0.03125
+          },
+          "draw": {
+            "mc_se": 0.00012681072964975418,
+            "mean": 0.09977678571428562
+          },
+          "early_advantage": {
+            "mc_se": 0.05322996508440148,
+            "mean": 0.6261874793007663
+          },
+          "loss": {
+            "mc_se": 0.0006299345110056893,
+            "mean": 0.4497395833333329
+          },
+          "points": {
+            "mc_se": 0.000647764501799255,
+            "mean": 0.5003720238095238
+          },
+          "win": {
+            "mc_se": 0.0006711338853043062,
+            "mean": 0.45048363095238053
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "mc_se": 0.058397074018894594,
+            "mean": 0.6875
+          },
+          "disadvantage": {
+            "mc_se": 0.026630253226448332,
+            "mean": 0.046875
+          },
+          "draw": {
+            "mc_se": 0.00012681072964975418,
+            "mean": 0.09977678571428562
+          },
+          "early_advantage": {
+            "mc_se": 0.0532299650844015,
+            "mean": 0.6261874793007662
+          },
+          "loss": {
+            "mc_se": 0.0006299345110056893,
+            "mean": 0.4497395833333329
+          },
+          "points": {
+            "mc_se": 0.000647764501799255,
+            "mean": 0.5003720238095238
+          },
+          "win": {
+            "mc_se": 0.0006711338853043062,
+            "mean": 0.45048363095238053
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "mc_se": 0.058397074018894594,
+            "mean": 0.6875
+          },
+          "disadvantage": {
+            "mc_se": 0.015625,
+            "mean": 0.015625
+          },
+          "draw": {
+            "mc_se": 0.0015811932385059512,
+            "mean": 0.0978794642857142
+          },
+          "early_advantage": {
+            "mc_se": 0.053203344747017794,
+            "mean": 0.625894853745367
+          },
+          "loss": {
+            "mc_se": 0.007061178712102557,
+            "mean": 0.44250372023809487
+          },
+          "points": {
+            "mc_se": 0.007836084959315264,
+            "mean": 0.5085565476190477
+          },
+          "win": {
+            "mc_se": 0.008613843288782997,
+            "mean": 0.45961681547619004
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.015625,
+            "mean": 0.015625
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.39795250213112626,
+              0.3985377532419249
+            ],
+            "sample_difference_interval": [
+              0.00029262555539931456,
+              0.00029262555539931456
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.07525971747991503,
+            "mc_se": 0.040507869918004834,
+            "mean": 0.00029262555539931456
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.3982451276865256,
+              0.3982451276865256
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 46,
+          "points": {
+            "independence_assumed_se": 0.007862812877043313,
+            "mc_se": 0.007815452012196801,
+            "mean": -0.008184523809523808
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.021921011700381302,
+            "mean": 0.03125
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.39795250213112626,
+              0.3985377532419249
+            ],
+            "sample_difference_interval": [
+              0.00029262555539931456,
+              0.00029262555539931456
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.07525971747991504,
+            "mc_se": 0.0454228754061485,
+            "mean": 0.00029262555539931456
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.3982451276865256,
+              0.3982451276865256
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 44,
+          "points": {
+            "independence_assumed_se": 0.007862812877043313,
+            "mc_se": 0.007815452012196801,
+            "mean": -0.008184523809523808
+          }
+        }
+      }
+    },
+    "base/maia_rapid": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "mc_se": 0.05915529526875285,
+            "mean": 0.671875
+          },
+          "disadvantage": {
+            "mc_se": 0.026630253226448332,
+            "mean": 0.046875
+          },
+          "draw": {
+            "mc_se": 0.00017436244296989417,
+            "mean": 0.09970914502164492
+          },
+          "early_advantage": {
+            "mc_se": 0.05376909899057751,
+            "mean": 0.6103176530701747
+          },
+          "loss": {
+            "mc_se": 0.0008330747385453504,
+            "mean": 0.4494352002164498
+          },
+          "points": {
+            "mc_se": 0.0008863520259266352,
+            "mean": 0.5007102272727273
+          },
+          "win": {
+            "mc_se": 0.0009446837769779446,
+            "mean": 0.4508556547619043
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "mc_se": 0.05915529526875285,
+            "mean": 0.671875
+          },
+          "disadvantage": {
+            "mc_se": 0.026630253226448332,
+            "mean": 0.046875
+          },
+          "draw": {
+            "mc_se": 0.00017436244296989417,
+            "mean": 0.09970914502164492
+          },
+          "early_advantage": {
+            "mc_se": 0.0537690989905775,
+            "mean": 0.6103176530701746
+          },
+          "loss": {
+            "mc_se": 0.0008330747385453504,
+            "mean": 0.4494352002164498
+          },
+          "points": {
+            "mc_se": 0.0008863520259266352,
+            "mean": 0.5007102272727273
+          },
+          "win": {
+            "mc_se": 0.0009446837769779446,
+            "mean": 0.4508556547619043
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "mc_se": 0.060451293443302384,
+            "mean": 0.640625
+          },
+          "disadvantage": {
+            "mc_se": 0.026630253226448332,
+            "mean": 0.046875
+          },
+          "draw": {
+            "mc_se": 0.00022196305367303698,
+            "mean": 0.09956709956709947
+          },
+          "early_advantage": {
+            "mc_se": 0.05495531961917883,
+            "mean": 0.5820500035991738
+          },
+          "loss": {
+            "mc_se": 0.0008368579306412054,
+            "mean": 0.4495062229437225
+          },
+          "points": {
+            "mc_se": 0.0008863520259266352,
+            "mean": 0.5007102272727273
+          },
+          "win": {
+            "mc_se": 0.0009463310362919278,
+            "mean": 0.4509266774891771
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.36997747821552485,
+              0.42651277715752633
+            ],
+            "sample_difference_interval": [
+              0.028267649471000772,
+              0.028267649471000772
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.07688434925720986,
+            "mc_se": 0.019833108688945805,
+            "mean": 0.028267649471000772
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.3669951276865256,
+              0.4294951276865256
+            ],
+            "sample_difference_interval": [
+              0.03125,
+              0.03125
+            ]
+          },
+          "identical_position_sequences": 62,
+          "points": {
+            "independence_assumed_se": 0.0012534910561023166,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.36997747821552485,
+              0.42651277715752633
+            ],
+            "sample_difference_interval": [
+              0.028267649471000772,
+              0.028267649471000772
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.07688434925720984,
+            "mc_se": 0.02856050218634168,
+            "mean": 0.028267649471000772
+          },
+          "first_advantage": {
+            "hoeffding_margin": 0.3982451276865256,
+            "mc_outer_95": [
+              -0.3669951276865256,
+              0.4294951276865256
+            ],
+            "sample_difference_interval": [
+              0.03125,
+              0.03125
+            ]
+          },
+          "identical_position_sequences": 60,
+          "points": {
+            "independence_assumed_se": 0.0012534910561023166,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        }
+      }
+    },
+    "deeper/maia_blitz": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "mc_se": 0.125,
+            "mean": 0.875
+          },
+          "disadvantage": {
+            "mc_se": 0.125,
+            "mean": 0.125
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.11218744202687987,
+            "mean": 0.7846310414137557
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "mc_se": 0.125,
+            "mean": 0.875
+          },
+          "disadvantage": {
+            "mc_se": 0.125,
+            "mean": 0.125
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.11218744202687987,
+            "mean": 0.7846310414137557
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "mc_se": 0.125,
+            "mean": 0.875
+          },
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.11286634992145676,
+            "mean": 0.7891760192527296
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.125,
+            "mean": 0.125
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              -0.004544977838973854,
+              -0.004544977838973854
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.15913778650316604,
+            "mc_se": 0.16753742184020268,
+            "mean": -0.004544977838973854
+          },
+          "first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 3,
+          "points": {
+            "independence_assumed_se": 0.0,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.125,
+            "mean": 0.125
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              -0.004544977838973854,
+              -0.004544977838973854
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.15913778650316604,
+            "mc_se": 0.16753742184020268,
+            "mean": -0.004544977838973854
+          },
+          "first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 3,
+          "points": {
+            "independence_assumed_se": 0.0,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        }
+      }
+    },
+    "deeper/maia_rapid": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "mc_se": 0.16366341767699427,
+            "mean": 0.75
+          },
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.1485815964326989,
+            "mean": 0.6806275606997979
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "mc_se": 0.16366341767699427,
+            "mean": 0.75
+          },
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.1485815964326989,
+            "mean": 0.6806275606997979
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "mc_se": 0.16366341767699427,
+            "mean": 0.75
+          },
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "draw": {
+            "mc_se": 5.2453107553144695e-18,
+            "mean": 0.09999999999999999
+          },
+          "early_advantage": {
+            "mc_se": 0.1485815964326989,
+            "mean": 0.6806275606997979
+          },
+          "loss": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          },
+          "points": {
+            "mc_se": 0.0,
+            "mean": 0.5
+          },
+          "win": {
+            "mc_se": 2.0981243021257878e-17,
+            "mean": 0.45000000000000007
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.21012610879416865,
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 8,
+          "points": {
+            "independence_assumed_se": 0.0,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "discounted_first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "early_advantage": {
+            "independence_assumed_se": 0.21012610879416865,
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "first_advantage": {
+            "hoeffding_margin": 1.1264073214465788,
+            "mc_outer_95": [
+              -1,
+              1
+            ],
+            "sample_difference_interval": [
+              0.0,
+              0.0
+            ]
+          },
+          "identical_position_sequences": 8,
+          "points": {
+            "independence_assumed_se": 0.0,
+            "mc_se": 0.0,
+            "mean": 0.0
+          }
+        }
+      }
+    }
+  },
+  "contrast_alpha": 0.0125,
+  "deeper_matched_contrasts": {
+    "maia_blitz": {
+      "Nf6_Nc3": {
+        "base": -0.002295327427389457,
+        "deeper": -0.004544977838973854
+      },
+      "d6_Nc3": {
+        "base": -0.002295327427389457,
+        "deeper": -0.004544977838973854
+      }
+    },
+    "maia_rapid": {
+      "Nf6_Nc3": {
+        "base": 0.0,
+        "deeper": 0.0
+      },
+      "d6_Nc3": {
+        "base": 0.0,
+        "deeper": 0.0
+      }
+    }
+  },
+  "eligible": {
+    "Nf6_Nc3": true,
+    "d6_Nc3": true,
+    "exd4_Nxd4": true
+  },
+  "full_results_sha256": "ab8d4b63aee0736df461d95a725631437a12670b714d9755381ab7eb04c7d4cf",
+  "gates": {
+    "base": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 22,
+        "move": "d4",
+        "parent_cp": 39,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 37,
+        "move": "Nxd4",
+        "parent_cp": 42,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 4,
+        "move": "Nc3",
+        "parent_cp": 103,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 65,
+        "move": "Nc3",
+        "parent_cp": 80,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ],
+    "deeper": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 17,
+        "move": "d4",
+        "parent_cp": 47,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 14,
+        "move": "Nxd4",
+        "parent_cp": 14,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 17,
+        "move": "Nc3",
+        "parent_cp": 125,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 66,
+        "move": "Nc3",
+        "parent_cp": 90,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ]
+  },
+  "identity": {
+    "code_sha256": "acce4f042e0db07110e7a4f846eec76aae267cfae4620864eb5613190002b48f",
+    "config": {
+      "alpha": 0.05,
+      "cards": {
+        "Nf6_Nc3": [
+          "Nf6",
+          "Nc3"
+        ],
+        "d6_Nc3": [
+          "d6",
+          "Nc3"
+        ],
+        "exd4_Nxd4": [
+          "exd4",
+          "Nxd4"
+        ]
+      },
+      "deeper_nodes": 400000,
+      "deeper_pairs": 8,
+      "deeper_time_seconds": 2.0,
+      "engine_nodes": 100000,
+      "engine_runtime_seconds": 900,
+      "engine_time_seconds": 1.0,
+      "max_deeper_positions": 1000,
+      "max_positions": 6000,
+      "opponent_rating_input": 2000,
+      "pairs": 64,
+      "policies": [
+        "maia_blitz",
+        "maia_rapid"
+      ],
+      "recall": 0.85,
+      "reference": "exd4_Nxd4",
+      "sampling_seconds": 360,
+      "seed": "human-repertoire-maia-equal-budget-v1"
+    },
+    "plan_sha256": "e300d0ee3cedaccf0e2f5a92c05ff68fa391ed2594c28fc8177de9c5ebed2648",
+    "previous_engine_sha256": "3a908d54f360a09e06fa76b2dfcd5a55bd172fac8a84c73227cfd52bbcc59c9c",
+    "previous_identity": {
+      "code": {
+        "maia_comparison.py": "2c53bf82b3d308c0668af2c7b1130df9a8ae2fa5109829b5e278a38e32bb442c",
+        "maia_policy.py": "76d8cb33c7328bceaca5eaf9013bdcadaf2392503f79e9caed6b9edb460d148d",
+        "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+        "paired_panel.py": "3c9e32ac8c9ea27657cb16c691e7f5aed8853b6937aa6f0738af635d2a11d340",
+        "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9"
+      },
+      "config": {
+        "alpha": 0.05,
+        "deeper_nodes": 400000,
+        "deeper_pairs": 4,
+        "deeper_time_seconds": 2.0,
+        "engine_nodes": 100000,
+        "engine_runtime_seconds": 900,
+        "engine_time_seconds": 1.0,
+        "max_deeper_positions": 950,
+        "max_positions": 7500,
+        "opponent_rating_input": 2000,
+        "pairs": 32,
+        "plans": [
+          "source_one_card",
+          "two_cards"
+        ],
+        "policies": [
+          "shared_position",
+          "maia_blitz",
+          "maia_rapid"
+        ],
+        "recalls": [
+          0.5,
+          0.85,
+          1.0
+        ],
+        "sampling_seconds": 360,
+        "schema_version": 1,
+        "seed": "human-repertoire-maia-study-v1"
+      },
+      "m6_engine_sha256": "d15d741344b2cd6501b55d5979942dc49682d06f1a64d79d0621721124074390",
+      "m6_manifest_sha256": "6b134511b9e5ad5347196a5addddd774984f4d55150edd744b834339a3ed9569",
+      "maia_config_sha256": "a7d3e3ab3276860972d9535dba6cff110363f864f6691490417ff7a5d5fc657b",
+      "maia_verification_sha256": "1dfecdface5a3ca729fb22417552a9ef79eed36e2d9bb036472913ae4b613970",
+      "plan_sha256": "6ae1c31bb8f6efce9b0d029a05b5641f5d98b53c3f1c172f90ee6c8a9cf9fc50"
+    },
+    "previous_manifest_sha256": "f47801463d26fc7ececd345f8b38b81e24aaabc0856aea1044725b503142d380"
+  },
+  "local": {
+    "maia_blitz": {
+      "Nf6_Nc3": {
+        "branch_probability_after_d4": 0.020287291918730438,
+        "fallback_probability": 0.11523818387507424,
+        "position": "-1867097936539676342",
+        "with_card_probability": 0.8672857275812611
+      },
+      "d6_Nc3": {
+        "branch_probability_after_d4": 0.04292152564782531,
+        "fallback_probability": 0.025501685930162547,
+        "position": "-8916530477222717007",
+        "with_card_probability": 0.8538252528895244
+      },
+      "exd4_Nxd4": {
+        "branch_probability_after_d4": 0.899650191467687,
+        "fallback_probability": 0.5300698877101456,
+        "position": "2776049323298866377",
+        "with_card_probability": 0.9295104831565218
+      }
+    },
+    "maia_rapid": {
+      "Nf6_Nc3": {
+        "branch_probability_after_d4": 0.020287291918730438,
+        "fallback_probability": 0.11364428854719923,
+        "position": "-1867097936539676342",
+        "with_card_probability": 0.8670466432820798
+      },
+      "d6_Nc3": {
+        "branch_probability_after_d4": 0.04292152564782531,
+        "fallback_probability": 0.02772501299324985,
+        "position": "-8916530477222717007",
+        "with_card_probability": 0.8541587519489875
+      },
+      "exd4_Nxd4": {
+        "branch_probability_after_d4": 0.899650191467687,
+        "fallback_probability": 0.9105766005868884,
+        "position": "2776049323298866377",
+        "with_card_probability": 0.9865864900880332
+      }
+    }
+  }
+}

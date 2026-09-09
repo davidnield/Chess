@@ -93,3 +93,12 @@ self rating 1400 as an ease/intuitiveness proxy despite a higher actual rating.
 Opponent conditioning retains the supplied actual rating; opponent policy is
 not downgraded. The above pre-integration status is historical. Both checkpoints
 are installed and verified, and the 96-case integration diagnostic passes.
+
+**Study-decision update:** The first [Maia-1400 card comparison](maia_comparison_report.md)
+is complete, with 576 replayed paths and complete engine coverage. It finds no
+resolved benefit from the extra Nxd4 card, which the Rapid fallback already
+chooses about 91% of the time. A fresh [equal-budget comparison](maia_equal_plan.md)
+now tests alternative uses of the second card. Preserve 1400 as the user's
+preference; do not tune it against the higher-rated cohort. The fixed 2000
+opponent-conditioning scenario in these experiments is explicit, not an actual
+opponent rating observation. Custom M10 development remains paused.

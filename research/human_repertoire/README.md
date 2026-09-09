@@ -506,3 +506,18 @@ under `_artifacts/maia_compare/`. The [report](../../docs/human_repertoire/maia_
 records the completed 576-path comparison, bounded engine work, all nine
 contexts and unresolved book ranking. The independent verifier uses frozen
 probabilities and needs neither checkpoint loading nor fresh engine calls.
+
+## Equal-budget Maia packages
+
+```powershell
+& research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe -B -m research.human_repertoire.maia_equal prepare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.maia_equal engine
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.maia_equal compare
+& research/human_repertoire/_artifacts/venv/Scripts/python.exe -B -m research.human_repertoire.verify_maia_equal
+```
+
+The frozen [plan](../../docs/human_repertoire/maia_equal_plan.md) compares three
+two-card packages on 384 fresh paths, with the existing opponent policy and
+Maia fallback. All outputs are under `_artifacts/maia_equal/`; inherited engine
+records are fingerprinted and read-only. Four primary contrasts use Bonferroni
+Hoeffding bounds. Ineligible packages remain reported rather than being replaced.

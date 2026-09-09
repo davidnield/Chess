@@ -1,0 +1,34 @@
+{
+  "deeper_changed_early_utility_rows": {
+    "maia_blitz": {
+      "Nf6_Nc3": 1,
+      "d6_Nc3": 1,
+      "exd4_Nxd4": 0
+    },
+    "maia_rapid": {
+      "Nf6_Nc3": 0,
+      "d6_Nc3": 0,
+      "exd4_Nxd4": 0
+    }
+  },
+  "engine_work": {
+    "base": {
+      "new": 769,
+      "required": 930,
+      "reused": 161,
+      "seconds": 94.06599999999999
+    },
+    "deeper": {
+      "new": 132,
+      "required": 156,
+      "reused": 24,
+      "seconds": 60.360999999999976
+    }
+  },
+  "legal_moves": 4607,
+  "paths_replayed": 384,
+  "results_sha256": "ab8d4b63aee0736df461d95a725631437a12670b714d9755381ab7eb04c7d4cf",
+  "scalar_checks": 2160,
+  "status": "passed",
+  "verifier_sha256": "9d9c3d2612abeec5aa7bdd330423b84115d01a35c19ab239328127b6e8cf9faf"
+}

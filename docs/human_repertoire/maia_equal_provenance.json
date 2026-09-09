@@ -1,0 +1,308 @@
+{
+  "books": {
+    "Nf6_Nc3": {
+      "-1867097936539676342": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "d6_Nc3": {
+      "-8916530477222717007": "Nc3",
+      "8704797333742910878": "d4"
+    },
+    "exd4_Nxd4": {
+      "2776049323298866377": "Nxd4",
+      "8704797333742910878": "d4"
+    }
+  },
+  "engine_identity": {
+    "binary": {
+      "mtime_ns": 1769897604000000000,
+      "path": "C:\\Users\\David\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe\\stockfish\\stockfish-windows-x86-64-avx2.exe",
+      "sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+      "size": 114007552
+    },
+    "id": {
+      "author": "the Stockfish developers (see AUTHORS file)",
+      "name": "Stockfish 18"
+    },
+    "options": {
+      "Clear Hash": {
+        "default": null,
+        "max": null,
+        "min": null,
+        "type": "button",
+        "var": []
+      },
+      "Debug Log File": {
+        "default": "<empty>",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "EvalFile": {
+        "default": "nn-c288c895ea92.nnue",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "EvalFileSmall": {
+        "default": "nn-37f18f62d772.nnue",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "Hash": {
+        "default": 16,
+        "max": 33554432,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "Move Overhead": {
+        "default": 10,
+        "max": 5000,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "MultiPV": {
+        "default": 1,
+        "max": 256,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "NumaPolicy": {
+        "default": "auto",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "Ponder": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "Skill Level": {
+        "default": 20,
+        "max": 20,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "Syzygy50MoveRule": {
+        "default": true,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "SyzygyPath": {
+        "default": "<empty>",
+        "max": null,
+        "min": null,
+        "type": "string",
+        "var": []
+      },
+      "SyzygyProbeDepth": {
+        "default": 1,
+        "max": 100,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "SyzygyProbeLimit": {
+        "default": 7,
+        "max": 7,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      },
+      "Threads": {
+        "default": 1,
+        "max": 1024,
+        "min": 1,
+        "type": "spin",
+        "var": []
+      },
+      "UCI_Chess960": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "UCI_Elo": {
+        "default": 1320,
+        "max": 3190,
+        "min": 1320,
+        "type": "spin",
+        "var": []
+      },
+      "UCI_LimitStrength": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "UCI_ShowWDL": {
+        "default": false,
+        "max": null,
+        "min": null,
+        "type": "check",
+        "var": []
+      },
+      "nodestime": {
+        "default": 0,
+        "max": 10000,
+        "min": 0,
+        "type": "spin",
+        "var": []
+      }
+    }
+  },
+  "engine_options": {
+    "Hash": 32,
+    "Skill Level": 20,
+    "SyzygyPath": "",
+    "Threads": 1,
+    "UCI_LimitStrength": false,
+    "UCI_ShowWDL": true
+  },
+  "engine_path": "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe",
+  "evaluator_config": {
+    "discount": 0.99,
+    "horizon": 12,
+    "max_disadvantage": 0.4,
+    "max_engine_loss_cp": 150,
+    "max_states": 200000,
+    "min_points": 0.48,
+    "recall": 0.85,
+    "reentry": true,
+    "repetition_visits": 3,
+    "soundness_floor_cp": -100,
+    "threshold_cp": 300
+  },
+  "gates": [
+    {
+      "child": "-4757902768255381284",
+      "move": "d4",
+      "position": "8704797333742910878"
+    },
+    {
+      "child": "4689055884960126695",
+      "move": "Nxd4",
+      "position": "2776049323298866377"
+    },
+    {
+      "child": "2126161864446612371",
+      "move": "Nc3",
+      "position": "-1867097936539676342"
+    },
+    {
+      "child": "9211275652690385768",
+      "move": "Nc3",
+      "position": "-8916530477222717007"
+    }
+  ],
+  "identity": {
+    "code_sha256": "acce4f042e0db07110e7a4f846eec76aae267cfae4620864eb5613190002b48f",
+    "config": {
+      "alpha": 0.05,
+      "cards": {
+        "Nf6_Nc3": [
+          "Nf6",
+          "Nc3"
+        ],
+        "d6_Nc3": [
+          "d6",
+          "Nc3"
+        ],
+        "exd4_Nxd4": [
+          "exd4",
+          "Nxd4"
+        ]
+      },
+      "deeper_nodes": 400000,
+      "deeper_pairs": 8,
+      "deeper_time_seconds": 2.0,
+      "engine_nodes": 100000,
+      "engine_runtime_seconds": 900,
+      "engine_time_seconds": 1.0,
+      "max_deeper_positions": 1000,
+      "max_positions": 6000,
+      "opponent_rating_input": 2000,
+      "pairs": 64,
+      "policies": [
+        "maia_blitz",
+        "maia_rapid"
+      ],
+      "recall": 0.85,
+      "reference": "exd4_Nxd4",
+      "sampling_seconds": 360,
+      "seed": "human-repertoire-maia-equal-budget-v1"
+    },
+    "plan_sha256": "e300d0ee3cedaccf0e2f5a92c05ff68fa391ed2594c28fc8177de9c5ebed2648",
+    "previous_engine_sha256": "3a908d54f360a09e06fa76b2dfcd5a55bd172fac8a84c73227cfd52bbcc59c9c",
+    "previous_identity": {
+      "code": {
+        "maia_comparison.py": "2c53bf82b3d308c0668af2c7b1130df9a8ae2fa5109829b5e278a38e32bb442c",
+        "maia_policy.py": "76d8cb33c7328bceaca5eaf9013bdcadaf2392503f79e9caed6b9edb460d148d",
+        "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+        "paired_panel.py": "3c9e32ac8c9ea27657cb16c691e7f5aed8853b6937aa6f0738af635d2a11d340",
+        "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9"
+      },
+      "config": {
+        "alpha": 0.05,
+        "deeper_nodes": 400000,
+        "deeper_pairs": 4,
+        "deeper_time_seconds": 2.0,
+        "engine_nodes": 100000,
+        "engine_runtime_seconds": 900,
+        "engine_time_seconds": 1.0,
+        "max_deeper_positions": 950,
+        "max_positions": 7500,
+        "opponent_rating_input": 2000,
+        "pairs": 32,
+        "plans": [
+          "source_one_card",
+          "two_cards"
+        ],
+        "policies": [
+          "shared_position",
+          "maia_blitz",
+          "maia_rapid"
+        ],
+        "recalls": [
+          0.5,
+          0.85,
+          1.0
+        ],
+        "sampling_seconds": 360,
+        "schema_version": 1,
+        "seed": "human-repertoire-maia-study-v1"
+      },
+      "m6_engine_sha256": "d15d741344b2cd6501b55d5979942dc49682d06f1a64d79d0621721124074390",
+      "m6_manifest_sha256": "6b134511b9e5ad5347196a5addddd774984f4d55150edd744b834339a3ed9569",
+      "maia_config_sha256": "a7d3e3ab3276860972d9535dba6cff110363f864f6691490417ff7a5d5fc657b",
+      "maia_verification_sha256": "1dfecdface5a3ca729fb22417552a9ef79eed36e2d9bb036472913ae4b613970",
+      "plan_sha256": "6ae1c31bb8f6efce9b0d029a05b5641f5d98b53c3f1c172f90ee6c8a9cf9fc50"
+    },
+    "previous_manifest_sha256": "f47801463d26fc7ececd345f8b38b81e24aaabc0856aea1044725b503142d380"
+  },
+  "sampling_seconds": 20.51600000000326,
+  "snapshots": {
+    "engine_selection": "220ad485f40261509fc1fefe2f2c8df52ed7f90110867d6cdc7b26078c8e3c46",
+    "fens": "2140dbb5ce0a631e24b9750975118f702f1721c67e5a1b7e9b23e457d8333fe1",
+    "inherited_records": "fd45583c6cbe3fec129809b03e0bdda0e7c7a5dc0331db81f7247bdb1a72acb0",
+    "local": "f8b497ee77644fb573a750bbe8500cd1f586a47e0f69596277b12a50e789002f",
+    "policy_tables": "379019c46d09fc3cc92f7755195bcdfde1716cb6ea6840cb93464e64e3da168e",
+    "traces": "8533b17193d75e0ff897aea07955259501da66244495edc0da1246205bdec3aa"
+  }
+}

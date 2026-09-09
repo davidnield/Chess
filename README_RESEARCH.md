@@ -9,7 +9,11 @@ opponent conditioning and unchanged opponent behavior. The first
 [Maia repertoire comparison](docs/human_repertoire/maia_comparison_report.md)
 is complete: 100 tests pass and all 576 paths replay. The extra Nxd4 card has
 no resolved early-advantage benefit; Maia Rapid already chooses it 91% of the
-time. Next is a bounded comparison of alternative cards at equal study cost.
+time. The [equal-cost comparison](docs/human_repertoire/maia_equal_report.md)
+is also complete: 102 tests pass, 384 fresh paths replay, and all three packages
+pass soundness gates. No ranking is resolved; rare-card exposure and opponent
+model credibility remain limits. Broader optimisation needs deliberate rare-branch
+evaluation with correct reach weighting, not another unstratified rerun.
 The user authorises proceeding through next priorities autonomously using
 judgment for routine decisions. Maia-3's documented training period
 overlaps our 2024 samples; do not call those samples held out for that model.
