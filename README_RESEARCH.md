@@ -2,7 +2,15 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Current result:** [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
+**Active priority:** [build the bounded repertoire-selection loop](docs/human_repertoire/research_priorities.md).
+The user requested a strategic reset after too many incremental single-card
+studies. Connect the existing empirical/Maia/contextual-recall components to
+selective package search across several branches and study budgets, compare
+against the existing-method reference, and export provisional books. Further
+Be3-specific upstream expansion is deferred; retain the example as a regression
+fixture. This priority supersedes all historical "next steps" below.
+
+**Latest completed result:** [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
 supports adding 5.Be3 to d4/Nxd4 under the frozen opening-entry/recall model.
 All six local benefit intervals have positive lower bounds; targeted expansion
 and score coverage reduced comparison uncertainty by about 90%. All 132 tests
