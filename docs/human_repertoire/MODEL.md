@@ -336,3 +336,20 @@ masked softmax and no engine filtering. Stockfish soundness and study/recall
 constraints remain separate. M8 diagnostic likelihood at 1400 is descriptive
 under this chosen policy assumption, not a target that overrides the preference.
 See `maia_integration.md` for verified artifacts and remaining repertoire work.
+
+## Completed Maia study-package comparisons
+
+The marginal-card, equal-cost and branch-stratified experiments now use the
+same utility and separate opponent policy. The last enumerates full first-two-
+ply prefix mass and samples conditional continuations while preserving original
+visit history and first-hit times; see `stratified_sampling.md`. This changes
+estimation machinery, not the repertoire objective. Rare positions receive
+direct coverage without being assigned excessive population weight. All 107
+tests and the 768-path audit pass. `maia_stratified_report.md` records unresolved
+overall rankings and a conditional drawback of the fixed Nc3-after-Nf6 card.
+
+New Maia trajectory backends should use the research `HashedBoard` adapter for
+X-FEN en-passant serialization. Polyglot retains the EP file for an adjacent
+pawn even if its capture is pinned; legal-only FEN loses that hash information.
+The adapter preserves legal moves and the existing key definition. Earlier
+frozen source and successful results remain intact.

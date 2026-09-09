@@ -11,9 +11,14 @@ is complete: 100 tests pass and all 576 paths replay. The extra Nxd4 card has
 no resolved early-advantage benefit; Maia Rapid already chooses it 91% of the
 time. The [equal-cost comparison](docs/human_repertoire/maia_equal_report.md)
 is also complete: 102 tests pass, 384 fresh paths replay, and all three packages
-pass soundness gates. No ranking is resolved; rare-card exposure and opponent
-model credibility remain limits. Broader optimisation needs deliberate rare-branch
-evaluation with correct reach weighting, not another unstratified rerun.
+pass soundness gates. The follow-through
+[branch-stratified comparison](docs/human_repertoire/maia_stratified_report.md)
+is complete too: 107 tests pass, all 768 paths replay, and 1,672 prefix masses
+are verified. Rare branches now receive explicit weighted coverage. No overall
+ranking is resolved; the Nc3-after-Nf6 card loses available engine advantage
+and has worse conditional utility in this sample. The integration and bounded
+study experiments are complete; opponent credibility and personal calibration
+still limit claims about real performance.
 The user authorises proceeding through next priorities autonomously using
 judgment for routine decisions. Maia-3's documented training period
 overlaps our 2024 samples; do not call those samples held out for that model.

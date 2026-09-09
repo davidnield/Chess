@@ -47,3 +47,14 @@ class StratifiedTests(unittest.TestCase):
         with self.assertRaises(ValueError): weighted_summary({'x':[0,1]},{'x':.5})
         with self.assertRaises(ValueError): enumerate_prefixes(GraphBackend(demanding()),'x',{},Config(reentry=False))
         with self.assertRaises(ValueError): enumerate_prefixes(GraphBackend(demanding()),'x',{},Config(),cap=1)
+
+    def test_sampled_suffix_matches_independent_recall_oracle(self):
+        for graph,book in [(demanding(),{'root':'demanding','d1':'remember1','d2':'remember2'}),(shared_reentry(),{'shared':'find'})]:
+            cfg=Config(horizon=6,recall=.65,recall_by_position={'d2':.3})
+            backend=GraphBackend(graph); ps=enumerate_prefixes(backend,'x',book,cfg,depth=1)
+            scores={k:n.cp for k,n in graph.nodes.items()}; exact=path_evaluate(graph,book,cfg).report()
+            rows={str(j):[score_trace(continue_trace(backend,'x',book,cfg,'suffix/'+str(j),i,p),scores,cfg) for i in range(1024)] for j,p in enumerate(ps)}
+            weights={str(j):p['probability'] for j,p in enumerate(ps)}
+            for metric in ['early_advantage','disadvantage','win','draw','loss']:
+                estimate=weighted_summary({s:[r[metric] for r in rs] for s,rs in rows.items()},weights)
+                self.assertLessEqual(abs(estimate['mean']-exact[metric]),6*estimate['mc_se']+.002)

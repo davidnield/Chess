@@ -1,0 +1,1370 @@
+{
+  "contexts": {
+    "base/maia_blitz": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.4182673762020732,
+              0.8066181301709305
+            ],
+            "mc_se": 0.07155024214068151,
+            "mean": 0.6124427531865019
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0,
+              0.2998177583795836
+            ],
+            "mc_se": 0.04738696100172024,
+            "mean": 0.10564238139515487
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.3653376556762151,
+              0.7536884096450724
+            ],
+            "mc_se": 0.06514101484193564,
+            "mean": 0.5595130326606438
+          },
+          "points": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.3188270829662577,
+              0.707177836935115
+            ],
+            "mc_se": 0.012422747938314412,
+            "mean": 0.5130024599506864
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.42280556759008037,
+              0.8111563215589377
+            ],
+            "mc_se": 0.07153515631235763,
+            "mean": 0.616980944574509
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0,
+              0.2980755054800513
+            ],
+            "mc_se": 0.04736888998937491,
+            "mean": 0.10390012849562262
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.36979555981233825,
+              0.7581463137811956
+            ],
+            "mc_se": 0.06512740581859348,
+            "mean": 0.5639709367967669
+          },
+          "points": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.3188137689734555,
+              0.7071645229423128
+            ],
+            "mc_se": 0.012422740803723253,
+            "mean": 0.5129891459578841
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.4712174233183464,
+              0.8595681772872037
+            ],
+            "mc_se": 0.06985839599253732,
+            "mean": 0.665392800302775
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0,
+              0.27446111021683695
+            ],
+            "mc_se": 0.0418247888015497,
+            "mean": 0.08028573323240824
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.41307816634430217,
+              0.8014289203131595
+            ],
+            "mc_se": 0.06351398744467256,
+            "mean": 0.6072535433287308
+          },
+          "points": {
+            "hoeffding_margin": 0.1941753769844287,
+            "mc_outer": [
+              0.30582462301557123,
+              0.6941753769844285
+            ],
+            "mc_se": 0.0008483343573947814,
+            "mean": 0.4999999999999999
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.4301580355599803,
+              0.48087133188547354
+            ],
+            "mc_se": 0.024803764560990572,
+            "mean": 0.025356648162746624,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.03125,
+                "mean": 0.03125
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.03125,
+                "mean": 0.03125
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.5032551943908139,
+              0.4077741730546399
+            ],
+            "mc_se": 0.03160639221917163,
+            "mean": -0.04774051066808697,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.06375738605666098,
+                "mean": -0.1858151076950125
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.03980472471812432,
+                "mean": -0.05597288633910545
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.44251222377204047,
+              0.46851714367341335
+            ],
+            "mc_se": 0.012393748228722357,
+            "mean": 0.013002459950686444,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0007440476190476164,
+                "mean": 0.0007440476190476164
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.015618712618405467,
+                "mean": 0.016369047619047616
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.43190028845951256,
+              0.47912907898594126
+            ],
+            "mc_se": 0.024825665928381393,
+            "mean": 0.023614395263214367,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.03125,
+                "mean": -0.03125
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.03125,
+                "mean": 0.03125
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.4987972902546907,
+              0.4122320771907631
+            ],
+            "mc_se": 0.031723190006861975,
+            "mean": -0.04328260653196382,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.07790400877779635,
+                "mean": 0.029925638865842052
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.03980472471812432,
+                "mean": -0.05597288633910545
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 0.4555146837227269,
+            "mc_outer": [
+              -0.4425255377648427,
+              0.4685038296806111
+            ],
+            "mc_se": 0.0123937410774372,
+            "mean": 0.012989145957884182,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.015618712618405467,
+                "mean": 0.016369047619047616
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "base/maia_rapid": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.450268273244557,
+              0.8315779919530978
+            ],
+            "mc_se": 0.06941752690615675,
+            "mean": 0.6409231325988274
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0,
+              0.2219048593542704
+            ],
+            "mc_se": 0.02481650715227531,
+            "mean": 0.031249999999999997
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.3939600616985828,
+              0.7752697804071236
+            ],
+            "mc_se": 0.06319882532619248,
+            "mean": 0.5846149210528532
+          },
+          "points": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.32145880077707323,
+              0.702768519485614
+            ],
+            "mc_se": 0.012145571777436677,
+            "mean": 0.5121136601313436
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.45408814375547357,
+              0.8353978624640144
+            ],
+            "mc_se": 0.06940832408875705,
+            "mean": 0.644743003109744
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0,
+              0.2224505551415442
+            ],
+            "mc_se": 0.024822119153431764,
+            "mean": 0.031795695787273794
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.3977697947721246,
+              0.7790795134806654
+            ],
+            "mc_se": 0.0631908223727354,
+            "mean": 0.588424654126395
+          },
+          "points": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.3211413956313445,
+              0.7024511143398853
+            ],
+            "mc_se": 0.012134906737524449,
+            "mean": 0.5117962549856149
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.45408814375547357,
+              0.8353978624640144
+            ],
+            "mc_se": 0.06940832408875705,
+            "mean": 0.644743003109744
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0,
+              0.2224505551415442
+            ],
+            "mc_se": 0.024822119153431764,
+            "mean": 0.031795695787273794
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.39684791375580497,
+              0.7781576324643458
+            ],
+            "mc_se": 0.06306355652310859,
+            "mean": 0.5875027731100754
+          },
+          "points": {
+            "hoeffding_margin": 0.1906548593542704,
+            "mc_outer": [
+              0.3217186559138703,
+              0.7030283746224111
+            ],
+            "mc_se": 0.012148629180372496,
+            "mean": 0.5123735152681407
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.44780162137214263,
+              0.446710229797595
+            ],
+            "mc_se": 0.0009552819169026235,
+            "mean": -0.0005456957872738029,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.05470549819038361,
+                "mean": -0.03125
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.4501437776420909,
+              0.44436807352764673
+            ],
+            "mc_se": 0.001637454436760868,
+            "mean": -0.0028878520572220793,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.07908300069623518,
+                "mean": -0.2157640487829773
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0011362444597434631,
+                "mean": 0.0011362444597434636
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.44751578072166587,
+              0.44699607044807177
+            ],
+            "mc_se": 0.0002735753962973477,
+            "mean": -0.00025985513679704903,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.015666661414049984,
+                "mean": -0.014880952380952384
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.4472559255848688,
+              0.4472559255848688
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.44633404456854914,
+              0.4481778066011885
+            ],
+            "mc_se": 0.0032049133914960806,
+            "mean": 0.0009218810163197062,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.08341576067946495,
+                "mean": 0.0011369447387123248
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0011362444597434631,
+                "mean": 0.0011362444597434636
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 0.4472559255848688,
+            "mc_outer": [
+              -0.4478331858673947,
+              0.44667866530234296
+            ],
+            "mc_se": 0.0005772602825258822,
+            "mean": -0.0005772602825258822,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.015625,
+                "mean": -0.015625
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "deeper/maia_blitz": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.2057801168125628,
+              1
+            ],
+            "mc_se": 0.20199291344061873,
+            "mean": 0.7549910200331379
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              0.5492109032205751
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.13986402780761165,
+              1
+            ],
+            "mc_se": 0.18404912681067648,
+            "mean": 0.6890749310281867
+          },
+          "points": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.00472332580286696,
+            "mean": 0.5047233258028668
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.21472711997568283,
+              1
+            ],
+            "mc_se": 0.2019268534024858,
+            "mean": 0.7639380231962579
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              0.5492109032205751
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.14803384450220636,
+              1
+            ],
+            "mc_se": 0.18398769363454237,
+            "mean": 0.6972447477227814
+          },
+          "points": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.00472332580286696,
+            "mean": 0.5047233258028668
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.21472711997568283,
+              1
+            ],
+            "mc_se": 0.2019268534024858,
+            "mean": 0.7639380231962579
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              0.5492109032205751
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0.1448076933331156,
+              1
+            ],
+            "mc_se": 0.18288197947003498,
+            "mean": 0.6940185965536907
+          },
+          "points": {
+            "hoeffding_margin": 0.5492109032205751,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.00472332580286696,
+            "mean": 0.5047233258028668
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.005770106315045172,
+            "mean": -0.004943665525504093,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.25331975965032416,
+                "mean": -0.4757987041768312
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.004499300823168795,
+                "mean": 0.004499300823168795
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0035758045849675346,
+            "mean": 0.0032261511690905437,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.005248618400596378,
+                "mean": -0.009089955677947709
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.004499300823168795,
+                "mean": 0.004499300823168795
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 1.2883900871615426,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "deeper/maia_rapid": {
+      "arms": {
+        "Nf6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0.02202398341470413,
+              1
+            ],
+            "mc_se": 0.227659404547361,
+            "mean": 0.5612773590769925
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              0.5392533756622884
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.20420104696967542,
+            "mean": 0.508348802283072
+          },
+          "points": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.49999999999999994
+          }
+        },
+        "d6_Nc3": {
+          "advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0.030755116011084938,
+              1
+            ],
+            "mc_se": 0.22760358869473135,
+            "mean": 0.5700084916733733
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              0.5392533756622884
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.20414726322512422,
+            "mean": 0.5164938628013124
+          },
+          "points": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.49999999999999994
+          }
+        },
+        "exd4_Nxd4": {
+          "advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0.030755116011084938,
+              1
+            ],
+            "mc_se": 0.22760358869473135,
+            "mean": 0.5700084916733733
+          },
+          "disadvantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              0.5392533756622884
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0
+          },
+          "early_advantage": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.20414707908845614,
+            "mean": 0.5164904877578502
+          },
+          "points": {
+            "hoeffding_margin": 0.5392533756622884,
+            "mc_outer": [
+              0,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.49999999999999994
+          }
+        }
+      },
+      "contrasts": {
+        "Nf6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.004606645210860294,
+            "mean": -0.00814168547477815,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.2638057067630493,
+                "mean": -0.46624452125220106
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        },
+        "d6_Nc3": {
+          "disadvantage": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "early_advantage": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.00027420713654846096,
+            "mean": 3.375043462216687e-06,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.007422105137430103,
+                "mean": 9.135403161011912e-05
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          },
+          "points": {
+            "hoeffding_margin": 1.2650307916277064,
+            "mc_outer": [
+              -1,
+              1
+            ],
+            "mc_se": 0.0,
+            "mean": 0.0,
+            "strata": {
+              "Nf6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "d6_Nc3": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "exd4_Nxd4": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              },
+              "rest": {
+                "mc_se": 0.0,
+                "mean": 0.0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "contrast_alpha": 0.0125,
+  "eligible": {
+    "Nf6_Nc3": true,
+    "d6_Nc3": true,
+    "exd4_Nxd4": true
+  },
+  "engine_sha256": "14aabca90b250ae06244425b660cc3858ef48f649ed4b5dec3b8c3270f0d03ae",
+  "full_results_sha256": "88107644826d5910dae9e7571e42e510c7d4cb0b17db709d6f7a7ecefac4829f",
+  "gates": {
+    "base": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 22,
+        "move": "d4",
+        "parent_cp": 39,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 37,
+        "move": "Nxd4",
+        "parent_cp": 42,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 4,
+        "move": "Nc3",
+        "parent_cp": 103,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 65,
+        "move": "Nc3",
+        "parent_cp": 80,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ],
+    "deeper": [
+      {
+        "child": "-4757902768255381284",
+        "child_cp": 17,
+        "move": "d4",
+        "parent_cp": 47,
+        "passed": true,
+        "position": "8704797333742910878"
+      },
+      {
+        "child": "4689055884960126695",
+        "child_cp": 14,
+        "move": "Nxd4",
+        "parent_cp": 14,
+        "passed": true,
+        "position": "2776049323298866377"
+      },
+      {
+        "child": "2126161864446612371",
+        "child_cp": 17,
+        "move": "Nc3",
+        "parent_cp": 125,
+        "passed": true,
+        "position": "-1867097936539676342"
+      },
+      {
+        "child": "9211275652690385768",
+        "child_cp": 66,
+        "move": "Nc3",
+        "parent_cp": 90,
+        "passed": true,
+        "position": "-8916530477222717007"
+      }
+    ]
+  },
+  "identity": {
+    "code_sha256": "b44f9507e65a8f1df766be96c22968b7ee3531649f7f9494c6ab789db23a6c18",
+    "config": {
+      "alpha": 0.05,
+      "cards": {
+        "Nf6_Nc3": [
+          "Nf6",
+          "Nc3"
+        ],
+        "d6_Nc3": [
+          "d6",
+          "Nc3"
+        ],
+        "exd4_Nxd4": [
+          "exd4",
+          "Nxd4"
+        ]
+      },
+      "deeper_nodes": 400000,
+      "deeper_pairs": 4,
+      "deeper_time_seconds": 2.0,
+      "engine_nodes": 100000,
+      "engine_runtime_seconds": 900,
+      "engine_time_seconds": 1.0,
+      "max_deeper_positions": 1000,
+      "max_positions": 6000,
+      "opponent_rating_input": 2000,
+      "pairs": 32,
+      "policies": [
+        "maia_blitz",
+        "maia_rapid"
+      ],
+      "prefix_cap": 2000,
+      "recall": 0.85,
+      "reference": "exd4_Nxd4",
+      "sampling_seconds": 360,
+      "seed": "human-repertoire-maia-stratified-v1"
+    },
+    "equal_engine_sha256": "446125952d9ddab5d4f693e1fd5fccc2e456ba1a85461c77d5cf6be9587965de",
+    "equal_identity": {
+      "code_sha256": "acce4f042e0db07110e7a4f846eec76aae267cfae4620864eb5613190002b48f",
+      "config": {
+        "alpha": 0.05,
+        "cards": {
+          "Nf6_Nc3": [
+            "Nf6",
+            "Nc3"
+          ],
+          "d6_Nc3": [
+            "d6",
+            "Nc3"
+          ],
+          "exd4_Nxd4": [
+            "exd4",
+            "Nxd4"
+          ]
+        },
+        "deeper_nodes": 400000,
+        "deeper_pairs": 8,
+        "deeper_time_seconds": 2.0,
+        "engine_nodes": 100000,
+        "engine_runtime_seconds": 900,
+        "engine_time_seconds": 1.0,
+        "max_deeper_positions": 1000,
+        "max_positions": 6000,
+        "opponent_rating_input": 2000,
+        "pairs": 64,
+        "policies": [
+          "maia_blitz",
+          "maia_rapid"
+        ],
+        "recall": 0.85,
+        "reference": "exd4_Nxd4",
+        "sampling_seconds": 360,
+        "seed": "human-repertoire-maia-equal-budget-v1"
+      },
+      "plan_sha256": "e300d0ee3cedaccf0e2f5a92c05ff68fa391ed2594c28fc8177de9c5ebed2648",
+      "previous_engine_sha256": "3a908d54f360a09e06fa76b2dfcd5a55bd172fac8a84c73227cfd52bbcc59c9c",
+      "previous_identity": {
+        "code": {
+          "maia_comparison.py": "2c53bf82b3d308c0668af2c7b1130df9a8ae2fa5109829b5e278a38e32bb442c",
+          "maia_policy.py": "76d8cb33c7328bceaca5eaf9013bdcadaf2392503f79e9caed6b9edb460d148d",
+          "model.py": "fa1e800e56b09f83bfbc3540917068dc2fdb208b2e3a9c82138a70ce17cb657a",
+          "paired_panel.py": "3c9e32ac8c9ea27657cb16c691e7f5aed8853b6937aa6f0738af635d2a11d340",
+          "trajectory.py": "62a5ebf6c31c33a5beab24963f1e4b08843ced9bfcc0b51a2256b840b931bda9"
+        },
+        "config": {
+          "alpha": 0.05,
+          "deeper_nodes": 400000,
+          "deeper_pairs": 4,
+          "deeper_time_seconds": 2.0,
+          "engine_nodes": 100000,
+          "engine_runtime_seconds": 900,
+          "engine_time_seconds": 1.0,
+          "max_deeper_positions": 950,
+          "max_positions": 7500,
+          "opponent_rating_input": 2000,
+          "pairs": 32,
+          "plans": [
+            "source_one_card",
+            "two_cards"
+          ],
+          "policies": [
+            "shared_position",
+            "maia_blitz",
+            "maia_rapid"
+          ],
+          "recalls": [
+            0.5,
+            0.85,
+            1.0
+          ],
+          "sampling_seconds": 360,
+          "schema_version": 1,
+          "seed": "human-repertoire-maia-study-v1"
+        },
+        "m6_engine_sha256": "d15d741344b2cd6501b55d5979942dc49682d06f1a64d79d0621721124074390",
+        "m6_manifest_sha256": "6b134511b9e5ad5347196a5addddd774984f4d55150edd744b834339a3ed9569",
+        "maia_config_sha256": "a7d3e3ab3276860972d9535dba6cff110363f864f6691490417ff7a5d5fc657b",
+        "maia_verification_sha256": "1dfecdface5a3ca729fb22417552a9ef79eed36e2d9bb036472913ae4b613970",
+        "plan_sha256": "6ae1c31bb8f6efce9b0d029a05b5641f5d98b53c3f1c172f90ee6c8a9cf9fc50"
+      },
+      "previous_manifest_sha256": "f47801463d26fc7ececd345f8b38b81e24aaabc0856aea1044725b503142d380"
+    },
+    "equal_manifest_sha256": "fec91d26ac5c59748312e006cefa278ed28b782d8ab7cefe5d8ab195223bf07a",
+    "hashed_board_sha256": "d0fe960dfe20c3c53e061974c732e5afc2ca302b0863aa9e457b673898ae3afc",
+    "plan_sha256": "eed6784cd50bcaf66342c17791062bba365bece16672122e35a9d98fa29c0b8e",
+    "sampler_sha256": "086c5c29ca0e80f3d4c77c24e01d859a794755a3d8ec61c2e2be48cec5b2a5c4"
+  },
+  "scored_sha256": "85284685b1ab43cd89b9c76497778f67293d0171de1b45cf08427cd44c7419d4",
+  "weights": {
+    "maia_blitz": {
+      "Nf6_Nc3": 0.017894006326239914,
+      "d6_Nc3": 0.037858086458792274,
+      "exd4_Nxd4": 0.793518734881652,
+      "rest": 0.15072917233331554
+    },
+    "maia_rapid": {
+      "Nf6_Nc3": 0.017462265192761693,
+      "d6_Nc3": 0.03694465808165646,
+      "exd4_Nxd4": 0.7743729565809244,
+      "rest": 0.17122012014465723
+    }
+  }
+}

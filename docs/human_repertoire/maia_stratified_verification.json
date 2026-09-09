@@ -1,0 +1,45 @@
+{
+  "engine_work": {
+    "base": {
+      "new": 2045,
+      "required": 2263,
+      "reused": 218,
+      "seconds": 221.88700000000017
+    },
+    "deeper": {
+      "new": 310,
+      "required": 349,
+      "reused": 39,
+      "seconds": 133.8069999999999
+    }
+  },
+  "legal_moves": 9207,
+  "matched_deeper_contrasts": {
+    "maia_blitz": {
+      "Nf6_Nc3": {
+        "base": -0.004943665525504093,
+        "deeper": -0.004943665525504093
+      },
+      "d6_Nc3": {
+        "base": -0.005163057608208137,
+        "deeper": 0.0032261511690905437
+      }
+    },
+    "maia_rapid": {
+      "Nf6_Nc3": {
+        "base": -0.00814168547477815,
+        "deeper": -0.00814168547477815
+      },
+      "d6_Nc3": {
+        "base": -0.00016622513051848658,
+        "deeper": 3.375043462216687e-06
+      }
+    }
+  },
+  "paths_replayed": 768,
+  "prefix_mass_checks": 1672,
+  "results_sha256": "88107644826d5910dae9e7571e42e510c7d4cb0b17db709d6f7a7ecefac4829f",
+  "scalar_checks": 4320,
+  "status": "passed",
+  "verifier_sha256": "25d6bed96317100f3f702abf4f19fe75427eb7c5604593c3aee8f35d38cb11ab"
+}
