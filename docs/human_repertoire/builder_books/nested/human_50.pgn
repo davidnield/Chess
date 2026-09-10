@@ -1,0 +1,41 @@
+[Event "human budget 50 — nested variations"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[Budget "50"]
+[BookCost "48"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. One repertoire tree. STUDY comments identify prescribed White moves; other White moves are context routes to study positions. }
+1. e4 Nc6 ( 1... Nf6 2. e5 { STUDY: e5. Model recall 83.7%. } ) ( 1... b6 2. d4
+{ STUDY: d4. Model recall 70.8%. } 2... Bb7 3. Nc3 { STUDY: Nc3. Model recall 52.7%. } ) ( 1... c5
+2. d4 { STUDY: d4. Model recall 99.9%. } 2... Nc6 ( 2... cxd4 3. Nf3
+{ STUDY: Nf3. Model recall 99.8%. } 3... Nc6 ( 3... Nf6 4. e5 { STUDY: e5. Model recall 66.4%. } )
+( 3... d6 4. Qxd4 { STUDY: Qxd4. Model recall 90.2%. } ) 4. c3 { STUDY: c3. Model recall 99.4%. } )
+( 2... e6 3. Nf3 { STUDY: Nf3. Model recall 75.2%. } 3... cxd4 4. Qxd4
+{ STUDY: Qxd4. Model recall 90.6%. } ) 3. d5 { STUDY: d5. Model recall 59.2%. } ) ( 1... c6 2. Nf3
+{ STUDY: Nf3. Model recall 98.9%. } ( 2. d4 d5 3. e5 { STUDY: e5. Model recall 0.0%. } ) ( 2. Bc4
+d5 3. exd5 cxd5 4. Bb3 { STUDY: Bb3. Model recall 0.1%. } ) 2... d5 3. e5
+{ STUDY: e5. Model recall 98.7%. } ( 3. exd5 cxd5 4. Bb5+ { STUDY: Bb5+. Model recall 0.5%. } )
+3... Bf5 ( 3... Bg4 4. h3 { STUDY: h3. Model recall 94.8%. } ) 4. d4
+{ STUDY: d4. Model recall 88.8%. } ) ( 1... d5 2. exd5 { STUDY: exd5. Model recall 98.6%. } 2...
+Nf6 ( 2... Qxd5 3. Nc3 { STUDY: Nc3. Model recall 96.2%. } 3... Qa5 ( 3... Qd8 4. Nf3
+{ STUDY: Nf3. Model recall 74.4%. } ) 4. Nf3 { STUDY: Nf3. Model recall 81.5%. } ) 3. Nc3
+{ STUDY: Nc3. Model recall 86.9%. } ( 3. Nf3 Nxd5 4. d4 { STUDY: d4. Model recall 0.0%. } ) 3...
+Nxd5 4. Nxd5 { STUDY: Nxd5. Model recall 79.2%. } ) ( 1... d6 2. d4
+{ STUDY: d4. Model recall 95.0%. } 2... Nf6 3. Nc3 { STUDY: Nc3. Model recall 84.5%. } ) ( 1... e5
+2. Bc4 { STUDY: Bc4. Model recall 99.9%. } ( 2. Nc3 Nf6 3. Nf3 { STUDY: Nf3. Model recall 0.0%. } )
+( 2. Nf3 Nc6 3. Bc4 { STUDY: Bc4. Model recall 97.5%. } ( 3. Bb5 a6 4. Bxc6
+{ STUDY: Bxc6. Model recall 97.0%. } ) ( 3. d3 Nf6 4. c3 { STUDY: c3. Model recall 13.2%. } ) ( 3.
+d4 exd4 4. Bc4 { STUDY: Bc4. Model recall 43.0%. } ) 3... Be7 ( 3... Nf6 4. d4
+{ STUDY: d4. Model recall 89.9%. } ) ( 3... d6 4. d4 { STUDY: d4. Model recall 45.4%. } ) ( 3... h6
+4. d4 { STUDY: d4. Model recall 92.8%. } ) 4. d4 { STUDY: d4. Model recall 92.8%. } ) 2... Nc6 (
+2... Nf6 3. d4 { STUDY: d4. Model recall 99.1%. } ) 3. Qf3 { STUDY: Qf3. Model recall 99.0%. } ) (
+1... e6 2. d4 { STUDY: d4. Model recall 99.3%. } 2... d5 3. Nc3 { STUDY: Nc3. Model recall 98.9%. }
+( 3. e5 c5 4. Nf3 { STUDY: Nf3. Model recall 0.2%. } ) ( 3. exd5 exd5 4. Nc3
+{ STUDY: Nc3. Model recall 0.2%. } ) 3... Nf6 ( 3... dxe4 4. Nxe4
+{ STUDY: Nxe4. Model recall 79.2%. } ) 4. e5 { STUDY: e5. Model recall 93.1%. } ) ( 1... g6 2. d4
+{ STUDY: d4. Model recall 90.8%. } 2... Bg7 3. Nc3 d6 4. Bf4 { STUDY: Bf4. Model recall 3.2%. } )
+2. Nf3 { STUDY: Nf3. Model recall 68.0%. } *

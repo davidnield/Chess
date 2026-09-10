@@ -34,6 +34,14 @@ command publishes the verified books and compact numerical summary under
 `docs/human_repertoire/builder_books/`. It overwrites those report deliverables
 for the specified run; the underlying run snapshots remain separately named.
 
+The report command also creates `builder_books/nested/`: one PGN game per
+repertoire, with shared move prefixes merged and all continuations nested as
+variations. Use these files for study imports. The original one-game-per-card
+files remain unchanged. To regenerate just the nested copies, run
+`python -B -m research.human_repertoire.nested_pgn` in the research environment.
+The converter checks a PGN parse round trip, legal moves, every original route
+and annotation, and that each output contains exactly one game.
+
 Search is a bounded heuristic, including connected packages and substitutions;
 it does not certify a global optimum. Every proposed book gets its own recall
 calculation. Explicit graph cutoffs and unknown scores remain unresolved, and

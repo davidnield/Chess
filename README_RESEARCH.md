@@ -18,7 +18,7 @@ passed 138 tests. Best-available exports contain 10, 25 and 48 cards. At budget
 10, the perfect-selection search found a better common-human score than the
 human search's local result, exposing heuristic search limitations. Coverage
 bounds remain wide; these are provisional research books, not validated
-performance improvements. Start with the [10-card export](docs/human_repertoire/builder_books/best_available_10.pgn).
+performance improvements. Start with the [nested 10-card export](docs/human_repertoire/builder_books/nested/best_available_10.pgn).
 
 Previous result: [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
 supports adding 5.Be3 to d4/Nxd4 under the frozen opening-entry/recall model.

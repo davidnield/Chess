@@ -8,6 +8,8 @@ To inspect the highest-scoring book found at each budget under the common human 
 
 ## Books and common evaluation
 
+**Nested PGNs for study import:** [10 positions](builder_books/nested/best_available_10.pgn), [25 positions](builder_books/nested/best_available_25.pgn), [48 positions](builder_books/nested/best_available_50.pgn). Each file contains one game with nested variations and preserved STUDY comments. Original per-card exports remain available above.
+
 Each percentage is conditional on reaching the starting position after 1. e4. The score is discounted probability of reaching +300 cp before -300 cp within the horizon, on paths with enough known evaluation. The interval adds unresolved first-hit mass to that lower bound; it is a conservative model-coverage bound, **not a statistical confidence interval or win rate**. Scores average Blitz and Rapid equally.
 
 | Budget | Selection method / PGN | Actual positions | Known early advantage | Coverage bound | Observed first disadvantage |

@@ -12,6 +12,7 @@ import chess.pgn
 from .context_recall import solve
 from .io import ROOT,output_path,sha256
 from .repertoire_builder import Builder
+from .nested_pgn import publish as publish_nested
 
 
 def cutoff_masses(graph,book,recall,horizon,reasons):
@@ -52,6 +53,7 @@ def report(b):
         name=f'best_available_{budget}.pgn'
         shutil.copyfile(target/f'{method}_{budget}.pgn',target/name)
         best_available[budget]={'method':method,'cost':row['cost'],'pgn':name,'sha256':sha256(target/name)}
+    publish_nested(target)
     def mean(row,metric):
         return sum(c['conditional_metrics'][metric] for c in row['contexts'].values())/len(row['contexts'])
     empty={'contexts':{e:solve(g,{},b.cfg,b.c['entry_probability'],anchors=result['anchors_used'],root_ply=b.root_ply) for e,g in graphs.items()}}
@@ -67,6 +69,7 @@ def report(b):
         'The reusable selection loop is working: it generates sound candidate moves, searches connected preparation packages under a position budget, recomputes encounter frequency and recall, compares all books with the same evaluator, and exports annotated legal PGNs.', '',
         f'This run produces {number_books} provisional White books after **{root_line}**, across budgets **{budget_text}**. They are research outputs, not a validated replacement for the existing repertoire. The lookahead ends after move {end_move} by {end_side}; unexpanded positions remain explicitly unresolved.', '',
         'To inspect the highest-scoring book found at each budget under the common human evaluator: '+', '.join(f'[budget {budget}: {row["cost"]} cards](builder_books/{row["pgn"]})' for budget,row in sorted(best_available.items(),key=lambda x:int(x[0])))+'. These copies preserve the originating method in their PGN headers; no search results were changed after comparison.', '',
+        '**Nested PGNs for study import:** '+', '.join(f'[{row["cost"]} positions](builder_books/nested/{row["pgn"]})' for budget,row in sorted(best_available.items(),key=lambda x:int(x[0])))+'. Each file contains one game with nested variations and preserved STUDY comments. Original per-card exports remain available above.', '',
         '## Books and common evaluation', '',
         f'Each percentage is conditional on reaching the starting position after {root_line}. The score is discounted probability of reaching +300 cp before -300 cp within the horizon, on paths with enough known evaluation. The interval adds unresolved first-hit mass to that lower bound; it is a conservative model-coverage bound, **not a statistical confidence interval or win rate**. Scores average Blitz and Rapid equally.', '',
         '| Budget | Selection method / PGN | Actual positions | Known early advantage | Coverage bound | Observed first disadvantage |',
