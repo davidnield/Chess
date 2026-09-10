@@ -2,15 +2,25 @@
 
 This is the permanent research worktree on `codex/human-repertoire`, based on original commit `f249c4dced5935619500514e26fd1ddb0dea78a1`.
 
-**Active priority:** [build the bounded repertoire-selection loop](docs/human_repertoire/research_priorities.md).
-The user requested a strategic reset after too many incremental single-card
-studies. Connect the existing empirical/Maia/contextual-recall components to
-selective package search across several branches and study budgets, compare
-against the existing-method reference, and export provisional books. Further
-Be3-specific upstream expansion is deferred; retain the example as a regression
-fixture. This priority supersedes all historical "next steps" below.
+**Active priority:** improve whole-book continuation coverage through the
+[working repertoire-selection loop](docs/human_repertoire/research_priorities.md).
+The first end-to-end builder is complete. Keep improvements connected to usable
+books and budget tradeoffs across branches; further Be3-specific investigation
+remains deferred. This priority supersedes historical "next steps" below.
 
-**Latest completed result:** [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
+**Latest completed result:** [bounded multi-branch builder](docs/human_repertoire/builder_report.md).
+One configurable workflow prepares empirical/Maia graphs, generates sound
+candidates, searches connected packages with candidate-dependent recall, and
+exports reference/perfect-selection/human-selection books at budgets 10/25/50.
+The real e4 run retained 170 candidate moves at 77 positions. Nine books and all
+18 time-control/book cases passed independent verification; the implementation
+passed 138 tests. Best-available exports contain 10, 25 and 48 cards. At budget
+10, the perfect-selection search found a better common-human score than the
+human search's local result, exposing heuristic search limitations. Coverage
+bounds remain wide; these are provisional research books, not validated
+performance improvements. Start with the [10-card export](docs/human_repertoire/builder_books/best_available_10.pgn).
+
+Previous result: [focused 5.Be3 comparison](docs/human_repertoire/be3_focus_report.md)
 supports adding 5.Be3 to d4/Nxd4 under the frozen opening-entry/recall model.
 All six local benefit intervals have positive lower bounds; targeted expansion
 and score coverage reduced comparison uncertainty by about 90%. All 132 tests

@@ -36,7 +36,7 @@ def verify(builder):
         'engine':sha256(output_path(builder.prefix+'engine.json'))}
     pool=builder.read('candidates'); data=builder.read('data'); fens=builder.read('fens')
     policies=builder.read('policies'); aliases=builder.read('aliases'); records=builder.read('engine')['records']
-    edges_checked=0; cases=0; pgn_hashes={}
+    edges_checked=0; cases=0; pgn_hashes={}; perfect_scores={}
     for event,g in graphs.items():
         g.validate()
         for key,n in g.nodes.items():
@@ -86,11 +86,22 @@ def verify(builder):
                 if method=='perfect_selection':
                     perfect=path_evaluate(g,book,replace(builder.cfg,recall=1,recall_by_position={})).report()
                     assert abs(scorer.score(book,True)['score']-perfect['certain_early_advantage'])<1e-10
+                    perfect_scores.setdefault(budget,[]).append(perfect['certain_early_advantage'])
+                    ref=results['results'][budget]['reference']['book']
+                    ref_score=path_evaluate(g,ref,replace(builder.cfg,recall=1,recall_by_position={})).certain_early_advantage
+                    perfect_scores.setdefault('reference_'+budget,[]).append(ref_score)
                 name=f'{method}_{budget}.pgn'; path=output_path(builder.prefix+name)
                 verify_pgn(path.read_text(encoding='utf-8'),book); pgn_hashes[name]=sha256(path)
                 cases+=1
                 print('verified',event,budget,method,flush=True)
+    for budget,methods in results['results'].items():
+        for method in ('human','perfect_selection'):
+            selected=results['search'][method][budget]
+            assert methods[method]['book']==selected['book']
+            actual=(methods[method]['mean_human_score'] if method=='human' else sum(perfect_scores[budget])/len(graphs))
+            reference=(methods['reference']['mean_human_score'] if method=='human' else sum(perfect_scores['reference_'+budget])/len(graphs))
+            assert abs(actual-selected['selection_metrics']['score'])<1e-10
+            assert actual+1e-10>=reference,('search worse than reference seed',budget,method)
     out={'status':'passed','scenario_books':cases,'legal_edges':edges_checked,'pgn_sha256':pgn_hashes,
          'results_sha256':sha256(output_path(builder.prefix+'results.json')),'verifier_sha256':sha256(__file__)}
     builder.save('verification',out); print(out,flush=True)
-

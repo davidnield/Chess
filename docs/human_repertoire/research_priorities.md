@@ -1,5 +1,36 @@
 # Priority reset: build the repertoire-selection loop
 
+## Delivered: first end-to-end builder
+
+The bounded selection workflow and real e4 run are complete; see the
+[report and PGNs](builder_report.md). It generated nine comparison books under
+10/25/50-position ceilings across multiple Black replies, with empirical
+opponents, Maia-1400 fallback, candidate-dependent contextual recall, connected
+package search, canonical reference projection and common final evaluation.
+All 18 policy/book cases passed independent verification. Keep the sections
+below as the original acceptance criteria, not as outstanding implementation.
+
+The next project-level bottleneck is whole-book continuation coverage: the
+budget-50 human book exits at expansion caps on about 58.3% of route mass,
+whereas empirical-tail exits are about 0.028%. Develop bounded continuation
+allocation across competing packages through this builder, then report how
+whole-book scores, risk and budget choices change. Do not infer sparse opponent
+data from these computational cutoffs or launch another Be3-only series.
+
+Search robustness also matters: at budget 10, the perfect-selection arm found
+a better human-evaluated book than the human search's local result. The report
+therefore exports the best available book across the already-scored methods,
+without rewriting the frozen comparison. Future search can reuse all available
+feasible seeds. Avoid attributing every method difference to recall alone.
+
+Set the next run's limits prospectively. Its completion criterion should be a
+new independently checked whole-book comparison with reported coverage and
+resource cost, whether or not it resolves a ranking. Do not automatically expand
+until confidence intervals become narrow, rebuild full datasets, or require
+per-card certainty before retaining useful provisional output.
+
+## Original reset and acceptance criteria
+
 The user requested this reassessment after repeated follow-ups on 5.Be3.
 This document overrides historical "next priority" paragraphs in experiment
 reports. The starter brief and isolation requirements remain in force.

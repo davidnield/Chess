@@ -1,0 +1,129 @@
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "7227515431820872427"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 c5 2. d4 { STUDY: d4. Model recall 99.9%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "1172755318016414253"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 c6 2. Nf3 { STUDY: Nf3. Model recall 98.9%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "528813709611831216"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 d5 2. exd5 { STUDY: exd5. Model recall 98.6%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "595762792459712928"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 e5 2. Bc4 { STUDY: Bc4. Model recall 99.9%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "-843464636023713340"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 e6 2. d4 { STUDY: d4. Model recall 99.3%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "7748663110719689693"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 g6 2. d4 { STUDY: d4. Model recall 90.8%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "762724301325386410"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 c5 2. d4 { STUDY: d4. Model recall 99.9%. } 2... Nc6 3. d5 { STUDY: d5. Model recall 59.2%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "-6582747376220884868"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 d5 2. exd5 { STUDY: exd5. Model recall 98.6%. } 2... Qxd5 3. Nc3 { STUDY: Nc3. Model recall 96.2%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "-4604086398752470523"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 e5 2. Bc4 { STUDY: Bc4. Model recall 99.9%. } 2... Nc6 3. Qf3 { STUDY: Qf3. Model recall 99.0%. } *
+
+[Event "human budget 10"]
+[Site "?"]
+[Date "????.??.??"]
+[Round "?"]
+[White "Prepared player"]
+[Black "Empirical opponent"]
+[Result "*"]
+[CardPosition "3465823137605430928"]
+[Budget "10"]
+[BookCost "10"]
+
+{ Illustrative route to this card. Unmarked White moves are context, not additional prescriptions. } 1. e4 e5 2. Bc4 { STUDY: Bc4. Model recall 99.9%. } 2... Nf6 3. d4 { STUDY: d4. Model recall 99.1%. } *

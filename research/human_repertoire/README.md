@@ -1,5 +1,48 @@
 # Human repertoire prototype
 
+## Active workflow: bounded repertoire builder
+
+The current workflow builds candidate packages across multiple Black replies
+after 1.e4, selects books under 10/25/50-position ceilings, and exports reference,
+perfect-selection and human-selection PGNs. All final books use the common
+human evaluator. Read the [prospective plan](../../docs/human_repertoire/builder_plan.md)
+and [result report](../../docs/human_repertoire/builder_report.md).
+
+After checking memory headroom and active workloads, use the existing isolated
+Maia environment (the preparation phase requires its pinned models):
+
+```powershell
+$env:OPENBLAS_NUM_THREADS='1'
+$env:OMP_NUM_THREADS='1'
+$builderPython = 'C:/Users/David/Documents/Chess-human-repertoire/research/human_repertoire/_artifacts/maia2/venv/Scripts/python.exe'
+& $builderPython -B -m unittest discover -s research/human_repertoire -t . -p 'test_*.py'
+& $builderPython -B -m research.human_repertoire.repertoire_builder all
+& $builderPython -B -m research.human_repertoire.builder_report
+```
+
+`prepare`, `engine`, `build`, and `verify` can also run separately. Use
+`--config <path>` with a distinct `run_name` for another declared scenario.
+Configuration is [builder_config.json](../../docs/human_repertoire/builder_config.json).
+Preparation checkpoints source batches and Maia policies, engine work checkpoints
+each target, and search checkpoints each selection method. Completed phases check
+input identities before reuse. Do not edit snapshots to bypass drift checks.
+
+Run state is isolated under `_artifacts/builder/<run_name>/`: source projections,
+graph/FEN/policy snapshots, provenance, engine audit, candidates, search traces,
+per-book exposure/recall/metrics, PGNs and independent verification. The report
+command publishes the verified books and compact numerical summary under
+`docs/human_repertoire/builder_books/`. It overwrites those report deliverables
+for the specified run; the underlying run snapshots remain separately named.
+
+Search is a bounded heuristic, including connected packages and substitutions;
+it does not certify a global optimum. Every proposed book gets its own recall
+calculation. Explicit graph cutoffs and unknown scores remain unresolved, and
+horizon W/D/L is a placeholder. The original reference is a documented budget
+projection, not a perfect-recall method. Classical transfers the Rapid fallback;
+this first run averages Blitz/Rapid and does not add a duplicate validation arm.
+
+## Historical prototype and experiments
+
 Finite-horizon evaluator, exact small-book search, independent complete-path
 oracle, synthetic fixtures, and a bounded real chess adapter. Read
 [the model contract](../../docs/human_repertoire/MODEL.md) and
