@@ -63,6 +63,9 @@ Usage:
 
     # a single kind
     .venv/Scripts/python.exe python/consolidate_reclaim.py --kinds ps --apply
+
+    # banded explorer months (~45 GB of ps partials each) do not fit one GROUP BY
+    .venv/Scripts/python.exe python/consolidate_reclaim.py --partial-dir <dir> --kinds ps term --sub-buckets auto
 """
 from __future__ import annotations
 
@@ -79,7 +82,7 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).parent))
 from build_pooled_stats import (STATS_DIR, consolidate_monthly,
-                                discover_source_files)
+                                discover_source_files, sub_buckets_arg)
 
 # build_pooled_stats keeps this as an argparse default rather than a constant;
 # it must match, or the completeness guard compares against the wrong file count.
@@ -191,6 +194,10 @@ def main() -> int:
     ap.add_argument("--kinds", nargs="+", default=list(DEFAULT_KINDS))
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--mem", default="48GB")
+    ap.add_argument("--sub-buckets", type=sub_buckets_arg, default=1, metavar="N|auto",
+                    help="Split each month's GROUP BY into N key-hash slices; 'auto' "
+                         "sizes N per month to fit --mem. Default 1 (one query per "
+                         "month). See build_pooled_stats.consolidate_monthly.")
     ap.add_argument("--start-year", type=int, default=2013)
     ap.add_argument("--end-year", type=int, default=2026)
     ap.add_argument("--apply", action="store_true",
@@ -212,6 +219,7 @@ def main() -> int:
     print(f"chunks    : {have:,} ps partials / {expected:,} source files "
           f"— {'COMPLETE' if done else 'INCOMPLETE'}")
     print(f"free      : {free0/GB:,.1f} GB")
+    print(f"sub-bucket: {a.sub_buckets} (threads {a.threads}, mem {a.mem})")
     print(f"mode      : {'APPLY (will delete verified partials)' if a.apply else 'DRY RUN'}\n")
     if not done and not a.force:
         print("REFUSING: the extract has not produced a partial for every source "
@@ -231,7 +239,8 @@ def main() -> int:
               f"{len(parts)} months")
 
         t0 = time.time()
-        consolidate_monthly(partial_dir, a.threads, a.mem, None, (kind,))
+        consolidate_monthly(partial_dir, a.threads, a.mem, None, (kind,),
+                            sub_buckets=a.sub_buckets)
         print(f"  consolidated in {time.time()-t0:,.0f}s", flush=True)
 
         if not verify_kind(partial_dir, kind, a.threads, a.mem):

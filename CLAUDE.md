@@ -141,8 +141,17 @@ Long-lived processes doing repeated multi-GB alloc/free cycles degrade or die:
   `gc.collect()` + `pyarrow.default_memory_pool().release_unused()`.
 - **DuckDB**: consecutive multi-GB GROUP BYs in one process decay throughput 3–5× with no error
   (measured on flat same-size inputs, zero spill). Mitigation: per-task process isolation —
-  `ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)`, as in `build_pooled_stats.py`'s
-  monthly consolidation.
+  one fresh worker process per query, as `build_pooled_stats._run_isolated` does for the monthly
+  consolidation.
+
+### Process pools that fail slowly and silently
+Never submit a queue of long tasks and then read them with `as_completed` inside
+`with ProcessPoolExecutor(...)`. The first task's exception is raised inside the `with` block, and
+its exit, `shutdown(wait=True)`, runs **every remaining queued task to completion** before the
+exception reaches the log. The 2026 banded consolidation failed five ~1.5 h months in a row that
+way, with an empty log. For long sequential work, submit one task and call `.result()` before
+submitting the next (`_run_isolated`). The tell-tale in `_monthly`: a missing month *before* the
+month whose `.tmp` is in flight. A failed DuckDB `COPY` deletes its own `.tmp`.
 
 ### DuckDB out-of-memory triage — two errors that look alike
 - `failed to offload data block ... max_temp_directory_size` → the **temp drive is full**, not RAM.
@@ -153,7 +162,9 @@ Long-lived processes doing repeated multi-GB alloc/free cycles degrade or die:
   `preserve_insertion_order=false` always. If it *still* OOMs at the full budget, the group
   cardinality doesn't fit RAM at all — partition the GROUP BY into disjoint key-hash buckets and
   union (`N_MERGE_BUCKETS` is the template; bucketing on a column of the grouping key keeps
-  HAVING-filter semantics exact).
+  HAVING-filter semantics exact). Monthly consolidation does this with `--sub-buckets auto`: banded
+  explorer months (~45 GB of partials) spilled 309 GB in an hour and still never finished as one
+  query. The sizing constants and their calibration table sit above `SUB_BUCKET_BYTES_FACTOR`.
 
 ### Windows working-set trim vs. big DuckDB memory limits
 A DuckDB process whose memory_limit approaches physical RAM while scanning hundreds of GB can get

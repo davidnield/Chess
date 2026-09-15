@@ -70,6 +70,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import shutil
 import sys
@@ -980,11 +981,11 @@ _MONTH_RE = re.compile(r"year=(\d+)_month=(\d+)_event=")
 N_MERGE_BUCKETS = 32
 
 
-def _bucket_expr(col: str) -> str:
+def _bucket_expr(col: str, n: int = N_MERGE_BUCKETS) -> str:
     # Arithmetic bucketing (not hash()) so resumed runs assign identical buckets
     # regardless of DuckDB version. Zobrist hashes are uniform in the low bits;
     # the double-modulo folds negative int64 values into [0, N).
-    return f"(({col} % {N_MERGE_BUCKETS}) + {N_MERGE_BUCKETS}) % {N_MERGE_BUCKETS}"
+    return f"(({col} % {n}) + {n}) % {n}"
 
 
 def _bucket_has_data(part_dir: Path, i: int) -> bool:
@@ -1152,9 +1153,262 @@ def _consolidate_one_month(task: tuple) -> tuple:
     return label, len(in_files), out.stat().st_size, time.time() - t0
 
 
+# ── sub-bucketed consolidation (explorer scale, 2026-09) ──────────────────────
+#
+# _consolidate_one_month was tuned on brc months of ~5-7 GB of ps partials. The
+# banded explorer extract writes 43-47 GB (1.7-1.8B rows) of ps partials per
+# month, and one GROUP BY over that does not finish:
+#   - 2024-06, --mem 24GB --threads 4: OutOfMemoryException
+#     "could not allocate block of size 256.0 KiB (22.3 GiB/22.3 GiB used)".
+#   - 2026, --mem 48GB --threads 8: months 1-5 each ran ~87 min and wrote
+#     nothing; month 6 had spilled 309 GB to temp within the hour while holding
+#     47 GB. Out-of-core aggregation does engage for this query. It does not
+#     rescue it.
+# With sub_buckets = K a month runs as K GROUP BYs over disjoint key-hash slices
+# of the same files. Every group key starts with the sliced column (parent_hash,
+# or position_hash for term), so each key lands wholly in one slice and the
+# union of the K results IS the single-query aggregate, holding 1/K of its
+# state. The parts are then concatenated into the usual one-file monthly, so no
+# reader of _monthly changes.
+
+# (GROUP BY key, aggregates) per partial kind. winpos<T> partials are
+# schema-identical to crush by construction, so they reuse its grouping rather
+# than getting a near-duplicate spec that could drift.
+_HIST_SPEC = ("parent_hash, move_san, move_bucket",
+              "SUM(n)::BIGINT AS n, SUM(white_wins)::BIGINT AS white_wins, "
+              "SUM(black_wins)::BIGINT AS black_wins")
+_CONSOLIDATION_SPECS = {
+    "ps": ("parent_hash, move_san, event, elo_band",
+           "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
+           "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
+           "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
+           "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
+    "crush": _HIST_SPEC,
+    "term": ("position_hash, kind, reason",
+             "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
+             "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
+}
+
+
+def consolidation_spec(kind: str) -> tuple[str, str] | None:
+    """(GROUP BY key, aggregates) for one partial kind; None for an unknown kind.
+    The FIRST key column is the one sub-bucketing slices on."""
+    if kind.startswith("winpos"):
+        return _HIST_SPEC
+    return _CONSOLIDATION_SPECS.get(kind)
+
+
+# sub_buckets='auto' sizing, calibrated 2026-09-15 on the 2024-06 banded month
+# (327 ps partials, 44.67 GB, 1.73B rows -> 1.355B groups) with --threads 8
+# --mem 48GB, one slice at each K:
+#     K    input/slice   groups/slice   peak commit   seconds   month total
+#     64      0.70 GB        21.2M         10.5 GB        90       1.6 h
+#     32      1.40 GB        42.3M         18.4 GB       185       1.6 h
+#     16      2.79 GB        84.7M         32.3 GB       545       2.4 h
+# Peak commit ~= 3.2 GB + 10.4 x slice input bytes. Aggregation also slows
+# superlinearly once a slice passes ~1.5 GB of input, so auto takes the larger
+# of a memory K and a speed K. The filter itself is cheap: DuckDB pushes it into
+# the parquet scan (a filtered read of all twelve columns took 44 s).
+SUB_BUCKET_BYTES_FACTOR = 12.0          # peak commit per input byte (10.4 measured, +15%)
+SUB_BUCKET_BASE_BYTES = 4 * 10**9       # per-query overhead (3.2 GB measured)
+SUB_BUCKET_MAX_INPUT_BYTES = 15 * 10**8  # slice input above this aggregates slowly
+
+
+def _mem_bytes(mem: str) -> int:
+    """A DuckDB memory_limit string as bytes. DuckDB reads KB/MB/GB/TB as powers
+    of 1000 and KiB/MiB/GiB/TiB as powers of 1024 — --mem 24GB surfaced in its
+    OOM message as 22.3 GiB."""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT]I?B|B)?\s*", mem.upper())
+    if not m:
+        raise ValueError(f"unparseable memory size: {mem!r}")
+    unit = m.group(2) or "B"
+    if unit == "B":
+        return int(float(m.group(1)))
+    base = 1024 if "I" in unit else 1000
+    return int(float(m.group(1)) * base ** ("KMGT".index(unit[0]) + 1))
+
+
+def resolve_sub_buckets(spec: int | str, input_bytes: int, mem: str) -> int:
+    """K for one month: an explicit count, or 'auto' — the smallest power of two
+    that both fits each slice in the memory limit (base + factor * input / K) and
+    keeps each slice's input under SUB_BUCKET_MAX_INPUT_BYTES."""
+    if isinstance(spec, str) and spec.strip().lower() == "auto":
+        mem_b = _mem_bytes(mem)
+        usable = max(mem_b - SUB_BUCKET_BASE_BYTES, mem_b // 4)
+        need = max(math.ceil(input_bytes * SUB_BUCKET_BYTES_FACTOR / usable),
+                   math.ceil(input_bytes / SUB_BUCKET_MAX_INPUT_BYTES), 1)
+        return 1 << (need - 1).bit_length()
+    k = int(spec)
+    if k < 1:
+        raise ValueError(f"sub_buckets must be a positive integer or 'auto', got {spec!r}")
+    return k
+
+
+def sub_buckets_arg(value: str) -> int | str:
+    """argparse type for --sub-buckets: a positive integer or 'auto'."""
+    v = value.strip().lower()
+    if v == "auto":
+        return v
+    if v.isdigit() and int(v) >= 1:
+        return int(v)
+    raise argparse.ArgumentTypeError(f"expected a positive integer or 'auto', got {value!r}")
+
+
+def _peak_commit_bytes() -> int | None:
+    """This process's peak private commit (Windows PeakPagefileUsage) — commit,
+    not RAM, is the ceiling on these machines. Peak RSS elsewhere; None if the
+    platform will not say."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+
+            class _Counters(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            ("PeakWorkingSetSize", ctypes.c_size_t),
+                            ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                            ("PagefileUsage", ctypes.c_size_t),
+                            ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            current = ctypes.windll.kernel32.GetCurrentProcess
+            current.restype = wintypes.HANDLE
+            info = ctypes.windll.psapi.GetProcessMemoryInfo
+            info.argtypes = [wintypes.HANDLE, ctypes.POINTER(_Counters), wintypes.DWORD]
+            info.restype = wintypes.BOOL
+            c = _Counters()
+            c.cb = ctypes.sizeof(c)
+            return int(c.PeakPagefileUsage) if info(current(), ctypes.byref(c), c.cb) else None
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024   # Linux: KiB
+    except Exception:                                                        # noqa: BLE001
+        return None
+
+
+def _peak_note(peak: int | None) -> str:
+    return "" if peak is None else f", peak {peak / 1e9:.1f} GB"
+
+
+def _parquet_rows(p) -> int:
+    # Closed before any rename: Windows will not rename a file that is still open.
+    with pq.ParquetFile(p) as f:
+        return f.metadata.num_rows
+
+
+def _run_isolated(fn, task: tuple):
+    """fn(task) in a fresh worker process; its result, or its exception, NOW.
+
+    A fresh process per query is the allocator isolation _consolidate_one_month
+    explains. Submitting ONE task at a time is the other half. The old loop
+    submitted every month and read results with as_completed, so the first
+    month's OutOfMemoryException was raised inside the `with` block, whose exit
+    (shutdown(wait=True)) first ran every remaining month to completion. Home's
+    2026 consolidation failed five months in a row that way, over ~7 h, with
+    nothing in its log."""
+    with ProcessPoolExecutor(max_workers=1) as ex:
+        return ex.submit(fn, task).result()
+
+
+def _consolidate_sub_bucket(task: tuple) -> tuple:
+    """ONE key-hash slice of one month's GROUP BY, in a fresh process. The query
+    is _consolidate_one_month's plus a WHERE on the slice. Atomic .tmp -> rename:
+    a part exists only when complete, which is what lets a killed month resume
+    from the parts it already has."""
+    grp, sums, in_files, bucket_col, nsub, j, part_str, threads, mem, tmp_str = task
+    part = Path(part_str)
+    part_tmp = part.with_suffix(".parquet.tmp")
+    part_tmp.unlink(missing_ok=True)
+    in_list = ", ".join(f"'{_sql_path(Path(p))}'" for p in in_files)
+    t0 = time.time()
+    con = _duck(threads, mem, Path(tmp_str))
+    try:
+        con.execute(f"""
+            COPY (
+                SELECT {grp}, {sums}
+                FROM read_parquet([{in_list}])
+                WHERE {_bucket_expr(bucket_col, nsub)} = {j}
+                GROUP BY {grp}
+            ) TO '{_sql_path(part_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+    finally:
+        con.close()
+    part_tmp.replace(part)
+    return _parquet_rows(part), part.stat().st_size, time.time() - t0, _peak_commit_bytes()
+
+
+def _assemble_sub_buckets(task: tuple) -> tuple:
+    """Concatenate one month's parts into its single monthly file, in a fresh
+    process. A streaming COPY with no GROUP BY, so memory stays at scan and writer
+    buffers. The row count is checked against the parts' footers BEFORE the
+    rename, so a short monthly can never pass the skip gate."""
+    parts, out_str, threads, mem, tmp_str = task
+    out = Path(out_str)
+    out_tmp = out.with_suffix(".parquet.tmp")
+    out_tmp.unlink(missing_ok=True)
+    want = sum(_parquet_rows(p) for p in parts)
+    in_list = ", ".join(f"'{_sql_path(Path(p))}'" for p in parts)
+    t0 = time.time()
+    con = _duck(threads, mem, Path(tmp_str))
+    try:
+        con.execute(f"""
+            COPY (SELECT * FROM read_parquet([{in_list}]))
+            TO '{_sql_path(out_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+    finally:
+        con.close()
+    got = _parquet_rows(out_tmp)
+    if got != want:
+        raise RuntimeError(f"{out.name}: assembled {got:,} rows from parts holding {want:,}")
+    out_tmp.replace(out)
+    return got, out.stat().st_size, time.time() - t0, _peak_commit_bytes()
+
+
+def _consolidate_month_in_parts(grp: str, sums: str, files: list[Path], out: Path,
+                                nsub: int, threads: int, mem: str, tmp_dir: Path,
+                                label: str) -> None:
+    """One month as `nsub` key-hash slices, then one concatenation. Parts live in
+    a directory named for their K, so a re-run that resolves a different K
+    discards them instead of mixing two slicings."""
+    t0 = time.time()
+    bucket_col = grp.split(",")[0].strip()
+    stem = out.name[: -len(".parquet")]                      # year=Y_month=M.<kind>
+    part_dir = out.parent / f"_tmp_{stem}.k{nsub}"
+    for stale in out.parent.glob(f"_tmp_{stem}.k*"):
+        if stale != part_dir:
+            print(f"      discarding {stale.name}: parts sliced with a different K", flush=True)
+            shutil.rmtree(stale)
+    part_dir.mkdir(exist_ok=True)
+    for stale in part_dir.glob("*.tmp"):
+        stale.unlink()
+    in_gb = sum(f.stat().st_size for f in files) / 1e9
+    print(f"    {label} {stem.rsplit('.', 1)[1]}: {len(files)} files, {in_gb:,.1f} GB -> "
+          f"{nsub} sub-buckets on {bucket_col}", flush=True)
+    parts = [part_dir / f"part-{j:04d}.parquet" for j in range(nsub)]
+    for j, part in enumerate(parts):
+        if part.exists():
+            print(f"      part {j + 1}/{nsub}: kept from an earlier run", flush=True)
+            continue
+        rows, size, secs, peak = _run_isolated(
+            _consolidate_sub_bucket,
+            (grp, sums, [str(p) for p in files], bucket_col, nsub, j, str(part),
+             threads, mem, str(tmp_dir)))
+        print(f"      part {j + 1}/{nsub}: {rows:,} rows, {size / 1e6:,.0f} MB "
+              f"({secs:,.0f}s{_peak_note(peak)})", flush=True)
+    rows, size, secs, peak = _run_isolated(
+        _assemble_sub_buckets, ([str(p) for p in parts], str(out), threads, mem, str(tmp_dir)))
+    shutil.rmtree(part_dir, ignore_errors=True)
+    print(f"    {label} {stem.rsplit('.', 1)[1]}: {nsub} parts -> {size / 1e6:,.0f} MB, "
+          f"{rows:,} rows (assembly {secs:,.0f}s{_peak_note(peak)}; "
+          f"month {time.time() - t0:,.0f}s)", flush=True)
+
+
 def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
                         tmp_base: Path | None = None,
-                        kinds: tuple[str, ...] = ("ps", "crush")) -> Path:
+                        kinds: tuple[str, ...] = ("ps", "crush"),
+                        sub_buckets: int | str = 1) -> Path:
     """SUM-only per-(year,month) consolidation of the per-file partials.
 
     NO min_games filter here — pure summation, so a position split across files/
@@ -1167,32 +1421,19 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
     passes ("ps",) only — the resignation-proxy crush histogram is retired (see
     --crush-hist), and consolidating its partials is the largest avoidable cost in
     the merge.
+
+    `sub_buckets` (--sub-buckets): 1 runs each month as one GROUP BY, exactly as
+    before. K > 1 runs K disjoint key-hash slices and concatenates them, resumable
+    per slice; 'auto' picks K per month from its input size (resolve_sub_buckets).
+    See the note above SUB_BUCKET_BYTES_FACTOR.
     """
     mdir = partial_dir / "_monthly"
     mdir.mkdir(parents=True, exist_ok=True)
     tmp_dir = (tmp_base or partial_dir) / "_merge_duckdb_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # winpos<T> partials are schema-identical to crush by construction, so they
-    # reuse its grouping rather than getting a near-duplicate spec that could drift.
-    _HIST = ("parent_hash, move_san, move_bucket",
-             "SUM(n)::BIGINT AS n, SUM(white_wins)::BIGINT AS white_wins, "
-             "SUM(black_wins)::BIGINT AS black_wins")
-    specs = {
-        "ps": ("parent_hash, move_san, event, elo_band",
-               "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
-               "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
-               "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
-               "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
-        "crush": _HIST,
-        "term": ("position_hash, kind, reason",
-                 "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
-                 "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
-    }
-    for k in kinds:
-        if k.startswith("winpos"):
-            specs.setdefault(k, _HIST)
-    for kind, (grp, sums) in [(k, specs[k]) for k in kinds if k in specs]:
+    for kind, (grp, sums) in [(k, consolidation_spec(k)) for k in kinds
+                              if consolidation_spec(k)]:
         months: dict[tuple[int, int], list[Path]] = {}
         for f in partial_dir.glob(f"*.{kind}.parquet"):
             m = _MONTH_RE.search(f.name)
@@ -1200,24 +1441,32 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
                 months.setdefault((int(m.group(1)), int(m.group(2))), []).append(f)
         todo = [(ym, fs) for ym, fs in sorted(months.items())
                 if not (mdir / f"year={ym[0]}_month={ym[1]}.{kind}.parquet").exists()]
+        # Part dirs left by a crash between a monthly's rename and their removal.
+        for stale in mdir.glob(f"_tmp_year=*.{kind}.k*"):
+            m = re.fullmatch(rf"_tmp_year=(\d+)_month=(\d+)\.{re.escape(kind)}\.k\d+",
+                             stale.name)
+            if m and (mdir / f"year={m.group(1)}_month={m.group(2)}.{kind}.parquet").exists():
+                shutil.rmtree(stale, ignore_errors=True)
         print(f"  consolidate {kind}: {len(months)} months, {len(todo)} to build", flush=True)
-        if not todo:
-            continue
-        # Per-month process isolation: each GROUP BY runs in a worker that is recycled
-        # after one task (max_tasks_per_child=1), resetting the native-allocator
-        # fragmentation that otherwise degrades throughput ~3x over a few months.
-        # max_workers=1 keeps months sequential — each may use the full --mem budget.
-        tasks = [
-            (kind, grp, sums, [str(p) for p in files],
-             str(mdir / f"year={y}_month={mo}.{kind}.parquet"),
-             threads, mem, str(tmp_dir), f"{y}/{mo}")
-            for (y, mo), files in todo
-        ]
-        with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as ex:
-            for fut in as_completed([ex.submit(_consolidate_one_month, t) for t in tasks]):
-                label, nfiles, size, secs = fut.result()
-                print(f"    {label} {kind}: {nfiles} files -> "
-                      f"{size/1e6:.0f} MB ({secs:.0f}s)", flush=True)
+        # Months run strictly one after another, one fresh process per GROUP BY
+        # (_run_isolated): each may use the full --mem budget, the native-allocator
+        # fragmentation that degrades a long-lived process ~3x is reset every time,
+        # and a failure stops the run at that month.
+        for (y, mo), files in todo:
+            label = f"{y}/{mo}"
+            out = mdir / f"year={y}_month={mo}.{kind}.parquet"
+            nsub = resolve_sub_buckets(sub_buckets, sum(f.stat().st_size for f in files), mem)
+            if nsub > 1:
+                _consolidate_month_in_parts(grp, sums, files, out, nsub, threads, mem,
+                                            tmp_dir, label)
+                continue
+            label, nfiles, size, secs = _run_isolated(
+                _consolidate_one_month,
+                (kind, grp, sums, [str(p) for p in files], str(out),
+                 threads, mem, str(tmp_dir), label))
+            print(f"    {label} {kind}: {nfiles} files -> "
+                  f"{size/1e6:.0f} MB ({secs:.0f}s)"
+                  + ("" if sub_buckets == 1 else " [1 sub-bucket]"), flush=True)
     return mdir
 
 
@@ -1622,6 +1871,14 @@ def main() -> None:
                     help="Override the DuckDB merge-phase temp/spill directory "
                          "(default: <partial-dir>/_merge_duckdb_tmp). Point this at a "
                          "drive with ample free space if the default drive is tight.")
+    ap.add_argument("--sub-buckets", type=sub_buckets_arg, default=1, metavar="N|auto",
+                    help="Run each month's consolidation GROUP BY as N disjoint "
+                         "key-hash slices (one fresh process each, resumable per "
+                         "slice), then concatenate them into the usual monthly. "
+                         "'auto' picks the smallest power of two that fits --mem "
+                         "for each month's input size. Default 1: one GROUP BY per "
+                         "month, as before. Banded explorer months (~45 GB of ps "
+                         "partials) need auto.")
     ap.add_argument("--tag", default=None, help="Override the output filename tag.")
     # ── asymmetric-depth prune (seeded from existing >=1800 frequency stats) ──
     ap.add_argument("--no-prune", action="store_true",
@@ -1793,7 +2050,7 @@ def main() -> None:
                       if any(partial_dir.glob(f"*.winpos{t}.parquet"))]
         print("Consolidating per-month (sum only, no filter)...", flush=True)
         monthly_dir = consolidate_monthly(partial_dir, args.threads, args.mem, tmp_base,
-                                          tuple(kinds))
+                                          tuple(kinds), sub_buckets=args.sub_buckets)
         # Stage 2: final global merge — min_games applied here ONCE, over all months.
         print("Final merge: position-stats (min_games applied here)...", flush=True)
         merge_position_stats(monthly_dir, partial_dir, ps_out, args.min_games,
