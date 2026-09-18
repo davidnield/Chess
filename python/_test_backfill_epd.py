@@ -36,6 +36,7 @@ from __future__ import annotations
 import contextlib
 import io
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -59,6 +60,17 @@ PS_SCHEMA = {"parent_hash": pl.Int64, "move_san": pl.Utf8, "event": pl.Utf8,
 KEY = ["parent_hash", "move_san", "event", "elo_band"]
 
 _checks: list[tuple[bool, str]] = []
+
+# More tasks than any plausible per-worker recycle limit, run in a subprocess so
+# a regression FAILS on a timeout instead of hanging the suite. See _run_pool:
+# max_tasks_per_child deadlocks on 3.11 + Windows spawn, and it did so in the
+# 2024-06 pilot at exactly 11 workers x 32 tasks.
+POOL_STRESS_N = 200
+POOL_STRESS_WORKERS = 3
+
+
+def _double(t: tuple) -> int:
+    return t[0] * 2
 
 
 def check(ok: bool, label: str) -> bool:
@@ -154,6 +166,20 @@ def read_out(out: Path, year: int = YEAR, month: int = MONTH) -> pl.DataFrame:
 
 
 def main() -> None:
+    if "--pool-stress" in sys.argv:
+        got = bf._run_pool(_double, [(i,) for i in range(POOL_STRESS_N)],
+                           POOL_STRESS_WORKERS)
+        print(sum(got))
+        return
+
+    print("\nthe worker pool survives more tasks than a recycle limit would allow")
+    proc = subprocess.run([sys.executable, __file__, "--pool-stress"],
+                          capture_output=True, text=True, timeout=300)
+    want = sum(i * 2 for i in range(POOL_STRESS_N))
+    check(proc.returncode == 0 and proc.stdout.strip() == str(want),
+          f"{POOL_STRESS_N} tasks over {POOL_STRESS_WORKERS} workers all return "
+          f"(max_tasks_per_child would deadlock here)")
+
     tmp = Path(tempfile.mkdtemp(prefix="test_backfill_"))
     try:
         rows, truth = build_rows(GAMES)

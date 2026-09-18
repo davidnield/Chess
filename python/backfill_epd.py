@@ -135,7 +135,7 @@ def _dir_bytes(p: Path) -> int:
     return sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
 
 
-def _run_pool(fn, tasks: list, workers: int, recycle: int = 32) -> list:
+def _run_pool(fn, tasks: list, workers: int) -> list:
     """Run tasks in parallel and FAIL FAST.
 
     ProcessPoolExecutor's context exit is shutdown(wait=True), so the obvious
@@ -143,12 +143,20 @@ def _run_pool(fn, tasks: list, workers: int, recycle: int = 32) -> list:
     queued task to run. That is what silently burned ~7 h of home's 2026
     consolidation. Cancelling the queue first bounds the wait to the tasks
     already in flight.
+
+    NO max_tasks_per_child. It HANGS on Python 3.11 + Windows spawn: the pilot
+    stopped dead after exactly 352 of 512 seed tasks — 11 workers x 32 tasks —
+    with every worker exited at its limit, no replacement spawned, no exception,
+    and the parent waiting forever on futures that could never run. Worker
+    recycling is not needed here anyway: every caller builds a fresh pool for one
+    stage or one ply and tears it down after, so no worker outlives a level. The
+    long-lived-process fragmentation that _consolidate_one_month documents is
+    handled by _run_isolated, which gives each heavy DuckDB query its own process.
     """
     if not tasks:
         return []
     out = []
-    with ProcessPoolExecutor(max_workers=min(workers, len(tasks)),
-                             max_tasks_per_child=recycle) as ex:
+    with ProcessPoolExecutor(max_workers=min(workers, len(tasks))) as ex:
         futs = [ex.submit(fn, t) for t in tasks]
         try:
             for f in futs:
