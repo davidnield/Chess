@@ -95,9 +95,14 @@ SUM_COLS = ("total", "white_wins", "draws", "black_wins")
 
 MONTH_RE = re.compile(r"^year=(\d+)_month=(\d+)\.ps\.parquet$")
 
-# Transposition stragglers converge in one or two sweeps; more than this means
-# the edge graph is not what we think it is, and looping is the wrong answer.
-MAX_SWEEPS = 6
+# Transposition stragglers form chains and a sweep unwinds one layer of each, so
+# the round count is the deepest chain -- not "one or two". Measured on 2024-06:
+# 460,186 positions short after the levels, in ~61,230 chains averaging 7.5 deep,
+# needing ~8 rounds. The real guard against a broken edge graph is the no-progress
+# check inside the loop (a round that resolves nothing can never be followed by
+# one that does, since `known` only grows), so this ceiling only has to be
+# generous. Rounds after the first are cheap -- see the fixpoint comment.
+MAX_SWEEPS = 64
 
 # DuckDB keeps one writer open per partition value; the default cap of 100 makes
 # a 512-way split thrash. Raising it trades a little memory for one pass.
@@ -595,19 +600,35 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
     # 4 ── fixpoint: keys whose any_value(ply) sent them to the wrong level
     #
     # A consolidated key carries any_value(ply), so a (parent, move) seen at two
-    # depths can be filed under the deeper one and miss the level where its
-    # parent became known. Sweeping what is still missing against the WHOLE known
-    # table catches those; the count must reach zero, because every position that
-    # appears as a parent in the month was itself reached by an edge in the same
-    # month.
+    # depths can be filed under the deeper one and miss the level where its parent
+    # became known. The count must reach zero, because every position that appears
+    # as a parent in the month was itself reached by an edge in the same month.
+    #
+    # Measured on 2024-06: 460,186 positions short after the levels, and each round
+    # resolved almost exactly 61,230 of them -- i.e. ~61,230 transposition chains
+    # of average depth 7.5, needing ~8 rounds rather than "one or two". So rounds
+    # have to be cheap, and the naive shape (rescan 25 GB of edges and 37 GB of
+    # known per round, to perform 61k replays) is not.
+    #
+    # Two facts make them cheap. The missing set only ever SHRINKS, so one pass
+    # collects every edge that could ever resolve it -- `pending`, ~0.5M rows. And
+    # an edge becomes replayable exactly when its parent does, so round r only
+    # needs the parents resolved in round r-1, which is one small file per bucket.
+    # Round 1 still needs the full known table; rounds 2+ are near-free.
+    pending = work / "pending"
     rnd = 0
     while True:
         rnd += 1
         need_dir = work / "need" / f"round={rnd}"
         cnt = work / f"_need={rnd}.json"
         if not cnt.exists():
-            n = _missing_positions(edges, known, need_dir, task_threads,
-                                   per_worker_mem, tmp, workers)
+            if rnd == 1 or not _done(work, "pending"):
+                n = _missing_positions(edges, known, need_dir, task_threads,
+                                       per_worker_mem, tmp, workers)
+            else:
+                n = _shrink_need(work / "need" / f"round={rnd-1}",
+                                 known / f"lvl=s{rnd-1}", need_dir,
+                                 task_threads, per_worker_mem, tmp, workers)
             cnt.write_text(str(n), encoding="utf-8")
         n_need = int(cnt.read_text())
         if n_need == 0:
@@ -616,16 +637,33 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
             raise RuntimeError(
                 f"{year}/{month}: {n_need:,} positions still have no EPD after "
                 f"{MAX_SWEEPS} sweeps — see {need_dir}")
+        if not _done(work, "pending"):
+            t0 = time.time()
+            ptasks = []
+            for b in sorted(_bucket_files(edges, "ply=*/pb=*/*.parquet")):
+                fs = sorted(edges.glob(f"ply=*/pb={b}/*.parquet"))
+                ptasks.append((b, [str(f) for f in fs],
+                               [str(f) for f in sorted(need_dir.glob("*.parquet"))],
+                               str(pending / f"bkt={b}.parquet"),
+                               task_threads, per_worker_mem, str(tmp)))
+            n_pend = sum(_run_pool(_pending_task, ptasks, workers))
+            print(f"    pending: {n_pend:,} edges reach the {n_need:,} missing "
+                  f"positions ({time.time()-t0:,.0f}s)", flush=True)
+            _mark(work, "pending")
         if not _done(work, f"sweep={rnd}"):
             t0 = time.time()
             need_files = [str(f) for f in sorted(need_dir.glob("*.parquet"))]
             tasks = []
-            for b in sorted(_bucket_files(edges, "ply=*/pb=*/*.parquet")):
-                fs = sorted(edges.glob(f"ply=*/pb={b}/*.parquet"))
-                kf = sorted(known.glob(f"lvl=*/bkt={b}/*.parquet"))
-                if not fs or not kf:
+            for pf in sorted(pending.glob("bkt=*.parquet")):
+                b = int(pf.stem.split("=")[1])
+                # Round 1 needs every EPD known so far; later rounds only need the
+                # parents the previous round resolved.
+                kf = (sorted(known.glob(f"lvl=*/bkt={b}/*.parquet")) if rnd == 1
+                      else sorted((known / f"lvl=s{rnd-1}" / f"bkt={b}")
+                                  .glob("*.parquet")))
+                if not kf:
                     continue
-                tasks.append((f"s{rnd}", b, [str(f) for f in fs],
+                tasks.append((f"s{rnd}", b, [str(pf)],
                               [str(f) for f in kf], need_files,
                               str(work / "new" / f"sweep={rnd}" /
                                   f"from={b}.parquet"),
@@ -755,6 +793,71 @@ def _missing_positions(edges: Path, known: Path, out: Path, threads: int,
         tasks.append((b, [str(f) for f in fs], [str(f) for f in kf],
                       str(out / f"bkt={b}.parquet"), threads, mem, str(tmp)))
     return sum(_run_pool(_missing_task, tasks, workers))
+
+
+def _pending_task(task: tuple) -> int:
+    """Every edge of one bucket whose CHILD is still missing an EPD.
+
+    Collected once. The missing set only shrinks, so an edge that cannot resolve
+    anything now never will, and this table is a complete substitute for the full
+    edge set across every later round — ~0.5M rows instead of 25 GB.
+    """
+    b, edge_files, need_files, out_s, threads, mem, tmp_s = task
+    con = _duck(threads, mem, Path(tmp_s))
+    try:
+        t = con.execute(f"""
+            SELECT e.parent_hash, e.move_san, e.child_hash
+            FROM (SELECT DISTINCT parent_hash, move_san, child_hash
+                  FROM read_parquet({_read_list(edge_files)})) e
+            SEMI JOIN (SELECT h FROM read_parquet({_read_list(need_files)})) n
+              ON e.child_hash = n.h
+        """).fetch_arrow_table()
+    finally:
+        con.close()
+    out = Path(out_s)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_suffix(".parquet.tmp")
+    tmp.unlink(missing_ok=True)
+    pq.write_table(t, tmp, compression="zstd")
+    tmp.replace(out)
+    return t.num_rows
+
+
+def _shrink_need(prev: Path, new_known: Path, out: Path, threads: int, mem: str,
+                 tmp: Path, workers: int) -> int:
+    """What is still missing after a round: the previous set minus what it found.
+
+    Small against small. Recomputing it from the edge and known tables instead
+    would cost a full rescan per round, which is the whole point of `pending`.
+    """
+    _rmtree(out)
+    out.mkdir(parents=True, exist_ok=True)
+    tasks = []
+    for f in sorted(prev.glob("bkt=*.parquet")):
+        b = int(f.stem.split("=")[1])
+        kf = sorted((new_known / f"bkt={b}").glob("*.parquet"))
+        tasks.append((b, [str(f)], [str(x) for x in kf],
+                      str(out / f"bkt={b}.parquet"), threads, mem, str(tmp)))
+    return sum(_run_pool(_shrink_task, tasks, workers))
+
+
+def _shrink_task(task: tuple) -> int:
+    b, need_files, known_files, out_s, threads, mem, tmp_s = task
+    con = _duck(threads, mem, Path(tmp_s))
+    try:
+        src = f"read_parquet({_read_list(need_files)})"
+        if known_files:
+            sql = (f"SELECT n.h FROM {src} n ANTI JOIN "
+                   f"read_parquet({_read_list(known_files)}) k ON n.h = k.h")
+        else:
+            sql = f"SELECT h FROM {src}"
+        t = con.execute(sql).fetch_arrow_table()
+    finally:
+        con.close()
+    if t.num_rows:
+        Path(out_s).parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(t, out_s, compression="zstd")
+    return t.num_rows
 
 
 def _missing_task(task: tuple) -> int:

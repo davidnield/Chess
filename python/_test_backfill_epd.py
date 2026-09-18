@@ -319,6 +319,36 @@ def main() -> None:
                                                 got2["parent_epd"])),
               "and every EPD in that month is still correct")
 
+        # A CHAIN of mis-filed plies needs one round per link: sweep 1 can only
+        # resolve the depth-6 position, and the depth-7 edge below it becomes
+        # replayable only once that lands. Rounds after the first read just the
+        # previous round's discoveries, so this is the path that a single-sweep
+        # fixture would leave completely untested -- and 2024-06 needs ~8 rounds.
+        mdir2b, out2b, work2b = tmp / "m2b", tmp / "o2b", tmp / "w2b"
+        b_ch = chess.Board()
+        for san in "Nf3 d5 d4 Nf6 c4 e6".split():
+            b_ch.push(b_ch.parse_san(san))
+        picked2 = ((pl.col("parent_hash") == zobrist_int64(b_ch))
+                   & (pl.col("move_san") == "Nc3"))
+        check(df.filter(picked2).height > 0 and df.filter(picked2)["ply"][0] == 7,
+              "the chain fixture is the ply-7 edge below that one")
+        chained = df.with_columns(
+            pl.when(picked | picked2).then(pl.lit(2, dtype=pl.Int32))
+            .otherwise(pl.col("ply")).alias("ply"))
+        mdir2b.mkdir(parents=True)
+        p2b = mdir2b / f"year={YEAR}_month={MONTH}.ps.parquet"
+        chained.write_parquet(p2b, compression="zstd")
+        man2b, log2b, err2b = run(p2b, out2b, work2b)
+        got2b = read_out(out2b)
+        check(err2b is None and got2b["parent_epd"].null_count() == 0
+              and all(truth[h] == e for h, e in zip(got2b["parent_hash"],
+                                                    got2b["parent_epd"])),
+              "a two-link chain of mis-filed plies resolves, every EPD correct")
+        check("sweep 2:" in log2b,
+              "it genuinely takes two rounds (one link unwound per round)")
+        check("pending:" in log2b,
+              "and the edges reaching the missing set are collected once, not per round")
+
         # ── the gates ─────────────────────────────────────────────────────────
         print("\nthe gates")
         mdir3, out3, work3 = tmp / "m3", tmp / "o3", tmp / "w3"
