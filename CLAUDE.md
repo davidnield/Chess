@@ -153,6 +153,19 @@ way, with an empty log. For long sequential work, submit one task and call `.res
 submitting the next (`_run_isolated`). The tell-tale in `_monthly`: a missing month *before* the
 month whose `.tmp` is in flight. A failed DuckDB `COPY` deletes its own `.tmp`.
 
+### `max_tasks_per_child` deadlocks a pool on Windows (3.11)
+Do not pass `max_tasks_per_child` to `ProcessPoolExecutor` here. On Python 3.11 + the Windows spawn
+start method, once every worker has hit its recycle limit the executor can fail to spawn
+replacements: **no exception, no progress, and no worker processes left**, with the parent waiting
+forever on futures that can never run. The EPD backfill pilot stopped after exactly 352 of 512 tasks
+— 11 workers × 32 — and looked exactly like a slow job.
+
+*Tell-tale:* main process alive, **zero** child workers, log silent for minutes, CPU ~20%. Compare
+with a genuinely slow stage, which always has workers. Recycling is usually unnecessary anyway: build
+a fresh pool per stage so no worker outlives it, and give heavy single queries their own process via
+`_run_isolated`. `_test_backfill_epd.py` guards it by running 200 tasks over 3 workers under a
+subprocess timeout — a regression fails on the clock instead of hanging the suite.
+
 ### DuckDB out-of-memory triage — two errors that look alike
 - `failed to offload data block ... max_temp_directory_size` → the **temp drive is full**, not RAM.
   Fix: point the spill dir at a roomy NVMe volume (`--tmp-dir`). Never a USB HDD — spill is random
