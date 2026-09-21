@@ -16,8 +16,9 @@ their descriptions are accurate. A path can exist and still be described wrongly
 and no test catches that.
 
 Portability: the pipeline's data lives on D:/E:/F: on one machine. On any other
-checkout those drives are absent, which is not a documentation bug, so a missing
-DRIVE is skipped while a missing path on a PRESENT drive fails. Glob patterns are
+checkout those drives, or those dataset roots, are absent -- which is not a
+documentation bug. So a missing DRIVE or a missing top-level ROOT is skipped,
+while a missing path under a root that IS present fails. Glob patterns are
 satisfied by any match.
 
 Run: .venv/Scripts/python.exe python/_test_docs_paths.py
@@ -51,6 +52,16 @@ def resolve(spec: str) -> tuple[str, bool]:
     drive = Path(p.drive + "/")
     if not drive.exists():
         return f"SKIP (drive {p.drive} not mounted)", True
+    # A mounted drive is not the same as a hosted dataset. DESKTOP-B842EA6 keeps
+    # its games on C: and has its own D:, so `D:/data/chess/...` -- correct for
+    # home -- reported MISSING there and failed a gate for three days. A whole
+    # ABSENT ROOT means "this machine does not host that dataset", the same
+    # portability case as an absent drive; a missing leaf UNDER a present root is
+    # still doc rot and still fails, so home keeps full coverage.
+    if len(p.parts) > 1:
+        root = drive / p.parts[1]
+        if not root.exists():
+            return f"SKIP ({root} not on this machine)", True
     if "*" in spec:
         parent = Path(spec).parent
         if not parent.exists():
