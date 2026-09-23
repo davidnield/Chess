@@ -45,6 +45,19 @@ HOW IT WORKS, PER MONTH
   write     LEFT JOIN each bucket's rows to the known table, COALESCE the EPD in,
             verify, then rename the month into place.
 
+HASH COLLISIONS: QUARANTINE, NOT HALT
+-------------------------------------
+A 64-bit Zobrist collision shows up as an edge whose replayed child hash does not
+match: the "losing" twin's outgoing edge was replayed from the winner's EPD. Such
+an edge is untrustworthy at both ends, so its rows, and the rows of every position
+that becomes unreachable without it, are moved out of the book into
+<out>\\_quarantine\\month=Y_M\\ -- byte-exact, with a reason, and outside the merge's
+month=*/bkt=* glob. Conservation becomes book + quarantine == input, exactly.
+It stays fatal above --max-quarantine-edges / --max-quarantine-rows (a real bug
+makes thousands of mismatches, not a few), and a missing position the quarantine
+does not explain is still fatal. --max-quarantine-edges 0 is the old behaviour.
+Neither knob is in _params.json, so a work dir halted by the old code resumes.
+
 Every stage is skip-gated on its own marker, so a killed run resumes at the stage
 it died in rather than repeating hours of replay. --fresh forces a rebuild.
 
@@ -53,6 +66,8 @@ Usage:
                            --out <dir> --work-dir <fast local dir>
                            [--buckets 512] [--months 2024_6 ...]
                            [--workers N] [--threads T] [--mem M] [--tmp-dir D]
+                           [--max-quarantine-edges 64]
+                           [--max-quarantine-rows 10000]
 
     # home
     python backfill_epd.py --monthly-dir E:\\chess\\explorer_banded_home\\monthly_2026
@@ -107,6 +122,11 @@ MAX_SWEEPS = 64
 # DuckDB keeps one writer open per partition value; the default cap of 100 makes
 # a 512-way split thrash. Raising it trades a little memory for one pass.
 _MAX_OPEN_FILES = 1024
+
+# Quarantine ceilings (B2). P(some collision) is ~3-4% per full-size month, and a
+# collision costs one edge key plus a short subtree; a real bug costs thousands.
+DEFAULT_MAX_QUARANTINE_EDGES = 64
+DEFAULT_MAX_QUARANTINE_ROWS = 10_000
 
 
 # ── small helpers ─────────────────────────────────────────────────────────────
@@ -194,6 +214,9 @@ def _write_pairs(path: Path, hashes: list, epds: list) -> int:
 
 def _write_report(path: Path, rows: list[dict], schema: pa.Schema) -> None:
     if not rows:
+        # A re-run stage that finds nothing must not leave the last run's report
+        # behind: the mismatch reports ARE the quarantine set.
+        path.unlink(missing_ok=True)
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.Table.from_pylist(rows, schema=schema), path,
@@ -366,6 +389,12 @@ def _replay_task(task: tuple) -> tuple:
     c0s = t.column(3).to_pylist()
     c1s = t.column(4).to_pylist()
 
+    # Ply parity fixes the side to move whatever the move order (ply 1 is White's
+    # first move), so a mismatch whose parent EPD has the wrong side to move is
+    # the other half of a hash collision, and the report says so. Sweep tasks
+    # ("s{r}") have no ply and skip the check.
+    want_white = (k % 2 == 1) if isinstance(k, int) else None
+
     found: dict[int, str] = {}
     bad: list[dict] = []
     conflicts: list[dict] = []
@@ -374,6 +403,8 @@ def _replay_task(task: tuple) -> tuple:
         # " 0 1": an EPD has no clocks. Neither the hash nor legality uses them,
         # and the 6-field parse measured faster than the 4-field one.
         board = chess.Board(epd + " 0 1")
+        par = ("" if want_white is None or board.turn == want_white
+               else "+parity")
         push, pop, parse, board_epd = (board.push, board.pop, board.parse_san,
                                        board.epd)
         for san, c0, c1 in zip(mv_sans, mv_c0, mv_c1):
@@ -387,7 +418,7 @@ def _replay_task(task: tuple) -> tuple:
                 bad.append({"parent_hash": ph, "parent_epd": epd,
                             "move_san": san, "child_hash": c0,
                             "computed_hash": None, "computed_epd": None,
-                            "reason": f"parse: {type(exc).__name__}"})
+                            "reason": f"parse{par}: {type(exc).__name__}"})
                 continue
             push(move)
             ce, ch = board_epd(), zobrist_int64(board)
@@ -396,7 +427,7 @@ def _replay_task(task: tuple) -> tuple:
                 bad.append({"parent_hash": ph, "parent_epd": epd,
                             "move_san": san, "child_hash": c0,
                             "computed_hash": ch, "computed_epd": ce,
-                            "reason": "hash"})
+                            "reason": f"hash{par}"})
                 continue
             prev = found.get(c0)
             if prev is None:
@@ -436,8 +467,17 @@ def _write_bucket_task(task: tuple) -> tuple:
     Verification happens here, while the file is still warm: full row-group read,
     the four conserved sums, and the null-EPD count. The month-level gate then
     only has to add them up and compare against the input.
+
+    Rows the quarantine claims go to `q_s` instead of the book, with a reason:
+      edge         (parent_hash, move_san) is an edge whose replay did not verify;
+      unreachable  parent_hash is a position only such an edge led to (EPD NULL);
+      parity       the resolved EPD's side to move contradicts the ply: a
+                   collision twin's row that was never replayed.
+    `q_keys` and `m_hashes` are this bucket's slices of both sets -- tiny, and
+    empty in almost every bucket, where the quarantine file is never written.
     """
-    (i, row_files, known_files, out_s, threads, mem, tmp_s) = task
+    (i, row_files, known_files, out_s, q_s, q_keys, m_hashes, parity, threads,
+     mem, tmp_s) = task
     out = Path(out_s)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".parquet.tmp")
@@ -454,27 +494,70 @@ def _write_bucket_task(task: tuple) -> tuple:
         # Only reachable for a bucket whose every row already carried an EPD.
         cols = ", ".join(f"r.{c}" for c in PS_COLS)
         src = f"read_parquet({_read_list(row_files)}) r"
+    whens = ["WHEN q.ph IS NOT NULL THEN 'edge'",
+             "WHEN m.h IS NOT NULL THEN 'unreachable'"]
+    if parity:
+        whens.append("WHEN split_part(j.parent_epd, ' ', 2) <> CASE WHEN "
+                     "j.ply % 2 = 1 THEN 'w' ELSE 'b' END THEN 'parity'")
+    ps = ", ".join(PS_COLS)
+    sums = ", ".join(f"SUM({c})::HUGEINT" for c in SUM_COLS)
     t0 = time.time()
     con = _duck(threads, mem, Path(tmp_s))
     try:
+        con.register("qe", pa.table({
+            "ph": pa.array([p for p, _ in q_keys], pa.int64()),
+            "san": pa.array([s for _, s in q_keys], pa.string())}))
+        con.register("mh", pa.table({"h": pa.array(m_hashes, pa.int64())}))
         con.execute(f"""
-            COPY (SELECT {cols} FROM {src})
+            CREATE TEMP VIEW t AS
+            SELECT j.*, CASE {' '.join(whens)} END AS reason
+            FROM (SELECT {cols} FROM {src}) j
+            LEFT JOIN (SELECT DISTINCT ph, san FROM qe) q
+              ON j.parent_hash = q.ph AND j.move_san = q.san
+            LEFT JOIN (SELECT DISTINCT h FROM mh) m ON j.parent_hash = m.h
+        """)
+        con.execute(f"""
+            COPY (SELECT {ps} FROM t WHERE reason IS NULL)
             TO '{_sql_path(tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
         """)
         tmp.replace(out)
-        sums = ", ".join(f"SUM({c})::HUGEINT" for c in SUM_COLS)
         stats = con.execute(f"""
             SELECT COUNT(*), {sums},
                    COUNT(*) FILTER (WHERE parent_epd IS NULL)
             FROM read_parquet('{_sql_path(out)}')
         """).fetchone()
+        n_in = con.execute(f"SELECT COUNT(*) FROM read_parquet("
+                           f"{_read_list(row_files)})").fetchone()[0]
+        q_stats, by_reason, q_bytes = (0, 0, 0, 0, 0), {}, 0
+        if n_in != stats[0]:
+            qp = Path(q_s)
+            qp.parent.mkdir(parents=True, exist_ok=True)
+            qtmp = qp.with_suffix(".parquet.tmp")
+            qtmp.unlink(missing_ok=True)
+            con.execute(f"""
+                COPY (SELECT {ps}, reason FROM t WHERE reason IS NOT NULL)
+                TO '{_sql_path(qtmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+            """)
+            qtmp.replace(qp)
+            q_stats = con.execute(f"SELECT COUNT(*), {sums} FROM "
+                                  f"read_parquet('{_sql_path(qp)}')").fetchone()
+            by_reason = {r: (int(n), int(g)) for r, n, g in con.execute(
+                f"SELECT reason, COUNT(*), SUM(total)::HUGEINT FROM "
+                f"read_parquet('{_sql_path(qp)}') GROUP BY reason").fetchall()}
+            good, why = read_fully(qp)
+            if not good:
+                raise RuntimeError(f"bucket {i} quarantine unreadable after "
+                                   f"write — {why}")
+            q_bytes = qp.stat().st_size
     finally:
         con.close()
     good, why = read_fully(out)
     if not good:
         raise RuntimeError(f"bucket {i} unreadable after write — {why}")
     return (i, int(stats[0]), tuple(int(x) for x in stats[1:5]), int(stats[5]),
-            out.stat().st_size, time.time() - t0)
+            out.stat().st_size, time.time() - t0,
+            int(q_stats[0]), tuple(int(x or 0) for x in q_stats[1:5]),
+            by_reason, q_bytes)
 
 
 # ── the month ─────────────────────────────────────────────────────────────────
@@ -491,7 +574,9 @@ def _bucket_files(root: Path, pattern: str) -> dict[int, list[Path]]:
 
 def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
                    work_root: Path, nb: int, workers: int, threads: int,
-                   mem: str, tmp: Path, fresh: bool) -> dict:
+                   mem: str, tmp: Path, fresh: bool,
+                   max_q_edges: int = DEFAULT_MAX_QUARANTINE_EDGES,
+                   max_q_rows: int = DEFAULT_MAX_QUARANTINE_ROWS) -> dict:
     tag = f"{year}_{month}"
     sentinel = out_dir / f"_month={tag}.DONE"
     if sentinel.exists():
@@ -546,7 +631,7 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
 
     # 3 ── levels
     stats = {"edges_replayed": 0, "resolved": 0, "replay_secs": 0.0,
-             "mismatches": 0, "conflicts": 0}
+             "mismatches": 0, "conflicts": 0, "quarantine_edges": 0}
     counts = json.loads((work / "_counts.json").read_text()) if (
         work / "_counts.json").exists() else stats
     stats.update(counts)
@@ -575,10 +660,17 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
         _write_report(work / "conflicts" / f"lvl={k}.parquet", conf,
                       _CONFLICT_SCHEMA)
         if bad:
-            raise RuntimeError(
-                f"{year}/{month} ply {k}: {len(bad):,} hash mismatches — see "
-                f"{work / 'mismatch' / f'lvl={k}.parquet'}. The first is "
-                f"{bad[0]}")
+            n_qe = _n_edge_keys(_quarantine_edges(work))
+            if n_qe > max_q_edges:
+                raise RuntimeError(
+                    f"{year}/{month} ply {k}: {len(bad):,} hash mismatches — see "
+                    f"{work / 'mismatch' / f'lvl={k}.parquet'}. The first is "
+                    f"{bad[0]}")
+            print(f"    ply {k}: {len(bad):,} mismatches quarantined "
+                  f"({n_qe:,} edge keys this month, limit {max_q_edges:,})",
+                  flush=True)
+            stats["mismatches"] += len(bad)
+            stats["quarantine_edges"] = n_qe
         if n_found:
             src = sorted((work / "new" / f"lvl={k}").glob("*.parquet"))
             _run_isolated(_repartition_new,
@@ -615,9 +707,13 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
     # an edge becomes replayable exactly when its parent does, so round r only
     # needs the parents resolved in round r-1, which is one small file per bucket.
     # Round 1 still needs the full known table; rounds 2+ are near-free.
+    #
+    # With quarantined edges (B2), the positions only they led to can never
+    # resolve. A round that resolves nothing then ends the loop IF the quarantine
+    # explains every missing position -- see _unreachable -- and is fatal if not.
     pending = work / "pending"
     rnd = 0
-    while True:
+    while not _done(work, "closure"):
         rnd += 1
         need_dir = work / "need" / f"round={rnd}"
         cnt = work / f"_need={rnd}.json"
@@ -639,11 +735,15 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
                 f"{MAX_SWEEPS} sweeps — see {need_dir}")
         if not _done(work, "pending"):
             t0 = time.time()
+            # Quarantined edges stay out of pending: their parent is known, so
+            # sweep 1 would otherwise replay them and re-detect the mismatch.
+            qe_file = _write_qe(work / "qe.parquet", _quarantine_edges(work))
             ptasks = []
             for b in sorted(_bucket_files(edges, "ply=*/pb=*/*.parquet")):
                 fs = sorted(edges.glob(f"ply=*/pb={b}/*.parquet"))
                 ptasks.append((b, [str(f) for f in fs],
                                [str(f) for f in sorted(need_dir.glob("*.parquet"))],
+                               qe_file,
                                str(pending / f"bkt={b}.parquet"),
                                task_threads, per_worker_mem, str(tmp)))
             n_pend = sum(_run_pool(_pending_task, ptasks, workers))
@@ -674,12 +774,34 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
             _write_report(work / "mismatch" / f"sweep={rnd}.parquet", bad,
                           _MISMATCH_SCHEMA)
             if bad:
-                raise RuntimeError(f"{year}/{month} sweep {rnd}: "
-                                   f"{len(bad):,} hash mismatches")
+                n_qe = _n_edge_keys(_quarantine_edges(work))
+                if n_qe > max_q_edges:
+                    raise RuntimeError(f"{year}/{month} sweep {rnd}: "
+                                       f"{len(bad):,} hash mismatches")
+                print(f"    sweep {rnd}: {len(bad):,} mismatches quarantined "
+                      f"({n_qe:,} edge keys this month, limit "
+                      f"{max_q_edges:,})", flush=True)
+                stats["mismatches"] += len(bad)
+                stats["quarantine_edges"] = n_qe
             if not n_found:
-                raise RuntimeError(
-                    f"{year}/{month}: {n_need:,} positions have no EPD and no "
-                    f"replayable edge reaches them — see {need_dir}")
+                qe = _quarantine_edges(work)
+                missing, n_orphan = _unreachable(need_dir, pending, qe)
+                if n_orphan:
+                    raise RuntimeError(
+                        f"{year}/{month}: {n_need:,} positions have no EPD and "
+                        f"no replayable edge reaches them — see {need_dir}")
+                _write_hashes(work / "unreachable.parquet", missing)
+                stats["edges_replayed"] += sum(r[2] for r in res)
+                stats["replay_secs"] += time.time() - t0
+                stats["conflicts"] += sum(len(r[5]) for r in res)
+                (work / "_counts.json").write_text(json.dumps(stats),
+                                                   encoding="utf-8")
+                _rmtree(work / "new" / f"sweep={rnd}")
+                print(f"    closure: {len(missing):,} positions unreachable, "
+                      f"all below the {_n_edge_keys(qe):,} quarantined edge "
+                      f"key(s)", flush=True)
+                _mark(work, "closure")
+                break
             src = sorted((work / "new" / f"sweep={rnd}").glob("*.parquet"))
             _run_isolated(_repartition_new,
                           ([str(f) for f in src], str(work / "_tmp_known_sw"),
@@ -715,17 +837,40 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
     # 6 ── write + verify
     t0 = time.time()
     out_tmp = out_dir / f"_tmp_month={tag}"
+    qe = _quarantine_edges(work)
+    unreach_f = work / "unreachable.parquet"
+    unreach = (pq.read_table(unreach_f).column("h").to_pylist()
+               if unreach_f.exists() else [])
+    q_by_b: dict[int, list] = {}
+    for ph, san in {(p, s) for p, s, _ in qe}:
+        q_by_b.setdefault(ph % nb, []).append((ph, san))
+    m_by_b: dict[int, list] = {}
+    for h in unreach:
+        m_by_b.setdefault(h % nb, []).append(h)   # == _bucket_expr for int64
+    # --max-quarantine-edges 0 is the pre-quarantine tool exactly, so it also
+    # leaves parity rows in the book as that tool did.
+    parity = max_q_edges > 0
     tasks = []
     for b, fs in sorted(_bucket_files(rows_dir, "bkt=*/*.parquet").items()):
         kf = sorted(known.glob(f"lvl=*/bkt={b}/*.parquet"))
         tasks.append((b, [str(f) for f in fs], [str(f) for f in kf],
                       str(out_tmp / f"bkt={b}" / "part-0000.parquet"),
+                      str(out_tmp / "_q" / f"bkt={b}.parquet"),
+                      q_by_b.get(b, []), m_by_b.get(b, []), parity,
                       task_threads, per_worker_mem, str(tmp)))
     res = _run_pool(_write_bucket_task, tasks, workers)
     n_rows = sum(r[1] for r in res)
     got = tuple(sum(r[2][j] for r in res) for j in range(len(SUM_COLS)))
     n_null = sum(r[3] for r in res)
     n_bytes = sum(r[4] for r in res)
+    n_q = sum(r[6] for r in res)
+    got_q = tuple(sum(r[7][j] for r in res) for j in range(len(SUM_COLS)))
+    by_reason: dict[str, list[int]] = {}
+    for r in res:
+        for why, (n, g) in r[8].items():
+            acc = by_reason.setdefault(why, [0, 0])
+            acc[0] += n
+            acc[1] += g
 
     con = _duck(threads, mem, tmp)
     try:
@@ -741,20 +886,35 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
     if n_null:
         raise RuntimeError(f"{year}/{month}: {n_null:,} output rows still have "
                            f"a NULL parent_epd")
-    if n_rows != in_rows:
-        raise RuntimeError(f"{year}/{month}: {n_rows:,} rows out != "
-                           f"{in_rows:,} in")
-    if got != want:
-        broken = [f"{c}: in {w:,} != out {g:,}"
-                  for c, w, g in zip(SUM_COLS, want, got) if w != g]
+    if n_rows + n_q != in_rows:
+        raise RuntimeError(f"{year}/{month}: {n_rows:,} rows out + {n_q:,} "
+                           f"quarantined != {in_rows:,} in")
+    both = tuple(g + q for g, q in zip(got, got_q))
+    if both != want:
+        broken = [f"{c}: in {w:,} != out {g:,} + quarantined {q:,}"
+                  for c, w, g, q in zip(SUM_COLS, want, got, got_q)
+                  if w != g + q]
         raise RuntimeError(f"{year}/{month}: conservation broken — "
                            f"{'; '.join(broken)}")
+    if n_q > max_q_rows:
+        raise RuntimeError(f"{year}/{month}: {n_q:,} rows quarantined > "
+                           f"--max-quarantine-rows {max_q_rows:,} "
+                           f"(reasons {by_reason}) — see {out_tmp / '_q'}")
     out_dir.mkdir(parents=True, exist_ok=True)
+    # The quarantine goes OUTSIDE month=Y_M/ before the month is promoted, so
+    # the merge's month=*/bkt=* read can never see it.
+    q_dst = out_dir / "_quarantine" / f"month={tag}"
+    _rmtree(q_dst)
+    if (out_tmp / "_q").exists():
+        q_dst.parent.mkdir(parents=True, exist_ok=True)
+        (out_tmp / "_q").replace(q_dst)
     final = out_dir / f"month={tag}"
     _rmtree(final)
     out_tmp.replace(final)
 
     secs = time.time() - t_month
+    n_mismatch = sum(pq.ParquetFile(f).metadata.num_rows
+                     for f in (work / "mismatch").glob("*.parquet"))
     man = {"year": year, "month": month, "files": len(res), "bytes": n_bytes,
            "rows": n_rows, "ply1_games": int(ply1),
            "total": got[0], "white_wins": got[1], "draws": got[2],
@@ -763,7 +923,14 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
            "positions_resolved": stats["resolved"],
            "replays_per_sec": stats["edges_replayed"] /
                               max(stats["replay_secs"], 1e-9),
-           "mismatches": 0, "conflicts": stats["conflicts"], "unresolved": 0,
+           "mismatches": n_mismatch, "conflicts": stats["conflicts"],
+           "unresolved": len(unreach),
+           "quarantine_edges": _n_edge_keys(qe), "quarantine_rows": n_q,
+           "quarantine_total": got_q[0], "quarantine_white_wins": got_q[1],
+           "quarantine_draws": got_q[2], "quarantine_black_wins": got_q[3],
+           "quarantine_by_reason": json.dumps(
+               {k: v[0] for k, v in sorted(by_reason.items())}),
+           "unreachable_positions": len(unreach),
            "seconds": secs}
     _write_manifest(out_dir, tag, man)
     for name, src in (("conflicts", work / "conflicts"),
@@ -778,6 +945,10 @@ def backfill_month(monthly: Path, year: int, month: int, out_dir: Path,
     print(f"    wrote {len(res)} buckets, {n_rows:,} rows, {n_bytes/1e9:,.1f} GB "
           f"({time.time()-t0:,.0f}s); month {secs/3600:.2f} h, "
           f"{man['replays_per_sec']:,.0f} replays/s", flush=True)
+    if n_q:
+        print(f"    quarantined {man['quarantine_edges']:,} edges, {n_q:,} rows "
+              f"({by_reason.get('edge', [0, 0])[1]:,} games-at-edge), reasons "
+              f"{man['quarantine_by_reason']}; see {q_dst}", flush=True)
     return man
 
 
@@ -802,7 +973,11 @@ def _pending_task(task: tuple) -> int:
     anything now never will, and this table is a complete substitute for the full
     edge set across every later round — ~0.5M rows instead of 25 GB.
     """
-    b, edge_files, need_files, out_s, threads, mem, tmp_s = task
+    b, edge_files, need_files, qe_s, out_s, threads, mem, tmp_s = task
+    anti = ""
+    if qe_s:
+        anti = (f"ANTI JOIN read_parquet('{_sql_path(Path(qe_s))}') q "
+                f"ON e.parent_hash = q.parent_hash AND e.move_san = q.move_san")
     con = _duck(threads, mem, Path(tmp_s))
     try:
         t = con.execute(f"""
@@ -811,6 +986,7 @@ def _pending_task(task: tuple) -> int:
                   FROM read_parquet({_read_list(edge_files)})) e
             SEMI JOIN (SELECT h FROM read_parquet({_read_list(need_files)})) n
               ON e.child_hash = n.h
+            {anti}
         """).fetch_arrow_table()
     finally:
         con.close()
@@ -821,6 +997,74 @@ def _pending_task(task: tuple) -> int:
     pq.write_table(t, tmp, compression="zstd")
     tmp.replace(out)
     return t.num_rows
+
+
+# ── the quarantine (B2) ───────────────────────────────────────────────────────
+
+def _quarantine_edges(work: Path) -> set[tuple[int, str, int]]:
+    """Qe: every (parent_hash, move_san, child_hash) a replay failed to verify,
+    over every level and sweep. Parse failures count: an illegal SAN from the
+    wrong collision twin is the same event as a wrong child hash."""
+    qe: set[tuple[int, str, int]] = set()
+    for f in sorted((work / "mismatch").glob("*.parquet")):
+        t = pq.read_table(f, columns=["parent_hash", "move_san", "child_hash"])
+        qe.update(zip(t.column(0).to_pylist(), t.column(1).to_pylist(),
+                      t.column(2).to_pylist()))
+    return qe
+
+
+def _n_edge_keys(qe: set) -> int:
+    """What --max-quarantine-edges counts: distinct (parent_hash, move_san)."""
+    return len({(p, s) for p, s, _ in qe})
+
+
+def _write_qe(path: Path, qe: set) -> str | None:
+    """Qe as parquet for _pending_task's anti-join; None when it is empty."""
+    path.unlink(missing_ok=True)
+    if not qe:
+        return None
+    ps, ss, cs = zip(*sorted(qe))
+    tmp = path.with_suffix(".parquet.tmp")
+    pq.write_table(pa.table({"parent_hash": pa.array(ps, pa.int64()),
+                             "move_san": pa.array(ss, pa.string()),
+                             "child_hash": pa.array(cs, pa.int64())}), tmp)
+    tmp.replace(path)
+    return str(path)
+
+
+def _write_hashes(path: Path, hashes: list) -> None:
+    tmp = path.with_suffix(".parquet.tmp")
+    pq.write_table(pa.table({"h": pa.array(hashes, pa.int64())}), tmp)
+    tmp.replace(path)
+
+
+def _unreachable(need_dir: Path, pending: Path, qe: set) -> tuple[list, int]:
+    """The positions still missing, and how many the quarantine does NOT explain.
+
+    M is explained exactly when every position in it is reachable from a child
+    of a quarantined edge by edges whose parent is also in M. `pending` holds
+    every edge whose child was missing at round 1 -- a superset of the edges into
+    M -- minus Qe itself, whose children are the seeds here. Anything left over
+    has no incoming edge but from M or from nowhere: a broken edge graph, not a
+    collision, and the caller stays fatal on it.
+    """
+    m: set[int] = set()
+    for f in need_dir.glob("*.parquet"):
+        m.update(pq.read_table(f, columns=["h"]).column(0).to_pylist())
+    succ: dict[int, list[int]] = {}
+    for f in pending.glob("bkt=*.parquet"):
+        t = pq.read_table(f, columns=["parent_hash", "child_hash"])
+        for p, c in zip(t.column(0).to_pylist(), t.column(1).to_pylist()):
+            if p in m and c in m:
+                succ.setdefault(p, []).append(c)
+    reach = {c for _, _, c in qe if c in m}
+    stack = list(reach)
+    while stack:
+        for c in succ.get(stack.pop(), ()):
+            if c not in reach:
+                reach.add(c)
+                stack.append(c)
+    return sorted(m), len(m - reach)
 
 
 def _shrink_need(prev: Path, new_known: Path, out: Path, threads: int, mem: str,
@@ -932,6 +1176,15 @@ def main() -> int:
     ap.add_argument("--tmp-dir", type=Path, default=None)
     ap.add_argument("--fresh", action="store_true",
                     help="Discard any resumable work dir and rebuild.")
+    ap.add_argument("--max-quarantine-edges", type=int,
+                    default=DEFAULT_MAX_QUARANTINE_EDGES,
+                    help="Hash-mismatch edge keys (distinct parent_hash, "
+                         "move_san) a month may quarantine before it fails. "
+                         "0 = the first mismatch is fatal, as before B2.")
+    ap.add_argument("--max-quarantine-rows", type=int,
+                    default=DEFAULT_MAX_QUARANTINE_ROWS,
+                    help="Rows a month may move to <out>/_quarantine before "
+                         "it fails.")
     a = ap.parse_args()
 
     if not a.monthly_dir.is_dir():
@@ -963,7 +1216,8 @@ def main() -> int:
     done = 0
     for y, mo, f in months:
         backfill_month(f, y, mo, a.out, work_root, a.buckets, workers,
-                       a.threads, a.mem, tmp, a.fresh)
+                       a.threads, a.mem, tmp, a.fresh,
+                       a.max_quarantine_edges, a.max_quarantine_rows)
         done += 1
     print(f"\n{done} months in {(time.time()-t0)/3600:,.2f} h")
     print("Next: ship <out> to the merge host and run build_pooled_stats.py "
