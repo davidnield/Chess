@@ -66,10 +66,18 @@ Usage:
 
   # merge phase only (after partials exist)
   .venv/Scripts/python.exe python/build_pooled_stats.py --start-year 2019 --end-year 2025 --phase merge
+
+  # B1: an EPD on every row, so the month needs no EPD backfill. Consolidate as
+  # usual, then python/bucket_month.py writes the backfill's bucketed layout.
+  .venv/Scripts/python.exe python/build_pooled_stats.py ... --phase extract --epd-max-ply 30
+
+Every extract run locks its settings in <partial-dir>/_extract_params.json and
+refuses to resume a dir built with different ones (see lock_extract_params).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 import shutil
@@ -358,7 +366,8 @@ def classify_maxply(tiers: dict | None, w1: str | None, b1: str | None,
 
 def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
                move_count, tiers, max_ply_cap, hasher=None, epd_memo=None,
-               term_buf=None, reason: int = TERM_OTHER, band: int = 0) -> bool:
+               term_buf=None, reason: int = TERM_OTHER, band: int = 0,
+               epd_max_ply: int = EPD_MAX_PLY) -> bool:
     """Append one game's per-ply rows into the columnar buffer, capping depth by the
     asymmetric tier (classified from the first two SAN moves). Returns True on parse error.
 
@@ -370,6 +379,11 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
     only so the replay-path harnesses (_test_epd_memo, _test_extract_child_hash)
     can keep calling this without caring about the band; production always
     passes it.
+
+    `epd_max_ply` is the deepest ply that gets a parent_epd (--epd-max-ply). It is
+    a parameter rather than a read of EPD_MAX_PLY because spawned workers
+    re-import this module: a value set on the constant in the parent never
+    reaches them. At the default the output is exactly the pre-flag extract's.
 
     `hasher` / `epd_memo` are the two extract-speed optimizations (2026-07 profiling:
     the position hash and board.epd() were 29% and 52% of replay time, against 19%
@@ -419,7 +433,7 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
         # is never displayed, costs 19.55 B/row on disk, and board.epd() was
         # measured at 52% of replay time (against 19% for parse_san+push), so
         # skipping it is a throughput win as well as a storage one.
-        if ply > EPD_MAX_PLY:
+        if ply > epd_max_ply:
             epd = None
         elif epd_memo is None:
             epd = board.epd()
@@ -487,7 +501,8 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
                  excluded_terminations: frozenset = frozenset(),
                  max_rating_gap: int | None = None,
                  chunk_games: int | None = None,
-                 event: str | None = None) -> dict:
+                 event: str | None = None,
+                 epd_max_ply: int = EPD_MAX_PLY) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
@@ -530,6 +545,11 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     file (the source is hive-partitioned by event), so it is attached once to
     each frame rather than appended per row -- unlike `elo_band`, which varies
     per game. None means "derive it from the source path" (see _event_of).
+
+    `epd_max_ply` (--epd-max-ply) is the deepest ply given a parent_epd. The
+    default is today's EPD_MAX_PLY and changes nothing; 30 with --max-ply 30
+    writes an EPD on every row, which is what makes the EPD backfill
+    unnecessary (bucket_month.py then buckets the consolidated month).
     """
     ev_label = event if event is not None else _event_of(src_file)
     want_crush = crush_out is not None
@@ -769,7 +789,7 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             g0 = len(buf["parent_hash"]) if want_wp else 0
             if _walk_game(buf, rec["movetext"], ws, white_norm, black_norm,
                           rec["move_count"], tiers, max_ply, hasher, epd_memo,
-                          term_buf, _term_reason(term), band):
+                          term_buf, _term_reason(term), band, epd_max_ply):
                 n_failed += 1
             if want_wp:
                 g1 = len(buf["parent_hash"])
@@ -825,7 +845,8 @@ def _init_worker(min_elo: int, max_ply: int, tiers: dict | None,
                  with_child_eval: bool = True, exclude_bots: bool = False,
                  excluded_terminations: frozenset = frozenset(),
                  max_rating_gap: int | None = None,
-                 chunk_games: int | None = None) -> None:
+                 chunk_games: int | None = None,
+                 epd_max_ply: int = EPD_MAX_PLY) -> None:
     _W["min_elo"] = min_elo
     _W["max_ply"] = max_ply
     _W["tiers"] = tiers
@@ -834,6 +855,9 @@ def _init_worker(min_elo: int, max_ply: int, tiers: dict | None,
     _W["excluded_terminations"] = excluded_terminations
     _W["max_rating_gap"] = max_rating_gap
     _W["chunk_games"] = chunk_games
+    # Carried explicitly: Windows spawn re-imports this module in every worker,
+    # so the parent's --epd-max-ply only arrives through the initializer.
+    _W["epd_max_ply"] = epd_max_ply
 
 
 def _worker(task: tuple) -> dict:
@@ -848,7 +872,50 @@ def _worker(task: tuple) -> dict:
                         excluded_terminations=_W["excluded_terminations"],
                         max_rating_gap=_W["max_rating_gap"],
                         chunk_games=_W["chunk_games"],
-                        event=event)
+                        event=event,
+                        epd_max_ply=_W["epd_max_ply"])
+
+
+# ── the partial dir's parameter lock ──────────────────────────────────────────
+#
+# Resume is gated per source file on its _DONE sentinel, so nothing stops a rerun
+# with different settings from finishing a half-built dir: the first files would
+# carry epd-16 partials, the rest epd-30, and the merge would read the mixture
+# as one extract. The lock is written on first use and every later run must
+# match it. `producer` is part of it on purpose: the Rust extract writes the
+# same file with "rust", so the two can never share a dir either.
+EXTRACT_PARAMS_FILE = "_extract_params.json"
+
+
+def extract_params(args, excluded_terms: frozenset) -> dict:
+    """What the lock records: every setting that changes a partial's content
+    under the explorer contract."""
+    return {"epd_max_ply": args.epd_max_ply, "max_ply": args.max_ply,
+            "chunk_games": args.chunk_games, "events": list(args.events),
+            "min_elo": args.min_elo, "exclude_bots": bool(args.exclude_bots),
+            "excluded_terminations": sorted(excluded_terms),
+            "producer": "python"}
+
+
+def lock_extract_params(partial_dir: Path, params: dict) -> Path:
+    """Write the lock if the dir has none; otherwise refuse unless it matches."""
+    p = partial_dir / EXTRACT_PARAMS_FILE
+    if p.exists():
+        have = json.loads(p.read_text(encoding="utf-8"))
+        if have != params:
+            diff = {k: {"locked": have.get(k), "this run": params.get(k)}
+                    for k in sorted(set(have) | set(params))
+                    if have.get(k) != params.get(k)}
+            raise SystemExit(
+                f"FATAL: {p} records different extract parameters: {diff}. "
+                f"Partials built under different settings must not share a "
+                f"directory -- use a new --partial-dir.")
+        return p
+    partial_dir.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(params, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    return p
 
 
 # ── depth-tier seeding (from existing >=1800 frequency stats) ───────────────────
@@ -1854,6 +1921,14 @@ def main() -> None:
                          f"filters change.")
     ap.add_argument("--min-games", type=int, default=50)
     ap.add_argument("--max-ply", type=int, default=30)
+    ap.add_argument("--epd-max-ply", type=int, default=EPD_MAX_PLY, metavar="N",
+                    help=f"Deepest ply whose rows carry a parent_epd (default "
+                         f"{EPD_MAX_PLY}, today's extract exactly). 30 with the "
+                         f"default --max-ply writes an EPD on every row, so the "
+                         f"month needs no EPD backfill: consolidate it, then "
+                         f"bucket it with bucket_month.py. Locked per "
+                         f"--partial-dir in {EXTRACT_PARAMS_FILE}, with the "
+                         f"other settings that change a partial.")
     ap.add_argument("--crush-hist", action="store_true",
                     help="Also merge the resignation-proxy crush histogram. OFF by "
                          "default: no consumer reads it (build_sharp_reps.py uses the "
@@ -1973,8 +2048,12 @@ def main() -> None:
             print("Eval arrays: not needed "
                   "(--no-fuse-winpos and --no-child-eval)", flush=True)
 
+        if args.epd_max_ply < 0:
+            sys.exit(f"FATAL: --epd-max-ply must be >= 0, got {args.epd_max_ply}")
         files = discover_source_files(args.start_year, args.end_year, args.months, args.events)
         partial_dir.mkdir(parents=True, exist_ok=True)
+        lock = lock_extract_params(partial_dir, extract_params(args, excluded_terms))
+        print(f"Params lock: {lock} (epd_max_ply={args.epd_max_ply})", flush=True)
         tasks = []
         for f, y, m, ev in files:
             ps_p = partial_dir / partial_name(f, y, m, ev, "ps")
@@ -2009,7 +2088,8 @@ def main() -> None:
                     initargs=(args.min_elo, args.max_ply, tiers,
                               args.child_eval, args.exclude_bots,
                               excluded_terms, args.max_rating_gap,
-                              args.chunk_games or None)) as ex:
+                              args.chunk_games or None,
+                              args.epd_max_ply)) as ex:
                 futs = [ex.submit(_worker, t) for t in tasks]
                 for fut in as_completed(futs):
                     r = fut.result()
