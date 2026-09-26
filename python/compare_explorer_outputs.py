@@ -23,6 +23,9 @@ machines, so it reads only what the files contain and never imports a producer.
                        --min-ply-from DIR  B.ply == MIN(ply) over DIR's ps
                                            partials (use --buckets: it scans
                                            every partial once)
+                       --b-ply-cap C       B is ply-keyed (month --ply-key):
+                                           compare its rows at ply <= C,
+                                           re-aggregated (ply_cap.py)
 
     term A B [--month Y_M]
                      two term monthlies (files, or dirs holding
@@ -55,6 +58,9 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from ply_cap import reaggregate  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -89,6 +95,9 @@ def connect(threads: int, mem: str, tmp: Path) -> duckdb.DuckDBPyConnection:
 
 
 def _src(files) -> str:
+    """A FROM-clause relation: a file, a list of files, or a relation already."""
+    if isinstance(files, str):
+        return files
     if isinstance(files, Path):
         return f"read_parquet('{_p(files)}')"
     return "read_parquet([" + ", ".join(f"'{_p(f)}'" for f in files) + "])"
@@ -218,7 +227,8 @@ def classify(con, a_files, b_files, q_files, cols) -> dict[str, list[tuple]]:
 
 
 def cmd_month(a: Path, b: Path, tag: str, con, ply_le: bool, min_from: Path | None,
-              only: list[int] | None, nbuckets: int = MONTH_BUCKETS) -> int:
+              only: list[int] | None, nbuckets: int = MONTH_BUCKETS,
+              b_cap: int | None = None) -> int:
     t0 = time.time()
     ba, bb = _buckets(a, tag), _buckets(b, tag)
     if not ba or not bb:
@@ -259,8 +269,12 @@ def cmd_month(a: Path, b: Path, tag: str, con, ply_le: bool, min_from: Path | No
            "joined": 0, "min_bad": 0, "min_missing": 0}
     classes = {"quarantine": 0, "collision": 0, "bug": 0}
     samples: dict[str, list] = {"quarantine": [], "collision": [], "bug": []}
+    if b_cap is not None:
+        print(f"  B is ply-keyed: rows at ply <= {b_cap}, re-aggregated on the 4-column key",
+              flush=True)
     for i in common:
-        fa, fb = ba[i], bb[i]
+        fa = ba[i]
+        fb = bb[i] if b_cap is None else reaggregate(_src(bb[i]), b_cap)
         da, db = digest(con, fa, cols), digest(con, fb, cols)
         tot["rows_a"] += da[0]
         tot["rows_b"] += db[0]
@@ -368,6 +382,10 @@ def main() -> int:
                     help="month: also require B.ply == MIN(ply) over these partials.")
     ap.add_argument("--buckets", type=int, nargs="*", default=None,
                     help="month: compare only these buckets.")
+    ap.add_argument("--b-ply-cap", type=int, default=None, metavar="C",
+                    help="month: B is a ply-keyed month (month --ply-key); compare "
+                         "its rows at ply <= C re-aggregated on the 4-column key "
+                         "(ply_cap.reaggregate) instead of its raw rows.")
     ap.add_argument("--nbuckets", type=int, default=MONTH_BUCKETS,
                     help="month: the months' bucket count, for --min-ply-from's "
                          "bucket filter (default 512, the explorer book's).")
@@ -396,7 +414,7 @@ def main() -> int:
                 return 1
             y, m = a.month.split("_")
             return cmd_month(a.a, a.b, f"{int(y)}_{int(m)}", con, a.ply_le,
-                             a.min_ply_from, a.buckets, a.nbuckets)
+                             a.min_ply_from, a.buckets, a.nbuckets, a.b_ply_cap)
         return cmd_term(a.a, a.b, a.month, con)
     finally:
         con.close()

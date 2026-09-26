@@ -383,6 +383,186 @@ def month_checks(root: Path, tmp: Path) -> None:
     check(tq.returncode == 0, "and the term monthly equals B1's consolidated one exactly")
 
 
+# ── 50-ply coverage and the ply key (month --max-ply N --ply-key) ─────────────
+
+LONG_MONTH = 2
+BASE = ["--min-elo", "0", "--chunk-games", "250000",
+        "--exclude-terminations", "Rules infraction", "Abandoned"]
+CAPS = (20, 30, 50)
+
+
+def random_games(n: int, seed: int) -> list[tuple]:
+    """Legal games of 0-90 plies from a few shared openings -- one a knight
+    shuffle, so the start position recurs at ply 5 and a ply-keyed key splits --
+    with lengths landing exactly on the caps, and parse failures before and
+    after them."""
+    import random
+    rng = random.Random(seed)
+    prefixes = [[], RUY[:6], "d4 d5 c4 e6".split(), "Nf3 Nf6 Ng1 Ng8".split(),
+                "e4 c5 Nf3 d6".split()]
+    lengths = [0, 1, 19, 20, 21, 29, 30, 31, 49, 50, 51] + list(range(2, 91))
+    out = []
+    for _ in range(n):
+        b, sans = chess.Board(), []
+        for san in rng.choice(prefixes):
+            mv = b.parse_san(san)
+            sans.append(b.san(mv))
+            b.push(mv)
+        target = rng.choice(lengths)
+        while len(sans) < target and not b.is_game_over():
+            mv = rng.choice(list(b.legal_moves))
+            sans.append(b.san(mv))
+            b.push(mv)
+        if sans and rng.random() < 0.08:
+            k = rng.randrange(len(sans))
+            sans = sans[:k] + ["Qxz9"] + sans[k + 1:]
+        out.append((pgn(sans), rng.choice([1.0, 0.5, 0.0, 1.0, 0.0]),
+                    rng.choice(["Normal", "Normal", "Time forfeit", None, "Normal"]),
+                    rng.randint(900, 2700), "BOT" if rng.random() < 0.02 else None, None))
+    return out
+
+
+def build_long_tree(root: Path) -> None:
+    """4,000 random games: three 1,000-game blocks at the starts of the three
+    250k chunks of one Blitz file (so keys span chunks), and 1,000 in Rapid."""
+    ev = root / f"year={YEAR}" / f"month={LONG_MONTH}"
+    games = random_games(4000, 2026)
+    blitz = [DROPPED] * 600_000
+    for k, start in enumerate((0, 250_000, 500_000)):
+        blitz[start:start + 1000] = games[k * 1000:(k + 1) * 1000]
+    write_source(ev / "event=Blitz" / "part-0.parquet", blitz)
+    write_source(ev / "event=Rapid" / "part-0.parquet", games[3000:])
+
+
+def long_args(root: Path, max_ply: int) -> list[str]:
+    return ["--source", str(root), "--months", f"{YEAR}_{LONG_MONTH}", "--events", *EVENTS,
+            *BASE, "--max-ply", str(max_ply)]
+
+
+def ply_key_checks(tmp: Path) -> None:
+    import duckdb
+    import bucket_month as bm
+    from ply_cap import reaggregate
+    print("\n50-ply coverage and --ply-key")
+    root = tmp / "long"
+    build_long_tree(root)
+    tag = f"{YEAR}_{LONG_MONTH}"
+    sp = lambda x: str(x).replace("\\", "/")                                  # noqa: E731
+    term_name = f"year={YEAR}_month={LONG_MONTH}.term.parquet"
+
+    py, rs = tmp / "py50", tmp / "rs50"
+    pp = subprocess.run(
+        [sys.executable, str(HERE / "build_pooled_stats.py"), "--start-year", str(YEAR),
+         "--end-year", str(YEAR), "--months", str(LONG_MONTH), "--phase", "extract",
+         "--events", *EVENTS, "--no-prune", "--no-fuse-winpos", "--no-child-eval",
+         "--exclude-bots", *BASE, "--max-ply", "50", "--workers", "2", "--source", str(root),
+         "--partial-dir", str(py), "--tag", "rust_test_50", "--epd-max-ply", "50"],
+        capture_output=True, text=True, timeout=1800)
+    rp = rust("partials", *long_args(root, 50), "--threads", "4", "--partial-dir", str(rs),
+              "--epd-max-ply", "50")
+    rc, log = compare(py, rs, tmp)
+    check(pp.returncode == 0 and rp.returncode == 0 and rc == 0,
+          "at --max-ply 50, EPD at every ply: Rust partials == the Python extract, "
+          "ply and term kind included")
+    if rc:
+        print(log[-2500:])
+
+    def month(out: Path, max_ply: int, *extra: str) -> subprocess.CompletedProcess:
+        return rust("month", *long_args(root, max_ply), "--out", str(out), "--mem-gb", "2",
+                    *extra)
+
+    direct = {c: tmp / f"d{c}" for c in CAPS}
+    runs = [month(direct[c], c, "--threads", "4") for c in CAPS]
+    m50p, m50p4 = tmp / "m50p", tmp / "m50p4"
+    runs.append(month(m50p, 50, "--ply-key", "--threads", "2", "--passes", "1"))
+    runs.append(month(m50p4, 50, "--ply-key", "--threads", "12", "--passes", "4"))
+    check(all(r.returncode == 0 for r in runs),
+          f"direct months at --max-ply {CAPS}, and --ply-key at 50 twice "
+          f"(rc {[r.returncode for r in runs]})")
+
+    con = duckdb.connect()
+    con.execute(f"""
+        CREATE TABLE ref50 AS
+        SELECT parent_hash, move_san, event, elo_band, MIN(parent_epd) AS parent_epd,
+               MIN(child_hash) AS child_hash, CAST(NULL AS INTEGER) AS child_eval,
+               MIN(ply) AS ply, SUM(white_wins)::BIGINT AS white_wins,
+               SUM(draws)::BIGINT AS draws, SUM(black_wins)::BIGINT AS black_wins,
+               SUM(total)::BIGINT AS total
+        FROM read_parquet('{sp(rs)}/*.ps.parquet') GROUP BY ALL""")
+    con.execute(f"CREATE VIEW d50 AS SELECT {PS_COLS} FROM read_parquet("
+                f"'{sp(direct[50])}/month={tag}/bkt=*/*.parquet', hive_partitioning=false)")
+    a = con.execute("SELECT COUNT(*) FROM (SELECT * FROM ref50 EXCEPT ALL "
+                    "SELECT * FROM d50)").fetchone()[0]
+    b = con.execute("SELECT COUNT(*) FROM (SELECT * FROM d50 EXCEPT ALL "
+                    "SELECT * FROM ref50)").fetchone()[0]
+    n50 = con.execute("SELECT COUNT(*) FROM d50").fetchone()[0]
+    check(n50 > 20_000 and a == 0 and b == 0,
+          f"month --max-ply 50 == a MIN consolidation of the 50-ply partials ({n50:,} rows, "
+          f"ply included)")
+
+    for c in CAPS:
+        pm = subprocess.run([sys.executable, str(HERE / "compare_explorer_outputs.py"), "month",
+                             str(direct[c]), str(m50p), "--month", tag, "--b-ply-cap", str(c),
+                             "--ply-le", "--tmp-dir", str(tmp / "_cmp")],
+                            capture_output=True, text=True, timeout=1800)
+        pt = subprocess.run([sys.executable, str(HERE / "ply_cap.py"), "check-term", str(m50p),
+                             str(direct[c] / "_term" / term_name), "--month", tag,
+                             "--cap", str(c)], capture_output=True, text=True, timeout=1800)
+        check(pm.returncode == 0 and "IDENTICAL" in pm.stdout,
+              f"cap {c}: the ply-keyed rows at ply <= {c}, re-aggregated, == a direct "
+              f"--max-ply {c} month on every column but ply; parity equal, ply <= direct")
+        check(pt.returncode == 0,
+              f"cap {c}: the derived term table == the direct run's (ENDED exact with "
+              f"reason; HORIZON per position)")
+        if pm.returncode or pt.returncode:
+            print(pm.stdout[-2000:] + pt.stdout[-2000:])
+
+    con.execute(f"CREATE VIEW p AS SELECT * FROM read_parquet("
+                f"'{sp(m50p)}/month={tag}/bkt=*/*.parquet', hive_partitioning=false)")
+    split = con.execute("SELECT COUNT(*) FROM (SELECT parent_hash, move_san, event, elo_band "
+                        "FROM p GROUP BY ALL HAVING COUNT(*) > 1)").fetchone()[0]
+    n_p = con.execute("SELECT COUNT(*) FROM p").fetchone()[0]
+    check(split > 0 and n_p > n50,
+          f"--ply-key keeps a key's plies apart: {split} keys at 2+ plies, {n_p:,} rows vs "
+          f"{n50:,} unkeyed")
+    lower = con.execute(f"""
+        SELECT COUNT(*) FROM {reaggregate('p', 30)} r
+        JOIN (SELECT * FROM read_parquet('{sp(direct[30])}/month={tag}/bkt=*/*.parquet',
+                                         hive_partitioning=false)) d
+          USING (parent_hash, move_san, event, elo_band)
+        WHERE r.ply < d.ply""").fetchone()[0]
+    print(f"  info  cap 30: the re-aggregated ply is below the direct run's on {lower} keys "
+          f"(keys first seen at a later ply in every chunk)")
+    t50 = f"read_parquet('{sp(direct[50] / '_term' / term_name)}')"
+    tp = f"read_parquet('{sp(m50p / '_term' / term_name)}')"
+    sums = ("SUM(white_wins)::BIGINT, SUM(draws)::BIGINT, SUM(black_wins)::BIGINT, "
+            "SUM(total)::BIGINT")
+    diff = con.execute(f"""
+        SELECT COUNT(*) FROM (
+          SELECT position_hash, kind, reason, {sums} FROM {tp} GROUP BY ALL
+          EXCEPT ALL SELECT position_hash, kind, reason, white_wins, draws, black_wins, total
+          FROM {t50})""").fetchone()[0]
+    names = [f.name for f in pq.read_schema(m50p / "_term" / term_name)]
+    check(diff == 0 and names[:4] == ["position_hash", "kind", "reason", "end_ply"],
+          "the ply-keyed term table has end_ply after reason, and summed over it equals "
+          "the direct cap-50 table")
+    f1 = sorted(q.relative_to(m50p).as_posix() for q in (m50p / f"month={tag}").rglob("*.parquet"))
+    f4 = sorted(q.relative_to(m50p4).as_posix() for q in (m50p4 / f"month={tag}").rglob("*.parquet"))
+    same = f1 == f4 and all((m50p / f).read_bytes() == (m50p4 / f).read_bytes() for f in f1)
+    tb = Path("_term") / term_name
+    check(same and (m50p / tb).read_bytes() == (m50p4 / tb).read_bytes(),
+          "--ply-key output is byte-identical at (2 threads, 1 pass) and (12 threads, 4 passes)")
+    man = pq.read_schema(m50p / "_manifest" / f"month={tag}.parquet")
+    check([(f.name, str(f.type)) for f in man] == list(bm.MANIFEST_FIELDS),
+          "the manifest schema is unchanged under --ply-key")
+    r1 = month(direct[50], 50, "--ply-key")
+    r2 = month(m50p, 30, "--ply-key")
+    check(r1.returncode != 0 and "_extract_params.json" in r1.stderr
+          and r2.returncode != 0 and "max_ply" in r2.stderr,
+          "the month dir's params lock refuses --ply-key into an unkeyed dir, and "
+          "--max-ply 30 into a 50-ply dir")
+
+
 def compare(a: Path, b: Path, tmp: Path) -> tuple[int, str]:
     p = subprocess.run([sys.executable, str(HERE / "compare_explorer_outputs.py"),
                         "partials", str(a), str(b), "--tmp-dir", str(tmp / "_cmp")],
@@ -464,6 +644,7 @@ def main() -> None:
               "an event directory differing only in case is refused, not silently read")
 
         month_checks(root, tmp)
+        ply_key_checks(tmp)
 
         print("\ndump-plies against python-chess")
         base = tmp / "dump" / "plies"

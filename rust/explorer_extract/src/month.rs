@@ -52,10 +52,10 @@ use crate::chesspos::{pack, Packed};
 use crate::fasthash::FastMap;
 use crate::game::{count_ply, drive_game, Counts, Filters, GameSink, Outcome, Walker};
 use crate::keys::{
-    band_index, bucket_of, ps_schema, rename_retry, san_of, san_str, term_schema, tmp_of,
+    band_index, bucket_of, ps_schema, rename_retry, san_of, san_str, term_schema_with, tmp_of,
     write_parquet, writer_props, PsKey, TermKey, BANDS,
 };
-use crate::partials::term_batch;
+use crate::partials::term_batch_with;
 use crate::pyre::Tokens;
 use crate::source::{chunks, FileMeta, SourceFile};
 use crate::stats::Counters;
@@ -93,8 +93,29 @@ pub struct Config {
     pub events: Vec<String>,
     pub buckets: u32,
     pub threads: usize,
+    /// --ply-key: ply joins the ps key and end_ply the term key, so a lower
+    /// coverage cap can be derived later (python/ply_cap.py).
+    pub ply_key: bool,
     /// Every flag, for the provenance JSON.
     pub flags: Value,
+}
+
+/// The month output dir's settings lock, as the partials' _extract_params.json:
+/// one book dir must never mix months built with different caps or keys.
+pub fn params(cfg: &Config) -> Value {
+    let mut ex = cfg.filters.excluded_terminations.clone();
+    ex.sort();
+    json!({
+        "producer": "rust-month",
+        "max_ply": cfg.max_ply,
+        "ply_key": cfg.ply_key,
+        "chunk_games": cfg.chunk,
+        "events": cfg.events,
+        "min_elo": cfg.filters.min_elo,
+        "exclude_bots": cfg.filters.exclude_bots,
+        "excluded_terminations": ex,
+        "buckets": cfg.buckets,
+    })
 }
 
 // ── one chunk ────────────────────────────────────────────────────────────────
@@ -103,6 +124,7 @@ struct ChunkSink {
     lo: u32,
     hi: u32,
     nb: u32,
+    ply_key: bool,
     maps: Vec<FastMap<PsKey, Local>>,
     term: FastMap<TermKey, Counts>,
     event: u8,
@@ -128,7 +150,13 @@ impl Walker for ChunkSink {
         if b < self.lo || b >= self.hi {
             return;
         }
-        let key = PsKey { hash: ph, san: s, event: self.event, band: self.band };
+        let key = PsKey {
+            hash: ph,
+            san: s,
+            event: self.event,
+            band: self.band,
+            ply: if self.ply_key { ply as u16 } else { 0 },
+        };
         let o = self.outcome;
         self.maps[(b - self.lo) as usize]
             .entry(key)
@@ -138,12 +166,17 @@ impl Walker for ChunkSink {
     }
 
     #[inline]
-    fn term(&mut self, hash: i64, kind: i32) {
+    fn term(&mut self, hash: i64, kind: i32, end_ply: u32) {
         let b = bucket_of(hash, self.nb);
         if b < self.lo || b >= self.hi {
             return;
         }
-        let key = TermKey { hash, kind: kind as u8, reason: self.reason };
+        let key = TermKey {
+            hash,
+            kind: kind as u8,
+            reason: self.reason,
+            end_ply: if self.ply_key { end_ply as u16 } else { 0 },
+        };
         self.term.entry(key).or_default().add(self.outcome);
     }
 }
@@ -536,6 +569,9 @@ pub fn choose_passes(games: u64, cfg: &Config) -> u32 {
 
 pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> Result<Option<Manifest>> {
     let tag = format!("{year}_{month}");
+    // Before the sentinel test: a rerun with another cap or key into a finished
+    // dir must be refused, not reported as "already done".
+    crate::partials::lock(&cfg.out, &params(cfg))?;
     let sentinel = cfg.out.join(format!("_month={tag}.DONE"));
     if sentinel.exists() {
         eprintln!("  {year}/{month}: already done");
@@ -618,6 +654,7 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
                 lo: pass.lo,
                 hi: pass.hi,
                 nb,
+                ply_key: cfg.ply_key,
                 maps: (0..per).map(|_| FastMap::default()).collect(),
                 term: FastMap::default(),
                 event: f.event_idx,
@@ -770,13 +807,15 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
     std::fs::create_dir_all(&cfg.term_dir)?;
     let term_path = cfg.term_dir.join(format!("year={year}_month={month}.term.parquet"));
     let term_tmp = tmp_of(&term_path);
-    write_parquet(&term_tmp, &term_schema(), &[term_batch(&term_rows)?])?;
+    let term_schema = term_schema_with(cfg.ply_key);
+    write_parquet(&term_tmp, &term_schema, &[term_batch_with(&term_rows, cfg.ply_key)?])?;
     let back = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&term_tmp)?)?.build()?;
+    let total_col = term_schema.index_of("total")?;
     let (mut n, mut tot) = (0u64, 0u64);
     for b in back {
         let b = b?;
         n += b.num_rows() as u64;
-        tot += b.column(6).as_primitive::<Int64Type>().values().iter().map(|&x| x as u64).sum::<u64>();
+        tot += b.column(total_col).as_primitive::<Int64Type>().values().iter().map(|&x| x as u64).sum::<u64>();
     }
     if n != term_rows.len() as u64 || tot != term_total {
         bail!("{}: re-read {n} rows / total {tot}, wrote {} / {term_total}", term_tmp.display(), term_rows.len());
@@ -831,6 +870,8 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
         "commit": sys::GIT_COMMIT,
         "built": sys::BUILD_DATE,
         "flags": cfg.flags,
+        "max_ply": cfg.max_ply,
+        "ply_key": cfg.ply_key,
         "month": tag,
         "files": files.iter().map(|f| f.path.display().to_string()).collect::<Vec<_>>(),
         "games_in_footers": games,

@@ -79,7 +79,7 @@ impl Walker for DumpWalker<'_> {
         self.p.epd.append_value(&self.buf);
     }
 
-    fn term(&mut self, hash: i64, kind: i32) {
+    fn term(&mut self, hash: i64, kind: i32, _end_ply: u32) {
         self.term = Some((hash, kind));
     }
 }

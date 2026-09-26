@@ -112,6 +112,12 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
 - **Hold two producers equal with `compare_explorer_outputs.py`** (`partials`, `month --ply-le
   [--min-ply-from DIR]`, `term`); it classifies every difference as quarantine / collision / bug.
   `ab_extract.py` times the three arms (idle machine only; `--dry-run` and `--selfcheck` are safe).
+- **A ply-keyed month (`month --ply-key`, any `--max-ply N`) defers the coverage cap.** `ply` joins
+  the ps key and `end_ply` (plies walked) the term key; `python/ply_cap.py` derives any cap C <= N:
+  ps rows at ply <= C re-aggregated on the 4-column key, ENDED rows with end_ply <= C, and HORIZON
+  at C = ps rows at ply C by child_hash minus ENDED with end_ply = C. A derived HORIZON row has no
+  reason (ps rows carry none); `merge_aux_stats` sums horizon over reason anyway. The month dir's
+  `_extract_params.json` records max_ply and ply_key, so the two kinds never share a book dir.
 - **Build and check the Rust tool:** `RUSTUP_TOOLCHAIN=stable` (this machine's stable is the pinned
   1.98.1), `CARGO_TARGET_DIR` on D: (C: is nearly full), `cargo build --release --locked`, then
   `cargo test` and `python/_test_rust_extract.py`. Run `explorer-extract selftest` on any machine

@@ -43,6 +43,18 @@ cargo test
 | partials values | ply of the key's first occurrence in the chunk; the first non-NULL EPD, through Python's per-50k-batch hash->EPD memo (so even an in-batch 64-bit collision matches); child first; W/D/B/total. | `mini_extract.json`, `_test_rust_extract.py`, T3a |
 | month values | MIN over the chunks' first plies, MIN EPD, MIN child (conflicts reported), summed counts. Commutative, so thread and pass count cannot change the output. | `_test_rust_extract.py` (byte-identical at 2 threads/1 pass and 12 threads/4 passes) |
 
+## 50 plies and the ply key
+
+`month --max-ply N` walks and keys N plies (EPD at every ply, tokens counted to
+N+1 for the term kind). `month --ply-key` adds `ply` to the ps key and
+`end_ply` to the term key (a column after `reason`), so a lower cap C can be
+derived later by `python/ply_cap.py`: re-aggregate ps rows at ply <= C, keep
+ENDED rows with end_ply <= C, and take HORIZON at C from the ps rows at ply C
+by child_hash minus the games that ENDED there at ply C. The derived HORIZON
+rows carry no reason, which the merge never uses. `_test_rust_extract.py` holds
+the derivation at caps 20/30/50 to direct runs; the month dir's params lock
+keeps keyed and unkeyed months apart.
+
 ## Month mode's memory
 
 Each pass walks every game but records only its bucket range. Each chunk's

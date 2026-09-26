@@ -76,7 +76,7 @@ pub fn lock(dir: &Path, want: &Value) -> Result<()> {
         if &have != want {
             bail!(
                 "{} records different extract parameters:\n  locked:   {have}\n  this run: {want}\n\
-                 Partials built under different settings must not share a directory.",
+                 Outputs built under different settings must not share a directory.",
                 p.display()
             );
         }
@@ -155,7 +155,7 @@ impl Walker for ChunkAgg {
             }
         };
         count_ply(&mut self.c, self.outcome, san);
-        let key = PsKey { hash: ph, san: s, event: self.event, band: self.band };
+        let key = PsKey { hash: ph, san: s, event: self.event, band: self.band, ply: 0 };
         let want_epd = ply <= self.epd_max_ply;
         let v = self.ps.entry(key).or_insert_with(|| PsVal {
             child: ch,
@@ -170,8 +170,8 @@ impl Walker for ChunkAgg {
     }
 
     #[inline]
-    fn term(&mut self, hash: i64, kind: i32) {
-        let key = TermKey { hash, kind: kind as u8, reason: self.reason };
+    fn term(&mut self, hash: i64, kind: i32, _end_ply: u32) {
+        let key = TermKey { hash, kind: kind as u8, reason: self.reason, end_ply: 0 };
         self.term.entry(key).or_default().add(self.outcome);
     }
 }
@@ -284,19 +284,32 @@ pub fn ps_batch(agg: &ChunkAgg, event: &str) -> Result<RecordBatch> {
 }
 
 pub fn term_batch(rows: &[(TermKey, Counts)]) -> Result<RecordBatch> {
+    term_batch_with(rows, false)
+}
+
+/// The term rows; `end_ply` adds that column (month --ply-key).
+pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool) -> Result<RecordBatch> {
     let i64s = |f: &dyn Fn(&TermKey, &Counts) -> i64| -> ArrayRef {
         Arc::new(Int64Array::from_iter_values(rows.iter().map(|(k, c)| f(k, c))))
     };
-    let cols: Vec<ArrayRef> = vec![
+    let i32s = |f: &dyn Fn(&TermKey) -> i32| -> ArrayRef {
+        Arc::new(Int32Array::from_iter_values(rows.iter().map(|(k, _)| f(k))))
+    };
+    let mut cols: Vec<ArrayRef> = vec![
         i64s(&|k, _| k.hash),
-        Arc::new(Int32Array::from_iter_values(rows.iter().map(|(k, _)| i32::from(k.kind)))),
-        Arc::new(Int32Array::from_iter_values(rows.iter().map(|(k, _)| i32::from(k.reason)))),
+        i32s(&|k| i32::from(k.kind)),
+        i32s(&|k| i32::from(k.reason)),
+    ];
+    if end_ply {
+        cols.push(i32s(&|k| i32::from(k.end_ply)));
+    }
+    cols.extend([
         i64s(&|_, c| i64::from(c.w)),
         i64s(&|_, c| i64::from(c.d)),
         i64s(&|_, c| i64::from(c.b)),
         i64s(&|_, c| i64::from(c.t)),
-    ];
-    Ok(RecordBatch::try_new(term_schema(), cols)?)
+    ]);
+    Ok(RecordBatch::try_new(crate::keys::term_schema_with(end_ply), cols)?)
 }
 
 /// The partial's path for chunk k: `{stem}_c{k:03d}.{kind}.parquet`.

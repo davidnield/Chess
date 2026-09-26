@@ -179,6 +179,10 @@ struct MonthArgs {
     bytes_per_key: f64,
     #[arg(long, default_value_t = month::BUCKETS)]
     buckets: u32,
+    /// Keep ply in the ps key and end_ply in the term key, so any lower
+    /// coverage cap can be derived later (python/ply_cap.py).
+    #[arg(long)]
+    ply_key: bool,
 }
 
 #[derive(Args)]
@@ -268,6 +272,9 @@ fn run() -> Result<ExitCode> {
             if !a.buckets.is_power_of_two() {
                 bail!("--buckets must be a power of two, got {}", a.buckets);
             }
+            if a.common.max_ply == 0 || a.common.max_ply > 1000 {
+                bail!("--max-ply must be in 1..=1000, got {}", a.common.max_ply);
+            }
             let threads = rayon::current_num_threads();
             let flags = serde_json::json!({
                 "source": a.common.source, "months": a.common.months, "events": a.common.events,
@@ -276,7 +283,7 @@ fn run() -> Result<ExitCode> {
                 "exclude_terminations": a.common.exclude_terminations, "threads": threads,
                 "below_normal": a.common.below_normal, "out": a.out, "term_dir": a.term_dir,
                 "passes": a.passes, "mem_gb": a.mem_gb, "keys_per_game": a.keys_per_game,
-                "bytes_per_key": a.bytes_per_key, "buckets": a.buckets,
+                "bytes_per_key": a.bytes_per_key, "buckets": a.buckets, "ply_key": a.ply_key,
             });
             let cfg = month::Config {
                 out: a.out.clone(),
@@ -291,6 +298,7 @@ fn run() -> Result<ExitCode> {
                 events: a.common.events.clone(),
                 buckets: a.buckets,
                 threads,
+                ply_key: a.ply_key,
                 flags,
             };
             for (y, m) in a.common.months()? {

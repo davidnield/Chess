@@ -44,13 +44,16 @@ pub fn san_str(s: &San) -> &str {
     std::str::from_utf8(&s[..n]).expect("ASCII")
 }
 
-/// (parent_hash, move_san, event, elo_band). Ord is the output sort order.
+/// (parent_hash, move_san, event, elo_band), plus `ply` in month mode's
+/// --ply-key (0 everywhere else, so it never splits a key). Ord is the output
+/// sort order. Still 24 bytes: ply fits the padding.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct PsKey {
     pub hash: i64,
     pub san: San,
     pub event: u8,
     pub band: u8,
+    pub ply: u16,
 }
 
 impl Hash for PsKey {
@@ -61,23 +64,31 @@ impl Hash for PsKey {
         st.write_u64(
             lo ^ (u64::from(self.san[8]) << 7)
                 ^ (u64::from(self.event) << 59)
-                ^ (u64::from(self.band) << 52),
+                ^ (u64::from(self.band) << 52)
+                ^ (u64::from(self.ply) << 40),
         );
     }
 }
 
-/// (position_hash, kind, reason).
+/// (position_hash, kind, reason), plus `end_ply` -- the plies the game walked
+/// -- in month mode's --ply-key (0 everywhere else).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct TermKey {
     pub hash: i64,
     pub kind: u8,
     pub reason: u8,
+    pub end_ply: u16,
 }
 
 impl Hash for TermKey {
     #[inline]
     fn hash<H: Hasher>(&self, st: &mut H) {
-        st.write_u64(self.hash as u64 ^ (u64::from(self.kind) << 3) ^ (u64::from(self.reason) << 5));
+        st.write_u64(
+            self.hash as u64
+                ^ (u64::from(self.kind) << 3)
+                ^ (u64::from(self.reason) << 5)
+                ^ (u64::from(self.end_ply) << 8),
+        );
     }
 }
 
@@ -110,15 +121,26 @@ pub fn ps_schema(large_strings: bool) -> SchemaRef {
 }
 
 pub fn term_schema() -> SchemaRef {
-    Arc::new(Schema::new(vec![
+    term_schema_with(false)
+}
+
+/// The term table; with `end_ply` (month --ply-key) that column follows
+/// `reason`, so the first three columns keep their meaning.
+pub fn term_schema_with(end_ply: bool) -> SchemaRef {
+    let mut f = vec![
         Field::new("position_hash", DataType::Int64, true),
         Field::new("kind", DataType::Int32, true),
         Field::new("reason", DataType::Int32, true),
+    ];
+    if end_ply {
+        f.push(Field::new("end_ply", DataType::Int32, true));
+    }
+    Arc::new(Schema::new([f, vec![
         Field::new("white_wins", DataType::Int64, true),
         Field::new("draws", DataType::Int64, true),
         Field::new("black_wins", DataType::Int64, true),
         Field::new("total", DataType::Int64, true),
-    ]))
+    ]].concat()))
 }
 
 pub fn writer_props() -> WriterProperties {

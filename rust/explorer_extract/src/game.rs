@@ -134,8 +134,9 @@ pub trait Walker {
     fn before_parse(&mut self, _ply: u32, _pos: &Chess, _ph: i64) {}
     /// A parsed and played ply: `pos` is the position BEFORE the move.
     fn row(&mut self, ply: u32, pos: &Chess, ph: i64, san: &str, ch: i64);
-    /// The term row, for a game that did not fail.
-    fn term(&mut self, hash: i64, kind: i32);
+    /// The term row, for a game that did not fail; `end_ply` is the plies
+    /// walked (0 for a game with no moves).
+    fn term(&mut self, hash: i64, kind: i32, end_ply: u32);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -161,7 +162,7 @@ pub fn walk<W: Walker>(
     start: &Chess,
 ) -> Result<WalkEnd, NullInCheck> {
     if toks.is_empty() {
-        w.term(START_HASH, 0);
+        w.term(START_HASH, 0, 0);
         return Ok(WalkEnd::Done);
     }
     let n = toks.len();
@@ -193,7 +194,7 @@ pub fn walk<W: Walker>(
         pos = next;
         ph = ch;
     }
-    w.term(ph, if maxply >= n { 0 } else { 1 });
+    w.term(ph, if maxply >= n { 0 } else { 1 }, maxply as u32);
     Ok(WalkEnd::Done)
 }
 
