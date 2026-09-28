@@ -118,6 +118,12 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
   at C = ps rows at ply C by child_hash minus ENDED with end_ply = C. A derived HORIZON row has no
   reason (ps rows carry none); `merge_aux_stats` sums horizon over reason anyway. The month dir's
   `_extract_params.json` records max_ply and ply_key, so the two kinds never share a book dir.
+- **The all-time book is `explorer-extract merge`** over ply-keyed Rust months (book-v1:
+  `ps/event=E/elo_band=B/bkt<iii>.parquet` plus pooled `term/`). Its settings lock refuses any other
+  build, month set or writer settings, so a book is continued only by the exe that began it — delete
+  the book dir after a code change. `verify_book.py` and `compare_explorer_outputs.py book` hold a
+  book to its months with DuckDB and python-chess alone; the rest of the contract is in the crate
+  README.
 - **Build and check the Rust tool:** `RUSTUP_TOOLCHAIN=stable` (this machine's stable is the pinned
   1.98.1), `CARGO_TARGET_DIR` on D: (C: is nearly full), `cargo build --release --locked`, then
   `cargo test` and `python/_test_rust_extract.py`. Run `explorer-extract selftest` on any machine
@@ -126,7 +132,8 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
 Tests: `_test_epd_max_ply.py` (B1 is a no-op at 16 against d79a0c7's `extract_file`),
 `_test_bucket_month.py` (bucket_month's output is the backfill's, row for row),
 `_test_rust_extract.py` (skips without the exe; `--plies-check` is the per-ply differential against
-python-chess at scale), and `cargo test` in the crate.
+python-chess at scale), `_test_verify_book.py` (a two-month book through `merge` and both checkers;
+skips without the exe), and `cargo test` in the crate.
 
 **Before changing an empirical constant** (batch sizes, memory limits, `min_games`), name the
 failure you expect to fix and the test that would prove it. This codebase has many tuned constants

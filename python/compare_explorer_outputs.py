@@ -31,6 +31,18 @@ machines, so it reads only what the files contain and never imports a producer.
                      two term monthlies (files, or dirs holding
                      year=Y_month=M.term.parquet): exact, with schemas.
 
+    book MONTHS_ROOT BOOK --months 2013_1..2013_12 [--buckets ...]
+                     a merged book (explorer-extract merge) against a DuckDB
+                     reference built from the months themselves, bucket by
+                     bucket: GROUP BY parent_hash, parent_epd, move_san, event,
+                     elo_band, ply with the sums, MIN = MAX(child_hash), and
+                     white_score_avg in IEEE doubles. Book == reference as a
+                     multiset on every column, the book's schema exact (every
+                     column REQUIRED), each file's event/elo_band equal to its
+                     path; term likewise (GROUP BY the term key, 512 files,
+                     each row in its file's bucket). For small month sets
+                     only. Temp defaults to D:\\chess_duckdb_tmp.
+
 Every difference in `month` is classified:
     quarantine  A's book quarantined the key (A\\_quarantine\\month=Y_M), B kept it
     collision   the key's parent_hash carries two EPDs across A and B: 64-bit
@@ -46,6 +58,7 @@ Usage:
     python compare_explorer_outputs.py partials E:\\chess\\_pilot_full_202406 E:\\chess\\ab_rust\\r16_202406
     python compare_explorer_outputs.py month D:\\chess\\_epd_pilot E:\\chess\\ab_rust\\month --month 2024_6 --ply-le
     python compare_explorer_outputs.py term E:\\chess\\_pilot_full_202406\\_monthly E:\\chess\\ab_rust\\term --month 2024_6
+    python compare_explorer_outputs.py book F:\\chess\\explorer_banded\\rust_p30k E:\\chess\\ab_rust\\merge\\book2013 --months 2013_1..2013_12
 """
 from __future__ import annotations
 
@@ -77,6 +90,17 @@ SHOW = 20
 # pull millions of rows; past this many it reports the count and samples.
 CLASSIFY_CAP = 200_000
 DEFAULT_TMP = Path("D:/chess_duckdb_tmp_compare")
+# The book checks' temp (explorer-merge-spec): never F:, and apart from the
+# month cross-checks' dir above.
+BOOK_TMP = Path("D:/chess_duckdb_tmp")
+BOOK_COLS = ("parent_hash", "move_san", "event", "elo_band", "parent_epd", "child_hash",
+             "ply", "white_wins", "draws", "black_wins", "total", "white_score_avg")
+BOOK_SCHEMA = [("parent_hash", "int64"), ("move_san", "string"), ("event", "string"),
+               ("elo_band", "int64"), ("parent_epd", "string"), ("child_hash", "int64"),
+               ("ply", "int32"), ("white_wins", "int64"), ("draws", "int64"),
+               ("black_wins", "int64"), ("total", "int64"), ("white_score_avg", "double")]
+BOOK_TERM_COLS = ("position_hash", "kind", "reason", "end_ply", "white_wins", "draws",
+                  "black_wins", "total")
 
 
 def _p(path: Path) -> str:
@@ -368,13 +392,179 @@ def cmd_term(a: Path, b: Path, tag: str | None, con) -> int:
     return 0 if not bad else 1
 
 
+# ── book ──────────────────────────────────────────────────────────────────────
+
+def parse_months(specs: list[str]) -> list[str]:
+    """Y_M values and Y_M..Y_M ranges (inclusive), as `explorer-extract merge
+    --months` takes them; returned as sorted Y_M tags."""
+    out: set[tuple[int, int]] = set()
+    for tok in (t.strip() for s in specs for t in s.split(",")):
+        if not tok:
+            continue
+        a, _, b = tok.partition("..")
+        y, m = (int(x) for x in a.split("_"))
+        ey, em = (int(x) for x in (b or a).split("_"))
+        if not (1 <= m <= 12 and 1 <= em <= 12) or (ey, em) < (y, m):
+            raise SystemExit(f"FATAL: bad --months {tok!r}")
+        while (y, m) <= (ey, em):
+            out.add((y, m))
+            y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+    return [f"{y}_{m}" for y, m in sorted(out)]
+
+
+def _lit(files) -> str:
+    """A DuckDB list literal of file paths."""
+    return "[" + ", ".join("'" + _p(f).replace("'", "''") + "'" for f in files) + "]"
+
+
+def book_ps_files(book: Path) -> dict[int, list[Path]]:
+    """The book's ps files by bucket, found by walking the tree (not from the
+    tool's sentinels)."""
+    out: dict[int, list[Path]] = {}
+    for f in sorted((book / "ps").glob("event=*/elo_band=*/*.parquet")):
+        mm = re.fullmatch(r"bkt(\d{3})\.parquet", f.name)
+        if not mm:
+            raise SystemExit(f"FATAL: unexpected file {f}")
+        out.setdefault(int(mm.group(1)), []).append(f)
+    return out
+
+
+def _book_schema_ok(f: Path) -> str | None:
+    s = pq.read_schema(f)
+    got = [(x.name, str(x.type), x.nullable) for x in s]
+    want = [(n, t, False) for n, t in BOOK_SCHEMA]
+    return None if got == want else f"{f}: schema {got}"
+
+
+def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | None) -> int:
+    t0 = time.time()
+    bad = 0
+    by_bucket = book_ps_files(book)
+    files = [f for v in by_bucket.values() for f in v]
+    print(f"[book] {book}: {len(files):,} ps files over {len(by_bucket)} buckets; months "
+          f"{tags[0]}..{tags[-1]} ({len(tags)})", flush=True)
+    for f in files:
+        err = _book_schema_ok(f)
+        if err:
+            bad += 1
+            print(f"  FAIL  {err}")
+            break
+    paths = con.execute(f"""
+        SELECT COUNT(*) FROM read_parquet({_lit(files)}, filename=true, hive_partitioning=false)
+        WHERE regexp_extract(filename, 'event=([^/\\\\]+)', 1) <> event
+           OR regexp_extract(filename, 'elo_band=([^/\\\\]+)', 1) <> CAST(elo_band AS VARCHAR)
+    """).fetchone()[0] if files else 0
+    if paths:
+        bad += 1
+        print(f"  FAIL  {paths:,} rows whose event/elo_band differ from their path")
+    buckets = sorted(set(only) if only else set(range(MONTH_BUCKETS)))
+    cols = ", ".join(BOOK_COLS)
+    tot = {"ref": 0, "book": 0, "only_ref": 0, "only_book": 0, "child": 0, "buckets": 0}
+    shown = 0
+    for i in buckets:
+        ref_files = [p for t in tags if (p := root / f"month={t}" / f"bkt={i}" / "part-0000.parquet").exists()]
+        bk = by_bucket.get(i, [])
+        if not ref_files and not bk:
+            continue
+        tot["buckets"] += 1
+        if not ref_files or not bk:
+            bad += 1
+            print(f"  FAIL  bucket {i}: {len(ref_files)} month files, {len(bk)} book files")
+            continue
+        con.execute(f"""
+            CREATE OR REPLACE TEMP TABLE ref AS
+            SELECT parent_hash, move_san, event, elo_band, parent_epd, child_hash, ply,
+                   white_wins, draws, black_wins, total,
+                   (white_wins::DOUBLE + 0.5::DOUBLE * draws::DOUBLE) / total::DOUBLE AS white_score_avg,
+                   child_max
+            FROM (SELECT parent_hash, move_san, event, elo_band, parent_epd, ply,
+                         MIN(child_hash) AS child_hash, MAX(child_hash) AS child_max,
+                         SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws,
+                         SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total
+                  FROM {_src(ref_files)}
+                  GROUP BY parent_hash, parent_epd, move_san, event, elo_band, ply)""")
+        b_rel = f"(SELECT {cols} FROM read_parquet({_lit(bk)}, hive_partitioning=false))"
+        n_ref, n_child = con.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE child_hash <> child_max) "
+                                     "FROM ref").fetchone()
+        n_book = con.execute(f"SELECT COUNT(*) FROM {b_rel}").fetchone()[0]
+        a_only = con.execute(f"SELECT COUNT(*) FROM (SELECT {cols} FROM ref EXCEPT ALL "
+                             f"SELECT {cols} FROM {b_rel})").fetchone()[0]
+        b_only = con.execute(f"SELECT COUNT(*) FROM (SELECT {cols} FROM {b_rel} EXCEPT ALL "
+                             f"SELECT {cols} FROM ref)").fetchone()[0]
+        for k, v in (("ref", n_ref), ("book", n_book), ("only_ref", a_only), ("only_book", b_only),
+                     ("child", n_child)):
+            tot[k] += v
+        if a_only or b_only or n_child:
+            bad += 1
+            if shown < 3:
+                shown += 1
+                print(f"  FAIL  bucket {i}: {a_only:,} reference rows not in the book, {b_only:,} "
+                      f"book rows not in the reference, {n_child:,} keys with two children")
+                show_rows("in the reference, not the book", except_all(
+                    con, f"(SELECT {cols} FROM ref)", b_rel, BOOK_COLS), BOOK_COLS)
+                show_rows("in the book, not the reference", except_all(
+                    con, b_rel, f"(SELECT {cols} FROM ref)", BOOK_COLS), BOOK_COLS)
+    print(f"[ps] {tot['buckets']} buckets: reference {tot['ref']:,} rows, book {tot['book']:,} rows; "
+          f"only in the reference {tot['only_ref']:,}, only in the book {tot['only_book']:,}, "
+          f"keys with two children {tot['child']:,}")
+
+    # term: every month's term rows summed on the term key, against term/*.
+    tfiles = sorted((book / "term").glob("bkt*.parquet"))
+    if only:
+        print("[term] skipped (--buckets given)")
+    else:
+        if len(tfiles) != MONTH_BUCKETS:
+            bad += 1
+            print(f"  FAIL  term: {len(tfiles)} files, want {MONTH_BUCKETS}")
+        refs = []
+        for t in tags:
+            y, m = t.split("_")
+            p = root / "_term" / f"year={int(y)}_month={int(m)}.term.parquet"
+            if not p.exists():
+                bad += 1
+                print(f"  FAIL  no {p}")
+            refs.append(p)
+        tcols = ", ".join(BOOK_TERM_COLS)
+        tref = f"""(SELECT position_hash, kind, reason, end_ply, SUM(white_wins)::BIGINT AS white_wins,
+                           SUM(draws)::BIGINT AS draws, SUM(black_wins)::BIGINT AS black_wins,
+                           SUM(total)::BIGINT AS total
+                    FROM {_src(refs)} GROUP BY position_hash, kind, reason, end_ply)"""
+        tb = f"(SELECT {tcols} FROM read_parquet({_lit(tfiles)}))"
+        if tfiles:
+            sd = [f.name for f in tfiles if pq.read_schema(f).names != list(BOOK_TERM_COLS)]
+            if sd:
+                bad += 1
+                print(f"  FAIL  term schema: {sd[:3]}")
+            routed = con.execute(f"""
+                SELECT COUNT(*) FROM read_parquet({_lit(tfiles)}, filename=true)
+                WHERE {_bucket_sql('position_hash', MONTH_BUCKETS)}
+                      <> CAST(regexp_extract(filename, 'bkt(\\d+)\\.parquet', 1) AS BIGINT)""").fetchone()[0]
+            ta = con.execute(f"SELECT COUNT(*) FROM (SELECT {tcols} FROM {tref} EXCEPT ALL "
+                             f"SELECT {tcols} FROM {tb})").fetchone()[0]
+            tbo = con.execute(f"SELECT COUNT(*) FROM (SELECT {tcols} FROM {tb} EXCEPT ALL "
+                              f"SELECT {tcols} FROM {tref})").fetchone()[0]
+            n = con.execute(f"SELECT COUNT(*) FROM {tb}").fetchone()[0]
+            print(f"[term] {len(tfiles)} files, {n:,} rows; only in the reference {ta:,}, only in the "
+                  f"book {tbo:,}; rows outside their file's bucket {routed:,}")
+            if ta or tbo or routed:
+                bad += 1
+                show_rows("in the reference, not the book", except_all(con, tref, tb, BOOK_TERM_COLS),
+                          BOOK_TERM_COLS)
+                show_rows("in the book, not the reference", except_all(con, tb, tref, BOOK_TERM_COLS),
+                          BOOK_TERM_COLS)
+    print(f"\n{'IDENTICAL' if not bad else f'{bad} MISMATCHES'} ({time.time()-t0:,.0f}s)")
+    return 0 if not bad else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("mode", choices=["partials", "month", "term"])
+    ap.add_argument("mode", choices=["partials", "month", "term", "book"])
     ap.add_argument("a", type=Path)
     ap.add_argument("b", type=Path)
     ap.add_argument("--month", default=None, metavar="Y_M")
+    ap.add_argument("--months", nargs="+", default=None, metavar="Y_M[..Y_M]",
+                    help="book: the book's months, as merge --months takes them.")
     ap.add_argument("--kinds", nargs="+", default=["ps", "term"])
     ap.add_argument("--ply-le", action="store_true",
                     help="month: also require B.ply <= A.ply on every key.")
@@ -393,7 +583,8 @@ def main() -> int:
     ap.add_argument("--mem", default="4GB")
     ap.add_argument("--tmp-dir", type=Path, default=None)
     a = ap.parse_args()
-    tmp = a.tmp_dir or (DEFAULT_TMP if DEFAULT_TMP.drive and Path(DEFAULT_TMP.drive + "/").exists()
+    default_tmp = BOOK_TMP if a.mode == "book" else DEFAULT_TMP
+    tmp = a.tmp_dir or (default_tmp if default_tmp.drive and Path(default_tmp.drive + "/").exists()
                         else Path.cwd() / "_compare_duckdb_tmp")
     if str(tmp).upper().startswith("F:"):
         print("FATAL: never put DuckDB temp on F: (USB spinning disk)")
@@ -415,6 +606,11 @@ def main() -> int:
             y, m = a.month.split("_")
             return cmd_month(a.a, a.b, f"{int(y)}_{int(m)}", con, a.ply_le,
                              a.min_ply_from, a.buckets, a.nbuckets, a.b_ply_cap)
+        if a.mode == "book":
+            if not a.months:
+                print("FATAL: book needs --months")
+                return 1
+            return cmd_book(a.a, a.b, parse_months(a.months), con, a.buckets)
         return cmd_term(a.a, a.b, a.month, con)
     finally:
         con.close()

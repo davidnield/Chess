@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use explorer_extract::game::Filters;
 use explorer_extract::source::{discover, effective_chunk, parse_month};
 use explorer_extract::stats::RunStats;
-use explorer_extract::{dump, month, partials, selftest, sys};
+use explorer_extract::{dump, merge, month, partials, selftest, sys};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -34,6 +34,9 @@ enum Cmd {
     Month(MonthArgs),
     /// Per-ply debug rows for the differential test against python-chess.
     DumpPlies(DumpArgs),
+    /// Ply-keyed Rust months -> the all-time banded explorer book (exit 0 done,
+    /// 1 error or failed gate, 4 out of space, 5 refused).
+    Merge(MergeArgs),
     /// The embedded fixtures (keys, SAN table, tokenizer, a mini extract).
     Selftest,
 }
@@ -199,6 +202,93 @@ struct DumpArgs {
     special: bool,
 }
 
+#[derive(Args)]
+struct MergeArgs {
+    /// The months root (`month --ply-key` output): month=Y_M/bkt=i/, _manifest,
+    /// _provenance, _term, _conflicts and the _month=Y_M.DONE sentinels. Read-only.
+    #[arg(long, required = true)]
+    months_root: PathBuf,
+    /// The expected months, every one complete: Y_M values and Y_M..Y_M ranges,
+    /// e.g. 2013_1..2026_7.
+    #[arg(long, num_args = 1.., required = true)]
+    months: Vec<String>,
+    /// The book dir.
+    #[arg(long, required = true)]
+    out: PathBuf,
+    /// Where inputs are staged, whole-file, before the merge reads them: an NVMe
+    /// dir that is not on the input volume. The tool owns only its bkt*/ and
+    /// term/ subdirs, marked by _merge_stage.
+    #[arg(long, required = true)]
+    stage_dir: PathBuf,
+    /// Cap on staged bytes, GB.
+    #[arg(long, default_value_t = 200.0)]
+    stage_gb: f64,
+    /// Buckets to do, e.g. 0-7 or 0-3,9 (default: all 512). Finalize runs once all
+    /// 512 and term are done.
+    #[arg(long, num_args = 1..)]
+    buckets: Option<Vec<String>>,
+    /// Up to threads - 1 buckets at once, plus the term merge (default: logical
+    /// cores). Not in the settings lock: the output is identical at any count.
+    #[arg(long)]
+    threads: Option<usize>,
+    #[arg(long, default_value_t = 262_144)]
+    row_group_rows: usize,
+    /// Exit 4 (resumable) when the book's volume would drop below this, GB.
+    #[arg(long, default_value_t = 100.0)]
+    min_free_gb: f64,
+    /// Write these columns without dictionary encoding (the pilot's tuning of
+    /// parent_epd, parent_hash, child_hash). In the settings lock.
+    #[arg(long, num_args = 1.., value_parser = ["parent_epd", "parent_hash", "child_hash"])]
+    no_dictionary: Vec<String>,
+    /// Run at BELOW_NORMAL priority.
+    #[arg(long)]
+    below_normal: bool,
+    /// Test only: allow --stage-dir on the input volume.
+    #[arg(long, hide = true)]
+    test_one_volume: bool,
+    /// Test only: exit(86) at PHASE:BUCKET (stage, merge, verify, publish, term, term-publish).
+    #[arg(long, hide = true)]
+    test_crash_at: Option<String>,
+}
+
+fn run_merge(a: MergeArgs) -> Result<ExitCode> {
+    if a.below_normal {
+        sys::set_below_normal().map_err(anyhow::Error::msg)?;
+    }
+    let mut no_dict = a.no_dictionary.clone();
+    no_dict.sort();
+    no_dict.dedup();
+    let cfg = merge::Config {
+        months: merge::parse_months(&a.months)?,
+        buckets: match &a.buckets {
+            Some(b) => merge::parse_buckets(b)?,
+            None => (0..merge::BUCKETS).collect(),
+        },
+        threads: a
+            .threads
+            .unwrap_or_else(|| std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
+            .max(1),
+        stage_bytes: (a.stage_gb * 1e9) as u64,
+        min_free_bytes: (a.min_free_gb * 1e9) as u64,
+        row_group_rows: a.row_group_rows.max(1),
+        no_dictionary: no_dict,
+        allow_one_volume: a.test_one_volume,
+        crash_at: a.test_crash_at.as_deref().map(merge::parse_crash).transpose()?,
+        months_root: a.months_root,
+        out: a.out,
+        stage_dir: a.stage_dir,
+    };
+    match merge::run(&cfg) {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(e) => {
+            let code = merge::exit_code(&e);
+            eprintln!("explorer-extract merge: {} (exit {code}): {e:#}",
+                      match code { 4 => "out of space", 5 => "refused", _ => "error" });
+            Ok(ExitCode::from(code))
+        }
+    }
+}
+
 fn run() -> Result<ExitCode> {
     let missing = sys::missing_cpu_features();
     if !missing.is_empty() {
@@ -326,6 +416,7 @@ fn run() -> Result<ExitCode> {
                       t0.elapsed().as_secs_f64());
             Ok(ExitCode::SUCCESS)
         }
+        Cmd::Merge(a) => run_merge(a),
     }
 }
 

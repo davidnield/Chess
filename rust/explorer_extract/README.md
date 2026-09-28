@@ -9,6 +9,7 @@ fast: the Python extract spends ~37 µs per ply in pure-Python chess logic.
 | `partials` | Drop-in for `build_pooled_stats.py --phase extract` with the explorer flags. Same file names, schemas (`large_string`), 250k-row chunks, `.tmp`-then-rename with ps last, `_DONE` sentinels, stale-chunk resume and the `_extract_params.json` lock (`producer: "rust"`). `--epd-max-ply` is required: 16 matches today's extract, 30 is B1's. |
 | `month` | A month's games straight to the finished 512-bucket layout that `backfill_epd.py` and `bucket_month.py` write (EPD at every ply), plus its term monthly. Replaces extract + consolidation + EPD backfill. |
 | `dump-plies` | Per-ply and per-game rows for the differential test against python-chess (`python/_test_rust_extract.py --plies-check`). |
+| `merge` | Ply-keyed months (`month --ply-key`, 30 plies, 512 buckets) to the all-time banded book: a streaming k-way merge per bucket, verified and published bucket by bucket (see below). |
 | `selftest` | The embedded fixtures, in well under a second. Run it on any machine before real use. |
 
 `--version` prints the crate version, git commit, build date and target features.
@@ -54,6 +55,46 @@ by child_hash minus the games that ENDED there at ply C. The derived HORIZON
 rows carry no reason, which the merge never uses. `_test_rust_extract.py` holds
 the derivation at caps 20/30/50 to direct runs; the month dir's params lock
 keeps keyed and unkeyed months apart.
+
+## merge: the all-time book
+
+The contract is the blog repo's `docs/explorer-merge-spec.md`; the code is
+`src/merge.rs` and `src/stage.rs`, and `tests/merge.rs` runs the binary end to
+end on synthetic month roots.
+
+- **Output (book-v1).** `ps/event=E/elo_band=B/bkt<iii>.parquet` (every column
+  REQUIRED, `child_eval` dropped, `white_score_avg` added, zstd 3, 262,144-row
+  groups, page indexes), unique on (parent_hash, parent_epd, move_san, event,
+  elo_band, ply) and strictly increasing on (parent_hash, parent_epd,
+  move_san, ply) within a file; `term/bkt<iii>.parquet` (512 files, pooled over
+  slices); `_collisions`, `_slices`, `_manifest`, `_done`, the settings lock
+  `_merge_params.json`, `_book.meta.json`, `README.md`, and `_BOOK.DONE` last.
+- **Per bucket** (one worker, one thread): the month files merge by
+  parent_hash; a hash's rows are sorted by (EPD, SAN, event, band, ply) and
+  summed, child_hash must agree, and two EPDs under one hash stay separate rows
+  (64-bit collision twins, listed in `_collisions`). Every input row is
+  validated as it streams, every output file is re-read in full, and a linear
+  128-bit digest (xxh3 seeds 1 and 2 over key and child, times each count) must
+  match across the two before the files are renamed into place and the
+  sentinel is written.
+- **I/O.** One stager thread copies whole files (16 MB reads) from the months
+  root to `--stage-dir`, term first and then bucket by bucket, capped by
+  `--stage-gb`; workers read only the stage. The stage dir must be off the
+  input volume, and is refused unless empty or marked by `_merge_stage` with
+  nothing but `bkt*/` and `term/` in it.
+- **Resume.** A bucket is done iff `_done/bkt<iii>.DONE` exists; everything of
+  an unfinished bucket is deleted on start. Term is all-or-nothing. The lock
+  records the months, the input params, the producer commit, this tool's
+  commit and build, and the writer settings (`--row-group-rows`,
+  `--no-dictionary`); a book is never continued by another build.
+- **Exit codes.** 0 done (or the requested `--buckets` done), 1 error or failed
+  gate (nothing unverified is published), 3 CPU features, 4 out of space
+  (resumable), 5 refused by pre-flight, the stage-dir check or the lock.
+- **Independent checks.** `python/verify_book.py` (DuckDB digests per bucket,
+  duplicate keys, book-wide sums and scan, `_collisions` and a python-chess
+  sample) and `python/compare_explorer_outputs.py book` (a DuckDB GROUP BY of
+  the months, for small month sets); `python/_test_verify_book.py` builds a
+  two-month book with this binary and runs both.
 
 ## Month mode's memory
 

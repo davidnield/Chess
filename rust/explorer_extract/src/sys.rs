@@ -86,6 +86,18 @@ mod win {
             counters: *mut ProcessMemoryCounters,
             cb: u32,
         ) -> i32;
+        pub fn GetDiskFreeSpaceExW(
+            dir: *const u16,
+            free_to_caller: *mut u64,
+            total: *mut u64,
+            total_free: *mut u64,
+        ) -> i32;
+        pub fn GetVolumePathNameW(path: *const u16, out: *mut u16, len: u32) -> i32;
+    }
+
+    pub fn wide(p: &std::path::Path) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        p.as_os_str().encode_wide().chain(std::iter::once(0)).collect()
     }
 
     pub const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x4000;
@@ -127,6 +139,44 @@ pub fn peak_commit() -> Option<u64> {
         }
     }
     None
+}
+
+/// The deepest existing ancestor of `p` (itself if it exists), absolute.
+fn existing_ancestor(p: &std::path::Path) -> Option<std::path::PathBuf> {
+    let abs = std::path::absolute(p).ok()?;
+    abs.ancestors().find(|a| a.exists()).map(|a| a.to_path_buf())
+}
+
+/// Bytes free to this process on the volume holding `p` (or its deepest
+/// existing ancestor).
+pub fn free_bytes(p: &std::path::Path) -> Option<u64> {
+    let dir = existing_ancestor(p)?;
+    #[cfg(windows)]
+    unsafe {
+        let w = win::wide(&dir);
+        let (mut free, mut total, mut total_free) = (0u64, 0u64, 0u64);
+        if win::GetDiskFreeSpaceExW(w.as_ptr(), &mut free, &mut total, &mut total_free) != 0 {
+            return Some(free);
+        }
+    }
+    let _ = dir;
+    None
+}
+
+/// The mount point of the volume holding `p` (`D:\` for anything on D:), for
+/// telling whether two paths share a disk. Lower-cased; None if unknown.
+pub fn volume_root(p: &std::path::Path) -> Option<String> {
+    let dir = existing_ancestor(p)?;
+    #[cfg(windows)]
+    unsafe {
+        let w = win::wide(&dir);
+        let mut buf = vec![0u16; 1024];
+        if win::GetVolumePathNameW(w.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) != 0 {
+            let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+            return Some(String::from_utf16_lossy(&buf[..n]).to_lowercase());
+        }
+    }
+    dir.components().next().map(|c| c.as_os_str().to_string_lossy().to_lowercase())
 }
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
