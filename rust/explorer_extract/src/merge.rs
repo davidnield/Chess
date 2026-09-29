@@ -53,6 +53,7 @@ use parquet::schema::types::ColumnPath;
 use serde_json::{json, Value};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
+use crate::chesspos::START_HASH;
 use crate::keys::{bucket_of, ps_schema, rename_retry, san_of, term_schema_with, tmp_of, San, BANDS};
 use crate::stage::{self, bucket_dir_name, CopyJob, Queue, Staged};
 use crate::sys;
@@ -2216,6 +2217,22 @@ fn footer_of(ins: &[PsIn], mi: usize) -> u64 {
 
 type TKey = (i64, i32, i32, i32);
 
+/// Phase T's rule for a term key, from game.rs walk(): a kept game with no
+/// moves writes term(START_HASH, 0, 0); every other game writes end_ply =
+/// min(30, its moves), kind 1 (horizon) only if it had more moves than that.
+pub fn term_key_rule(key: (i64, i32, i32, i32)) -> std::result::Result<(), String> {
+    let (hash, kind, end) = (key.0, key.1, key.3);
+    match kind {
+        0 if !(0..=MAX_PLY).contains(&end) => Err(format!("kind 0 with end_ply {end}, outside 0..={MAX_PLY}")),
+        0 if end == 0 && hash != START_HASH => Err(format!(
+            "end_ply 0 at position_hash {hash}: only the start position {START_HASH} ends at ply 0"
+        )),
+        1 if end != MAX_PLY => Err(format!("kind 1 (horizon) with end_ply {end}, not {MAX_PLY}")),
+        0 | 1 => Ok(()),
+        _ => Err(format!("kind {kind} is not 0 or 1")),
+    }
+}
+
 struct TermBatch {
     hash: Int64Array,
     kind: Int32Array,
@@ -2293,11 +2310,8 @@ impl TermIn {
                 bail!("{}: rows are not strictly increasing on TermKey: {key:?} follows {p:?}", at());
             }
         }
-        if !(1..=MAX_PLY).contains(&key.3) {
-            bail!("{}: end_ply {} is outside 1..={MAX_PLY}", at(), key.3);
-        }
-        if key.1 != 0 && key.1 != 1 {
-            bail!("{}: kind {} is not 0 or 1", at(), key.1);
+        if let Err(why) = term_key_rule(key) {
+            bail!("{}: {why}", at());
         }
         let c = [bt.c[0].value(i), bt.c[1].value(i), bt.c[2].value(i), bt.c[3].value(i)];
         if c.iter().any(|&x| x < 0) || c[3] < 1 {
@@ -2378,8 +2392,8 @@ fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest) ->
                 bail!("{p} row {}: not strictly increasing on TermKey", st.rows);
             }
             prev = Some(key);
-            if !(1..=MAX_PLY).contains(&key.3) || (key.1 != 0 && key.1 != 1) {
-                bail!("{p} row {}: kind {} end_ply {}", st.rows, key.1, key.3);
+            if let Err(why) = term_key_rule(key) {
+                bail!("{p} row {}: {why}", st.rows);
             }
             let c = [cs[0].value(i), cs[1].value(i), cs[2].value(i), cs[3].value(i)];
             if c.iter().any(|&x| x < 0) || c[3] < 1 {

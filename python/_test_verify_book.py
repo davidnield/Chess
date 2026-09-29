@@ -54,7 +54,8 @@ def pgn(sans: list[str], result: str) -> str:
 
 def games(n: int, seed: int) -> list[tuple]:
     """Legal games of 1-40 plies from a few shared openings (so keys repeat
-    across games, slices and months), some with a bad token mid-game."""
+    across games, slices and months), some with a bad token mid-game, plus a
+    few with no moves at all."""
     rng = random.Random(seed)
     openings = [[], "e4 e5 Nf3 Nc6".split(), "d4 d5 c4 e6".split(), "e4 c5 Nf3 d6".split(),
                 "Nf3 Nf6 Ng1 Ng8".split()]
@@ -78,6 +79,10 @@ def games(n: int, seed: int) -> list[tuple]:
         ws = rng.choice([1.0, 0.5, 0.0])
         out.append((pgn(sans, {1.0: "1-0", 0.5: "1/2-1/2", 0.0: "0-1"}[ws]), ws,
                     rng.choice(["Normal", "Time forfeit", "Normal"]), rng.randint(800, 2700), None, None))
+    # Kept games with no moves: month mode writes term(START_HASH, kind 0, end_ply 0) for them.
+    for k in range(max(1, n // 200)):
+        out.insert(rng.randrange(len(out) + 1), (["1-0", "0-1", ""][k % 3], [1.0, 0.0, 0.5][k % 3],
+                                                 "Time forfeit", rng.randint(800, 2700), None, None))
     return out
 
 
@@ -147,6 +152,11 @@ def main() -> None:
               f"merge finishes the book (rc {p.returncode}) {tail(p) if p.returncode else ''}")
         rows = sum(pq.read_metadata(f).num_rows for f in (book / "ps").glob("event=*/elo_band=*/*.parquet"))
         check(rows > 5000, f"the book has {rows:,} rows")
+        start = pq.ParquetFile(book / "term" / "bkt156.parquet").read().to_pylist()
+        zero = [r for r in start if r["position_hash"] == 5060803636482931868 and r["end_ply"] == 0]
+        check(len(zero) > 0 and all(r["kind"] == 0 for r in zero),
+              f"the no-move games' term rows (start position, kind 0, end_ply 0) are in the book: "
+              f"{sum(r['total'] for r in zero)} games")
         duck = ["--tmp-dir", tmp / "duck"]
         v = run(sys.executable, HERE / "verify_book.py", book, months, "--digest-buckets", "0-511",
                 "--dup-buckets", "0-511", "--sums", "--scan", "--collisions", "--sample", "3000",

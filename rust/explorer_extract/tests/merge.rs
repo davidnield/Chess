@@ -15,6 +15,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use serde_json::{json, Value};
 
+use explorer_extract::chesspos::START_HASH;
 use explorer_extract::keys::{bucket_of, ps_schema, term_schema_with, writer_props, BANDS};
 use explorer_extract::merge::{self, Digest, EVENTS};
 use explorer_extract::month::MANIFEST_FIELDS;
@@ -462,9 +463,13 @@ fn base_months() -> Vec<Month> {
         row(d, "exd5", 5, 1, 5, 3, 905, [0, 0, 1]),
         row(d, "Qxd5", 5, 1, 5, 3, 908, [0, 1, 0]),
     ];
-    let t1 = vec![(a, 0, 0, 3, [1, 0, 0, 1]), (c, 1, 3, 30, [0, 1, 0, 1]), (n, 0, 1, 12, [2, 0, 1, 3])];
-    let t2 = vec![(a, 0, 0, 3, [0, 0, 2, 2]), (c, 1, 3, 30, [1, 0, 0, 1]), (d, 0, 0, 5, [1, 0, 0, 1])];
-    let t3 = vec![(c, 1, 2, 30, [0, 0, 1, 1]), (b0, 1, 0, 30, [5, 0, 0, 5])];
+    // A kept game with no moves ends at the start position at ply 0 (walk()).
+    let s = START_HASH;
+    let t1 = vec![(a, 0, 0, 3, [1, 0, 0, 1]), (c, 1, 3, 30, [0, 1, 0, 1]), (n, 0, 1, 12, [2, 0, 1, 3]),
+                  (s, 0, 0, 0, [1, 0, 0, 1])];
+    let t2 = vec![(a, 0, 0, 3, [0, 0, 2, 2]), (c, 1, 3, 30, [1, 0, 0, 1]), (d, 0, 0, 5, [1, 0, 0, 1]),
+                  (s, 0, 0, 0, [0, 1, 0, 1]), (s, 0, 1, 4, [0, 0, 1, 1])];
+    let t3 = vec![(c, 1, 2, 30, [0, 0, 1, 1]), (b0, 1, 0, 30, [5, 0, 0, 5]), (s, 0, 1, 0, [0, 0, 1, 1])];
     vec![month(2099, 1, m1, t1), month(2099, 2, m2, t2), month(2099, 3, m3, t3)]
 }
 
@@ -817,6 +822,7 @@ fn term_merge_routing_and_digest() {
     }
     let want = expected_term(&months);
     assert_eq!(got, want, "term rows (end_ply kept, counts summed)");
+    assert_eq!(got.get(&(START_HASH, 0, 0, 0)), Some(&[1, 1, 0, 2]), "the no-move games at the start position");
     let mut dg = Digest::default();
     for (k, c) in &want {
         let (k1, k2) = merge::term_key_hashes(*k);
@@ -826,6 +832,45 @@ fn term_merge_routing_and_digest() {
     let hex: Vec<u64> = ["seed1", "seed2"].iter().flat_map(|s| d["digest"][*s].as_array().unwrap().iter()
         .map(|x| u64::from_str_radix(x.as_str().unwrap(), 16).unwrap()).collect::<Vec<_>>()).collect();
     assert_eq!(hex, dg.0.to_vec(), "term digest");
+}
+
+/// Phase T's end_ply rule (walk()): kind 0 has 0 <= end_ply <= 30 with 0 only
+/// at the start position; kind 1 has end_ply exactly 30.
+#[test]
+fn term_end_ply_rules() {
+    let h = hb(3, 9);
+    for (key, ok) in [
+        ((START_HASH, 0, 0, 0), true),
+        ((START_HASH, 0, 2, 4), true),
+        ((h, 0, 3, 17), true),
+        ((h, 0, 0, 30), true),
+        ((h, 1, 0, 30), true),
+        ((h, 0, 0, 0), false),
+        ((START_HASH, 1, 0, 0), false),
+        ((h, 1, 0, 29), false),
+        ((h, 0, 0, 31), false),
+        ((h, 0, 0, -1), false),
+        ((h, 2, 0, 5), false),
+    ] {
+        assert_eq!(merge::term_key_rule(key).is_ok(), ok, "{key:?}");
+    }
+    // End to end: each bad row stops the run at term, and term is not published.
+    for (name, row, needle) in [
+        ("zero_elsewhere", (h, 0, 0, 0, [1, 0, 0, 1]), "end_ply 0 at position_hash"),
+        ("horizon_29", (h, 1, 0, 29, [1, 0, 0, 1]), "kind 1 (horizon) with end_ply 29"),
+        ("ended_31", (h, 0, 0, 31, [1, 0, 0, 1]), "outside 0..=30"),
+    ] {
+        let t = Case::new(&format!("term_rule_{name}"));
+        let mut months = base_months();
+        months[1].term.push(row);
+        build_root(&t.root(), &months);
+        let o = t.merge("book", BASE, &[]);
+        assert_eq!(code(&o), 1, "{name}: {}", log(&o));
+        assert!(log(&o).contains(needle), "{name}: want {needle:?} in:\n{}", log(&o));
+        let out = t.book("book");
+        assert!(!out.join("_done").join("term.DONE").exists() && !out.join("term").exists(), "{name}: term published");
+        assert!(!out.join("_BOOK.DONE").exists(), "{name}");
+    }
 }
 
 // ── 10. out of space; 11. stage-dir safety ───────────────────────────────────
