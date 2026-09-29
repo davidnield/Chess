@@ -20,10 +20,15 @@ book's settings lock (_merge_params.json) names.
   --sums                 book-wide sums of the 4 counts, and SUM(total) at
                          ply 1, against the months' manifests (5 columns
                          read). Needs a complete book.
-  --scan                 every book row: no NULLs, event/elo_band equal to the
-                         path, the file in its row's bucket, the EPD's side to
-                         move against ply parity, total = W + D + B >= 1, and
-                         white_score_avg within 1e-12 of the formula.
+  --scan                 every book row: no NULLs, the EPD's side to move
+                         against ply parity, total = W + D + B >= 1, and
+                         white_score_avg within 1e-12 of the formula; every
+                         file's event/elo_band/bucket equal to its path. One
+                         query per bucket, aggregated per file (12.3M rows/s
+                         at 6 threads on the pilot: ~2 h for the full book).
+
+Each bucket gets a fresh DuckDB connection: in one long-lived connection the
+per-bucket time decayed 16 s -> 91 s over 13 buckets (CLAUDE.md, DuckDB decay).
   --collisions           _collisions: every EPD hashes to its parent_hash, every
                          hash has >= 2 EPDs, and the months' own collision
                          records (_conflicts, kind parent-epd) are a subset.
@@ -102,7 +107,12 @@ def parse_buckets(spec: str) -> list[int]:
     return sorted(out)
 
 
+_CONNECT_ARGS: tuple = ()
+
+
 def connect(threads: int, mem: str, tmp: Path) -> duckdb.DuckDBPyConnection:
+    global _CONNECT_ARGS
+    _CONNECT_ARGS = (threads, mem, tmp)
     if _p(tmp).upper().startswith("F:"):
         raise SystemExit("FATAL: never put DuckDB temp on F: (USB spinning disk)")
     tmp.mkdir(parents=True, exist_ok=True)
@@ -166,7 +176,9 @@ def check_digests(con, bk: Book, buckets: list[int]) -> None:
                 bad.append(f"bucket {b}: {len(outs)} book files but no sentinel")
             continue
         n += 1
-        di, do = _digest(con, ins), _digest(con, outs)
+        bcon = connect(*_CONNECT_ARGS)   # per bucket: DuckDB decays in a long-lived connection
+        di, do = _digest(bcon, ins), _digest(bcon, outs)
+        bcon.close()
         if di != do:
             bad.append(f"bucket {b}: months {di[:2]}.. vs book {do[:2]}..")
         print(f"    bkt {b:03d}: {len(ins)} month files, {len(outs)} book files, total "
@@ -184,10 +196,12 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
         outs = bk.ps.get(b, [])
         if not outs:
             continue
-        r = con.execute(f"""
+        bcon = connect(*_CONNECT_ARGS)   # per bucket: DuckDB decays in a long-lived connection
+        r = bcon.execute(f"""
             SELECT COUNT(*) FILTER (WHERE n > 1), SUM(n) FROM (
               SELECT COUNT(*) AS n FROM read_parquet({_lit(outs)}, hive_partitioning=false)
               GROUP BY parent_hash, parent_epd, move_san, event, elo_band, ply)""").fetchone()
+        bcon.close()
         dup += int(r[0] or 0)
         rows += int(r[1] or 0)
         print(f"    bkt {b:03d}: {int(r[1] or 0):,} rows, {int(r[0] or 0)} duplicated keys", flush=True)
@@ -213,36 +227,70 @@ def check_sums(con, bk: Book) -> None:
     check(m == b, f"the book's 4 sums and ply-1 total equal the {len(mans)} manifests'")
 
 
+SCAN_NULLS = " OR ".join(f"{c} IS NULL" for c in (
+    "parent_hash", "move_san", "event", "elo_band", "parent_epd", "child_hash", "ply",
+    "white_wins", "draws", "black_wins", "total", "white_score_avg"))
+
+
 def check_scan(con, bk: Book) -> None:
+    """One query per bucket, aggregated per file: the row checks count
+    violations, and each file's event, elo_band and bucket come back as
+    MIN/MAX to be held against its path here. Each bucket gets a fresh DuckDB
+    connection: in one connection the per-bucket time decayed 16 s -> 91 s
+    over the pilot's 13 buckets (CLAUDE.md's DuckDB decay), and one query over
+    every file ran about 4 h at one core."""
     files = bk.all_ps()
-    print(f"\nbook-wide scan: {len(files):,} files", flush=True)
+    print(f"\nbook-wide scan: {len(files):,} files in {len(bk.ps)} buckets", flush=True)
     if not files:
         check(False, "the book has ps files")
         return
-    nulls = " OR ".join(f"{c} IS NULL" for c in (
-        "parent_hash", "move_san", "event", "elo_band", "parent_epd", "child_hash", "ply",
-        "white_wins", "draws", "black_wins", "total", "white_score_avg"))
-    r = con.execute(f"""
-        SELECT COUNT(*),
-               COUNT(*) FILTER (WHERE {nulls}),
-               COUNT(*) FILTER (WHERE split_part(parent_epd, ' ', 2) NOT IN ('w', 'b')
-                                   OR (split_part(parent_epd, ' ', 2) = 'w') <> (ply % 2 = 1)),
-               COUNT(*) FILTER (WHERE total <> white_wins + draws + black_wins OR total < 1
-                                   OR white_wins < 0 OR draws < 0 OR black_wins < 0),
-               COUNT(*) FILTER (WHERE abs(white_score_avg - (white_wins::DOUBLE + 0.5::DOUBLE * draws::DOUBLE)
-                                          / total::DOUBLE) > 1e-12),
-               COUNT(*) FILTER (WHERE regexp_extract(filename, 'event=([^/\\\\]+)', 1) <> event
-                                   OR regexp_extract(filename, 'elo_band=([^/\\\\]+)', 1)
-                                      <> CAST(elo_band AS VARCHAR)),
-               COUNT(*) FILTER (WHERE ((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}
-                                      <> CAST(regexp_extract(filename, 'bkt(\\d+)\\.parquet', 1) AS BIGINT)),
-               COUNT(*) FILTER (WHERE ply < 1 OR ply > 30)
-        FROM read_parquet({_lit(files)}, hive_partitioning=false, filename=true)""").fetchone()
-    n, nul, par, tot, wsa, path, bkt, ply = (int(x) for x in r)
-    print(f"    {n:,} rows: NULLs {nul}, parity {par}, counts {tot}, white_score_avg {wsa}, "
-          f"path {path}, bucket {bkt}, ply range {ply}")
-    check(n > 0 and not (nul or par or tot or wsa or path or bkt or ply),
-          f"every book row: no NULLs, parity, total = W + D + B, white_score_avg, path, bucket, ply")
+    tot = {"rows": 0, "nulls": 0, "parity": 0, "counts": 0, "wsa": 0, "ply": 0, "path": 0, "bucket": 0}
+    bad_files: list[str] = []
+    t0 = time.time()
+    for b in sorted(bk.ps):
+        tb = time.time()
+        bcon = connect(*_CONNECT_ARGS)
+        rows = bcon.execute(f"""
+            SELECT filename, COUNT(*),
+                   COUNT(*) FILTER (WHERE {SCAN_NULLS}),
+                   COUNT(*) FILTER (WHERE split_part(parent_epd, ' ', 2) NOT IN ('w', 'b')
+                                       OR (split_part(parent_epd, ' ', 2) = 'w') <> (ply % 2 = 1)),
+                   COUNT(*) FILTER (WHERE total <> white_wins + draws + black_wins OR total < 1
+                                       OR white_wins < 0 OR draws < 0 OR black_wins < 0),
+                   COUNT(*) FILTER (WHERE abs(white_score_avg - (white_wins::DOUBLE + 0.5::DOUBLE
+                                              * draws::DOUBLE) / total::DOUBLE) > 1e-12),
+                   COUNT(*) FILTER (WHERE ply < 1 OR ply > 30),
+                   MIN(event), MAX(event), MIN(elo_band), MAX(elo_band),
+                   MIN(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}),
+                   MAX(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS})
+            FROM read_parquet({_lit(bk.ps[b])}, hive_partitioning=false, filename=true)
+            GROUP BY filename""").fetchall()
+        bcon.close()
+        n_b = 0
+        for fn, n, nul, par, cnt, wsa, ply, ev0, ev1, bd0, bd1, k0, k1 in rows:
+            m = re.search(r"event=([^/\\]+)[/\\]elo_band=(-?\d+)[/\\]bkt(\d{3})\.parquet$", fn)
+            path_ok = bool(m) and ev0 == ev1 == m.group(1) and bd0 == bd1 == int(m.group(2))
+            bkt_ok = bool(m) and k0 == k1 == int(m.group(3)) == b
+            for k, v in (("rows", n), ("nulls", nul), ("parity", par), ("counts", cnt), ("wsa", wsa),
+                         ("ply", ply), ("path", 0 if path_ok else n), ("bucket", 0 if bkt_ok else n)):
+                tot[k] += int(v or 0)
+            if nul or par or cnt or wsa or ply or not path_ok or not bkt_ok:
+                bad_files.append(fn)
+            n_b += int(n)
+        if len(rows) != len(bk.ps[b]):
+            tot["path"] += 1
+            bad_files.append(f"bucket {b}: {len(rows)} files read of {len(bk.ps[b])}")
+        dt = time.time() - tb
+        print(f"    bkt {b:03d}: {len(rows)} files, {n_b:,} rows, {dt:,.0f}s "
+              f"({n_b / max(dt, 1e-9) / 1e6:,.1f}M rows/s)", flush=True)
+    el = time.time() - t0
+    print(f"    {tot['rows']:,} rows in {el:,.0f}s ({tot['rows'] / max(el, 1e-9) / 1e6:,.1f}M rows/s): "
+          f"NULLs {tot['nulls']}, parity {tot['parity']}, counts {tot['counts']}, white_score_avg "
+          f"{tot['wsa']}, ply range {tot['ply']}, rows in a file whose path disagrees {tot['path']}, "
+          f"rows in a file outside its bucket {tot['bucket']} {bad_files[:3]}")
+    check(tot["rows"] > 0 and not any(v for k, v in tot.items() if k != "rows"),
+          "every book row: no NULLs, parity, total = W + D + B, white_score_avg, ply; every file's "
+          "event, elo_band and bucket match its path")
 
 
 # ── positions (python-chess) ──────────────────────────────────────────────────

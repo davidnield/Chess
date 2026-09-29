@@ -186,6 +186,13 @@ def main() -> None:
                 "--months", *tags, *duck)
         check(c.returncode == 1 and "MISMATCHES" in c.stdout,
               "compare_explorer_outputs.py book fails the corrupted book")
+        t = pq.ParquetFile(f).read()
+        d = {k: t[k].to_pylist() for k in t.column_names}
+        d["white_score_avg"][0] += 0.25
+        pq.write_table(pa.Table.from_pydict(d, schema=t.schema), f, compression="zstd")
+        s = run(sys.executable, HERE / "verify_book.py", book, months, "--scan", *duck)
+        check(s.returncode == 1 and "white_score_avg 1," in s.stdout,
+              "verify_book.py --scan fails a row whose white_score_avg is off the formula")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     n_fail = sum(1 for ok, _ in _checks if not ok)
