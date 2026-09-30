@@ -1562,27 +1562,6 @@ fn phase_c(ctx: &Ctx) -> Result<()> {
 
 // ── Phase J: per output bucket ───────────────────────────────────────────────
 
-/// One eval position of a bucket, reduced.
-struct EvalPos {
-    hash: i64,
-    pos: [u8; PACKED_BYTES],
-    variant: bool,
-    cloud: Option<CloudPick>,
-    fish: Option<FishPick>,
-    parent: bool,
-    hash_is_parent: bool,
-    epd: Option<String>,
-}
-
-impl EvalPos {
-    fn epd(&mut self) -> &str {
-        if self.epd.is_none() {
-            self.epd = Some(Packed::from_bytes(&self.pos).render());
-        }
-        self.epd.as_deref().unwrap()
-    }
-}
-
 fn shard_files(dir: &Path, b: u32) -> Result<Vec<PathBuf>> {
     let pre = format!("bkt{b:03}.");
     let mut v = Vec::new();
@@ -1604,8 +1583,8 @@ fn fixed_col(b: &RecordBatch, name: &str) -> Result<FixedSizeBinaryArray> {
     Ok(col(b, name)?.as_fixed_size_binary_opt().ok_or_else(|| anyhow!("{name} is not fixed binary"))?.clone())
 }
 
-fn load_fish(files: &[PathBuf]) -> Result<Vec<FRow>> {
-    let mut v = Vec::new();
+fn load_fish(files: &[PathBuf], rows: u64) -> Result<Vec<FRow>> {
+    let mut v = Vec::with_capacity(rows as usize);
     for p in files {
         for b in open_reader(p, &["position_hash", "pos", "variant", "tier", "skey", "n"], READ_BATCH)? {
             let b = b?;
@@ -1665,64 +1644,6 @@ fn load_cloud(files: &[PathBuf]) -> Result<Vec<CRow>> {
         }
     }
     Ok(v)
-}
-
-/// The bucket's eval positions, sorted by (hash, pos), each reduced by the rules.
-fn reduce_evals(mut fish: Vec<FRow>, mut cloud: Vec<CRow>) -> Vec<EvalPos> {
-    fish.par_sort_unstable_by(|a, b| (a.hash, a.pos, a.tier, a.key).cmp(&(b.hash, b.pos, b.tier, b.key)));
-    cloud.par_sort_unstable_by(|a, b| (a.hash, a.pos).cmp(&(b.hash, b.pos)));
-    let mut out: Vec<EvalPos> = Vec::new();
-    let (mut i, mut j) = (0usize, 0usize);
-    let mut trip: Vec<(u8, i32, u64)> = Vec::new();
-    let mut cands: Vec<CloudCand> = Vec::new();
-    while i < fish.len() || j < cloud.len() {
-        let kf = fish.get(i).map(|r| (r.hash, r.pos));
-        let kc = cloud.get(j).map(|r| (r.hash, r.pos));
-        let k = match (kf, kc) {
-            (Some(a), Some(b)) => a.min(b),
-            (Some(a), None) => a,
-            (None, Some(b)) => b,
-            (None, None) => unreachable!(),
-        };
-        let mut variant = false;
-        trip.clear();
-        while i < fish.len() && (fish[i].hash, fish[i].pos) == k {
-            let r = &fish[i];
-            variant = r.variant;
-            match trip.last_mut() {
-                Some(l) if l.0 == r.tier && l.1 == r.key => l.2 += r.n,
-                _ => trip.push((r.tier, r.key, r.n)),
-            }
-            i += 1;
-        }
-        cands.clear();
-        while j < cloud.len() && (cloud[j].hash, cloud[j].pos) == k {
-            let r = &cloud[j];
-            variant = r.variant;
-            cands.push(CloudCand {
-                depth: r.depth,
-                knodes: r.knodes,
-                key: r.key,
-                line: r.line.to_string(),
-                file: r.file,
-                row: r.row,
-                npv: r.npv,
-                bad: r.bad,
-            });
-            j += 1;
-        }
-        out.push(EvalPos {
-            hash: k.0,
-            pos: k.1,
-            variant,
-            cloud: cloud_pick(&cands),
-            fish: fish_pick(&trip),
-            parent: false,
-            hash_is_parent: false,
-            epd: None,
-        });
-    }
-    out
 }
 
 /// One book file, read by hash group.
@@ -2001,6 +1922,7 @@ fn j_done(cfg: &Config, b: u32) -> PathBuf {
 
 struct BucketInputs {
     est: u64,
+    fish_rows: u64,
     fish: Vec<PathBuf>,
     cloud: Vec<PathBuf>,
     child: Vec<PathBuf>,
@@ -2023,10 +1945,11 @@ fn j_inputs(ctx: &Ctx, b: u32) -> Result<BucketInputs> {
         }
     }
     let rows = |v: &[PathBuf]| -> Result<u64> { v.iter().map(|p| footer_rows(p)).sum() };
-    // Fishnet rows as loaded (64 B) plus their reduction; cloud rows with their
-    // lines and candidates; a child batch; the book cursors.
-    let est = rows(&fish)? * 160 + rows(&cloud)? * 450 + 64_000_000 + 256_000_000;
-    Ok(BucketInputs { est, fish, cloud, child })
+    let fish_rows = rows(&fish)?;
+    // Fishnet rows as loaded (56 B, reserved exactly) and the transient set of
+    // eval hashes; cloud rows with their lines; the book cursors and output.
+    let est = fish_rows * (56 + 20) + rows(&cloud)? * 300 + 512_000_000;
+    Ok(BucketInputs { est, fish_rows, fish, cloud, child })
 }
 
 /// A counting semaphore over bytes.
@@ -2053,29 +1976,108 @@ impl MemGate {
     }
 }
 
+/// One eval position's rows within the sorted fishnet and cloud vectors.
+struct PosRows {
+    pos: [u8; PACKED_BYTES],
+    variant: bool,
+    fish: std::ops::Range<usize>,
+    cloud: std::ops::Range<usize>,
+}
+
+/// The eval positions of hash `h`: the runs of `fish` from `*fi` and of
+/// `cloud` from `*ci` with that hash, grouped by position (both vectors are
+/// sorted by (hash, pos, ..)). Advances both cursors past `h`.
+fn eval_group(h: i64, fish: &[FRow], cloud: &[CRow], fi: &mut usize, ci: &mut usize, out: &mut Vec<PosRows>) {
+    out.clear();
+    let (fe, ce) = {
+        let mut fe = *fi;
+        while fe < fish.len() && fish[fe].hash == h {
+            fe += 1;
+        }
+        let mut ce = *ci;
+        while ce < cloud.len() && cloud[ce].hash == h {
+            ce += 1;
+        }
+        (fe, ce)
+    };
+    let (mut i, mut j) = (*fi, *ci);
+    while i < fe || j < ce {
+        let p = match (fish.get(i).filter(|_| i < fe), cloud.get(j).filter(|_| j < ce)) {
+            (Some(f), Some(c)) => f.pos.min(c.pos),
+            (Some(f), None) => f.pos,
+            (None, Some(c)) => c.pos,
+            (None, None) => unreachable!(),
+        };
+        let (i0, j0) = (i, j);
+        let mut variant = false;
+        while i < fe && fish[i].pos == p {
+            variant = fish[i].variant;
+            i += 1;
+        }
+        while j < ce && cloud[j].pos == p {
+            variant = cloud[j].variant;
+            j += 1;
+        }
+        out.push(PosRows { pos: p, variant, fish: i0..i, cloud: j0..j });
+    }
+    *fi = fe;
+    *ci = ce;
+}
+
+fn fish_of(pr: &PosRows, fish: &[FRow]) -> Option<FishPick> {
+    let trip: Vec<(u8, i32, u64)> = fish[pr.fish.clone()].iter().map(|r| (r.tier, r.key, r.n)).collect();
+    fish_pick(&trip)
+}
+
+fn cloud_of(pr: &PosRows, cloud: &[CRow]) -> Option<CloudPick> {
+    if pr.cloud.is_empty() {
+        return None;
+    }
+    let cands: Vec<CloudCand> = cloud[pr.cloud.clone()]
+        .iter()
+        .map(|r| CloudCand {
+            depth: r.depth,
+            knodes: r.knodes,
+            key: r.key,
+            line: r.line.to_string(),
+            file: r.file,
+            row: r.row,
+            npv: r.npv,
+            bad: r.bad,
+        })
+        .collect();
+    cloud_pick(&cands)
+}
+
+/// One bucket: a three-way merge by hash of the book's parent groups, the
+/// sorted eval rows and the child hashes. Only matched positions are reduced
+/// and rendered, so memory is the shard rows themselves.
 fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let cfg = ctx.cfg;
     let t0 = Instant::now();
-    let fish = load_fish(&inp.fish)?;
-    let cloud = load_cloud(&inp.cloud)?;
+    let mut fish = load_fish(&inp.fish, inp.fish_rows)?;
+    fish.par_sort_unstable_by(|a, b| (a.hash, a.pos, a.tier, a.key).cmp(&(b.hash, b.pos, b.tier, b.key)));
+    let mut cloud = load_cloud(&inp.cloud)?;
+    cloud.par_sort_unstable_by(|a, b| (a.hash, a.pos, a.file, a.row).cmp(&(b.hash, b.pos, b.file, b.row)));
     let (n_fish_rows, n_cloud_rows) = (fish.len(), cloud.len());
-    let mut evals = reduce_evals(fish, cloud);
     // Child hashes that some eval carries.
-    let eval_hashes: FastSet<i64> = evals.iter().map(|e| e.hash).collect();
     let mut children: Vec<i64> = Vec::new();
     let mut child_rows = 0u64;
-    for p in &inp.child {
-        for bt in open_reader(p, &["child_hash"], READ_BATCH * 16)? {
-            let c = i64_col(&bt?, "child_hash")?;
-            child_rows += c.len() as u64;
-            children.extend(c.values().iter().copied().filter(|h| eval_hashes.contains(h)));
+    {
+        let mut eval_hashes: FastSet<i64> = FastSet::default();
+        eval_hashes.extend(fish.iter().map(|r| r.hash).chain(cloud.iter().map(|r| r.hash)));
+        for p in &inp.child {
+            for bt in open_reader(p, &["child_hash"], READ_BATCH * 16)? {
+                let c = i64_col(&bt?, "child_hash")?;
+                child_rows += c.len() as u64;
+                children.extend(c.values().iter().copied().filter(|h| eval_hashes.contains(h)));
+            }
         }
     }
-    drop(eval_hashes);
     children.sort_unstable();
     children.dedup();
     let t_load = t0.elapsed().as_secs_f64();
-    // Stream the book's parents: a k-way merge of the bucket's files by hash.
+    // The book: a k-way merge of the bucket's files by hash.
     let files = book_bucket_files(&cfg.book, b)?;
     if files.is_empty() && !cfg.test_inputs {
         bail!("book bucket {b} has no ps files");
@@ -2091,74 +2093,129 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let (mut book_rows, mut book_parents, mut matched_parents) = (0u64, 0u64, 0u64);
     let mut g = Group::default();
     let mut idx: Vec<usize> = Vec::new();
-    let mut ei = 0usize;
-    let mut last_h: Option<i64> = None;
-    let mut totals = [0u64; PLIES];
-    while let Some(&Reverse((h, _))) = heap.peek() {
-        if last_h.is_some_and(|l| h <= l) {
-            bail!("bucket {b}: book hash groups out of order at {h}");
-        }
-        last_h = Some(h);
-        if bucket_of(h, BUCKETS) != b {
-            bail!("bucket {b}: book parent_hash {h} is in bucket {}", bucket_of(h, BUCKETS));
-        }
-        g.clear();
-        while let Some(&Reverse((hh, ci))) = heap.peek() {
-            if hh != h {
-                break;
+    let mut last_book: Option<i64> = None;
+    // Book positions of the current hash: (epd, ply mask, games per ply, has an eval).
+    let mut bpos: Vec<(String, u32, [u64; PLIES], bool)> = Vec::new();
+    let mut prs: Vec<PosRows> = Vec::new();
+    let (mut fi, mut ci) = (0usize, 0usize);
+    let mut rows: Vec<OutRow> = Vec::new();
+    let mut amb_list: Vec<Value> = Vec::new();
+    let (mut amb_hashes, mut n_evals, mut n_fish_pos) = (0u64, 0u64, 0u64);
+    let (mut order_n, mut order_bad, mut order_n_out, mut order_bad_out) = (0u64, 0u64, 0u64, 0u64);
+    loop {
+        let hb = heap.peek().map(|r| r.0 .0);
+        let he = match (fish.get(fi).map(|r| r.hash), cloud.get(ci).map(|r| r.hash)) {
+            (Some(a), Some(c)) => Some(a.min(c)),
+            (a, c) => a.or(c),
+        };
+        let h = match (hb, he) {
+            (Some(x), Some(y)) => x.min(y),
+            (x, y) => match x.or(y) {
+                Some(v) => v,
+                None => break,
+            },
+        };
+        // The book's positions with this hash.
+        bpos.clear();
+        if hb == Some(h) {
+            if last_book.is_some_and(|l| h <= l) {
+                bail!("bucket {b}: book hash groups out of order at {h}");
             }
-            heap.pop();
-            if curs[ci].drain(h, &mut g)? {
-                heap.push(Reverse((curs[ci].head(), ci)));
+            last_book = Some(h);
+            if bucket_of(h, BUCKETS) != b {
+                bail!("bucket {b}: book parent_hash {h} is in bucket {}", bucket_of(h, BUCKETS));
             }
-        }
-        book_rows += g.rows.len() as u64;
-        idx.clear();
-        idx.extend(0..g.rows.len());
-        idx.sort_by(|&x, &y| g.epd(x).cmp(g.epd(y)));
-        while ei < evals.len() && evals[ei].hash < h {
-            ei += 1;
-        }
-        let mut ee = ei;
-        while ee < evals.len() && evals[ee].hash == h {
-            evals[ee].hash_is_parent = true;
-            ee += 1;
-        }
-        let mut k = 0;
-        while k < idx.len() {
-            let mut mask: u32 = 0;
-            totals.fill(0);
-            let mut e = k;
-            while e < idx.len() && g.epd(idx[e]) == g.epd(idx[k]) {
-                let r = g.rows[idx[e]];
-                if !(1..PLIES as i32).contains(&r.2) || r.3 < 1 {
-                    bail!("bucket {b}: ply {} / total {} out of range at hash {h}", r.2, r.3);
+            g.clear();
+            while let Some(&Reverse((hh, c))) = heap.peek() {
+                if hh != h {
+                    break;
                 }
-                mask |= 1 << r.2;
-                totals[r.2 as usize] += r.3 as u64;
-                e += 1;
+                heap.pop();
+                if curs[c].drain(h, &mut g)? {
+                    heap.push(Reverse((curs[c].head(), c)));
+                }
             }
+            book_rows += g.rows.len() as u64;
+            idx.clear();
+            idx.extend(0..g.rows.len());
+            idx.sort_by(|&x, &y| g.epd(x).cmp(g.epd(y)));
+            let mut k = 0;
+            while k < idx.len() {
+                let mut mask = 0u32;
+                let mut totals = [0u64; PLIES];
+                let mut e = k;
+                while e < idx.len() && g.epd(idx[e]) == g.epd(idx[k]) {
+                    let r = g.rows[idx[e]];
+                    if !(1..PLIES as i32).contains(&r.2) || r.3 < 1 {
+                        bail!("bucket {b}: ply {} / total {} out of range at hash {h}", r.2, r.3);
+                    }
+                    mask |= 1 << r.2;
+                    totals[r.2 as usize] += r.3 as u64;
+                    e += 1;
+                }
+                bpos.push((g.epd(idx[k]).to_string(), mask, totals, false));
+                k = e;
+            }
+        }
+        // The evals with this hash.
+        eval_group(h, &fish, &cloud, &mut fi, &mut ci, &mut prs);
+        let is_child = bpos.is_empty() && !prs.is_empty() && children.binary_search(&h).is_ok();
+        let mut grp: Vec<OutRow> = Vec::new();
+        for pr in &prs {
+            n_evals += 1;
+            n_fish_pos += u64::from(!pr.fish.is_empty());
+            let c = cloud_of(pr, &cloud);
+            if let Some(c) = c.as_ref().filter(|c| c.cand.npv >= 2) {
+                order_n += 1;
+                order_bad += u64::from(c.cand.bad);
+            }
+            let matched = if bpos.is_empty() {
+                None
+            } else {
+                let epd = Packed::from_bytes(&pr.pos).render();
+                bpos.iter().position(|x| x.0 == epd).map(|i| (i, epd))
+            };
+            if matched.is_none() && !is_child {
+                continue;
+            }
+            let f = fish_of(pr, &fish);
+            if let Some(c) = c.as_ref().filter(|c| c.cand.npv >= 2) {
+                order_n_out += 1;
+                order_bad_out += u64::from(c.cand.bad);
+            }
+            let chosen = choose(c.as_ref(), f.as_ref()).expect("an eval position has a source");
+            let (epd, in_book) = match matched {
+                Some((i, epd)) => {
+                    bpos[i].3 = true;
+                    (epd, "parent")
+                }
+                None => (Packed::from_bytes(&pr.pos).render(), "child"),
+            };
+            grp.push(OutRow { hash: h, epd, in_book, chosen, cloud: c, fish: f, ambiguous: false, variant: pr.variant });
+        }
+        if is_child && grp.len() >= 2 {
+            amb_hashes += 1;
+            let n = grp.len();
+            for r in &mut grp {
+                r.ambiguous = true;
+                amb_list.push(json!({"position_hash": h, "epd": r.epd, "n_epds": n, "source": r.chosen.source}));
+            }
+        }
+        grp.sort_by(|x, y| x.epd.cmp(&y.epd));
+        rows.extend(grp);
+        for (_, mask, totals, has) in &bpos {
             book_parents += 1;
-            let epd = g.epd(idx[k]);
-            let mut has = false;
-            for ev in &mut evals[ei..ee] {
-                if ev.epd() == epd {
-                    ev.parent = true;
-                    has = true;
-                }
-            }
-            matched_parents += u64::from(has);
+            matched_parents += u64::from(*has);
             for p in 1..PLIES {
                 if mask & (1 << p) != 0 {
                     cov.positions[p] += 1;
                     cov.games[p] += totals[p];
-                    if has {
+                    if *has {
                         cov.with_eval[p] += 1;
                         cov.games_with_eval[p] += totals[p];
                     }
                 }
             }
-            k = e;
         }
     }
     let footer: u64 = files.iter().map(|p| footer_rows(p)).sum::<Result<u64>>()?;
@@ -2167,73 +2224,15 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
         bail!("bucket {b}: read {read} book rows, grouped {book_rows}, footers say {footer}");
     }
     drop(curs);
+    drop(fish);
+    drop(cloud);
     let t_book = t0.elapsed().as_secs_f64() - t_load;
-    // Classify: parent, or child (hash a book child_hash and not a book
-    // parent_hash), else dropped.
-    let mut rows: Vec<OutRow> = Vec::new();
-    let mut amb_list: Vec<Value> = Vec::new();
-    let mut amb_hashes = 0u64;
-    let (mut order_n, mut order_bad, mut order_n_out, mut order_bad_out) = (0u64, 0u64, 0u64, 0u64);
-    let mut st = 0;
-    while st < evals.len() {
-        let h = evals[st].hash;
-        let mut en = st;
-        while en < evals.len() && evals[en].hash == h {
-            en += 1;
-        }
-        let child_hash = children.binary_search(&h).is_ok();
-        let is_child = |ev: &EvalPos| !ev.parent && !ev.hash_is_parent && child_hash;
-        let n_child_epds = evals[st..en].iter().filter(|ev| is_child(ev)).count();
-        amb_hashes += u64::from(n_child_epds >= 2);
-        let mut grp: Vec<OutRow> = Vec::new();
-        for ev in &mut evals[st..en] {
-            if let Some(c) = &ev.cloud {
-                if c.cand.npv >= 2 {
-                    order_n += 1;
-                    order_bad += u64::from(c.cand.bad);
-                }
-            }
-            let child = is_child(ev);
-            if !ev.parent && !child {
-                continue;
-            }
-            let ambiguous = child && n_child_epds >= 2;
-            let chosen = choose(ev.cloud.as_ref(), ev.fish.as_ref()).expect("an eval position has a source");
-            if let Some(c) = &ev.cloud {
-                if c.cand.npv >= 2 {
-                    order_n_out += 1;
-                    order_bad_out += u64::from(c.cand.bad);
-                }
-            }
-            let epd = ev.epd().to_string();
-            if ambiguous {
-                amb_list.push(json!({"position_hash": h, "epd": epd, "n_epds": n_child_epds, "source": chosen.source}));
-            }
-            grp.push(OutRow {
-                hash: h,
-                epd,
-                in_book: if ev.parent { "parent" } else { "child" },
-                chosen,
-                cloud: ev.cloud.take(),
-                fish: ev.fish,
-                ambiguous,
-                variant: ev.variant,
-            });
-        }
-        grp.sort_by(|x, y| x.epd.cmp(&y.epd));
-        rows.extend(grp);
-        st = en;
-    }
-    let n_evals = evals.len() as u64;
-    let n_fish_pos = evals.iter().filter(|e| e.fish.is_some()).count() as u64;
-    drop(evals);
     let cnt = |f: &dyn Fn(&OutRow) -> bool| rows.iter().filter(|r| f(r)).count() as u64;
     let n_parent = cnt(&|r| r.in_book == "parent");
     let n_cloud = cnt(&|r| r.chosen.source == "cloud");
     let n_amb = cnt(&|r| r.ambiguous);
     let n_var = cnt(&|r| r.variant);
     let n_dis = cnt(&|r| r.chosen.disagrees);
-    let n_cloud_any = cnt(&|r| r.cloud.is_some());
     let n_fish_any = cnt(&|r| r.fish.is_some());
     // Write, re-read, publish.
     let path = out_path(cfg, b);
@@ -2248,7 +2247,7 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let n = rows.len() as u64;
     let man = json!({
         "bucket": b, "rows": n, "parents": n_parent, "children": n - n_parent,
-        "cloud": n_cloud, "fishnet": n - n_cloud, "with_cloud": n_cloud_any, "with_fishnet": n_fish_any,
+        "cloud": n_cloud, "fishnet": n - n_cloud, "with_cloud": n_cloud, "with_fishnet": n_fish_any,
         "ambiguous_rows": n_amb, "ambiguous_hashes": amb_hashes,
         "ep_variant_rows": n_var, "fishnet_disagrees": n_dis,
         "book_rows": book_rows, "book_parents": book_parents, "book_parents_with_eval": matched_parents,
@@ -2262,7 +2261,8 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     });
     Ok(json!({"manifest": man, "coverage": cov.to_json(), "ambiguous": amb_list,
               "secs": {"load": t_load, "book": t_book, "total": t0.elapsed().as_secs_f64()},
-              "digest": format!("{digest:016x}"), "finished": utc_now()}))
+              "digest": format!("{digest:016x}"), "finished": utc_now(),
+              "peak_commit_gb": sys::peak_commit().map(|x| x as f64 / 1e9)}))
 }
 
 fn phase_j(ctx: &Ctx) -> Result<()> {
