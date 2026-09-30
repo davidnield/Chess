@@ -5,6 +5,7 @@
 
 pub mod chesspos;
 pub mod dump;
+pub mod evals;
 pub mod fasthash;
 pub mod game;
 pub mod keys;

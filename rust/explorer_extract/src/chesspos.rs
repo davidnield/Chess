@@ -130,7 +130,25 @@ impl Packed {
         self.render_into(&mut s);
         s
     }
+
+    /// The 34 bytes `from_bytes` reads back (the evals shards store these).
+    pub fn to_bytes(&self) -> [u8; PACKED_BYTES] {
+        let mut b = [0u8; PACKED_BYTES];
+        b[..32].copy_from_slice(&self.board);
+        b[32] = self.meta;
+        b[33] = self.ep;
+        b
+    }
+
+    pub fn from_bytes(b: &[u8]) -> Packed {
+        let mut board = [0u8; 32];
+        board.copy_from_slice(&b[..32]);
+        Packed { board, meta: b[32], ep: b[33] }
+    }
 }
+
+/// `Packed::to_bytes`'s length.
+pub const PACKED_BYTES: usize = 34;
 
 /// shakmaty's own EPD, for cross-checking `Packed::render`.
 pub fn shakmaty_epd(pos: &Chess) -> String {

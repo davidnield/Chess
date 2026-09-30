@@ -27,6 +27,8 @@ serde_json = "1"
 anyhow = "1"
 # merge: the 128-bit linear digest of every (key, child) x count.
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+# evals: the sha256 of each output file and of the exe, for the manifest and meta.
+sha2 = "0.10"
 
 [dev-dependencies]
 # The SAN_REGEX fuzz's second oracle; the tool itself matches SAN by hand.

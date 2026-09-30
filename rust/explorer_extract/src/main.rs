@@ -10,7 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use explorer_extract::game::Filters;
 use explorer_extract::source::{discover, effective_chunk, parse_month};
 use explorer_extract::stats::RunStats;
-use explorer_extract::{dump, merge, month, partials, selftest, sys};
+use explorer_extract::{dump, evals, merge, month, partials, selftest, sys};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -37,6 +37,9 @@ enum Cmd {
     /// Ply-keyed Rust months -> the all-time banded explorer book (exit 0 done,
     /// 1 error or failed gate, 4 out of space, 5 refused).
     Merge(MergeArgs),
+    /// The Lichess cloud + fishnet evals -> one eval per book position (exit 0
+    /// done, 1 error, 5 refused, 6 short of commit: retry later).
+    Evals(EvalsArgs),
     /// The embedded fixtures (keys, SAN table, tokenizer, a mini extract).
     Selftest,
 }
@@ -251,6 +254,93 @@ struct MergeArgs {
     test_crash_at: Option<String>,
 }
 
+#[derive(Args)]
+struct EvalsArgs {
+    /// The merged explorer book (ps/event=E/elo_band=B/bkt<iii>.parquet). Read-only.
+    #[arg(long, required = true)]
+    book: PathBuf,
+    /// Lichess/chess-position-evaluations: data_*.parquet (+ .ok markers).
+    #[arg(long, required = true)]
+    cloud: PathBuf,
+    /// Lichess/fishnet-evals: standard_rated_YYYY_MM.parquet (+ .ok markers).
+    #[arg(long, required = true)]
+    fishnet: PathBuf,
+    /// Scratch for the bucket shards (e/, c/). Never F:.
+    #[arg(long, required = true)]
+    work: PathBuf,
+    /// The eval DB.
+    #[arg(long, required = true)]
+    out: PathBuf,
+    /// Worker threads. In the settings lock.
+    #[arg(long, required = true)]
+    threads: usize,
+    /// Memory budget, GB (buffers, the bucket semaphore). In the settings lock.
+    #[arg(long, required = true)]
+    mem_gb: f64,
+    /// Output buckets, e.g. 0-7,128 (default: all 512). In the settings lock.
+    #[arg(long, num_args = 1..)]
+    buckets: Option<Vec<String>>,
+    /// Book buckets whose child_hash phase C reads (default: all 512). A subset
+    /// makes child-only matches partial (pilot only). In the settings lock.
+    #[arg(long, num_args = 1..)]
+    child_sources: Option<Vec<String>>,
+    /// Phases to run: any of e, c, j (j is followed by finalize). Default: all.
+    #[arg(long, value_delimiter = ',', default_value = "e,c,j")]
+    phases: Vec<String>,
+    /// Run at BELOW_NORMAL priority.
+    #[arg(long)]
+    below_normal: bool,
+    /// Test only: no download/book sentinels, .ok markers or commit check.
+    #[arg(long, hide = true)]
+    test_inputs: bool,
+    /// Test only: exit(86) at PHASE:N (e, c, j, j-publish).
+    #[arg(long, hide = true)]
+    test_crash_at: Option<String>,
+}
+
+fn run_evals(a: EvalsArgs) -> Result<ExitCode> {
+    if a.below_normal {
+        sys::set_below_normal().map_err(anyhow::Error::msg)?;
+    }
+    let threads = a.threads.max(1);
+    rayon::ThreadPoolBuilder::new().num_threads(threads).build_global()?;
+    let all: Vec<u32> = (0..evals::BUCKETS).collect();
+    let mut ph = (false, false, false);
+    for p in &a.phases {
+        match p.as_str() {
+            "e" => ph.0 = true,
+            "c" => ph.1 = true,
+            "j" => ph.2 = true,
+            _ => bail!("--phases: unknown phase {p:?} (e, c, j)"),
+        }
+    }
+    let cfg = evals::Config {
+        buckets: match &a.buckets { Some(b) => merge::parse_buckets(b)?, None => all.clone() },
+        child_sources: match &a.child_sources { Some(b) => merge::parse_buckets(b)?, None => all },
+        threads,
+        mem_gb: a.mem_gb,
+        phases: ph,
+        test_inputs: a.test_inputs,
+        crash_at: a.test_crash_at.as_deref().map(evals::parse_crash).transpose()?,
+        book: a.book,
+        cloud: a.cloud,
+        fishnet: a.fishnet,
+        work: a.work,
+        out: a.out,
+    };
+    eprintln!("{} | evals, {threads} threads{}", sys::version_line(),
+              if a.below_normal { ", below-normal priority" } else { "" });
+    match evals::run(&cfg) {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(e) => {
+            let code = evals::exit_code(&e);
+            eprintln!("explorer-extract evals: {} (exit {code}): {e:#}",
+                      match code { 5 => "refused", 6 => "short of commit", _ => "error" });
+            Ok(ExitCode::from(code))
+        }
+    }
+}
+
 fn run_merge(a: MergeArgs) -> Result<ExitCode> {
     if a.below_normal {
         sys::set_below_normal().map_err(anyhow::Error::msg)?;
@@ -417,6 +507,7 @@ fn run() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Cmd::Merge(a) => run_merge(a),
+        Cmd::Evals(a) => run_evals(a),
     }
 }
 

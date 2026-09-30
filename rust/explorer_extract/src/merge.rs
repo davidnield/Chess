@@ -437,7 +437,7 @@ pub fn white_score_avg(w: i64, d: i64, t: i64) -> f64 {
 
 // ── small helpers ────────────────────────────────────────────────────────────
 
-fn fmt_n(n: u64) -> String {
+pub(crate) fn fmt_n(n: u64) -> String {
     let s = n.to_string();
     let mut out = String::with_capacity(s.len() + s.len() / 3);
     for (i, ch) in s.chars().enumerate() {
@@ -469,7 +469,7 @@ pub fn utc_now() -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", t / 3600, t / 60 % 60, t % 60)
 }
 
-fn rmtree(p: &Path) -> Result<()> {
+pub(crate) fn rmtree(p: &Path) -> Result<()> {
     match std::fs::remove_dir_all(p) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -477,7 +477,7 @@ fn rmtree(p: &Path) -> Result<()> {
     }
 }
 
-fn rm_file(p: &Path) -> Result<()> {
+pub(crate) fn rm_file(p: &Path) -> Result<()> {
     match std::fs::remove_file(p) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -485,7 +485,7 @@ fn rm_file(p: &Path) -> Result<()> {
     }
 }
 
-fn write_json_atomic(path: &Path, v: &Value) -> Result<()> {
+pub(crate) fn write_json_atomic(path: &Path, v: &Value) -> Result<()> {
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d)?;
     }
@@ -495,7 +495,7 @@ fn write_json_atomic(path: &Path, v: &Value) -> Result<()> {
     rename_retry(&tmp, path)
 }
 
-fn read_json(path: &Path) -> Result<Value> {
+pub(crate) fn read_json(path: &Path) -> Result<Value> {
     let s = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     serde_json::from_str(&s).with_context(|| format!("parsing {}", path.display()))
 }
@@ -523,7 +523,7 @@ fn read_all(path: &Path) -> Result<Vec<RecordBatch>> {
     r.map(|b| b.map_err(anyhow::Error::from)).collect()
 }
 
-fn footer_rows(path: &Path) -> Result<u64> {
+pub(crate) fn footer_rows(path: &Path) -> Result<u64> {
     let f = File::open(path).with_context(|| format!("opening {}", path.display()))?;
     let b = ParquetRecordBatchReaderBuilder::try_new(f)
         .with_context(|| format!("reading the footer of {}", path.display()))?;
