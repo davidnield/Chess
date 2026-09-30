@@ -5,7 +5,8 @@ en-passant position keyed by its ep hash), cloud files in the dataset's own type
 files) and fishnet months in all three tiers; runs the exe; requires verify_evals.py to pass; then
 corrupts one output value, drops one output row, and requires it to fail each time.
 
-The exe is $EE_EXE, else D:/rust-target/eval-db/release/explorer-extract.exe; absent -> skip (exit 0).
+Exe: $EXPLORER_EXTRACT_EXE, else D:/rust-target/explorer_extract/release/explorer-extract.exe; absent, or a
+build without the `evals` subcommand -> skip (exit 0).
 """
 from __future__ import annotations
 
@@ -25,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from zobrist import zobrist_int64  # noqa: E402
 
-EXE = Path(os.environ.get("EE_EXE", "D:/rust-target/eval-db/release/explorer-extract.exe"))
+EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE", "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
 FAILS: list[str] = []
 
 
@@ -61,6 +62,9 @@ def games() -> list[list[chess.Board]]:
 def main() -> int:
     if not EXE.is_file():
         print(f"SKIP: no exe at {EXE}")
+        return 0
+    if subprocess.run([str(EXE), "evals", "--help"], capture_output=True).returncode != 0:
+        print(f"SKIP: {EXE} has no evals subcommand")
         return 0
     tmp = Path(tempfile.mkdtemp(prefix="ee_verify_evals_"))
     try:
