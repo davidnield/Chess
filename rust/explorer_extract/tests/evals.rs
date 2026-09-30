@@ -570,6 +570,14 @@ fn end_to_end_resume_lock_determinism() {
     assert_eq!(t1.keys().collect::<Vec<_>>(), base.keys().collect::<Vec<_>>());
     assert!(t1 == base, "--threads 1 and 2 differ");
 
+    // A tiny budget: phase E flushes a shard part after every chunk, J runs a
+    // bucket at a time. Same output.
+    let o = run(&c, "out_m", "work_m", &["--mem-gb", "0.000001"]);
+    assert!(o.status.success(), "{}", log(&o));
+    assert!(out_files(&c.dir.join("out_m")) == base, "a tiny --mem-gb changes the output");
+    let parts = std::fs::read_dir(c.dir.join("work_m/e/cloud_data_0000")).unwrap().count();
+    assert!(parts >= 4, "{parts} cloud shard parts: the tiny budget did not flush per run");
+
     // Resume after a kill in each phase: identical output, nothing left over.
     let b1 = bucket_of(canon(EX1), 512);
     for (i, at) in [format!("e:1"), format!("e:3"), "c:0".into(), format!("j:{b1}"), format!("j-publish:{b1}")].iter().enumerate() {

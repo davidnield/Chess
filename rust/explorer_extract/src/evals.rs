@@ -903,9 +903,9 @@ struct FRow {
 }
 
 trait ShardRow: Send + Sized {
-    const MEM: usize;
-    fn mem(&self) -> usize {
-        Self::MEM
+    /// Heap bytes the row owns beyond its own size.
+    fn heap(&self) -> usize {
+        0
     }
     /// Sort (and for fishnet, reduce) one bucket's rows before they are written.
     fn prepare(v: &mut Vec<Self>);
@@ -914,9 +914,8 @@ trait ShardRow: Send + Sized {
 }
 
 impl ShardRow for CRow {
-    const MEM: usize = 104;
-    fn mem(&self) -> usize {
-        Self::MEM + self.line.len()
+    fn heap(&self) -> usize {
+        self.line.len()
     }
     fn prepare(v: &mut Vec<Self>) {
         v.sort_unstable_by(|a, b| (a.hash, a.pos, a.file, a.row).cmp(&(b.hash, b.pos, b.file, b.row)));
@@ -946,7 +945,6 @@ impl ShardRow for CRow {
 }
 
 impl ShardRow for FRow {
-    const MEM: usize = 64;
     fn prepare(v: &mut Vec<Self>) {
         v.sort_unstable_by(|a, b| (a.hash, a.pos, a.tier, a.key).cmp(&(b.hash, b.pos, b.tier, b.key)));
         let mut w = 0usize;
@@ -1019,8 +1017,12 @@ impl<'a, R: ShardRow> Sink<'a, R> {
             self.dropped += 1;
             return;
         }
-        self.mem += r.mem();
-        self.bufs[b].push(r);
+        // Capacity, not length: a Vec may hold twice what it uses.
+        let v = &mut self.bufs[b];
+        let cap = v.capacity();
+        self.mem += r.heap();
+        v.push(r);
+        self.mem += (v.capacity() - cap) * std::mem::size_of::<R>();
     }
 
     fn full(&self) -> bool {
@@ -1819,6 +1821,68 @@ fn out_batch(rows: &[OutRow]) -> Result<RecordBatch> {
     )?)
 }
 
+/// The bucket's output file, written as rows arrive (they arrive in order),
+/// with the digest and the counts the manifest reports.
+struct OutWriter {
+    w: ArrowWriter<File>,
+    buf: Vec<OutRow>,
+    digest: u64,
+    rows: u64,
+    parents: u64,
+    cloud: u64,
+    ambiguous: u64,
+    variant: u64,
+    disagrees: u64,
+    with_fish: u64,
+}
+
+impl OutWriter {
+    fn create(path: &Path) -> Result<OutWriter> {
+        if let Some(d) = path.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let f = File::create(path).with_context(|| format!("creating {}", path.display()))?;
+        Ok(OutWriter {
+            w: ArrowWriter::try_new(f, out_schema(), Some(out_props()))?,
+            buf: Vec::with_capacity(OUT_BATCH),
+            digest: 0,
+            rows: 0,
+            parents: 0,
+            cloud: 0,
+            ambiguous: 0,
+            variant: 0,
+            disagrees: 0,
+            with_fish: 0,
+        })
+    }
+
+    fn push(&mut self, r: OutRow) -> Result<()> {
+        self.digest = self.digest.wrapping_add(digest_out_row(&r));
+        self.rows += 1;
+        self.parents += u64::from(r.in_book == "parent");
+        self.cloud += u64::from(r.chosen.source == "cloud");
+        self.ambiguous += u64::from(r.ambiguous);
+        self.variant += u64::from(r.variant);
+        self.disagrees += u64::from(r.chosen.disagrees);
+        self.with_fish += u64::from(r.fish.is_some());
+        self.buf.push(r);
+        if self.buf.len() >= OUT_BATCH {
+            self.w.write(&out_batch(&self.buf)?)?;
+            self.buf.clear();
+        }
+        Ok(())
+    }
+
+    fn close(mut self) -> Result<OutWriter> {
+        if !self.buf.is_empty() {
+            self.w.write(&out_batch(&self.buf)?)?;
+            self.buf.clear();
+        }
+        self.w.flush()?;
+        Ok(self)
+    }
+}
+
 /// A per-row digest over every output column, as text, the same on write and
 /// on re-read; summed (wrapping) over the file.
 fn row_digest(fields: &[Option<String>]) -> u64 {
@@ -2098,7 +2162,9 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let mut bpos: Vec<(String, u32, [u64; PLIES], bool)> = Vec::new();
     let mut prs: Vec<PosRows> = Vec::new();
     let (mut fi, mut ci) = (0usize, 0usize);
-    let mut rows: Vec<OutRow> = Vec::new();
+    let path = out_path(cfg, b);
+    let tmp = tmp_of(&path);
+    let mut ow = OutWriter::create(&tmp)?;
     let mut amb_list: Vec<Value> = Vec::new();
     let (mut amb_hashes, mut n_evals, mut n_fish_pos) = (0u64, 0u64, 0u64);
     let (mut order_n, mut order_bad, mut order_n_out, mut order_bad_out) = (0u64, 0u64, 0u64, 0u64);
@@ -2202,7 +2268,9 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
             }
         }
         grp.sort_by(|x, y| x.epd.cmp(&y.epd));
-        rows.extend(grp);
+        for r in grp {
+            ow.push(r)?;
+        }
         for (_, mask, totals, has) in &bpos {
             book_parents += 1;
             matched_parents += u64::from(*has);
@@ -2227,24 +2295,18 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     drop(fish);
     drop(cloud);
     let t_book = t0.elapsed().as_secs_f64() - t_load;
-    let cnt = |f: &dyn Fn(&OutRow) -> bool| rows.iter().filter(|r| f(r)).count() as u64;
-    let n_parent = cnt(&|r| r.in_book == "parent");
-    let n_cloud = cnt(&|r| r.chosen.source == "cloud");
-    let n_amb = cnt(&|r| r.ambiguous);
-    let n_var = cnt(&|r| r.variant);
-    let n_dis = cnt(&|r| r.chosen.disagrees);
-    let n_fish_any = cnt(&|r| r.fish.is_some());
-    // Write, re-read, publish.
-    let path = out_path(cfg, b);
-    let tmp = tmp_of(&path);
-    let digest = rows.iter().fold(0u64, |a, r| a.wrapping_add(digest_out_row(r)));
-    let bytes = write_batches(&tmp, &out_schema(), out_props(), rows.chunks(OUT_BATCH).map(out_batch))?;
-    verify_out(&tmp, b, rows.len() as u64, digest)?;
+    // Close, re-read, publish.
+    let ow = ow.close()?;
+    let (n, digest) = (ow.rows, ow.digest);
+    let (n_parent, n_cloud, n_amb, n_var, n_dis, n_fish_any) =
+        (ow.parents, ow.cloud, ow.ambiguous, ow.variant, ow.disagrees, ow.with_fish);
+    ow.w.close()?;
+    let bytes = std::fs::metadata(&tmp)?.len();
+    verify_out(&tmp, b, n, digest)?;
     let sha = sha256_file(&tmp)?;
     crash(cfg, CrashPhase::J, b);
     rename_retry(&tmp, &path)?;
     crash(cfg, CrashPhase::JPublish, b);
-    let n = rows.len() as u64;
     let man = json!({
         "bucket": b, "rows": n, "parents": n_parent, "children": n - n_parent,
         "cloud": n_cloud, "fishnet": n - n_cloud, "with_cloud": n_cloud, "with_fishnet": n_fish_any,
