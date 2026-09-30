@@ -296,8 +296,24 @@ def main() -> int:
         "cloud": "source = 'cloud'", "fishnet": "source = 'fishnet'", "child": "in_book = 'child'",
         "ep_candidate": cand, "collision": "position_hash IN (SELECT h FROM coll)", "ambiguous": "hash_ambiguous",
     }
-    quota = {"cloud": 4 * per, "fishnet": 4 * per, "child": per, "ep_candidate": per, "collision": 10**9, "ambiguous": 20_000}
+    # Oversampled so that the strata's overlaps still leave >= --positive distinct rows.
+    quota = {"cloud": 9 * per // 2, "fishnet": 9 * per // 2, "child": per, "ep_candidate": per, "collision": 10**9,
+             "ambiguous": 20_000}
     samp = {}
+    # ep variants proper: python-chess finds them among up to 3M candidates (the hash of the EPD's own
+    # board differs from position_hash); every one found joins the sample.
+    cands = con.execute(f"SELECT * FROM (SELECT position_hash, epd FROM read_parquet({fl}) WHERE {cand}) "
+                        f"USING SAMPLE reservoir(3000000 ROWS) REPEATABLE ({a.seed})").fetchall()
+    var_keys = [(h, e) for h, e in cands if zobrist_int64(chess.Board(e + " 0 1")) != h]
+    con.register("vk", pa.table({"h": [k[0] for k in var_keys], "e": [k[1] for k in var_keys]}))
+    rows = con.execute(f"SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket "
+                       f"FROM read_parquet({fl}) o SEMI JOIN vk ON o.position_hash = vk.h AND o.epd = vk.e"
+                       ).to_arrow_table().to_pylist()
+    con.unregister("vk")
+    n_var_found = len(rows)
+    print(f"    ep_variant: {n_var_found:,} rows (of {len(cands):,} candidates checked)", flush=True)
+    for r in rows:
+        samp[(r["position_hash"], r["epd"])] = r
     for name, where in strata.items():
         q = quota[name]
         # The sample goes on a subquery: DuckDB samples FROM before WHERE.
@@ -313,6 +329,7 @@ def main() -> int:
     ok_n, var_n, bad = check_identity(pos)
     check(not bad, f"{ok_n:,} sampled rows: the EPD is canonical python-chess, zobrist_int64 gives position_hash "
                    f"({var_n} via an ep square the EPD cannot show) {bad[:SHOW]}")
+    check(var_n >= n_var_found, f"every ep-variant row found ({n_var_found:,}) hashes via an ep square its EPD cannot show")
     check(len(pos) >= a.positive or sum(mb[b]["rows"] for b in picks if b in mb) < a.positive,
           f"the positive sample has >= {a.positive:,} rows (or all the sampled buckets hold fewer)")
 
@@ -357,23 +374,41 @@ def main() -> int:
         WHERE (c.cp IS NULL) <> (c.mate IS NULL) AND c.depth IS NOT NULL AND c.knodes IS NOT NULL
           AND c.line IS NOT NULL""").fetchall()
     print(f"    cloud: {len(crow):,} matching rows ({time.time() - tc:,.0f}s)", flush=True)
+    # Fishnet: one query per month file, each on a fresh connection. One query over all 144 files ran at
+    # ~1 core and ~6 MB/s (2026-09-30, ~19 h projected); per file it is ~17M rows/s at 6 threads.
+    tgt_tab = pa.table({"epd": tgt_epd, "alt": tgt_alt})
+    fishes: dict[str, dict] = {}
     tf = time.time()
-    frow = con.execute(f"""
-        SELECT t.epd, regexp_extract(f.filename, 'standard_rated_(\\d{{4}})_(\\d{{2}})', ['y', 'm']) ym,
-               f.cp, f.mate, COUNT(*)
-        FROM (SELECT fen, cp, mate, filename FROM read_parquet({lit(fish_files)}, filename=true)
-              WHERE split_part(fen, ' ', 1) IN (SELECT placement FROM tgt_pl)
-                AND (cp IS NULL) <> (mate IS NULL)) f
-        JOIN tgt t ON regexp_extract(f.fen, '^(\\S+ \\S+ \\S+ \\S+)', 1) = t.alt
-        GROUP BY ALL""").fetchall()
-    print(f"    fishnet: {len(frow):,} (EPD, month, score) groups ({time.time() - tf:,.0f}s)", flush=True)
+    total = sum(pq.ParquetFile(f).metadata.num_rows for f in fish_files)
+    done_rows, n_groups = 0, 0
+    for k, f in enumerate(fish_files, 1):
+        m = re.search(r"standard_rated_(\d{4})_(\d{2})", f.name)
+        t = tier(int(m.group(1)), int(m.group(2)))
+        fc = connect(a)
+        fc.register("tgt_arrow", tgt_tab)
+        fc.execute("CREATE TEMP TABLE tgt AS SELECT * FROM tgt_arrow")
+        fc.execute("CREATE TEMP TABLE tgt_pl AS SELECT DISTINCT split_part(alt, ' ', 1) placement FROM tgt")
+        rows = fc.execute(f"""
+            SELECT t.epd, f.cp, f.mate, COUNT(*)
+            FROM (SELECT fen, cp, mate FROM read_parquet('{_p(f)}')
+                  WHERE split_part(fen, ' ', 1) IN (SELECT placement FROM tgt_pl)
+                    AND (cp IS NULL) <> (mate IS NULL)) f
+            JOIN tgt t ON regexp_extract(f.fen, '^(\\S+ \\S+ \\S+ \\S+)', 1) = t.alt
+            GROUP BY ALL""").fetchall()
+        fc.close()
+        for e, cp, mate, n in rows:
+            fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
+        n_groups += len(rows)
+        done_rows += pq.ParquetFile(f).metadata.num_rows
+        el = time.time() - tf
+        if k % 12 == 0 or k == len(fish_files):
+            print(f"    fishnet {k}/{len(fish_files)} files, {done_rows / 1e9:,.2f}/{total / 1e9:,.2f} B rows, "
+                  f"{el:,.0f}s ({done_rows / max(el, 1e-9) / 1e6:,.1f}M rows/s, ETA "
+                  f"{(total - done_rows) / max(done_rows, 1) * el / 60:,.0f} min)", flush=True)
+    print(f"    fishnet: {n_groups:,} (EPD, month, score) groups ({time.time() - tf:,.0f}s)", flush=True)
     clouds: dict[str, list] = {}
     for e, d, kn, cp, mate, line, fname, rn in crow:
         clouds.setdefault(e, []).append((d, kn, cp, mate, line, fname, rn))
-    fishes: dict[str, dict] = {}
-    for e, ym, cp, mate, n in frow:
-        t = tier(int(ym["y"]), int(ym["m"]))
-        fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
 
     def expected(epd: str) -> dict | None:
         white = epd.split(" ")[1] == "w"
