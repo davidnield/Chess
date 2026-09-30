@@ -343,6 +343,7 @@ def main() -> int:
             tgt_alt.append(s)
     con.register("tgt_arrow", pa.table({"epd": tgt_epd, "alt": tgt_alt}))
     con.execute("CREATE TEMP TABLE tgt AS SELECT * FROM tgt_arrow")
+    con.execute("CREATE TEMP TABLE tgt_pl AS SELECT DISTINCT split_part(alt, ' ', 1) placement FROM tgt")
     print(f"    {len(tgt_alt):,} target strings for {len(set(tgt_epd)):,} EPDs", flush=True)
 
     # ── raw recompute ──
@@ -360,9 +361,10 @@ def main() -> int:
     frow = con.execute(f"""
         SELECT t.epd, regexp_extract(f.filename, 'standard_rated_(\\d{{4}})_(\\d{{2}})', ['y', 'm']) ym,
                f.cp, f.mate, COUNT(*)
-        FROM read_parquet({lit(fish_files)}, filename=true) f
+        FROM (SELECT fen, cp, mate, filename FROM read_parquet({lit(fish_files)}, filename=true)
+              WHERE split_part(fen, ' ', 1) IN (SELECT placement FROM tgt_pl)
+                AND (cp IS NULL) <> (mate IS NULL)) f
         JOIN tgt t ON regexp_extract(f.fen, '^(\\S+ \\S+ \\S+ \\S+)', 1) = t.alt
-        WHERE (f.cp IS NULL) <> (f.mate IS NULL)
         GROUP BY ALL""").fetchall()
     print(f"    fishnet: {len(frow):,} (EPD, month, score) groups ({time.time() - tf:,.0f}s)", flush=True)
     clouds: dict[str, list] = {}

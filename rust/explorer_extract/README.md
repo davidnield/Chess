@@ -10,6 +10,7 @@ fast: the Python extract spends ~37 µs per ply in pure-Python chess logic.
 | `month` | A month's games straight to the finished 512-bucket layout that `backfill_epd.py` and `bucket_month.py` write (EPD at every ply), plus its term monthly. Replaces extract + consolidation + EPD backfill. |
 | `dump-plies` | Per-ply and per-game rows for the differential test against python-chess (`python/_test_rust_extract.py --plies-check`). |
 | `merge` | Ply-keyed months (`month --ply-key`, 30 plies, 512 buckets) to the all-time banded book: a streaming k-way merge per bucket, verified and published bucket by bucket (see below). |
+| `evals` | The two Lichess eval datasets (cloud and fishnet) to one eval per book position: bucket shards, the book's children, then a per-bucket merge against the book (see below). |
 | `selftest` | The embedded fixtures, in well under a second. Run it on any machine before real use. |
 
 `--version` prints the crate version, git commit, build date and target features.
@@ -95,6 +96,45 @@ end on synthetic month roots.
   sample) and `python/compare_explorer_outputs.py book` (a DuckDB GROUP BY of
   the months, for small month sets); `python/_test_verify_book.py` builds a
   two-month book with this binary and runs both.
+
+## evals: the eval DB for the book
+
+The contract is the blog repo's `docs/eval-db-spec.md`; the code is
+`src/evals.rs` (the output's `README.md` is `src/evals_readme.md`), and
+`tests/evals.rs` holds the position identity to python-chess on real FENs from
+both datasets (`tests/fixtures/eval_positions.json`, written by
+`python/gen_eval_fixtures.py`), the choice rules, and the binary end to end.
+
+- **Identity.** Every source FEN goes through `chesspos::pack`/`hash`, the
+  book's own functions, after strict shakmaty validation (failures are skipped
+  and counted by reason). A position that could carry an ep square whose capture
+  is pseudo-legal but illegal is emitted under that hash too (the book keys a
+  played board that way; its EPD cannot show the square).
+- **Phase E** (per source file, a sentinel each): cloud files in file order on
+  one thread each (a position's rows are one contiguous run; each block of one
+  eval's PVs is kept as its first row, and the row-order check is counted);
+  fishnet files one at a time with row groups in parallel, reduced to (hash, EPD,
+  tier, score, count). Shards: `<work>/e/<unit>/bkt<iii>.p<kkk>.parquet`.
+- **Phase C** (per group of book buckets): the distinct `child_hash` values,
+  routed to `<work>/c/g<ggg>/bkt<iii>.parquet` by their own bucket.
+- **Phase J** (per output bucket, under a memory semaphore): a streaming merge
+  by hash of the book's parent groups, the sorted eval rows and the child
+  hashes. Parent: (hash, EPD) equal; child: the hash is a book child_hash and
+  not a book parent_hash. Only matched positions are reduced (cloud: max depth,
+  max knodes, first row in file order; fishnet: the newest tier's lower median).
+  The file is re-read in full (order, bucket, one-of cp/mate, digest) before its
+  rename; the sentinel `_bucket_done/bkt<iii>.json` follows.
+- **Finalize**: `_manifest`, `_ambiguous`, `_coverage`, `_build.meta.json`,
+  `README.md`, `_DONE` last.
+- **Lock and exit codes.** `_evals_params.json` (in `--work` and `--out`)
+  records the paths, `--threads`, `--mem-gb`, the bucket sets, the source files
+  and this build; anything else refuses (exit 5). Exit 6: not enough free commit
+  for `--mem-gb` (nothing done; retry later).
+- **Independent check.** `python/verify_evals.py` (DuckDB + python-chess): a
+  stratified positive sample recomputed from the raw sources by EPD string
+  match, a negative sample of book parents without a row, collision twins,
+  in_book against the book. `python/_test_verify_evals.py` runs both on a
+  synthetic book built with this binary.
 
 ## Month mode's memory
 
