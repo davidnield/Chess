@@ -46,6 +46,36 @@ I did not touch it. The eval build starts when it passes.
 
 Expected: `verify_book` about 2.5 h, then the eval build plus its verification about 5–7 h.
 
+## The full build (2026-10-01)
+
+**verify_book (chain v2)** passed at 2026-09-30 22:04: ALL PASS, 5 checks, 8,320 s. The scan ran about 15 s per bucket. With the first run's digests, duplicate keys and sums, the book is fully verified.
+
+**Build.** It started at 22:04.
+- Phase E took 2.6 h; Phase C took 0.8 h.
+- Phase J had finished 189 of 512 buckets when Windows Update force-restarted the PC (02:44 and 02:49, KB5129195). Nothing was lost.
+- `run_eval_build.ps1` was relaunched by hand at 07:29. It resumed with 323 J buckets left and finished at 09:14: exit 0, `_DONE`.
+- J at full scale: about 24 s per bucket effective, at 12 threads.
+
+**Output: `D:\chess\eval_full`.**
+
+| | |
+|---|---|
+| Rows | 5,933,072,384 (196 GB): 5,484,581,495 parent, 448,490,889 child-only |
+| Source | 62,752,879 cloud, 5,870,319,505 fishnet |
+| Other counts | 85,430 ep-variant rows; 0 ambiguous; 0 `fishnet_disagrees` |
+
+About 875K child-only rows per bucket, against about 14K in the pilot. The pilot's Phase C read the children of only 13 book buckets.
+
+**verify_evals on the full DB.** These checks passed:
+- **Structure:** all 512 files match the manifest (rows, bytes, sha256). In 16 sampled buckets, 185.4M rows are sorted, unique and valid.
+- **Positive sample:** 110,461 rows (65,315 fishnet, 45,146 cloud). 474 ep-variant rows were found among 3M candidates and all hash correctly. Every column equals the raw recompute; the raw scans took 30 min at 19.7M rows/s.
+- **Negative sample:** for 100,000 book parents without a row, no raw source carries their EPD.
+- **Parents:** all 94,903 sampled parent rows are book parents.
+
+At 13:00 the last check was still running: whether the sampled child-only hashes are book `child_hash` values. It scans `child_hash` across the whole book, about 660 GB. It runs inside the main verifier process, so it got the same process-wide DuckDB slowdown (about 1 core, 28 MB/s), projected to finish around 17:00. The owner chose to let it finish, since the DB is complete and usable meanwhile.
+
+**Follow-up.** Move that check into a child process too, as already done for the raw scans and verify_book's scan.
+
 ## Pilot numbers
 
 | | |
