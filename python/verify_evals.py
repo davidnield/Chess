@@ -201,6 +201,100 @@ def scan_file(job: tuple) -> list:
         GROUP BY ALL""").fetchall()
 
 
+# ── child-only membership (each group of book buckets in a fresh process) ────────
+
+CHILD_GROUP = 8          # book buckets per process: Windows process start-up (~1-2 s) would dominate 1 per job
+CHILD_MEM = "4GB"        # the parent keeps its own --mem connection alive
+
+
+def book_index(book: Path) -> dict[int, list[Path]]:
+    """Every book ps file by bucket, from one walk of ps/. Where the book's per-bucket sentinel
+    (_done/bkt<iii>.DONE) exists, the walk must find exactly the files it lists."""
+    idx: dict[int, list[Path]] = {}
+    for p in book.glob("ps/event=*/elo_band=*/bkt*.parquet"):
+        m = re.fullmatch(r"bkt(\d{3})\.parquet", p.name)
+        if m:
+            idx.setdefault(int(m.group(1)), []).append(p)
+    for b, files in idx.items():
+        files.sort()
+        sent = book / "_done" / f"bkt{b:03d}.DONE"
+        if sent.is_file():
+            want = {f["path"] for f in json.loads(sent.read_text(encoding="utf-8"))["files"]}
+            have = {p.relative_to(book).as_posix() for p in files}
+            if want != have:
+                raise SystemExit(f"FATAL: book bucket {b}: {len(have)} files on disk, its sentinel lists {len(want)}")
+    return idx
+
+
+def _run_isolated(fn, job):
+    """fn(job) in a fresh single-worker process (the repo's build_pooled_stats._run_isolated pattern, copied so
+    this checker shares no code with the pipeline): its result, or its exception, now."""
+    with ProcessPoolExecutor(max_workers=1) as ex:
+        return ex.submit(fn, job).result()
+
+
+def _member_scan(job: tuple) -> tuple[list[int], list[int]]:
+    """One group of book buckets: which target hashes occur as a book child_hash (buckets flagged for the
+    child scan), and which as a book parent_hash (only the targets that hash into the bucket)."""
+    groups, targets, threads, mem, tmp = job
+    con = duckdb.connect()
+    con.execute(f"SET threads={threads}")
+    con.execute(f"SET memory_limit='{mem}'")
+    con.execute(f"SET temp_directory='{_p(tmp)}'")
+    con.execute("SET preserve_insertion_order=false")
+    con.execute("SET enable_progress_bar=false")
+    con.execute("CREATE TEMP TABLE ch AS SELECT UNNEST(?::BIGINT[]) h", [targets])
+    as_child: set[int] = set()
+    as_parent: set[int] = set()
+    for _b, files, scan_child, parent_targets in groups:
+        if not files:
+            continue
+        src = f"read_parquet({lit(files)}, hive_partitioning=false)"
+        if scan_child:
+            as_child.update(r[0] for r in con.execute(
+                f"SELECT DISTINCT child_hash FROM {src} WHERE child_hash IN (SELECT h FROM ch)").fetchall())
+        if parent_targets:
+            as_parent.update(r[0] for r in con.execute(
+                f"SELECT DISTINCT parent_hash FROM {src} WHERE parent_hash IN (SELECT UNNEST(?::BIGINT[]))",
+                [parent_targets]).fetchall())
+    con.close()
+    return sorted(as_child), sorted(as_parent)
+
+
+def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list[int], a) -> None:
+    """The sampled child-only hashes must be book child_hash values (any child-source bucket) and no book
+    parent_hash. In-process, one query over all 27,648 book files crawled at ~1 core after the sampling
+    phase (2026-10-01, ~6.5 h projected): CLAUDE.md's process-wide DuckDB decay. Each group of buckets now
+    runs in its own fresh process."""
+    tc = time.time()
+    targets = sorted(chi)
+    by_b: dict[int, list[int]] = {}
+    for h in targets:
+        by_b.setdefault(bucket(h), []).append(h)
+    src = set(child_src)
+    buckets = sorted(src | set(by_b))
+    jobs = []
+    for i in range(0, len(buckets), CHILD_GROUP):
+        g = [(b, [str(p) for p in idx.get(b, [])], b in src, by_b.get(b, [])) for b in buckets[i:i + CHILD_GROUP]]
+        jobs.append((g, targets, a.threads, CHILD_MEM, str(a.tmp_dir)))
+    got: set[int] = set()
+    par_h: set[int] = set()
+    for k, job in enumerate(jobs, 1):
+        c, p = _run_isolated(_member_scan, job)
+        got.update(c)
+        par_h.update(p)
+        if k % 8 == 0 or k == len(jobs):
+            el = time.time() - tc
+            print(f"    child check {min(k * CHILD_GROUP, len(buckets))}/{len(buckets)} book buckets, {el:,.0f}s, "
+                  f"ETA {(len(jobs) - k) * el / k / 60:,.1f} min", flush=True)
+    missing = sorted(set(targets) - got)
+    for h in missing[:SHOW]:
+        print(f"    not a book child_hash: {h}")
+    check(not missing and not par_h,
+          f"{len(targets):,} sampled child-only hashes are book child_hash values ({len(missing)} are not) "
+          f"and no book parent_hash ({len(par_h)} are) ({time.time() - tc:,.0f}s)")
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def connect(a) -> duckdb.DuckDBPyConnection:
@@ -243,6 +337,8 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20260930)
     ap.add_argument("--no-sha", action="store_true")
     ap.add_argument("--dump-targets", type=Path, help=argparse.SUPPRESS)
+    # Debug/timing: sample N child-only rows from the sampled buckets and run only the child check.
+    ap.add_argument("--child-check-only", type=int, default=None, metavar="N", help=argparse.SUPPRESS)
     a = ap.parse_args()
     t0 = time.time()
     out = a.out
@@ -262,6 +358,20 @@ def main() -> int:
           f"{len(cloud_files)} cloud + {len(fish_files)} fishnet files; child sources "
           f"{'all' if len(child_src) == BUCKETS else child_src}", flush=True)
     con = connect(a)
+
+    if a.child_check_only is not None:
+        files = [out / f"bkt{b:03d}.parquet" for b in picks]
+        chi = sorted({r[0] for r in con.execute(
+            f"SELECT * FROM (SELECT position_hash FROM read_parquet({lit(files)}) WHERE in_book = 'child') "
+            f"USING SAMPLE reservoir({a.child_check_only} ROWS) REPEATABLE ({a.seed})").fetchall()})
+        print(f"\nchild check only: {len(chi):,} child-only hashes from {len(picks)} buckets", flush=True)
+        if chi:
+            check_children(book_index(book), child_src, chi, a)
+        else:
+            check(False, "the sampled buckets hold child-only rows")
+        print(f"\n{'ALL PASS' if not _FAILS else f'{len(_FAILS)} FAILURES'} ({_N} checks, "
+              f"{time.time() - t0:,.0f}s)", flush=True)
+        return 0 if not _FAILS else 1
 
     # ── structure ──
     print("\nstructure", flush=True)
@@ -515,17 +625,7 @@ def main() -> int:
         con.unregister("pp")
     check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd) ({bad} are not)")
     if chi:
-        con.execute("CREATE TEMP TABLE ch AS SELECT UNNEST(?::BIGINT[]) h", [chi])
-        cfiles = [f for b in child_src for f in book_files(book, b)]
-        tc = time.time()
-        got = {r[0] for r in con.execute(f"""SELECT DISTINCT child_hash FROM read_parquet({lit(cfiles)},
-                    hive_partitioning=false) WHERE child_hash IN (SELECT h FROM ch)""").fetchall()}
-        pfiles = sorted({f for h in chi for f in book_files(book, bucket(h))})
-        par_h = {r[0] for r in con.execute(f"""SELECT DISTINCT parent_hash FROM read_parquet({lit(pfiles)},
-                    hive_partitioning=false) WHERE parent_hash IN (SELECT h FROM ch)""").fetchall()} if pfiles else set()
-        check(got == set(chi) and not par_h,
-              f"{len(chi):,} sampled child-only hashes are book child_hash values ({len(set(chi) - got)} are not) "
-              f"and no book parent_hash ({len(par_h)} are) ({time.time() - tc:,.0f}s)")
+        check_children(book_index(book), child_src, chi, a)
     else:
         print("    (no child rows in the sample)")
 

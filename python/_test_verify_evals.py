@@ -173,6 +173,26 @@ def run(tmp: Path) -> int:
     r = subprocess.run(ver + ["--no-sha"], capture_output=True, text=True)
     check(r.returncode == 1 and "cloud_line" in r.stdout, "a corrupted cloud_line fails the recompute")
     victim.write_bytes(orig)
+    # The child check alone (fresh processes per group of book buckets) passes the intact build...
+    r = subprocess.run(ver + ["--no-sha", "--child-check-only", "1000"], capture_output=True, text=True)
+    check(r.returncode == 0 and "PASS" in r.stdout and "child-only hashes are book child_hash values" in r.stdout,
+          "--child-check-only passes the intact build")
+    # ...and fails once the book no longer produces one child-only hash: drop every book row whose child_hash
+    # is that hash (restored afterwards).
+    child_h = next(h for p in outs for h, ib in zip(pq.read_table(p).column("position_hash").to_pylist(),
+                                                     pq.read_table(p).column("in_book").to_pylist()) if ib == "child")
+    saved = {}
+    for bf in (tmp / "book" / "ps").rglob("bkt*.parquet"):
+        bt = pq.ParquetFile(bf).read()  # not read_table: hive dirs clash with the in-file event column
+        ch = bt.column("child_hash").to_pylist()
+        if child_h in ch:
+            saved[bf] = bf.read_bytes()
+            pq.write_table(bt.take(pa.array([k for k, c in enumerate(ch) if c != child_h], pa.int64())), bf)
+    r = subprocess.run(ver + ["--no-sha", "--positive", "100000"], capture_output=True, text=True)
+    check(bool(saved) and r.returncode == 1 and "child_hash values (1 are not)" in r.stdout,
+          f"a child-only hash the book no longer produces fails the child check ({len(saved)} book file(s) edited)")
+    for bf, data in saved.items():
+        bf.write_bytes(data)
     tb = pq.read_table(victim)
     keep = [k for k in range(tb.num_rows) if k != i]
     pq.write_table(tb.take(pa.array(keep, pa.int64())), victim)
