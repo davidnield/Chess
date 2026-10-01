@@ -31,10 +31,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import sys
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import chess
@@ -167,6 +169,38 @@ def check_identity(rows: list[dict]) -> tuple[int, int, list[str]]:
     return len(rows) - len(bad), var, bad
 
 
+# ── raw scans (each in a fresh process) ───────────────────────────────────────
+
+def scan_file(job: tuple) -> list:
+    """One raw source file against the target strings: cloud rows (epd, depth, knodes, cp, mate, line, file,
+    row) or fishnet (epd, cp, mate, count) groups."""
+    kind, path, tgt_path, threads, mem, tmp = job
+    con = duckdb.connect()
+    con.execute(f"SET threads={threads}")
+    con.execute(f"SET memory_limit='{mem}'")
+    con.execute(f"SET temp_directory='{_p(tmp)}'")
+    con.execute("SET preserve_insertion_order=false")
+    con.execute("SET enable_progress_bar=false")
+    con.execute(f"CREATE TEMP TABLE tgt AS SELECT * FROM read_parquet('{_p(tgt_path)}')")
+    if kind == "cloud":
+        name = Path(path).name
+        return con.execute(f"""
+            SELECT t.epd, c.depth::INTEGER, c.knodes::BIGINT, c.cp::INTEGER, c.mate::INTEGER, c.line,
+                   '{name}', c.file_row_number
+            FROM read_parquet('{_p(path)}', file_row_number=true) c
+            JOIN tgt t ON c.fen = t.alt
+            WHERE (c.cp IS NULL) <> (c.mate IS NULL) AND c.depth IS NOT NULL AND c.knodes IS NOT NULL
+              AND c.line IS NOT NULL""").fetchall()
+    con.execute("CREATE TEMP TABLE tgt_pl AS SELECT DISTINCT split_part(alt, ' ', 1) placement FROM tgt")
+    return con.execute(f"""
+        SELECT t.epd, f.cp, f.mate, COUNT(*)
+        FROM (SELECT fen, cp, mate FROM read_parquet('{_p(path)}')
+              WHERE split_part(fen, ' ', 1) IN (SELECT placement FROM tgt_pl)
+                AND (cp IS NULL) <> (mate IS NULL)) f
+        JOIN tgt t ON regexp_extract(f.fen, '^(\\S+ \\S+ \\S+ \\S+)', 1) = t.alt
+        GROUP BY ALL""").fetchall()
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def connect(a) -> duckdb.DuckDBPyConnection:
@@ -208,6 +242,7 @@ def main() -> int:
     ap.add_argument("--tmp-dir", type=Path, default=Path("D:/chess_duckdb_tmp_evals"))
     ap.add_argument("--seed", type=int, default=20260930)
     ap.add_argument("--no-sha", action="store_true")
+    ap.add_argument("--dump-targets", type=Path, help=argparse.SUPPRESS)
     a = ap.parse_args()
     t0 = time.time()
     out = a.out
@@ -358,54 +393,47 @@ def main() -> int:
         for s in ep_alternatives(e)[0]:
             tgt_epd.append(e)
             tgt_alt.append(s)
-    con.register("tgt_arrow", pa.table({"epd": tgt_epd, "alt": tgt_alt}))
-    con.execute("CREATE TEMP TABLE tgt AS SELECT * FROM tgt_arrow")
-    con.execute("CREATE TEMP TABLE tgt_pl AS SELECT DISTINCT split_part(alt, ' ', 1) placement FROM tgt")
     print(f"    {len(tgt_alt):,} target strings for {len(set(tgt_epd)):,} EPDs", flush=True)
+    if a.dump_targets:
+        pq.write_table(pa.table({"epd": tgt_epd, "alt": tgt_alt}), a.dump_targets)
+        print(f"    targets written to {a.dump_targets}; stopping (debug)")
+        return 2
 
     # ── raw recompute ──
     print("\nraw sources", flush=True)
-    tc = time.time()
-    crow = con.execute(f"""
-        SELECT t.epd, c.depth::INTEGER, c.knodes::BIGINT, c.cp::INTEGER, c.mate::INTEGER, c.line,
-               regexp_extract(c.filename, '[^/\\\\]+$'), c.file_row_number
-        FROM read_parquet({lit(cloud_files)}, filename=true, file_row_number=true) c
-        JOIN tgt t ON c.fen = t.alt
-        WHERE (c.cp IS NULL) <> (c.mate IS NULL) AND c.depth IS NOT NULL AND c.knodes IS NOT NULL
-          AND c.line IS NOT NULL""").fetchall()
-    print(f"    cloud: {len(crow):,} matching rows ({time.time() - tc:,.0f}s)", flush=True)
-    # Fishnet: one query per month file, each on a fresh connection. One query over all 144 files ran at
-    # ~1 core and ~6 MB/s (2026-09-30, ~19 h projected); per file it is ~17M rows/s at 6 threads.
-    tgt_tab = pa.table({"epd": tgt_epd, "alt": tgt_alt})
-    fishes: dict[str, dict] = {}
-    tf = time.time()
-    total = sum(pq.ParquetFile(f).metadata.num_rows for f in fish_files)
-    done_rows, n_groups = 0, 0
-    for k, f in enumerate(fish_files, 1):
-        m = re.search(r"standard_rated_(\d{4})_(\d{2})", f.name)
-        t = tier(int(m.group(1)), int(m.group(2)))
-        fc = connect(a)
-        fc.register("tgt_arrow", tgt_tab)
-        fc.execute("CREATE TEMP TABLE tgt AS SELECT * FROM tgt_arrow")
-        fc.execute("CREATE TEMP TABLE tgt_pl AS SELECT DISTINCT split_part(alt, ' ', 1) placement FROM tgt")
-        rows = fc.execute(f"""
-            SELECT t.epd, f.cp, f.mate, COUNT(*)
-            FROM (SELECT fen, cp, mate FROM read_parquet('{_p(f)}')
-                  WHERE split_part(fen, ' ', 1) IN (SELECT placement FROM tgt_pl)
-                    AND (cp IS NULL) <> (mate IS NULL)) f
-            JOIN tgt t ON regexp_extract(f.fen, '^(\\S+ \\S+ \\S+ \\S+)', 1) = t.alt
-            GROUP BY ALL""").fetchall()
-        fc.close()
-        for e, cp, mate, n in rows:
-            fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
-        n_groups += len(rows)
-        done_rows += pq.ParquetFile(f).metadata.num_rows
-        el = time.time() - tf
-        if k % 12 == 0 or k == len(fish_files):
-            print(f"    fishnet {k}/{len(fish_files)} files, {done_rows / 1e9:,.2f}/{total / 1e9:,.2f} B rows, "
-                  f"{el:,.0f}s ({done_rows / max(el, 1e-9) / 1e6:,.1f}M rows/s, ETA "
-                  f"{(total - done_rows) / max(done_rows, 1) * el / 60:,.0f} min)", flush=True)
-    print(f"    fishnet: {n_groups:,} (EPD, month, score) groups ({time.time() - tf:,.0f}s)", flush=True)
+    # Every raw scan runs in a fresh child process, one file per process (CLAUDE.md: a process that has done
+    # hours of multi-GB DuckDB work decays). In-process, the fishnet scans ran ~0.8M rows/s against ~14M
+    # standalone (2026-09-30), whether as one query over all 144 files or one query and connection per file.
+    tgt_path = Path(a.tmp_dir) / f"verify_targets_{os.getpid()}.parquet"
+    pq.write_table(pa.table({"epd": tgt_epd, "alt": tgt_alt}), tgt_path)
+    jobs = [("cloud", str(f), str(tgt_path), a.threads, a.mem, str(a.tmp_dir)) for f in cloud_files] +            [("fishnet", str(f), str(tgt_path), a.threads, a.mem, str(a.tmp_dir)) for f in fish_files]
+    sizes = {str(f): pq.ParquetFile(f).metadata.num_rows for f in cloud_files + fish_files}
+    total = {k: sum(sizes[j[1]] for j in jobs if j[0] == k) for k in ("cloud", "fishnet")}
+    crow, fishes = [], {}
+    done = {"cloud": 0, "fishnet": 0}
+    nfiles = {"cloud": 0, "fishnet": 0}
+    t0s = time.time()
+    with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as pool:
+        for job, rows in zip(jobs, pool.map(scan_file, jobs)):
+            kind, path = job[0], job[1]
+            if kind == "cloud":
+                crow += rows
+            else:
+                m = re.search(r"standard_rated_(\d{4})_(\d{2})", Path(path).name)
+                t = tier(int(m.group(1)), int(m.group(2)))
+                for e, cp, mate, n in rows:
+                    fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
+            done[kind] += sizes[path]
+            nfiles[kind] += 1
+            el = time.time() - t0s
+            all_done, all_total = sum(done.values()), sum(total.values())
+            if nfiles[kind] % 12 == 0 or (kind == "fishnet" and nfiles[kind] == len(fish_files)) or                     (kind == "cloud" and nfiles[kind] == len(cloud_files)):
+                print(f"    {kind} {nfiles[kind]} files, {done[kind] / 1e9:,.2f}/{total[kind] / 1e9:,.2f} B rows; "
+                      f"all scans {el:,.0f}s, {all_done / max(el, 1e-9) / 1e6:,.1f}M rows/s, ETA "
+                      f"{(all_total - all_done) / max(all_done, 1) * el / 60:,.0f} min", flush=True)
+    tgt_path.unlink(missing_ok=True)
+    print(f"    cloud: {len(crow):,} matching rows; fishnet: {sum(len(v) for d in fishes.values() for v in d.values()):,} "
+          f"(EPD, month, score) groups ({time.time() - t0s:,.0f}s)", flush=True)
     clouds: dict[str, list] = {}
     for e, d, kn, cp, mate, line, fname, rn in crow:
         clouds.setdefault(e, []).append((d, kn, cp, mate, line, fname, rn))
