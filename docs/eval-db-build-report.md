@@ -32,6 +32,20 @@ Pinned:
 
 I did not touch it. The eval build starts when it passes.
 
+**Update, 19:45.** The owner chose to restart verification. The old chain was stopped while `verify_book`'s scan sat at bucket 24/512:
+- the sums had passed by then;
+- the scan was running 700–1,000 s per bucket on one core, about 100 h to go;
+- the cause is the same process-wide DuckDB decay as item 4 below.
+
+`verify_book.py` @ 540f935 now runs each scan bucket in a fresh child process: about 15 s per bucket, `_test_verify_book.py` 10/10.
+
+`D:\chess\run_post_merge2.ps1` replaces the chain:
+- it requires the first run's digest, duplicate-key and sums PASS lines;
+- it runs the owed `--scan --collisions --sample` from `D:\chess\bin\verify_book_540f935\`;
+- then, as before, it waits for `_DOWNLOAD.DONE` and `EVAL_BUILD.READY` and runs `run_eval_build.ps1`.
+
+Expected: `verify_book` about 2.5 h, then the eval build plus its verification about 5–7 h.
+
 ## Pilot numbers
 
 | | |
