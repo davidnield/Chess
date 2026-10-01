@@ -21,9 +21,21 @@ Usage:
     build_eval_arrays(Path("E:/chess/unified_eval_db.parquet"))   # one-time
     h, e = open_eval_arrays()
     cp = lookup_evals(np.array([...], dtype=np.int64), h, e)      # MISSING where absent
+
+Two kinds of source. A single parquet (unified_eval_db: one row per hash) is read
+here. An eval DB DIRECTORY -- D:/chess/eval_full, built by `explorer-extract evals`:
+512 bkt*.parquet files, 5.9B rows keyed by (position_hash, epd) -- is built by
+eval_arrays_build.py into the SAME format, with the hashes a hash-only lookup must
+not answer (collision twins, ambiguous child hashes) excluded and the book's
+checkmates added. Its fingerprint is the directory's _DONE, manifest, build meta
+and every bucket file's (name, size, mtime), plus the book it was matched against.
+
+    .venv/Scripts/python.exe python/eval_arrays.py --eval-db D:/chess/eval_full \
+        --out-dir D:/chess/eval_arrays_full
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -40,9 +52,65 @@ MISSING = np.int16(-32768)
 
 META_NAME = "eval_arrays.meta.json"
 
+# The meta `kind` of arrays built from an eval DB directory, and the fields of its
+# fingerprint a verify compares.
+DIR_KIND = "eval-db-dir-v1"
+DIR_FP_KEYS = ("done", "manifest_sha256", "build_meta_sha256", "bucket_files",
+               "bucket_stat_digest", "source_rows")
+BOOK_FP_KEYS = ("book_meta_sha256", "collisions_sha256")
+
 
 def _paths(array_dir: Path) -> tuple[Path, Path]:
     return array_dir / "eval_hash.npy", array_dir / "eval_cp.npy"
+
+
+def is_eval_db_dir(p: Path) -> bool:
+    """An eval DB directory (explorer-extract evals), not a single parquet."""
+    p = Path(p)
+    return p.is_dir() and (p / "_manifest.parquet").is_file()
+
+
+def _sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        while chunk := f.read(8 << 20):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def dir_fingerprint(db: Path) -> dict:
+    """Identity of an eval DB directory, cheap enough to check before every run:
+    _DONE, the sha256 of _manifest.parquet and _build.meta.json, a digest of every
+    bucket file's (name, size, mtime) -- a bucket replaced without a manifest update
+    is caught -- and the row count from the manifest (read with pyarrow: Polars
+    cannot read that file). A directory without _DONE is incomplete: refused."""
+    import pyarrow.parquet as pq
+    db = Path(db)
+    done = db / "_DONE"
+    if not done.is_file():
+        raise FileNotFoundError(f"{db} has no _DONE: the eval DB is incomplete")
+    h = hashlib.sha256()
+    n = 0
+    for p in sorted(db.glob("bkt*.parquet")):
+        st = p.stat()
+        h.update(f"{p.name} {st.st_size} {st.st_mtime_ns}\n".encode())
+        n += 1
+    rows = pq.ParquetFile(db / "_manifest.parquet").read(columns=["rows"]).column("rows").to_pylist()
+    return {"source": str(db), "kind": DIR_KIND,
+            "done": done.read_text(encoding="utf-8").strip(),
+            "manifest_sha256": _sha256(db / "_manifest.parquet"),
+            "build_meta_sha256": _sha256(db / "_build.meta.json"),
+            "bucket_files": n, "bucket_stat_digest": h.hexdigest(),
+            "source_rows": int(sum(rows))}
+
+
+def book_fingerprint(book: Path) -> dict:
+    """The explorer book the arrays were matched against: its collision list decides
+    which hashes are excluded, its moves which checkmates are added."""
+    book = Path(book)
+    return {"book": str(book),
+            "book_meta_sha256": _sha256(book / "_book.meta.json"),
+            "collisions_sha256": _sha256(book / "_collisions.parquet")}
 
 
 # ── staleness ─────────────────────────────────────────────────────────────────
@@ -63,6 +131,8 @@ def source_fingerprint(eval_db: Path) -> dict:
     cheap enough to call before every run.
     """
     import pyarrow.parquet as pq
+    if is_eval_db_dir(eval_db):
+        return dir_fingerprint(eval_db)
     st = eval_db.stat()
     return {"source": str(eval_db), "size": st.st_size,
             "mtime_ns": st.st_mtime_ns,
@@ -111,6 +181,22 @@ def verify_eval_arrays(array_dir: Path = DEFAULT_ARRAY_DIR,
         raise FileNotFoundError(
             f"eval arrays at {array_dir} cannot be verified: their source "
             f"{src} is gone. Point --eval-db at the current DB or rebuild.")
+    if is_eval_db_dir(src):
+        # No adoption for a directory source: its arrays always carry a meta.
+        if meta is None or meta.get("kind") != DIR_KIND:
+            raise ValueError(f"eval arrays at {array_dir} carry no directory fingerprint for {src}. "
+                             f"Rebuild: python/eval_arrays.py --eval-db {src} --out-dir {array_dir} --force")
+        fp = dir_fingerprint(src)
+        drift = [k for k in DIR_FP_KEYS if meta.get(k) != fp[k]]
+        bk = meta.get("book") or {}
+        if bk:
+            bfp = book_fingerprint(Path(bk["book"]))
+            drift += [f"book.{k}" for k in BOOK_FP_KEYS if bk.get(k) != bfp[k]]
+        if drift:
+            raise ValueError(f"eval arrays at {array_dir} are STALE: {src} changed ({', '.join(drift)}). "
+                             f"Rebuild: python/eval_arrays.py --eval-db {src} --out-dir {array_dir} --force")
+        return (f"verified against {src} ({fp['source_rows']:,} source rows, "
+                f"{meta.get('n_rows', 0):,} entries; _DONE {fp['done']})")
     fp = source_fingerprint(src)
 
     if meta is None:
