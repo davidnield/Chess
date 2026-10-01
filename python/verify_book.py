@@ -232,13 +232,38 @@ SCAN_NULLS = " OR ".join(f"{c} IS NULL" for c in (
     "white_wins", "draws", "black_wins", "total", "white_score_avg"))
 
 
+def _scan_bucket(job: tuple) -> list:
+    """One bucket's scan query, run in a fresh child process."""
+    files, threads, mem, tmp = job
+    bcon = connect(threads, mem, Path(tmp))
+    rows = bcon.execute(f"""
+        SELECT filename, COUNT(*),
+               COUNT(*) FILTER (WHERE {SCAN_NULLS}),
+               COUNT(*) FILTER (WHERE split_part(parent_epd, ' ', 2) NOT IN ('w', 'b')
+                                   OR (split_part(parent_epd, ' ', 2) = 'w') <> (ply % 2 = 1)),
+               COUNT(*) FILTER (WHERE total <> white_wins + draws + black_wins OR total < 1
+                                   OR white_wins < 0 OR draws < 0 OR black_wins < 0),
+               COUNT(*) FILTER (WHERE abs(white_score_avg - (white_wins::DOUBLE + 0.5::DOUBLE
+                                          * draws::DOUBLE) / total::DOUBLE) > 1e-12),
+               COUNT(*) FILTER (WHERE ply < 1 OR ply > 30),
+               MIN(event), MAX(event), MIN(elo_band), MAX(elo_band),
+               MIN(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}),
+               MAX(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS})
+        FROM read_parquet({_lit(files)}, hive_partitioning=false, filename=true)
+        GROUP BY filename""").fetchall()
+    bcon.close()
+    return rows
+
+
 def check_scan(con, bk: Book) -> None:
     """One query per bucket, aggregated per file: the row checks count
     violations, and each file's event, elo_band and bucket come back as
-    MIN/MAX to be held against its path here. Each bucket gets a fresh DuckDB
-    connection: in one connection the per-bucket time decayed 16 s -> 91 s
-    over the pilot's 13 buckets (CLAUDE.md's DuckDB decay), and one query over
-    every file ran about 4 h at one core."""
+    MIN/MAX to be held against its path here. Each bucket runs in a fresh
+    child process (max_tasks_per_child=1). A fresh connection per bucket in
+    one process was not enough: after the full run's digest, dup and sums
+    checks, the scan crawled at 700-1,000 s per bucket on one core (2026-09-30)
+    against 14 s in the pilot -- CLAUDE.md's DuckDB decay is process-wide. One
+    query over every file ran about 4 h at one core."""
     files = bk.all_ps()
     print(f"\nbook-wide scan: {len(files):,} files in {len(bk.ps)} buckets", flush=True)
     if not files:
@@ -247,25 +272,12 @@ def check_scan(con, bk: Book) -> None:
     tot = {"rows": 0, "nulls": 0, "parity": 0, "counts": 0, "wsa": 0, "ply": 0, "path": 0, "bucket": 0}
     bad_files: list[str] = []
     t0 = time.time()
-    for b in sorted(bk.ps):
-        tb = time.time()
-        bcon = connect(*_CONNECT_ARGS)
-        rows = bcon.execute(f"""
-            SELECT filename, COUNT(*),
-                   COUNT(*) FILTER (WHERE {SCAN_NULLS}),
-                   COUNT(*) FILTER (WHERE split_part(parent_epd, ' ', 2) NOT IN ('w', 'b')
-                                       OR (split_part(parent_epd, ' ', 2) = 'w') <> (ply % 2 = 1)),
-                   COUNT(*) FILTER (WHERE total <> white_wins + draws + black_wins OR total < 1
-                                       OR white_wins < 0 OR draws < 0 OR black_wins < 0),
-                   COUNT(*) FILTER (WHERE abs(white_score_avg - (white_wins::DOUBLE + 0.5::DOUBLE
-                                              * draws::DOUBLE) / total::DOUBLE) > 1e-12),
-                   COUNT(*) FILTER (WHERE ply < 1 OR ply > 30),
-                   MIN(event), MAX(event), MIN(elo_band), MAX(elo_band),
-                   MIN(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}),
-                   MAX(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS})
-            FROM read_parquet({_lit(bk.ps[b])}, hive_partitioning=false, filename=true)
-            GROUP BY filename""").fetchall()
-        bcon.close()
+    buckets = sorted(bk.ps)
+    threads, mem, tmp = _CONNECT_ARGS
+    jobs = [(bk.ps[b], threads, mem, str(tmp)) for b in buckets]
+    pool = ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)
+    tb = time.time()
+    for b, rows in zip(buckets, pool.map(_scan_bucket, jobs)):
         n_b = 0
         for fn, n, nul, par, cnt, wsa, ply, ev0, ev1, bd0, bd1, k0, k1 in rows:
             m = re.search(r"event=([^/\\]+)[/\\]elo_band=(-?\d+)[/\\]bkt(\d{3})\.parquet$", fn)
@@ -283,6 +295,8 @@ def check_scan(con, bk: Book) -> None:
         dt = time.time() - tb
         print(f"    bkt {b:03d}: {len(rows)} files, {n_b:,} rows, {dt:,.0f}s "
               f"({n_b / max(dt, 1e-9) / 1e6:,.1f}M rows/s)", flush=True)
+        tb = time.time()
+    pool.shutdown()
     el = time.time() - t0
     print(f"    {tot['rows']:,} rows in {el:,.0f}s ({tot['rows'] / max(el, 1e-9) / 1e6:,.1f}M rows/s): "
           f"NULLs {tot['nulls']}, parity {tot['parity']}, counts {tot['counts']}, white_score_avg "
