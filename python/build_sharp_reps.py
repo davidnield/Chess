@@ -270,6 +270,7 @@ def build_color(tag: str, extra: list[str], flags: list[str],
 
 
 def main() -> None:
+    global REP_DIR, PLAN_DIR, LOG_DIR
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true",
@@ -296,7 +297,6 @@ def main() -> None:
                          "forces --reply-shrink to 0, since the two corrections "
                          "overlap. Omitted = the pre-sidecar recipe unchanged.")
     args = ap.parse_args()
-    global REP_DIR, PLAN_DIR, LOG_DIR
     out_dir = Path(args.out_dir)
     if out_dir.resolve() != REP_DIR.resolve():
         LOG_DIR = LOG_DIR / out_dir.name
