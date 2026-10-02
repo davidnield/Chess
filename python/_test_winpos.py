@@ -13,6 +13,11 @@ Cases:
      white bucket 3 AND black bucket 30, n counted once.
   G6 strict inequality: crossings at ply 6 (== edge ply, excluded) and ply 9 ->
      event mv 4, bucket 4-2=2 (a non-strict filter would give bucket 1).
+     This also PINS the histogram's state semantics: the edge's parent (106) is
+     already winning and the edge is still credited by the next winning
+     position. Stage 3 --crush-won-cp is what removes that credit
+     (_test_stage3_crush_won.py); make the query crossing-only and this row
+     must change together with that flag's meaning.
   G7 bucket clip: resign at mv 90 -> bucket 60.
 
 Run: .venv/Scripts/python.exe python/_test_winpos.py

@@ -87,6 +87,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import sys
 import time
 from collections import Counter, defaultdict, deque
@@ -760,6 +761,7 @@ def run_backwards_induction(
     crush_gamma:      float = 0.8,
     crush_imm_window: int = 2,
     crush_baseline:   str = "mean",
+    crush_won_cp:     int = 0,
     force_root_move:  str | None = None,
     require_eval:     bool = False,
     memo_weight:      float = 0.0,
@@ -1119,6 +1121,16 @@ def run_backwards_induction(
     _cover_mass = cover_mass_shrink > 0
     relative_crush = (crush_mode == "relative-propagated"
                       and (crush_weight > 0 or _counter_crush))
+    # --crush-won-cp: winning positions are crush-ABSORBING (see build_move_vals).
+    # eval_lookup holds expected scores while the histogram tested integer cp. The
+    # sigmoid is monotone, so for integer cp, cp >= T <=> es > sigmoid(T - 0.5)
+    # EXACTLY; the half-point keeps the comparison clear of any ulp disagreement
+    # between the loader's vectorised exp and math.exp at the threshold itself.
+    _crush_won = (crush_won_cp > 0 and bool(eval_lookup)
+                  and (crush_weight > 0 or _counter_crush))
+    _won_white_es = cp_to_expected_score(crush_won_cp - 0.5)
+    _won_black_es = cp_to_expected_score(-(crush_won_cp - 0.5))
+    crush_won_nodes: set[int] = set()   # a set: cycle sweeps revisit nodes
     # Engine-candidate augmentation is only live when the caller supplied the full
     # (un-prefiltered) eval DB as sorted arrays — the prefiltered eval_lookup can't
     # see legal-but-unplayed children (they're outside the input DAG).
@@ -1178,6 +1190,31 @@ def run_backwards_induction(
         """One dict per child edge: mean value, robust value, decisiveness,
         forcingness, opponent_error, and the opponent's preference for the reply."""
         mvs = []
+        # --crush-won-cp. The winpos histogram records the FIRST WINNING POSITION
+        # after each edge, not the first crossing into one, so a game that is
+        # already winning at ph and stays winning credits every move out of ph at
+        # bucket 1 (measured: 81.7% of games through edges from >= +300 positions).
+        # That is a STATE, and it double-counts up the recursion: the edge that
+        # made the crossing earns imm, then (1-imm) * crush_pot(child) re-counts
+        # the same games through every move they play while still winning.
+        # Winning positions are therefore ABSORBING for that side's crush: the
+        # event has already happened, so no move out of ph earns crush and nothing
+        # propagates through ph -- crush_pot(ph) = 0, and the edge INTO ph keeps
+        # its own imm, which is the crossing. Zeroing only imm/dfull would NOT do:
+        # line_crush would still inherit crush_pot(child), so a move that dips
+        # below the threshold would collect the re-crossing beneath it while a move
+        # that keeps the win collects nothing -- a bonus for giving it back. The
+        # eval is per position, so this is exact for every eval-covered ph; an
+        # uncovered ph is left unmasked (we cannot know it was winning).
+        won_us = won_opp = False
+        if _crush_won:
+            es_ph = eval_lookup.get(ph)
+            if es_ph is not None:
+                won_w, won_b = es_ph > _won_white_es, es_ph < _won_black_es
+                won_us, won_opp = ((won_w, won_b) if our_color == chess.WHITE
+                                   else (won_b, won_w))
+                if won_us:
+                    crush_won_nodes.add(ph)
         for m in children[ph]:
             ch = m["child_hash"]
             emp = smoothed_score(m["score_avg"], m["total"], slice_prior, prior_strength)
@@ -1258,6 +1295,10 @@ def run_backwards_induction(
                         opp_line_crush = o_imm + (1.0 - o_imm) * gamma_hop * crush_pot_opp[ch]
                     else:
                         opp_line_crush = o_dfull
+            if won_us:
+                cr = line_crush = dfull = 0.0
+            if won_opp:
+                opp_line_crush = 0.0
             # Opponent's preference for THIS reply on the white-expected-score
             # scale (eval where covered, else empirical edge score).
             pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
@@ -1900,6 +1941,9 @@ def run_backwards_induction(
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
               f"{len(learn_override_nodes):,} nodes", flush=True)
+    if _crush_won:
+        print(f"  crush-won ({crush_won_cp} cp): {len(crush_won_nodes):,} positions "
+              f"already winning for us are crush-absorbing", flush=True)
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
     cover_effs = _ArrMap(sp, np.nan_to_num(cover_depth.arr, nan=0.0)
@@ -2127,6 +2171,18 @@ def main():
                              "artifact). 'zero': assume NO crush until proven by many games — thin "
                              "edges contribute ~0 and value/sample decide. With 'zero' keep --crush-prior "
                              "large or selection-biased thin lines slip through.")
+    parser.add_argument("--crush-won-cp", type=int, default=0,
+                        help="Make positions already WINNING for a side crush-absorbing "
+                             "for that side: no move out of one earns crush, and nothing "
+                             "propagates through it. The winpos histogram records the "
+                             "first winning position after an edge rather than the first "
+                             "crossing into one, so without this every move played in an "
+                             "already-won game is credited as a crush one move later "
+                             "(measured: 81.7%% of games through edges from >= +300 "
+                             "positions). Must equal the threshold the --crush-db "
+                             "histogram was built at (300 for *_t300 -- checked when the "
+                             "name carries it). Needs --eval-db; positions without an "
+                             "eval stay unmasked. 0 (default) = off, an exact no-op.")
     parser.add_argument("--memo-weight", type=float, default=0.0,
                         help="Penalty weight on propagated MEMORIZATION cost in selection. "
                              "Memo cost of a move = its shrunk deviation penalty (value lost "
@@ -2357,6 +2413,18 @@ def main():
     parser.add_argument("--elo-band",    type=int, help="Filter to a single elo band")
     args = parser.parse_args()
 
+    if args.crush_won_cp > 0:
+        if not args.eval_db:
+            sys.exit("FATAL: --crush-won-cp needs --eval-db: whether a position is "
+                     "already winning is read from its engine eval.")
+        # Masking at a different cp than the histogram counted its events at would
+        # absorb the wrong positions with no error anywhere downstream.
+        _t = re.search(r"_t(\d+)\.parquet$", Path(args.crush_db or "").name)
+        if _t and int(_t.group(1)) != args.crush_won_cp:
+            sys.exit(f"FATAL: --crush-won-cp {args.crush_won_cp} disagrees with the "
+                     f"threshold {Path(args.crush_db).name} was built at "
+                     f"({_t.group(1)} cp).")
+
     input_path  = Path(args.input)
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2442,6 +2510,9 @@ def main():
               + (f"  (γ={args.crush_gamma}, imm-window={args.crush_imm_window})"
                  if args.crush_mode == "relative-propagated" else f"  (horizon={args.crush_horizon})"))
         print(f"Crush prior:       {args.crush_prior}  (baseline={args.crush_baseline})")
+    if args.crush_won_cp > 0:
+        print(f"Crush won-cp:      {args.crush_won_cp}  (positions already winning at this "
+              f"threshold are crush-absorbing)")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
@@ -2532,6 +2603,9 @@ def main():
     if args.augment_engine and full_eval_hashes is None:
         print("WARNING: --augment-engine set but no usable --eval-db — augmentation "
               "will no-op (needs the full eval DB).")
+    if args.crush_won_cp > 0 and not eval_lookup:
+        # A missing DB only WARNs above; for this flag that would be a silent no-op.
+        sys.exit("FATAL: --crush-won-cp is set but no evals were loaded.")
 
     stats = pl.read_parquet(input_path)
     stats = stats.filter(pl.col("elo_band").is_not_null())
@@ -2685,6 +2759,7 @@ def main():
             crush_gamma=args.crush_gamma,
             crush_imm_window=args.crush_imm_window,
             crush_baseline=args.crush_baseline,
+            crush_won_cp=args.crush_won_cp,
             force_root_move=args.force_root_move,
             require_eval=args.require_eval,
             memo_weight=args.memo_weight,
