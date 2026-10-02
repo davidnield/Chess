@@ -212,6 +212,31 @@ def effective_eval_weight(ew_max: float, ew_min: float, k: float, n: int) -> flo
     return ew_min + (ew_max - ew_min) * k / (k + n)
 
 
+def recall_weight(reach: float, midpoint: float, power: float) -> float:
+    """Probability we actually REMEMBER the booked move at a node we reach with
+    per-game probability `reach`.  Hill curve:  r = (f/m)^p / (1 + (f/m)^p).
+
+    At reach = midpoint:  r = 0.5.  Monotone increasing, r(0) = 0, r -> 1.
+
+    midpoint <= 0 DISABLES the model and returns 1.0 (perfect recall), which is
+    what makes the flag an exact no-op when unset: every blend below collapses
+    to the prescriptive value it already had.
+
+    The two branches are algebraically identical; each is the one that stays
+    accurate on its side of the midpoint, since reach here spans many decades
+    (the plan export prunes at 1e-6, three decades below the default midpoint).
+    """
+    if midpoint <= 0 or power <= 0:
+        return 1.0                       # disabled: perfect recall
+    if reach <= 0:
+        return 0.0
+    ratio = reach / midpoint
+    if ratio <= 1:
+        v = ratio ** power
+        return v / (1.0 + v)
+    return 1.0 / (1.0 + (1.0 / ratio) ** power)
+
+
 def aux_opp_mix(term_tot: float, term_sum: float,
                 oth_tot: float, oth_sum: float,
                 oth_eval: float, oth_cov: float,
@@ -793,6 +818,9 @@ def run_backwards_induction(
     learn_reach_pivot: float = 0.02,
     learn_ctx_pivot:  float = 0.05,
     learn_depth_horizon: int = 6,
+    recall_midpoint:  float = 0.0,
+    recall_power:     float = 2.0,
+    recall_default_reach: float = 0.0,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
            dict[int, float], dict[int, float], dict[int, float],
@@ -1036,6 +1064,14 @@ def run_backwards_induction(
     # wildly different sizes — on 2018-01 the other-moves bucket carried 1,253,751
     # of edge mass against 4,224 for terminations — so "aux on" measures the bucket
     # unless the parts can be separated.
+    # Recall model. OFF unless --recall-midpoint is positive; reach comes from
+    # the SAME pass-1 export the learnability tiebreak already consumes, so this
+    # adds no new plumbing and inherits that export's bounds (--max-our-moves,
+    # --epsilon). Nodes absent from it are genuinely beyond those bounds, where
+    # the curve is ~0 anyway, so recall_default_reach=0.0 is self-consistent.
+    _recall = recall_midpoint > 0.0
+    _recall_reach = learn_reach or {}
+
     _parts = {p.strip().lower() for p in (aux_parts or "").split(",") if p.strip()}
     _bad = _parts - {"term", "other", "horizon"}
     if _bad:
@@ -1614,6 +1650,44 @@ def run_backwards_induction(
                 mem_nodes[ph] = 0.0
                 return
             values[ph]        = b["val"]
+            # ── imperfect recall ────────────────────────────────────────────
+            # We play the booked move only with probability r; otherwise we wing
+            # it and play the population's move here. So the node is worth
+            #     r * (prescriptive) + (1-r) * (what the population scores here)
+            # and the second term is the SAME mixture an opponent node computes,
+            # because "we play like the population" and "they play like the
+            # population" are the same arithmetic over the same edge list.
+            #
+            # Like the collapse blend below, r depends on the POSITION and not on
+            # the candidate, so this cannot change which move we pick AT this node
+            # -- the fallback term is constant in the candidate and drops out of
+            # the argmax. It changes the node's VALUE, hence the PARENT's choice.
+            # That is the whole mechanism: a deep trap stops paying for itself at
+            # the ancestor that would have to walk into it.
+            #
+            # Frozen-reach approximation: r comes from pass 1's policy, so pass 2
+            # cannot discover that a DIFFERENT move would make a node frequent
+            # enough to remember. Same approximation the learnability tiebreak
+            # already makes off the same export; stated, not hidden.
+            if _recall:
+                r = recall_weight(_recall_reach.get(ph, recall_default_reach),
+                                  recall_midpoint, recall_power)
+                if r < 1.0:
+                    fb_den = sum(mv["total"] for mv in mvs)
+                    fb_num = sum(mv["val"] * mv["total"] for mv in mvs)
+                    if _aux:
+                        i_fb = idx[ph]
+                        a_num, a_den = aux_opp_mix(
+                            aux_term_tot[i_fb], aux_term_sum[i_fb],
+                            aux_oth_tot[i_fb], aux_oth_sum[i_fb],
+                            aux_oth_eval[i_fb], aux_oth_cov[i_fb],
+                            aux_hor_tot[i_fb], aux_hor_sum[i_fb],
+                            (eval_lookup.get(ph) if eval_lookup else None),
+                            eval_weight, eval_weight_min, eval_weight_k,
+                            aux_horizon)
+                        fb_num += a_num; fb_den += a_den
+                    fb = fb_num / fb_den if fb_den else slice_prior
+                    values[ph] = r * values[ph] + (1.0 - r) * fb
             # Blend in the games where the opponent resigned BEFORE we moved. The
             # node's value is otherwise purely prescriptive — "what our book gets
             # from here" — and that is right for the games that continued, but
@@ -2389,6 +2463,20 @@ def main():
     parser.add_argument("--learn-reach-pivot", type=float, default=0.02,
                         help="Reach fraction at/above which a node counts as fully COMMON "
                              "(δ = --learn-delta-main). Default 0.02 (2%% of games).")
+    parser.add_argument("--recall-midpoint", type=float, default=0.0,
+                        help="IMPERFECT RECALL. Per-game reach at which we remember a "
+                             "booked move half the time. 0 (default) disables the model "
+                             "entirely and is an exact no-op. Requires --plan-reach. "
+                             "Typical: 0.001 (a position seen once per 1000 games is a "
+                             "coin flip). UNCALIBRATED -- sweep it, do not trust one value.")
+    parser.add_argument("--recall-power", type=float, default=2.0,
+                        help="Steepness of the recall curve. Higher = sharper cutoff "
+                             "around --recall-midpoint. Default 2.0.")
+    parser.add_argument("--recall-default-reach", type=float, default=0.0,
+                        help="Reach assumed for nodes ABSENT from --plan-reach (beyond "
+                             "its --max-our-moves / --epsilon bounds). Default 0.0, i.e. "
+                             "no recall -- consistent with that export pruning at 1e-6, "
+                             "three decades below a 0.001 midpoint.")
     parser.add_argument("--learn-ctx-pivot", type=float, default=0.05,
                         help="Context share (fraction of all games under the opponent's "
                              "first move) at/above which a context's OWN habits fully "
@@ -2516,6 +2604,10 @@ def main():
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
+    if args.recall_midpoint > 0 and not args.plan_reach:
+        sys.exit("FATAL: --recall-midpoint needs --plan-reach: the recall model is a "
+                 "function of per-node reach, which only the pass-1 plan export "
+                 "carries. Run plan_consistency_report.py --export-prefix first.")
     if args.plan_prior or args.plan_reach:
         if not (args.plan_prior and args.plan_reach):
             sys.exit("FATAL: --plan-prior and --plan-reach must be given together "
@@ -2791,6 +2883,9 @@ def main():
             learn_reach_pivot=args.learn_reach_pivot,
             learn_ctx_pivot=args.learn_ctx_pivot,
             learn_depth_horizon=args.learn_depth_horizon,
+            recall_midpoint=args.recall_midpoint,
+            recall_power=args.recall_power,
+            recall_default_reach=args.recall_default_reach,
         )
         elapsed = time.time() - t1
 
