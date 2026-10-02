@@ -227,13 +227,45 @@ def verify_eval_arrays(array_dir: Path = DEFAULT_ARRAY_DIR,
     return f"verified against {src.name} ({fp['n_rows']:,} rows)"
 
 
+def describe_eval_source(path: Path) -> dict:
+    """What a repertoire's provenance records about its eval source: an arrays
+    directory's meta and verify status, or a parquet / eval DB directory's
+    fingerprint. Never raises: a failure is recorded as the status."""
+    path = Path(path)
+    try:
+        if (path / META_NAME).is_file():
+            try:
+                status = verify_eval_arrays(path, adopt=False)
+            except (FileNotFoundError, ValueError) as e:
+                status = f"UNVERIFIED: {e}"
+            return {"kind": "arrays", "path": str(path), "meta": read_meta(path), "status": status}
+        return {"kind": "eval-db-dir" if is_eval_db_dir(path) else "parquet", "path": str(path),
+                "fingerprint": source_fingerprint(path)}
+    except Exception as e:                                         # noqa: BLE001
+        return {"kind": "unknown", "path": str(path), "error": str(e)}
+
+
 def build_eval_arrays(eval_db: Path = DEFAULT_EVAL_DB,
                       array_dir: Path = DEFAULT_ARRAY_DIR,
-                      force: bool = False) -> tuple[Path, Path]:
-    """Materialise sorted (hash, cp) .npy pair. Idempotent; skip-gated."""
+                      force: bool = False, **dir_opts) -> tuple[Path, Path]:
+    """Materialise sorted (hash, cp) .npy pair. Idempotent; skip-gated.
+
+    An eval DB directory goes to eval_arrays_build.build_from_db_dir (dir_opts:
+    book, terminal, work, threads, mem, tmp, terminal_sample, keep_work,
+    check_pool); a parquet is read here."""
     import polars as pl
 
     hp, cp = _paths(array_dir)
+    if is_eval_db_dir(eval_db):
+        if hp.exists() and cp.exists() and not force:
+            try:
+                verify_eval_arrays(array_dir, eval_db)
+                return hp, cp
+            except (FileNotFoundError, ValueError) as e:
+                print(f"eval arrays: rebuilding — {e}", file=sys.stderr)
+        from eval_arrays_build import build_from_db_dir
+        build_from_db_dir(Path(eval_db), Path(array_dir), **dir_opts)
+        return hp, cp
     if hp.exists() and cp.exists() and not force:
         # Skip gate is a VERIFICATION, not an existence check — see
         # verify_eval_arrays. Staleness rebuilds here rather than raising:
@@ -321,7 +353,27 @@ def main() -> None:
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB))
     ap.add_argument("--out-dir", default=str(DEFAULT_ARRAY_DIR))
     ap.add_argument("--force", action="store_true")
+    # For an eval DB directory (see eval_arrays_build.py):
+    ap.add_argument("--book", default=None, help="the explorer book (default: the DB's _build.meta.json)")
+    ap.add_argument("--work-dir", default=None, help="temp folder (default: <out-dir>_work), ~60 GB")
+    ap.add_argument("--no-terminal", action="store_true", help="do not add the book's checkmates")
+    ap.add_argument("--terminal-sample", type=int, default=20_000)
+    ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--mem", default="8GB")
+    ap.add_argument("--tmp-dir", default="D:/chess_duckdb_tmp")
+    ap.add_argument("--keep-work", action="store_true")
+    ap.add_argument("--check-pool", default=None, help="a pooled-stats parquet: report its eval coverage")
     a = ap.parse_args()
+    if is_eval_db_dir(Path(a.eval_db)):
+        build_eval_arrays(Path(a.eval_db), Path(a.out_dir), a.force,
+                          book=Path(a.book) if a.book else None, terminal=not a.no_terminal,
+                          work=Path(a.work_dir) if a.work_dir else None, threads=a.threads, mem=a.mem,
+                          tmp=Path(a.tmp_dir), terminal_sample=a.terminal_sample, keep_work=a.keep_work,
+                          check_pool=Path(a.check_pool) if a.check_pool else None)
+        meta = read_meta(Path(a.out_dir)) or {}
+        print(json.dumps({k: meta.get(k) for k in ("n_rows", "source_rows", "counts", "validation")}, indent=1))
+        print(f"status: {verify_eval_arrays(Path(a.out_dir), Path(a.eval_db))}")
+        return
     hp, cp = build_eval_arrays(Path(a.eval_db), Path(a.out_dir), a.force)
     h, e = open_eval_arrays(Path(a.out_dir))
     print(f"hashes {h.shape[0]:,}  ({hp.stat().st_size/1e9:.2f} GB)")

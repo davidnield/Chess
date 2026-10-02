@@ -15,6 +15,7 @@ Usage:  python _test_eval_arrays.py [--sample N]
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tempfile
@@ -103,6 +104,144 @@ def check_staleness() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def _hb(b: int, k: int) -> int:
+    """A hash in bucket b (((h % 512) + 512) % 512 == b)."""
+    return k * 512 + b
+
+
+def _write_db_dir(db: Path, book: Path, rows: list[tuple[int, int, bool]]) -> None:
+    """A synthetic eval DB directory: 512 bkt files sorted by hash, manifest, build meta, _DONE."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from eval_arrays import _sha256
+    db.mkdir(parents=True, exist_ok=True)
+    by: dict[int, list] = {}
+    for h, cp, amb in rows:
+        by.setdefault(((h % 512) + 512) % 512, []).append((h, cp, amb))
+    counts = []
+    for b in range(512):
+        v = sorted(by.get(b, []), key=lambda r: r[0])
+        pq.write_table(pa.table({"position_hash": pa.array([r[0] for r in v], pa.int64()),
+                                 "eval_cp": pa.array([r[1] for r in v], pa.int16()),
+                                 "hash_ambiguous": pa.array([r[2] for r in v], pa.bool_())}),
+                       db / f"bkt{b:03d}.parquet")
+        counts.append(len(v))
+    pq.write_table(pa.table({"bucket": pa.array(range(512), pa.int64()), "rows": pa.array(counts, pa.int64())}),
+                   db / "_manifest.parquet")
+    (db / "_build.meta.json").write_text(json.dumps(
+        {"inputs": {"book": str(book), "book_meta_sha256": _sha256(book / "_book.meta.json")}}), encoding="utf-8")
+    (db / "_DONE").write_text("2026-10-01T00:00:00Z\n", encoding="utf-8")
+
+
+def _write_book(book: Path, rows: list[tuple], collisions: list[tuple[int, str]]) -> None:
+    """A synthetic book: rows (parent_hash, move_san, parent_epd, child_hash, ply, total) in one slice."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    by: dict[int, list] = {}
+    for r in rows:
+        by.setdefault(((r[0] % 512) + 512) % 512, []).append(r)
+    d = book / "ps" / "event=Blitz" / "elo_band=1600"
+    d.mkdir(parents=True, exist_ok=True)
+    for b, v in by.items():
+        c = list(zip(*v))
+        pq.write_table(pa.table({"parent_hash": pa.array(c[0], pa.int64()), "move_san": pa.array(c[1]),
+                                 "parent_epd": pa.array(c[2]), "child_hash": pa.array(c[3], pa.int64()),
+                                 "ply": pa.array(c[4], pa.int32()), "total": pa.array(c[5], pa.int64())}),
+                       d / f"bkt{b:03d}.parquet")
+    pq.write_table(pa.table({"parent_hash": pa.array([x[0] for x in collisions], pa.int64()),
+                             "parent_epd": pa.array([x[1] for x in collisions])}), book / "_collisions.parquet")
+    (book / "_book.meta.json").write_text(json.dumps({"synthetic": True}), encoding="utf-8")
+
+
+def check_dir_source() -> None:
+    """Arrays built from an eval DB DIRECTORY: exclusions, checkmates, order, fingerprint."""
+    import os
+
+    import pyarrow.parquet as pq
+    from eval_arrays import DIR_KIND, read_meta
+    from eval_arrays_build import check_terminal_sample
+    tmp = Path(tempfile.mkdtemp(prefix="eval_arrays_dir_"))
+    try:
+        book, db, adir = tmp / "book", tmp / "db", tmp / "arrays"
+        A, B, C, D, E = _hb(3, 1), _hb(3, 2), _hb(3, 3), _hb(5, 7), _hb(5, 8)
+        F, G, H = -512 * 9 + 7, 2**63 - 512 + 4, -2**63 + 2
+        M1, M2, M4 = _hb(9, 11), _hb(9, 12), _hb(11, 13)
+        _write_book(book, [
+            (_hb(1, 1), "Qh4#", "x", M1, 5, 3),        # odd ply: White mated Black -> +2000
+            (_hb(1, 2), "Qxf7#", "x", M2, 6, 1),       # even ply: Black mated White -> -2000
+            (_hb(1, 3), "Rh8#", "x", E, 7, 2),         # a mate the DB already holds: the DB wins
+            (_hb(1, 4), "Qg7#", "x", M4, 3, 1),        # the same child at both parities: conflict
+            (_hb(1, 5), "Qg8#", "x", M4, 4, 1),
+            (_hb(1, 6), "Nf7#", "x", D, 9, 1),         # a mate on a collision hash: not added
+            (_hb(1, 7), "e4", "x", _hb(13, 1), 1, 9),  # no '#': nothing
+        ], collisions=[(D, "p1"), (D, "p2")])
+        _write_db_dir(db, book, [(A, 10, False), (B, 20, False), (B, -20, False), (C, 30, True),
+                                 (D, -40, False), (E, 2000, False), (F, 55, False), (G, 1, False),
+                                 (H, 2, False)])
+        build_eval_arrays(db, adir, book=book, terminal=True, work=tmp / "work", threads=1, mem="1GB",
+                          tmp=tmp / "duck", terminal_sample=0)
+        meta = read_meta(adir) or {}
+        check(meta.get("kind") == DIR_KIND and (adir / "excluded.parquet").exists()
+              and (adir / "terminal_mates.parquet").exists(), "a directory build writes the meta and sidecars")
+        h, e = open_eval_arrays(adir)
+        check(bool(np.all(np.asarray(h)[1:] > np.asarray(h)[:-1])), "hashes strictly increasing, int64 extremes included")
+        keys = np.array([A, B, C, D, E, F, G, H, M1, M2, M4, _hb(13, 1)], dtype=np.int64)
+        want = [10, MISSING, MISSING, MISSING, 2000, 55, 1, 2, 2000, -2000, MISSING, MISSING]
+        got = lookup_evals(keys, h, e).tolist()
+        check(got == [int(x) for x in want], f"lookups: kept rows, exclusions, mates by parity ({got})")
+        ex = pq.read_table(adir / "excluded.parquet").to_pylist()
+        reasons = {(r["position_hash"], r["reason"]) for r in ex}
+        check(reasons == {(B, "db_duplicate"), (C, "hash_ambiguous"), (D, "book_collision"), (M4, "mate_conflict")},
+              f"excluded with their reasons ({sorted(reasons)})")
+        cnt = meta.get("counts", {})
+        check(cnt.get("mates_added") == 2 and cnt.get("mates_in_db") == 1 and cnt.get("mates_in_db_agree") == 1
+              and cnt.get("mates_collision") == 1 and cnt.get("mate_conflicts") == 1,
+              f"mate counts: 2 added, 1 already in the DB and agreeing, 1 on an excluded hash, 1 conflict ({cnt})")
+        check("verified against" in verify_eval_arrays(adir, db), "a directory build verifies against its source")
+        del h, e
+        bf = db / "bkt003.parquet"
+        st = bf.stat()
+        os.utime(bf, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+        check(raises(lambda: verify_eval_arrays(adir, db), ValueError), "a touched bucket file makes them stale")
+        build_eval_arrays(db, adir, book=book, terminal=True, work=tmp / "work", threads=1, mem="1GB",
+                          tmp=tmp / "duck", terminal_sample=0)
+        check("verified against" in verify_eval_arrays(adir, db), "build_eval_arrays rebuilds a stale directory build")
+        (db / "_DONE").write_text("2026-10-02T00:00:00Z\n", encoding="utf-8")
+        check(raises(lambda: verify_eval_arrays(adir, db), ValueError), "a new _DONE makes them stale")
+        (db / "_DONE").write_text("2026-10-01T00:00:00Z\n", encoding="utf-8")
+        _write_book(book, [], collisions=[(D, "p1"), (D, "p2"), (A, "q1")])
+        check(raises(lambda: verify_eval_arrays(adir, db), ValueError), "a changed book collision list makes them stale")
+        (db / "_DONE").unlink()
+        check(raises(lambda: verify_eval_arrays(adir, db), FileNotFoundError), "a DB without _DONE is refused")
+
+        # The parity rule holds on real games (python-chess replay), and a wrong parity is caught.
+        import chess
+        from zobrist import zobrist_int64
+
+        def mate_row(moves: str, ply: int) -> tuple:
+            b = chess.Board()
+            for u in moves.split()[:-1]:
+                b.push_uci(u)
+            epd, parent = b.epd(), zobrist_int64(b)
+            mv = chess.Move.from_uci(moves.split()[-1])
+            san = b.san(mv)
+            b.push(mv)
+            return (parent, san, epd, zobrist_int64(b), ply, 1)
+
+        real = tmp / "book_real"
+        fool = mate_row("f2f3 e7e5 g2g4 d8h4", 4)
+        scholar = mate_row("e2e4 e7e5 f1c4 b8c6 d1h5 g8f6 h5f7", 7)
+        _write_book(real, [fool, scholar], collisions=[])
+        n, bad = check_terminal_sample(real, 10, 1, threads=1, mem="1GB", tmp=tmp / "duck", buckets=8)
+        check(n == 2 and not bad, f"real mates replay to mate, child_hash and parity ({n} rows, {bad})")
+        wrong = tmp / "book_wrong"
+        _write_book(wrong, [fool[:4] + (5, 1)], collisions=[])
+        n, bad = check_terminal_sample(wrong, 10, 1, threads=1, mem="1GB", tmp=tmp / "duck", buckets=8)
+        check(n == 1 and len(bad) == 1 and bad[0].startswith("parity"), f"a wrong ply parity is caught ({bad})")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     # 1.25M ~= one read batch (50K games x ~25 plies), the size the extract will
@@ -113,6 +252,8 @@ def main() -> None:
     # Runs on throwaway arrays, so it works with no E: data present.
     print("Staleness guard:")
     check_staleness()
+    print("\nEval DB directory source:")
+    check_dir_source()
 
     if not (DEFAULT_ARRAY_DIR / "eval_hash.npy").exists():
         print(f"\n  SKIP: eval arrays not built at {DEFAULT_ARRAY_DIR}")
