@@ -121,6 +121,7 @@ def _mate_scan(job: tuple) -> int:
     con.execute(f"SET memory_limit='{mem}'")
     con.execute(f"SET temp_directory='{_p(tmp)}'")
     con.execute("SET preserve_insertion_order=false")
+    con.execute("SET enable_progress_bar=false")
     n = 0
     for _b, files, out in groups:
         out = Path(out)
@@ -204,6 +205,7 @@ def _sample_job(job: tuple) -> list:
     con.execute(f"SET threads={threads}")
     con.execute(f"SET memory_limit='{mem}'")
     con.execute(f"SET temp_directory='{_p(tmp)}'")
+    con.execute("SET enable_progress_bar=false")
     rows = con.execute(f"""SELECT * FROM (SELECT parent_epd, move_san, child_hash, ply
         FROM read_parquet({_lit(files)}, hive_partitioning=false) WHERE move_san LIKE '%#')
         USING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})""").fetchall()
