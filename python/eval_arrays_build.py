@@ -17,13 +17,16 @@ EXCLUDED. A hash-only lookup must not pick between EPDs (book README, "Hash-only
   db_duplicate    a hash with >= 2 DB rows
   hash_ambiguous  a hash whose DB rows carry hash_ambiguous (two eval EPDs under a child-only hash)
   mate_conflict   a '#' child reached at both ply parities (impossible for one real position; a guard)
+  mate_hash_collision  a mated child hash whose DB row is a different (non-mated) position
 
 CHECKMATES. Neither Lichess source evaluates the position after mate, so the DB has none. The book's
 move_san is the PGN token, so a mating move ends in '#'; the side to move in the child is the mated side,
 and the side to move is the ply parity (verify_book.py holds that on every row; ply 1 = White's first
 move). So a '#' at an odd ply means White mated: +2000; at an even ply: -2000 -- the old DB's terminal
-rule (build_terminal_evals: mate by the mated side). No parent_epd is read. The DB's own value wins where a
-mated position has one. check_terminal_sample replays a sample with python-chess.
+rule (build_terminal_evals: mate by the mated side). No parent_epd is read. check_terminal_sample replays a
+sample with python-chess. Where the DB already holds a different value for a mated hash, python-chess checks
+the DB row's EPD: a checkmate takes the mate value (the full DB had 98, each a single classical-era fishnet
+row of 10-58 cp), anything else is another position under that hash, so the hash is excluded.
 
 BUILD. mates (groups of 8 book buckets, each group in a fresh DuckDB process; skip-gated per bucket) ->
 pass 1 per eval bucket (asserts, exclusions, mates merged; one temp sorted pair each, skip-gated) ->
@@ -54,7 +57,7 @@ EVAL_CAP = 2000
 RANGES = 256              # by the top byte: ~23M entries each at full scale
 GROUP = 8                 # book buckets per fresh DuckDB process
 RELEASE_EVERY = 25        # CLAUDE.md: pyarrow tight loops need gc + release_unused
-REASONS = ("book_collision", "db_duplicate", "hash_ambiguous", "mate_conflict")
+REASONS = ("book_collision", "db_duplicate", "hash_ambiguous", "mate_conflict", "mate_hash_collision")
 
 
 def _p(p) -> str:
@@ -311,24 +314,56 @@ def build_from_db_dir(db: Path, array_dir: Path, *, book: Path | None = None, te
         dup[:-1] |= eq
         is_coll = np.isin(h, coll)
         is_amb = np.isin(h, np.unique(h[amb])) if amb.any() else np.zeros(h.size, bool)
-        reason = np.full(h.size, "", dtype=object)
-        reason[is_amb] = "hash_ambiguous"
-        reason[dup] = "db_duplicate"
-        reason[is_coll] = "book_collision"
         excl = is_coll | dup | is_amb
-        excluded = [[int(x), int(c), str(r)] for x, c, r in zip(h[excl], cp[excl], reason[excl])]
-        kh, kc = h[~excl], cp[~excl]
+        ei = np.flatnonzero(excl)
+        excluded = [[int(h[i]), int(cp[i]),
+                     "book_collision" if is_coll[i] else "db_duplicate" if dup[i] else "hash_ambiguous"]
+                    for i in ei]
+        kh, kc = h[~excl].copy(), cp[~excl].copy()
         st = {"bucket": b, "db_rows": int(h.size), "kept": int(kh.size), "mates_added": 0, "mates_in_db": 0,
-              "mates_in_db_agree": 0, "mate_conflicts": 0, "mates_collision": 0}
+              "mates_in_db_agree": 0, "db_mate_overridden": 0, "mate_hash_collision": 0,
+              "mate_conflicts": 0, "mates_collision": 0, "overridden": []}
         if mates is not None:
             s, e = int(mates["offsets"][b]), int(mates["offsets"][b + 1])
             mh, mc, mconf = mates["h"][s:e], mates["cp"][s:e], mates["conflict"][s:e]
-            in_db = np.isin(mh, kh)                         # the DB's (kept) value wins
+            in_db = np.isin(mh, kh)
             if in_db.any():
                 pos = np.searchsorted(kh, mh[in_db])
                 st["mates_in_db"] = int(in_db.sum())
-                st["mates_in_db_agree"] = int((kc[pos] == mc[in_db]).sum())
-            on_excl = np.isin(mh, h[excl]) | np.isin(mh, coll)  # an excluded hash stays MISSING
+                agree = kc[pos] == mc[in_db]
+                st["mates_in_db_agree"] = int(agree.sum())
+                if not agree.all():
+                    # The DB has a value other than the mate for a position the book saw mated: check the
+                    # DB row's EPD. A checkmate gets the mate value (2026-10-01: 98 checkmates carried a
+                    # single classical fishnet row of 10-58 cp); anything else is a different position
+                    # under the same hash, and the hash is excluded.
+                    import chess
+                    epd = pq.ParquetFile(db / f"bkt{b:03d}.parquet").read(columns=["epd"]).column("epd")
+                    drop = []
+                    for j in np.flatnonzero(~agree):
+                        x, mate_cp = int(mh[in_db][j]), int(mc[in_db][j])
+                        row = int(np.searchsorted(h, x))
+                        try:
+                            board = chess.Board(epd[row].as_py())
+                            is_mate = board.is_checkmate() and ((board.turn == chess.WHITE) == (mate_cp < 0))
+                        except ValueError:
+                            is_mate = False
+                        if is_mate:
+                            kc[pos[j]] = mate_cp
+                            st["db_mate_overridden"] += 1
+                            st["overridden"].append(x)
+                        else:
+                            drop.append(pos[j])
+                            excluded.append([x, int(kc[pos[j]]), "mate_hash_collision"])
+                    st["mate_hash_collision"] = len(drop)
+                    if drop:
+                        keep = np.ones(kh.size, bool)
+                        keep[drop] = False
+                        kh, kc = kh[keep], kc[keep]
+                        in_db = np.isin(mh, kh)
+            on_excl = (np.isin(mh, h[excl]) | np.isin(mh, coll)  # an excluded hash stays MISSING
+                       | np.isin(mh, np.asarray([x[0] for x in excluded if x[2] == "mate_hash_collision"],
+                                                dtype=np.int64)))
             st["mates_collision"] = int(on_excl.sum())
             conf = mconf & ~in_db & ~on_excl
             st["mate_conflicts"] = int(conf.sum())
@@ -415,9 +450,12 @@ def build_from_db_dir(db: Path, array_dir: Path, *, book: Path | None = None, te
                                  "games": pa.array(mates["games"]), "parity_conflict": pa.array(mates["conflict"]),
                                  "eligible": pa.array(added)}),
                        array_dir / "terminal_mates.parquet", compression="zstd")
-    val = validate_arrays(array_dir, db, ex, mates, seed=seed, check_pool=check_pool, log=log)
-    counts = {k: sum(s[k] for s in stats) for k in ("db_rows", "kept", "mates_added", "mates_in_db",
-                                                    "mates_in_db_agree", "mate_conflicts", "mates_collision")}
+    overridden = [x for s in stats for x in s.get("overridden", [])]
+    val = validate_arrays(array_dir, db, ex, mates, seed=seed, check_pool=check_pool, log=log,
+                          overridden=overridden)
+    counts = {k: sum(s.get(k, 0) for s in stats) for k in (
+        "db_rows", "kept", "mates_added", "mates_in_db", "mates_in_db_agree", "db_mate_overridden",
+        "mate_hash_collision", "mate_conflicts", "mates_collision")}
     counts["excluded"] = {r: sum(1 for e in ex if e[2] == r) for r in REASONS}
     counts["excluded_hashes"] = len({e[0] for e in ex})
     if mates is not None:
@@ -437,7 +475,8 @@ def build_from_db_dir(db: Path, array_dir: Path, *, book: Path | None = None, te
 
 
 def validate_arrays(array_dir: Path, db: Path, excluded: list, mates: dict | None, *, seed: int,
-                    sample: int = 1_000_000, buckets: int = 16, check_pool: Path | None = None, log=print) -> dict:
+                    sample: int = 1_000_000, buckets: int = 16, check_pool: Path | None = None, log=print,
+                    overridden: list | None = None) -> dict:
     """The arrays against their source, not against themselves: sampled DB rows return their eval_cp,
     excluded hashes MISSING, eligible mates +-2000; optionally the coverage of a pooled-stats DAG."""
     import pyarrow.parquet as pq
@@ -445,13 +484,14 @@ def validate_arrays(array_dir: Path, db: Path, excluded: list, mates: dict | Non
     rng = np.random.default_rng(seed)
     h, e = open_eval_arrays(array_dir)
     ex_h = np.unique(np.asarray([x[0] for x in excluded], dtype=np.int64))
+    ov_h = np.unique(np.asarray(overridden or [], dtype=np.int64))   # DB value replaced by a verified mate
     picks = sorted(rng.choice(BUCKETS, size=min(buckets, BUCKETS), replace=False).tolist())
     keys, want = [], []
     for b in picks:
         t = pq.ParquetFile(db / f"bkt{b:03d}.parquet").read(columns=["position_hash", "eval_cp"])
         kh = t.column("position_hash").to_numpy().astype(np.int64)
         kc = t.column("eval_cp").to_numpy().astype(np.int16)
-        ok = ~np.isin(kh, ex_h)
+        ok = ~np.isin(kh, ex_h) & ~np.isin(kh, ov_h)
         keys.append(kh[ok])
         want.append(kc[ok])
     keys, want = np.concatenate(keys), np.concatenate(want)
@@ -459,7 +499,7 @@ def validate_arrays(array_dir: Path, db: Path, excluded: list, mates: dict | Non
         sel = rng.choice(keys.size, size=sample, replace=False)
         keys, want = keys[sel], want[sel]
     got = lookup_evals(keys, h, e)
-    out = {"db_sampled": int(keys.size), "db_wrong": int((got != want).sum()),
+    out = {"db_sampled": int(keys.size), "db_wrong": int((got != want).sum()), "db_mate_overridden": int(ov_h.size),
            "excluded_probed": int(ex_h.size),
            "excluded_answered": int((lookup_evals(ex_h, h, e) != MISSING).sum())}
     if mates is not None and mates["h"].size:
@@ -481,8 +521,10 @@ def validate_arrays(array_dir: Path, db: Path, excluded: list, mates: dict | Non
         out["pool"] = str(check_pool)
         out["pool_positions"] = int(need.size)
         out["pool_covered"] = int(cov.sum())
-    # A mated position the DB already evaluates keeps the DB's value (recorded, not failed).
-    bad = out["db_wrong"] or out["excluded_answered"]
+    # Every eligible mate is answered +-2000 with the book's sign (a disagreeing DB value was checked
+    # and overridden or its hash excluded), so any other answer is a bug.
+    bad = (out["db_wrong"] or out["excluded_answered"] or out.get("mates_non_terminal_value", 0)
+           or out.get("mates_sign_differs_from_book", 0))
     log(f"validate: {out}")
     del h, e
     gc.collect()

@@ -109,21 +109,23 @@ def _hb(b: int, k: int) -> int:
     return k * 512 + b
 
 
-def _write_db_dir(db: Path, book: Path, rows: list[tuple[int, int, bool]]) -> None:
+def _write_db_dir(db: Path, book: Path, rows: list[tuple]) -> None:
     """A synthetic eval DB directory: 512 bkt files sorted by hash, manifest, build meta, _DONE."""
     import pyarrow as pa
     import pyarrow.parquet as pq
     from eval_arrays import _sha256
     db.mkdir(parents=True, exist_ok=True)
     by: dict[int, list] = {}
-    for h, cp, amb in rows:
-        by.setdefault(((h % 512) + 512) % 512, []).append((h, cp, amb))
+    for r in rows:
+        h, cp, amb = r[:3]
+        by.setdefault(((h % 512) + 512) % 512, []).append((h, cp, amb, r[3] if len(r) > 3 else "x"))
     counts = []
     for b in range(512):
         v = sorted(by.get(b, []), key=lambda r: r[0])
         pq.write_table(pa.table({"position_hash": pa.array([r[0] for r in v], pa.int64()),
                                  "eval_cp": pa.array([r[1] for r in v], pa.int16()),
-                                 "hash_ambiguous": pa.array([r[2] for r in v], pa.bool_())}),
+                                 "hash_ambiguous": pa.array([r[2] for r in v], pa.bool_()),
+                                 "epd": pa.array([r[3] for r in v], pa.string())}),
                        db / f"bkt{b:03d}.parquet")
         counts.append(len(v))
     pq.write_table(pa.table({"bucket": pa.array(range(512), pa.int64()), "rows": pa.array(counts, pa.int64())}),
@@ -163,7 +165,14 @@ def check_dir_source() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="eval_arrays_dir_"))
     try:
         book, db, adir = tmp / "book", tmp / "db", tmp / "arrays"
+        import chess
+        from zobrist import zobrist_int64
         A, B, C, D, E = _hb(3, 1), _hb(3, 2), _hb(3, 3), _hb(5, 7), _hb(5, 8)
+        fb = chess.Board()
+        for u in "f2f3 e7e5 g2g4 d8h4".split():
+            fb.push_uci(u)
+        FOOL, FOOL_EPD = zobrist_int64(fb), fb.epd()            # White to move, mated: -2000
+        COLL = _hb(15, 21)                                       # a '#' child whose DB row is not mated
         F, G, H = -512 * 9 + 7, 2**63 - 512 + 4, -2**63 + 2
         M1, M2, M4 = _hb(9, 11), _hb(9, 12), _hb(11, 13)
         _write_book(book, [
@@ -174,10 +183,13 @@ def check_dir_source() -> None:
             (_hb(1, 5), "Qg8#", "x", M4, 4, 1),
             (_hb(1, 6), "Nf7#", "x", D, 9, 1),         # a mate on a collision hash: not added
             (_hb(1, 7), "e4", "x", _hb(13, 1), 1, 9),  # no '#': nothing
+            (_hb(1, 8), "Qh4#", "x", FOOL, 4, 5),      # the DB holds a bogus 20 cp for this checkmate
+            (_hb(1, 9), "Qd8#", "x", COLL, 6, 1),      # the DB row under this hash is the start position
         ], collisions=[(D, "p1"), (D, "p2")])
         _write_db_dir(db, book, [(A, 10, False), (B, 20, False), (B, -20, False), (C, 30, True),
                                  (D, -40, False), (E, 2000, False), (F, 55, False), (G, 1, False),
-                                 (H, 2, False)])
+                                 (H, 2, False), (FOOL, 20, False, FOOL_EPD),
+                                 (COLL, 15, False, chess.Board().epd())])
         build_eval_arrays(db, adir, book=book, terminal=True, work=tmp / "work", threads=1, mem="1GB",
                           tmp=tmp / "duck", terminal_sample=0)
         meta = read_meta(adir) or {}
@@ -185,18 +197,21 @@ def check_dir_source() -> None:
               and (adir / "terminal_mates.parquet").exists(), "a directory build writes the meta and sidecars")
         h, e = open_eval_arrays(adir)
         check(bool(np.all(np.asarray(h)[1:] > np.asarray(h)[:-1])), "hashes strictly increasing, int64 extremes included")
-        keys = np.array([A, B, C, D, E, F, G, H, M1, M2, M4, _hb(13, 1)], dtype=np.int64)
-        want = [10, MISSING, MISSING, MISSING, 2000, 55, 1, 2, 2000, -2000, MISSING, MISSING]
+        keys = np.array([A, B, C, D, E, F, G, H, M1, M2, M4, _hb(13, 1), FOOL, COLL], dtype=np.int64)
+        want = [10, MISSING, MISSING, MISSING, 2000, 55, 1, 2, 2000, -2000, MISSING, MISSING, -2000, MISSING]
         got = lookup_evals(keys, h, e).tolist()
         check(got == [int(x) for x in want], f"lookups: kept rows, exclusions, mates by parity ({got})")
         ex = pq.read_table(adir / "excluded.parquet").to_pylist()
         reasons = {(r["position_hash"], r["reason"]) for r in ex}
-        check(reasons == {(B, "db_duplicate"), (C, "hash_ambiguous"), (D, "book_collision"), (M4, "mate_conflict")},
+        check(reasons == {(B, "db_duplicate"), (C, "hash_ambiguous"), (D, "book_collision"), (M4, "mate_conflict"),
+                          (COLL, "mate_hash_collision")},
               f"excluded with their reasons ({sorted(reasons)})")
         cnt = meta.get("counts", {})
-        check(cnt.get("mates_added") == 2 and cnt.get("mates_in_db") == 1 and cnt.get("mates_in_db_agree") == 1
-              and cnt.get("mates_collision") == 1 and cnt.get("mate_conflicts") == 1,
-              f"mate counts: 2 added, 1 already in the DB and agreeing, 1 on an excluded hash, 1 conflict ({cnt})")
+        check(cnt.get("mates_added") == 2 and cnt.get("mates_in_db") == 3 and cnt.get("mates_in_db_agree") == 1
+              and cnt.get("db_mate_overridden") == 1 and cnt.get("mate_hash_collision") == 1
+              and cnt.get("mates_collision") == 2 and cnt.get("mate_conflicts") == 1,
+              f"mate counts: 2 added; of 3 in the DB 1 agrees, 1 checkmate overridden, 1 collision excluded; "
+              f"1 conflict ({cnt})")
         check("verified against" in verify_eval_arrays(adir, db), "a directory build verifies against its source")
         del h, e
         bf = db / "bkt003.parquet"
