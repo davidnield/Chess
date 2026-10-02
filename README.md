@@ -207,9 +207,9 @@ python/
   process_pgn_parquets.py        ingest + compression (recipe v3)
   build_pooled_stats.py          canonical extract + aggregate
   winpos_fused.py                "winning position reached early", inside that replay
-  build_crush_winpos*.py         the SQL definition of that event, kept as the test oracle
-  eval_arrays.py                 the eval DB as mmap'd arrays workers can share
-  build_{lichess,fishnet}_eval_db.py   Stockfish eval databases
+  winpos_reference.py            the SQL definition of that event, kept as the test oracle
+  eval_arrays.py                 the eval DB as mmap'd arrays every consumer can share
+  eval_arrays_build.py           ... built from the explorer book's eval DB, plus its checkmates
   stage3_backwards_induction.py  the valuation engine
   build_sharp_reps.py            the locked recipe, as a two-pass driver
   build_baseline_books.py        reach-pruned books — the truncation baseline

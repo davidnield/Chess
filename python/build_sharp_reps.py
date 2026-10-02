@@ -72,8 +72,8 @@ the chain reruns too (its inputs changed). --force reruns the whole chain.
 
 Prerequisites (defaults): position_stats_pooled_ge1800_2013_2025_brc.parquet
 (build_pooled_stats.py --phase merge --no-prune), crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet
-(build_crush_winpos_phase2.py), unified_eval_db.parquet (build_fishnet_eval_db.py — cloud
-eval DB unioned with the fishnet-evals dump, keyed to the SAME pool via its --stats).
+(the extract's fused winpos pass), and the eval arrays D:/chess/eval_arrays_full
+(python/eval_arrays.py, from the explorer book's eval DB D:/chess/eval_full).
 Override the inputs with
 --input / --crush-db / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
@@ -91,6 +91,8 @@ import sys
 import time
 from pathlib import Path
 
+from eval_arrays import DEFAULT_ARRAY_DIR
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
@@ -102,11 +104,11 @@ PLAN_DIR = REP_DIR / "_plan"          # pass-1 reps + plan-prior/reach exports
 LOG_DIR = PROJECT / "logs" / "sharp_reps"
 
 # Canonical inputs default to the combined 2013-2025 mean_elo>=1800 --no-prune pooled
-# build (build_pooled_stats.py) with the winpos crush histogram and the unified
-# (cloud+fishnet) eval DB. Override with --input / --crush-db / --eval-db.
+# build (build_pooled_stats.py) with the winpos crush histogram and the eval arrays of
+# D:/chess/eval_full (eval_arrays.py). Override with --input / --crush-db / --eval-db.
 DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2025_brc.parquet"
 DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet"
-DEFAULT_EVAL_DB   = Path("E:/chess/unified_eval_db.parquet")
+DEFAULT_EVAL_DB   = DEFAULT_ARRAY_DIR
 
 # Crush selection weight. Surfaced as a constant because the explorer reads it back (via
 # the .meta.json sidecar) to reconstruct its selection-key column — keep it in sync with

@@ -1,15 +1,15 @@
 """Winpos crossing detection, computed inline with the extract replay.
 
-Replaces the SECOND full replay that build_crush_winpos_phase2.py performs
+Replaces the SECOND full replay the retired build_crush_winpos_phase2.py performed
 (~47 h, peak 76 GB) with a pass over the buffers build_pooled_stats.py already
-fills. build_crush_winpos.winpos_sql stays the definition of the event and the
+fills. winpos_reference.winpos_sql stays the definition of the event and the
 oracle this is tested against — it is not being replaced, only precomputed.
 
 The event, unchanged: per game per side, ONE event at the EARLIEST of
   (a) the first position strictly AFTER the edge whose eval is >= +thresh for
       that side, expressed in full moves as ply // 2 -- a winning STATE, not a
       crossing: an edge played inside an already-won game is credited at
-      bucket 1 (see build_crush_winpos guarantee 3; stage3 --crush-won-cp
+      bucket 1 (see winpos_reference guarantee 3; stage3 --crush-won-cp
       restores event semantics on the consumer side), and
   (b) the decisive game end by mate/resignation (termination == 'Normal'),
       at move_count.
@@ -39,7 +39,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_crush_winpos import SENTINEL
+from winpos_reference import SENTINEL
 from eval_arrays import MISSING
 
 MISSING_I = int(MISSING)

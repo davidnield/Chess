@@ -1,4 +1,4 @@
-"""Synthetic test for build_crush_winpos.winpos_sql — verifies the task-#27
+"""Synthetic test for winpos_reference.winpos_sql — verifies the task-#27
 guarantees against the EXACT production query (imported, not copied).
 
 Cases:
@@ -30,7 +30,7 @@ import duckdb
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_crush_winpos import winpos_sql
+from winpos_reference import winpos_sql
 
 SCRATCH = Path(__file__).parent / "_test_fixtures" / "winpos"
 SCRATCH.mkdir(exist_ok=True)

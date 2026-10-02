@@ -1,7 +1,7 @@
 """
 Stage A CLI: build per-card annotation fact sheets + chunk assignments.
 
-Reads the training pack, repertoire parquets, position stats, unified eval DB,
+Reads the training pack, repertoire parquets, position stats, the eval arrays,
 plan-prior exports, the Stage-B engine cache (if present), and trainer.db
 deviations. Writes trainer_data/annotations/facts_{color}.parquet:
 
@@ -30,6 +30,7 @@ import polars as pl
 
 from annotate.chunks import build_chunks
 from annotate.facts import EvalDB, FactsBuilder, fact_hash
+from eval_arrays import DEFAULT_ARRAY_DIR
 from trainer_app.config import DEFAULTS, resolve_data_dir
 from trainer_app.pack import TrainingPack
 
@@ -49,7 +50,9 @@ def main() -> None:
     ap.add_argument("--data", default=None)
     ap.add_argument("--color", choices=["white", "black"], default=None,
                     help="Default: both")
-    ap.add_argument("--eval-db", default="E:/chess/unified_eval_db.parquet")
+    ap.add_argument("--eval-db", default=str(DEFAULT_ARRAY_DIR),
+                    help="An eval-arrays directory (eval_arrays.py) or a legacy "
+                         "(position_hash, eval_cp) parquet (default: %(default)s).")
     ap.add_argument("--stats", default=DEFAULTS["stats"])
     ap.add_argument("--engine-cache", default=DEFAULT_ENGINE_CACHE)
     ap.add_argument("--no-deviations", action="store_true")
@@ -63,7 +66,7 @@ def main() -> None:
     t0 = time.time()
     print(f"Loading eval DB: {args.eval_db}", flush=True)
     evaldb = EvalDB(args.eval_db)
-    print(f"  {len(evaldb.ph):,} evals ({time.time()-t0:.0f}s)", flush=True)
+    print(f"  {len(evaldb.ph):,} evals, {evaldb.status} ({time.time()-t0:.0f}s)", flush=True)
 
     colors = [args.color] if args.color else ["white", "black"]
     for color in colors:

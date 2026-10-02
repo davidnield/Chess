@@ -29,7 +29,7 @@ merge, whose tier/shard/fragment machinery was ~OOM-defensive scaffolding for th
 
 RETIRED OUTPUT: the resignation-proxy crush histogram is no longer merged unless
 --crush-hist is passed. Nothing consumes it — build_sharp_reps.py reads the winpos
-histogram (crush_hist_relwin_*, build_crush_winpos_phase2.py), whose win event is
+histogram (crush_hist_relwin_*, fused into this extract), whose win event is
 the earliest of (eval >= +300cp, decisive-normal end) rather than terminations
 alone. The extract still writes .crush.parquet partials, so it can be merged later
 without re-extracting. The next full rebuild should fuse winpos into THIS script's
@@ -411,9 +411,9 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     passes it (see _worker).
 
     `winpos_out` maps threshold_cp -> partial path. Supplying it FUSES the winpos
-    histogram into this replay, replacing build_crush_winpos_phase2.py's second
-    full pass over the same files (measured 47 h, peak 76 GB). The events are
-    computed by winpos_fused, which is held equal to build_crush_winpos.winpos_sql
+    histogram into this replay, replacing the retired build_crush_winpos_phase2.py's
+    second full pass over the same files (measured 47 h, peak 76 GB). The events are
+    computed by winpos_fused, which is held equal to winpos_reference.winpos_sql
     by _test_winpos_fused.py — that query remains the definition of the event.
     Rows are emitted for EVERY edge, not just pool survivors: the `keys` join the
     SQL performs needs a global min_games decision that does not exist yet while a
@@ -1291,10 +1291,10 @@ def main() -> None:
     ap.add_argument("--fuse-winpos", action=argparse.BooleanOptionalAction, default=True,
                     help=f"Compute the winpos crush histogram inside THIS replay at "
                          f"thresholds {WINPOS_THRESHOLDS} cp, instead of running "
-                         f"build_crush_winpos_phase2.py as a second full pass over "
+                         f"a second full pass over "
                          f"the same files (measured 47 h, peak 76 GB). Needs the "
                          f"mmap'd eval arrays (python/eval_arrays.py). Events are "
-                         f"identical to build_crush_winpos.winpos_sql — see "
+                         f"identical to winpos_reference.winpos_sql — see "
                          f"_test_winpos_fused.py — except that pool-survivor "
                          f"filtering moves to the merge, since min_games is not "
                          f"known during extraction. DEFAULT ON.")

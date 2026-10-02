@@ -48,12 +48,21 @@ def _r(x, nd=3):
 
 
 class EvalDB:
-    """Sorted-array eval lookup (stage3 full-DB pattern)."""
+    """Sorted-array eval lookup: an eval-arrays directory (eval_arrays.py; verified,
+    then memory-mapped -- the default, 6B entries, cannot be loaded) or a legacy
+    (position_hash, eval_cp) parquet read whole."""
 
     def __init__(self, path: str):
+        from eval_arrays import META_NAME, open_eval_arrays, verify_eval_arrays
+        p = Path(path)
+        if (p / META_NAME).is_file():
+            self.status = verify_eval_arrays(p, adopt=False)
+            self.ph, self.cp = open_eval_arrays(p)
+            return
         df = pl.read_parquet(path, columns=["position_hash", "eval_cp"]).sort("position_hash")
         self.ph = df["position_hash"].to_numpy()
         self.cp = df["eval_cp"].to_numpy()
+        self.status = f"read {p.name}"
 
     def get_cp(self, h: int) -> int | None:
         i = int(np.searchsorted(self.ph, h))

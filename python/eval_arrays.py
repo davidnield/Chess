@@ -1,37 +1,35 @@
 """Shared, memory-mapped (position_hash -> eval_cp) arrays.
 
-The unified eval DB is 400M rows. Stage 3 loads it into process memory as sorted
-numpy arrays (~4.8 GB) and that is fine for one process — but the fused extract
-needs the same lookup inside every worker, and 6 workers x 4.8 GB is not.
+The canonical eval DB is D:/chess/eval_full (`explorer-extract evals`: 5.9B rows
+keyed by (position_hash, epd), 196 GB). No consumer can load that, and the fused
+extract needs the lookup inside every worker. So it is materialised ONCE as two
+.npy files sorted by hash (6.0B entries, ~60 GB), np.load(mmap_mode) by each
+consumer. Windows backs mmaps of the same file with the same page-cache pages, so
+N workers share one resident copy instead of N private ones.
 
-So: materialise it ONCE as two .npy files sorted by hash, then np.load(mmap_mode)
-in each worker. Windows backs mmaps of the same file with the same page-cache
-pages, so N workers share one resident copy instead of N private ones.
+eval_cp is stored int16. Every source caps decisive evals at +-2000, which fits,
+and the cast is checked at build time rather than assumed — a silent wrap here
+would turn a won position into a lost one.
 
-eval_cp is stored int16. build_lichess_eval_db.py caps decisive evals at +-2000,
-which fits, and the cast is checked at build time rather than assumed — a silent
-wrap here would turn a won position into a lost one.
-
-Lookups are BATCHED on purpose. A binary search over a 3.2 GB array is ~28 random
+Lookups are BATCHED on purpose. A binary search over a 48 GB array is ~33 random
 accesses; doing that per ply during a replay is cache-hostile. Sorting the query
 batch first turns the searches into a mostly-sequential sweep, which is why
 lookup_evals sorts, searches, then scatters back.
 
 Usage:
-    build_eval_arrays(Path("E:/chess/unified_eval_db.parquet"))   # one-time
-    h, e = open_eval_arrays()
+    h, e = open_eval_arrays()                                     # the defaults
     cp = lookup_evals(np.array([...], dtype=np.int64), h, e)      # MISSING where absent
 
-Two kinds of source. A single parquet (unified_eval_db: one row per hash) is read
-here. An eval DB DIRECTORY -- D:/chess/eval_full, built by `explorer-extract evals`:
-512 bkt*.parquet files, 5.9B rows keyed by (position_hash, epd) -- is built by
-eval_arrays_build.py into the SAME format, with the hashes a hash-only lookup must
-not answer (collision twins, ambiguous child hashes) excluded and the book's
-checkmates added. Its fingerprint is the directory's _DONE, manifest, build meta
-and every bucket file's (name, size, mtime), plus the book it was matched against.
+Two kinds of source. An eval DB DIRECTORY (the default, D:/chess/eval_full) is
+built by eval_arrays_build.py, with the hashes a hash-only lookup must not answer
+(collision twins, ambiguous child hashes) excluded and the book's checkmates added.
+Its fingerprint is the directory's _DONE, manifest, build meta and every bucket
+file's (name, size, mtime), plus the book it was matched against:
 
-    .venv/Scripts/python.exe python/eval_arrays.py --eval-db D:/chess/eval_full \
-        --out-dir D:/chess/eval_arrays_full
+    .venv/Scripts/python.exe python/eval_arrays.py [--force]     # ~2 h, ~120 GB temp
+
+A single (position_hash, eval_cp) parquet -- the retired unified_eval_db, one row
+per hash -- is read here: pass --eval-db <file> --out-dir <dir>.
 """
 from __future__ import annotations
 
@@ -42,11 +40,11 @@ from pathlib import Path
 
 import numpy as np
 
-DEFAULT_EVAL_DB = Path("E:/chess/unified_eval_db.parquet")
-DEFAULT_ARRAY_DIR = Path("E:/chess/eval_arrays")
+DEFAULT_EVAL_DB = Path("D:/chess/eval_full")
+DEFAULT_ARRAY_DIR = Path("D:/chess/eval_arrays_full")
 
 # Sentinel for "this position is not in the eval DB". Outside any real eval
-# (build_lichess_eval_db.py caps at +-2000) and outside int16's usable range for
+# (capped at +-2000) and outside int16's usable range for
 # real data, so it can never collide with a genuine evaluation.
 MISSING = np.int16(-32768)
 
@@ -114,11 +112,10 @@ def book_fingerprint(book: Path) -> dict:
 
 
 # ── staleness ─────────────────────────────────────────────────────────────────
-# These arrays are a DERIVED copy of unified_eval_db.parquet, and the skip gate
-# used to be `if the .npy files exist, use them`. That is silent corruption
-# waiting to happen: rebuild the eval DB (which build_fishnet_eval_db.py has
-# already done once) and every later extract keeps reading the OLD evals, with
-# no error. It would land in two places at once — the winpos crossing plies and
+# These arrays are a DERIVED copy of the eval DB, and the skip gate used to be
+# `if the .npy files exist, use them`. That is silent corruption waiting to
+# happen: rebuild the eval DB (which has already happened twice) and every later
+# extract keeps reading the OLD evals, with no error. It would land in two places at once — the winpos crossing plies and
 # the child_eval feeding the other-moves bucket — so the repertoire would shift
 # for a reason nothing in the logs could explain.
 #
@@ -174,7 +171,7 @@ def verify_eval_arrays(array_dir: Path = DEFAULT_ARRAY_DIR,
     if not (hp.exists() and cp.exists()):
         raise FileNotFoundError(
             f"eval arrays missing at {array_dir}. Build them with:\n"
-            f"    .venv/Scripts/python.exe python/eval_arrays.py")
+            f"    .venv/Scripts/python.exe python/eval_arrays.py --out-dir {array_dir}")
     meta = read_meta(array_dir)
     src = Path(eval_db or (meta or {}).get("source") or DEFAULT_EVAL_DB)
     if not src.exists():

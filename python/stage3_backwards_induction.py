@@ -2245,16 +2245,16 @@ def main():
                         help="Baseline forcingness to shrink low-sample positions toward. "
                              "0.30 is roughly typical for opening positions. Default: 0.30")
     parser.add_argument("--eval-db", default=None,
-                        help="Eval source: a (position_hash, eval_cp) parquet (the old "
-                             "unified_eval_db), or an eval-arrays directory from "
-                             "python/eval_arrays.py (verified, then memory-mapped; e.g. the "
-                             "arrays of D:/chess/eval_full). When provided, Stockfish evals are "
+                        help="Eval source: an eval-arrays directory from python/eval_arrays.py "
+                             "(verified, then memory-mapped; canonical: D:/chess/eval_arrays_full, "
+                             "the arrays of D:/chess/eval_full), or a legacy (position_hash, "
+                             "eval_cp) parquet such as the retired unified_eval_db. When provided, Stockfish evals are "
                              "used in move selection and written to the output's eval_score column.")
     parser.add_argument("--eval-mate-cp", type=int, default=3000,
                         help="Drop eval_db entries with |eval_cp| >= this at load. RETIRED "
                              "safety: the old eval DB stamped +-10000 mate sentinels on quiet "
-                             "positions (1.e4 read +10000), which this dropped. The rebuilt "
-                             "build_lichess_eval_db.py caps decisive evals at +-2000, so nothing "
+                             "positions (1.e4 read +10000), which this dropped. Every eval DB "
+                             "since caps decisive evals at +-2000, so nothing "
                              "reaches 3000 and this guard is now inert. Kept as a cheap backstop.")
     parser.add_argument("--eval-weight", type=float, default=0.0,
                         help="Blending weight for Stockfish eval at leaf positions. "

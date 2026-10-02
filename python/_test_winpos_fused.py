@@ -1,4 +1,4 @@
-"""The fused winpos path reproduces build_crush_winpos.winpos_sql exactly.
+"""The fused winpos path reproduces winpos_reference.winpos_sql exactly.
 
 winpos_sql stays the definition of the event. This asserts the inline version
 agrees with it, rather than assuming the reimplementation is faithful — the
@@ -30,7 +30,7 @@ import duckdb
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_crush_winpos import SENTINEL, winpos_sql
+from winpos_reference import SENTINEL, winpos_sql
 from eval_arrays import MISSING
 from winpos_fused import game_events, winpos_batch
 import _test_winpos as oracle_fixtures
@@ -114,7 +114,7 @@ REAL_GAMES = 4000
 
 
 def real_check() -> None:
-    """Extract-fused winpos vs the shipped second-pass replay + winpos_sql."""
+    """Extract-fused winpos vs the reference replay + winpos_sql."""
     import shutil
 
     import chess
@@ -122,8 +122,8 @@ def real_check() -> None:
     import pyarrow.parquet as pq
 
     from build_pooled_stats import SOURCE_ROOT, extract_file
-    from build_crush_winpos_phase2 import _walk_game_winpos
-    from eval_arrays import open_eval_arrays, lookup_evals
+    from winpos_reference import _walk_game_winpos
+    from eval_arrays import DEFAULT_ARRAY_DIR, open_eval_arrays, lookup_evals
     from zobrist import IncrementalZobrist
 
     src = None
@@ -138,7 +138,7 @@ def real_check() -> None:
                 break
         if src:
             break
-    if src is None or not (Path("E:/chess/eval_arrays/eval_hash.npy")).exists():
+    if src is None or not (DEFAULT_ARRAY_DIR / "eval_hash.npy").exists():
         print("  SKIP real-data level (source parquet or eval arrays unavailable)")
         return
     # The selector takes the newest year on disk, so which games this level
@@ -157,7 +157,7 @@ def real_check() -> None:
         fused = {(ph, sa, mb): (n, w, b) for ph, sa, mb, n, w, b
                  in pl.read_parquet(wp).iter_rows()}
 
-        # Independent path: the shipped phase-2 replay.
+        # Independent path: the reference replay (the retired phase-2 builder's).
         pm_buf = {"game_id": [], "ply": [], "parent_hash": [], "move_san": [],
                   "elo_band": []}
         cr = {"game_id": [], "white_win_normal": [], "black_win_normal": [],
@@ -278,7 +278,7 @@ def main() -> None:
     # The three levels above test the algorithm. This tests the INTEGRATION: the
     # per-game spans into the shared replay buffer, and that the population the
     # batched eval lookup sees is the same one pm.parent_hash represents. It runs
-    # the shipped second-pass replay (_walk_game_winpos) independently and feeds
+    # the reference replay (_walk_game_winpos) independently and feeds
     # winpos_sql, so a spans bug shows up as a mismatch rather than as agreement
     # with itself. NOT independent on the eval values themselves — both sides read
     # the same arrays; that lookup is covered by _test_eval_arrays.py.
