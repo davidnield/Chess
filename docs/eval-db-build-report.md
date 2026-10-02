@@ -149,7 +149,7 @@ The four follow-ups are:
 3. retiring `unified_eval_db`;
 4. a fast child-only check.
 
-Items 1, 2 and 4 are done. Item 3 waits on the owner's A/B decision below.
+All four are done in code. The canonical rebuild on the new arrays, and archiving the old DB files, wait for the owner's go-ahead.
 
 ### 4. The child-only check in fresh processes (`verify_evals.py` @ 5bc7aec)
 
@@ -188,6 +188,34 @@ Every existing consumer works on the new folder.
   - A real checkmate takes the mate value (98 overridden).
   - Anything else is excluded as `mate_hash_collision` (0 cases).
 - The DB itself is unchanged. `eval_full` serves those 98 values; only the arrays correct them.
+
+**Root cause (investigated 2026-10-02): the Lichess fishnet dump itself.** The cause is a bad window in the dump, not a bug in our builder. The raw rows behind all 98 values are:
+- in `standard_rated_2016_03` (80) and `standard_rated_2016_06` (18) only;
+- the final row of a game ending in checkmate: no `move`, a `cp`, and the previous row is mate-in-1 with the mating move;
+- python-chess confirms all 98 are checkmate.
+
+The score is about +25 cp from the side to move's view in 96 of the 98 (range 16–58), which is an "about level" value. It is not copied from a neighbouring row: it equals the next row's cp in only 2 of 98.
+
+A sweep of every game-final row (`move IS NULL`) in eight months, using python-chess, shows the window:
+
+| Month | Checkmate final rows with a cp | Stalemate final rows not 0 |
+|---|---|---|
+| 2016-02 | 2 | 1 |
+| 2016-03 | 2,964 | 346 |
+| 2016-04 | 0 | 565 |
+| 2016-05 | 2 | 15 |
+| 2016-06 | 711 | 10 |
+| 2016-07, 2018-06, 2023-06 | 0 | 0 |
+
+In clean months, a mated final position has no row, and a stalemate reads exactly 0. Something in the early-2016 analysis returned a small search score for positions with no legal moves. This window is not among the dataset card's known-bad months.
+
+What reaches our data:
+- **Checkmates:** 3,680 bad rows (3,677 positions). 98 are book positions, all now ±2000 in the arrays. The rest are mates after the book's ply 30, so they were never DB rows.
+- **Stalemates:** 937 bad rows (793 positions). None is in the arrays, so none is a book position.
+- **Other months:** no other month put a cp on any of the 100M book checkmates. A cp in any other month would have shown up among the overrides, and all 98 come from 2016-03 and 2016-06.
+- **Not checked:** stalemates outside the eight months above.
+
+For a future `explorer-extract evals` build, the clean fix is to skip any source row whose position has no legal moves, counted as its own parse reason. Shakmaty already parses every FEN.
 
 The build validates itself before writing the meta:
 - 1M sampled DB rows match the lookup;
@@ -261,19 +289,42 @@ The scorecard's "eval cover" falls slightly in B (98.2 → 97.8%, 98.0 → 97.7%
 - the pool's aux `other_eval`;
 - the t300 crush histogram, and therefore `--crush-won-cp`.
 
-**For the owner to decide.** Should the B repertoires (or a canonical rebuild on the arrays) become canonical? That unlocks item 3:
-- switch defaults to `eval_full` / `eval_arrays_full`;
-- move `annotate/facts.py` to array lookups;
-- add `winpos_reference.py`;
-- move the four legacy scripts to `scratch/`;
-- archive the old DB files.
+**Decision (2026-10-02).** The owner accepted the new DB. The canonical rebuild is "not yet".
 
-Whichever way it goes, the 2026-08-25 canonical reps already differ from what current code produces.
+### 3. Retiring `unified_eval_db` (`stage3-eval-full` @ 93b2a60)
+
+- **Defaults:** `eval_arrays.DEFAULT_EVAL_DB` / `DEFAULT_ARRAY_DIR` now point at `D:/chess/eval_full` / `D:/chess/eval_arrays_full`. `build_sharp_reps.py`, the extract (fused winpos, `child_eval`), the budget and baseline books, and annotations all follow. `annotate.facts.EvalDB` verifies and memory-maps an arrays dir; a legacy parquet still works.
+- **`winpos_reference.py`:** the winpos event SQL and the reference replay, lifted from the legacy builders. They are byte-identical, checked by comparing the generated SQL and the function body. `winpos_fused.py` and both winpos tests import it.
+- **Legacy scripts:** `build_crush_winpos.py`, `build_crush_winpos_phase2.py`, `build_fishnet_eval_db.py` and `build_lichess_eval_db.py` left the repo. Copies are in the main checkout's `scratch/python/`.
+- **Tests and docs:**
+  - `_test_eval_arrays.py` takes its ground truth from a random sample of `bkt000` (excluded, ambiguous and mated hashes dropped): 28/28.
+  - `run_tests.py`: 41/41. `_test_winpos_fused`'s real-data level ran on the new arrays: 62,276 rows identical.
+  - The CLAUDE.md and README rows are updated.
+- **Still waiting:**
+  - the canonical rebuild (separate go-ahead);
+  - archiving `unified_eval_db.parquet`, `lichess_eval_db.parquet` and `E:\chess\eval_arrays\` (separate go-ahead, after the rebuild).
+
+**Extract cost on the new arrays (measured 2026-10-02).** Real `extract_file`, 3 concurrent workers × 300K games of 2025 Blitz, Rapid and Classical:
+
+| | New arrays | Old arrays |
+|---|---|---|
+| Wall | 112–192 s | 86–154 s |
+| Share of wall in `lookup_evals` | 20–26% | 7% |
+| Lookups per second | 0.11–0.15M | 0.51–0.57M |
+
+The cost comes from cold page faults: a 48 GB hash file does not stay in the page cache next to the extract's ~111 GB commit. That makes the extract about 25–30% slower.
+
+A synthetic benchmark with keys weighted by games measured 3–12K lookups/s for a cold single worker. Fully warm it ran 0.2M/s per worker at 6 workers, against about 1M/s for the old arrays.
+
+The untested fix is a sparse in-RAM index (every 512th hash, about 94 MB), so that each lookup touches one hash page and one cp page. Build and measure it before the next pool rebuild. Stage 3 is not affected: its lookups are one batch of 26M keys.
 
 ## Leftovers
 
-- The pilot's dirs (`D:\chess\eval_pilot` 4.3 GB, `H:\chess\eval_work_pilot` 18 GB, `D:\chess\eval_pilot_bin`) are kept as evidence. They are safe to delete.
-- Also kept, and deletable on the owner's go-ahead:
-  - `H:\chess\eval_work` (1.17 TB of build scratch);
-  - `D:\chess\eval_arrays_full_work` (the arrays build's temp files);
-  - the side rep folders `_evalnoop`, `_evalbase` and `_evaldb_ab` under `E:\chess\repertoire\`.
+- Deleted 2026-10-02 at the owner's request, about 1.29 TB in all:
+  - `H:\chess\eval_work` (1.2 TB);
+  - `H:\chess\eval_work_pilot`;
+  - `D:\chess\eval_pilot` and `D:\chess\eval_pilot_bin`;
+  - `D:\chess\eval_arrays_full_work` (57 GB);
+  - the side rep folders `_evalnoop`, `_evalbase` and `_evaldb_ab`.
+
+  Rerunning `run_eval_build.ps1` would recreate its scratch from nothing.
