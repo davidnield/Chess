@@ -6,8 +6,11 @@ fills. build_crush_winpos.winpos_sql stays the definition of the event and the
 oracle this is tested against — it is not being replaced, only precomputed.
 
 The event, unchanged: per game per side, ONE event at the EARLIEST of
-  (a) the first position strictly AFTER the edge whose eval crosses +thresh for
-      that side, expressed in full moves as ply // 2, and
+  (a) the first position strictly AFTER the edge whose eval is >= +thresh for
+      that side, expressed in full moves as ply // 2 -- a winning STATE, not a
+      crossing: an edge played inside an already-won game is credited at
+      bucket 1 (see build_crush_winpos guarantee 3; stage3 --crush-won-cp
+      restores event semantics on the consumer side), and
   (b) the decisive game end by mate/resignation (termination == 'Normal'),
       at move_count.
 move_bucket = clip(event_full_move - (ply - 1) // 2, 1, 60); every edge also
@@ -47,9 +50,10 @@ def game_events(plies, evals, thresh_cp: int, wwn: bool, bwn: bool,
     """Per-edge (ev_w, ev_b) in FULL MOVES, SENTINEL where no event.
 
     `plies` must be ascending (replay order). One reverse scan gives every edge
-    the smallest crossing ply strictly greater than its own: the crossing at an
-    edge's OWN ply is excluded, which is guarantee 3 (a game already winning
-    before the move must not credit the move).
+    the smallest WINNING ply strictly greater than its own: the edge's own
+    (parent) position is excluded, which is all guarantee 3 provides. A game
+    still winning after the move credits it at bucket 1 -- stage3
+    --crush-won-cp is what removes that.
     """
     n = len(plies)
     ev_w = [SENTINEL] * n

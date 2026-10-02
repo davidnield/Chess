@@ -22,12 +22,19 @@ Guarantees (task #27; verified by _test_winpos.py against this exact SQL):
   2. Ever-achieved, not frontier-eval — ALL positions along the game's path are
      checked, so a +3 later given away still counts. (Backwards induction cannot
      provide this: propagated value is an expectation, not a first-passage.)
-  3. Downstream-only — only crossings strictly after the edge ply count, so a
-     game already winning BEFORE an edge does not credit it (else every move
-     inside a won position, including the one that throws it away, inherits
-     credit). Terminations satisfy this automatically; crossings need the
-     strict > filter. Position at pm ply c = position after c-1 plies, hence
-     "after our move at ply p" == c > p.
+  3. Downstream-only — only positions strictly after the edge are checked
+     (position at pm ply c = position after c-1 plies, hence "after our move at
+     ply p" == c > p), so the edge's PARENT never credits it.
+     That does NOT make the event a crossing. This guarantee used to claim "a
+     game already winning BEFORE an edge does not credit it"; corrected
+     2026-09-22. A game winning at the parent that STAYS winning makes the
+     child a winning position too, so the edge is credited at bucket 1 —
+     measured on the 2013-2026 t300 histogram, 81.7% of games through edges
+     from >= +300 positions. The histogram records a STATE ("a winning
+     position within b moves"). The EVENT semantics are applied by the
+     consumer: stage3 --crush-won-cp makes already-winning positions
+     crush-absorbing, which is exact because the eval is per position, so
+     the histogram itself did not need a re-extract.
   4. Coverage — eval-crossings fire only where the eval DB covers the position;
      mate/resignation events fire for ALL games. Uncovered (rare) lines are
      structurally biased against, consistent with --crush-baseline zero.

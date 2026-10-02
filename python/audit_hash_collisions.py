@@ -44,6 +44,13 @@ groups. MIN(parent_epd) != MAX(parent_epd) is exactly equivalent for the ">= 2
 distinct" test and needs two running strings per group, so that is the screen;
 the expensive per-hash detail query runs only on whatever it flags.
 
+Even that screen does not fit one pass. The monthlies are UNPRUNED, so the
+group count is the full below-floor tail (~1e9), and two ~60-byte strings per
+group is well over 100 GB of hash table. DuckDB's memory_limit does not bind
+on this shape -- a 12GB limit spilled nothing and reached 197 GB of private
+bytes -- so the GROUP BY is partitioned into --buckets disjoint slices of
+parent_hash instead. Bucketing on a column of the grouping key is exact.
+
 Usage:
     .venv/Scripts/python.exe python/audit_hash_collisions.py \\
         --dir E:/chess/position-stats/_pooled_partials_ge1800_2013_2026_brc/_monthly
@@ -71,6 +78,9 @@ def main() -> int:
                     help="Pool floor. A collision below it never reaches Stage 3.")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--mem", default="16GB")
+    ap.add_argument("--buckets", type=int, default=32,
+                    help="Hash-partitions for the GROUP BY. One pass over the "
+                         "unpruned pool does not fit in RAM; see the loop.")
     ap.add_argument("--tmp", default=None,
                     help="DuckDB spill directory. Default: alongside --dir.")
     ap.add_argument("--show", type=int, default=25)
@@ -92,34 +102,76 @@ def main() -> int:
     con.execute("SET preserve_insertion_order=false")
 
     print(f"source : {len(files):,} file(s) under {d}")
-    print(f"test   : same parent_hash, different parent_epd\n")
+    print("test   : same parent_hash, different parent_epd")
+    print(f"buckets: {a.buckets} (arithmetic partition on parent_hash)")
+    print("", flush=True)
 
     t0 = time.time()
-    # One pass. The MIN/MAX screen is exact for ">=2 distinct EPDs" and costs two
-    # strings per group instead of a per-group hash set.
+    # BUCKETED ON PURPOSE (2026-08-25). The previous single GROUP BY over every
+    # distinct parent_hash in the UNPRUNED monthlies holds two ~60-byte EPD
+    # strings per group across ~1e9 groups. memory_limit did not bind on that
+    # shape -- nothing ever spilled to temp_directory -- so it grew to 197 GB of
+    # private bytes, drove the pagefile to 100%, and ran 7 h at one core with no
+    # output before being killed. Partitioning on a column of the grouping key is
+    # exact (every row of a given parent_hash lands in one bucket), which is the
+    # remedy CLAUDE.md prescribes; the arithmetic form mirrors
+    # build_pooled_stats._bucket_expr so bucket assignment is DuckDB-version
+    # stable rather than tied to hash().
+    nb_ = a.buckets
+    bkt = f"((parent_hash % {nb_}) + {nb_}) % {nb_}"
+
+    # Derive `bad`'s schema from the real query so column types cannot drift.
     con.execute(f"""
-        CREATE OR REPLACE TEMP TABLE agg AS
+        CREATE OR REPLACE TEMP TABLE bad AS
         SELECT parent_hash,
                MIN(parent_epd) AS epd_lo,
                MAX(parent_epd) AS epd_hi,
                SUM(total)::HUGEINT AS games,
                COUNT(*)::BIGINT   AS rows_
         FROM read_parquet({src})
+        WHERE false
         GROUP BY parent_hash
     """)
-    n_hash, n_rows, n_games = con.execute(
-        "SELECT COUNT(*), SUM(rows_), SUM(games) FROM agg").fetchone()
+
+    n_hash = n_rows = n_games = 0
+    for b in range(nb_):
+        tb = time.time()
+        # The MIN/MAX screen is exact for ">=2 distinct EPDs" and costs two
+        # running strings per group instead of a per-group hash set.
+        con.execute(f"""
+            CREATE OR REPLACE TEMP TABLE g AS
+            SELECT parent_hash,
+                   MIN(parent_epd) AS epd_lo,
+                   MAX(parent_epd) AS epd_hi,
+                   SUM(total)::HUGEINT AS games,
+                   COUNT(*)::BIGINT   AS rows_
+            FROM read_parquet({src})
+            WHERE {bkt} = {b}
+            GROUP BY parent_hash
+        """)
+        bh, br, bg = con.execute(
+            "SELECT COUNT(*), COALESCE(SUM(rows_), 0), COALESCE(SUM(games), 0) "
+            "FROM g").fetchone()
+        con.execute("INSERT INTO bad SELECT * FROM g WHERE epd_lo <> epd_hi")
+        so_far = con.execute("SELECT COUNT(*) FROM bad").fetchone()[0]
+        con.execute("DROP TABLE g")
+        n_hash += bh
+        n_rows += br
+        n_games += int(bg)
+        # Per-bucket progress: the failure this replaces was silent for 7 hours.
+        print(f"  bucket {b:>3}/{nb_}: {bh:>13,} hashes  {br:>14,} rows  "
+              f"bad so far {so_far:>6,}  ({(time.time() - tb) / 60:.1f} min)",
+              flush=True)
+
+    print("")
     print(f"distinct parent_hash : {n_hash:,}")
     print(f"edge rows            : {n_rows:,}")
     print(f"games (summed)       : {n_games:,}")
     exp = (n_hash ** 2) / float(2 ** 65)
     print(f"birthday expectation : {exp:.3f} collision(s) at this cardinality")
-    print(f"                       (n^2 / 2^65, 64-bit space)\n")
+    print("                       (n^2 / 2^65, 64-bit space)")
+    print("", flush=True)
 
-    con.execute("""
-        CREATE OR REPLACE TEMP TABLE bad AS
-        SELECT * FROM agg WHERE epd_lo <> epd_hi
-    """)
     n_bad, bad_games = con.execute(
         "SELECT COUNT(*), COALESCE(SUM(games), 0) FROM bad").fetchone()
     n_bad_floor = con.execute(

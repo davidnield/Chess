@@ -87,6 +87,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import sys
 import time
 from collections import Counter, defaultdict, deque
@@ -209,6 +210,129 @@ def effective_eval_weight(ew_max: float, ew_min: float, k: float, n: int) -> flo
     if ew_max <= 0 or k <= 0 or ew_min >= ew_max:
         return ew_max
     return ew_min + (ew_max - ew_min) * k / (k + n)
+
+
+def recall_weight(reach: float, midpoint: float, power: float) -> float:
+    """Probability we actually REMEMBER the booked move at a node we reach with
+    per-game probability `reach`.  Hill curve:  r = (f/m)^p / (1 + (f/m)^p).
+
+    At reach = midpoint:  r = 0.5.  Monotone increasing, r(0) = 0, r -> 1.
+
+    midpoint <= 0 DISABLES the model and returns 1.0 (perfect recall), which is
+    what makes the flag an exact no-op when unset: every blend below collapses
+    to the prescriptive value it already had.
+
+    The two branches are algebraically identical; each is the one that stays
+    accurate on its side of the midpoint, since reach here spans many decades
+    (the plan export prunes at 1e-6, three decades below the default midpoint).
+    """
+    if midpoint <= 0 or power <= 0:
+        return 1.0                       # disabled: perfect recall
+    if reach <= 0:
+        return 0.0
+    ratio = reach / midpoint
+    if ratio <= 1:
+        v = ratio ** power
+        return v / (1.0 + v)
+    return 1.0 / (1.0 + (1.0 / ratio) ** power)
+
+
+def aux_opp_mix(term_tot: float, term_sum: float,
+                oth_tot: float, oth_sum: float,
+                oth_eval: float, oth_cov: float,
+                hor_tot: float, hor_sum: float,
+                hor_eval: float | None,
+                eval_weight: float, eval_weight_min: float = 0.0,
+                eval_weight_k: float = 0.0,
+                horizon_mode: str = "empirical") -> tuple[float, float]:
+    """WHITE-SCORE (numerator, denominator) one position's aux buckets add to an
+    OPPONENT node's mean. Callers in other perspectives flip with `den - num`,
+    which is exact because the mix is linear in the bucket sums.
+
+    SHARED BY BOTH ENGINES (2026-09-04). Stage 3 and budget_core each grew their
+    own copy and they had drifted: the budget builder used the OTHER bucket's raw
+    empirical score while Stage 3 blended `other_eval_mean` at a coverage-weighted
+    eval weight. That is a difference in the objective being optimised, not in
+    budget allocation, so the four-arm comparison was partly measuring it. One
+    implementation, imported by both.
+
+    The three buckets are NOT interchangeable and are deliberately valued by
+    different rules:
+      term     the game ended here. A finished game's result is a fact, so it
+               enters at its empirical score with no engine opinion at all.
+      other    replies pruned under min_games. Their outcomes ARE observed but
+               their continuations are not, so the engine gets a say -- weighted
+               by n_eff = oth_tot * oth_cov, the eval-COVERED mass, because
+               `other_eval_mean` only describes the edges the eval DB knows.
+               Passing the whole bucket would claim the engine's opinion rests on
+               1/cov times the evidence it has, and would be most wrong on
+               exactly the thin lines this bucket exists to describe.
+      horizon  the extract's ply cap cut the game off. The OUTCOME is observed
+               and only the path is missing, so 'empirical' (the default) trusts
+               it; 'eval' substitutes the node's own engine score.
+
+    A NaN `oth_eval` means no eval-covered child, and must fall back to the
+    empirical mean rather than read as 0.0 (dead lost).
+    """
+    num = den = 0.0
+    if term_tot:
+        num += term_sum          # a finished game's result is a fact
+        den += term_tot
+    if oth_tot:
+        emp_o = oth_sum / oth_tot
+        if oth_eval == oth_eval and eval_weight > 0:      # not NaN
+            n_eff = oth_tot * oth_cov
+            w_o = effective_eval_weight(eval_weight, eval_weight_min,
+                                        eval_weight_k, n_eff)
+            v_o = (1.0 - w_o) * emp_o + w_o * oth_eval
+        else:
+            v_o = emp_o
+        num += v_o * oth_tot
+        den += oth_tot
+    if hor_tot:
+        if horizon_mode == "eval" and hor_eval is not None:
+            v_h = hor_eval
+        else:
+            v_h = hor_sum / hor_tot
+        num += v_h * hor_tot
+        den += hor_tot
+    return num, den
+
+
+def aux_our_blend(value: float, cont_mass: float, crack_mass: float,
+                  win_score: float) -> float:
+    """Fold opponent collapses BEFORE our move into an our-node's value.
+
+    `1.e4 e5 {Black resigns}` ends at a White-to-move position, so it lands on
+    one of OUR nodes. The node's value is otherwise purely prescriptive -- "what
+    our book gets from here" -- which is right for the games that continued, but
+    some fraction of arrivals never gave us a move to play at all. Those are ours.
+
+    Unit-agnostic: pass `win_score` in the caller's convention (1.0 for a White
+    book in white-score units, 0.0 for a Black one, always 1.0 for engines that
+    work in our-perspective units).
+
+    cont_mass IS THE WHOLE CONTINUING POPULATION, not just the surviving edges
+    (corrected 2026-09-04, found by external review). Stage 3 used to pass only
+    the sum of surviving outgoing edges, which omits games that continued through
+    below-floor OTHER moves and through the extract's horizon. Our policy
+    replaces those games' historical move choices, but it does not make them stop
+    arriving, so leaving them out shrinks the denominator and over-weights the
+    resignations -- worst precisely at thin nodes, where the surviving edges are
+    the smallest share of arrivals. With 100 surviving continuations, 900 OTHER
+    continuations and 100 collapses against a prepared value of 0.6, the old
+    denominator gave 0.8 where the arrival-weighted answer is
+    (1000*0.6 + 100)/1100 = 0.63636.
+
+    Non-crack terminations (our-node losses and draws) are deliberately NOT in
+    either term: a game we lost with us to move ABANDONED the book, and charging
+    the recipe for a resignation it never recommended would be worse than
+    dropping it. That is a modelling choice, and a stated one -- see the loader.
+    """
+    total = cont_mass + crack_mass
+    if crack_mass <= 0.0 or total <= 0.0:
+        return value
+    return (value * cont_mass + win_score * crack_mass) / total
 
 
 def opponent_error(
@@ -662,6 +786,7 @@ def run_backwards_induction(
     crush_gamma:      float = 0.8,
     crush_imm_window: int = 2,
     crush_baseline:   str = "mean",
+    crush_won_cp:     int = 0,
     force_root_move:  str | None = None,
     require_eval:     bool = False,
     memo_weight:      float = 0.0,
@@ -693,6 +818,9 @@ def run_backwards_induction(
     learn_reach_pivot: float = 0.02,
     learn_ctx_pivot:  float = 0.05,
     learn_depth_horizon: int = 6,
+    recall_midpoint:  float = 0.0,
+    recall_power:     float = 2.0,
+    recall_default_reach: float = 0.0,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
            dict[int, float | None], dict[int, float | None], dict[int, float | None],
            dict[int, float], dict[int, float], dict[int, float],
@@ -936,6 +1064,14 @@ def run_backwards_induction(
     # wildly different sizes — on 2018-01 the other-moves bucket carried 1,253,751
     # of edge mass against 4,224 for terminations — so "aux on" measures the bucket
     # unless the parts can be separated.
+    # Recall model. OFF unless --recall-midpoint is positive; reach comes from
+    # the SAME pass-1 export the learnability tiebreak already consumes, so this
+    # adds no new plumbing and inherits that export's bounds (--max-our-moves,
+    # --epsilon). Nodes absent from it are genuinely beyond those bounds, where
+    # the curve is ~0 anyway, so recall_default_reach=0.0 is self-consistent.
+    _recall = recall_midpoint > 0.0
+    _recall_reach = learn_reach or {}
+
     _parts = {p.strip().lower() for p in (aux_parts or "").split(",") if p.strip()}
     _bad = _parts - {"term", "other", "horizon"}
     if _bad:
@@ -1021,6 +1157,16 @@ def run_backwards_induction(
     _cover_mass = cover_mass_shrink > 0
     relative_crush = (crush_mode == "relative-propagated"
                       and (crush_weight > 0 or _counter_crush))
+    # --crush-won-cp: winning positions are crush-ABSORBING (see build_move_vals).
+    # eval_lookup holds expected scores while the histogram tested integer cp. The
+    # sigmoid is monotone, so for integer cp, cp >= T <=> es > sigmoid(T - 0.5)
+    # EXACTLY; the half-point keeps the comparison clear of any ulp disagreement
+    # between the loader's vectorised exp and math.exp at the threshold itself.
+    _crush_won = (crush_won_cp > 0 and bool(eval_lookup)
+                  and (crush_weight > 0 or _counter_crush))
+    _won_white_es = cp_to_expected_score(crush_won_cp - 0.5)
+    _won_black_es = cp_to_expected_score(-(crush_won_cp - 0.5))
+    crush_won_nodes: set[int] = set()   # a set: cycle sweeps revisit nodes
     # Engine-candidate augmentation is only live when the caller supplied the full
     # (un-prefiltered) eval DB as sorted arrays — the prefiltered eval_lookup can't
     # see legal-but-unplayed children (they're outside the input DAG).
@@ -1080,6 +1226,31 @@ def run_backwards_induction(
         """One dict per child edge: mean value, robust value, decisiveness,
         forcingness, opponent_error, and the opponent's preference for the reply."""
         mvs = []
+        # --crush-won-cp. The winpos histogram records the FIRST WINNING POSITION
+        # after each edge, not the first crossing into one, so a game that is
+        # already winning at ph and stays winning credits every move out of ph at
+        # bucket 1 (measured: 81.7% of games through edges from >= +300 positions).
+        # That is a STATE, and it double-counts up the recursion: the edge that
+        # made the crossing earns imm, then (1-imm) * crush_pot(child) re-counts
+        # the same games through every move they play while still winning.
+        # Winning positions are therefore ABSORBING for that side's crush: the
+        # event has already happened, so no move out of ph earns crush and nothing
+        # propagates through ph -- crush_pot(ph) = 0, and the edge INTO ph keeps
+        # its own imm, which is the crossing. Zeroing only imm/dfull would NOT do:
+        # line_crush would still inherit crush_pot(child), so a move that dips
+        # below the threshold would collect the re-crossing beneath it while a move
+        # that keeps the win collects nothing -- a bonus for giving it back. The
+        # eval is per position, so this is exact for every eval-covered ph; an
+        # uncovered ph is left unmasked (we cannot know it was winning).
+        won_us = won_opp = False
+        if _crush_won:
+            es_ph = eval_lookup.get(ph)
+            if es_ph is not None:
+                won_w, won_b = es_ph > _won_white_es, es_ph < _won_black_es
+                won_us, won_opp = ((won_w, won_b) if our_color == chess.WHITE
+                                   else (won_b, won_w))
+                if won_us:
+                    crush_won_nodes.add(ph)
         for m in children[ph]:
             ch = m["child_hash"]
             emp = smoothed_score(m["score_avg"], m["total"], slice_prior, prior_strength)
@@ -1160,6 +1331,10 @@ def run_backwards_induction(
                         opp_line_crush = o_imm + (1.0 - o_imm) * gamma_hop * crush_pot_opp[ch]
                     else:
                         opp_line_crush = o_dfull
+            if won_us:
+                cr = line_crush = dfull = 0.0
+            if won_opp:
+                opp_line_crush = 0.0
             # Opponent's preference for THIS reply on the white-expected-score
             # scale (eval where covered, else empirical edge score).
             pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
@@ -1475,6 +1650,44 @@ def run_backwards_induction(
                 mem_nodes[ph] = 0.0
                 return
             values[ph]        = b["val"]
+            # ── imperfect recall ────────────────────────────────────────────
+            # We play the booked move only with probability r; otherwise we wing
+            # it and play the population's move here. So the node is worth
+            #     r * (prescriptive) + (1-r) * (what the population scores here)
+            # and the second term is the SAME mixture an opponent node computes,
+            # because "we play like the population" and "they play like the
+            # population" are the same arithmetic over the same edge list.
+            #
+            # Like the collapse blend below, r depends on the POSITION and not on
+            # the candidate, so this cannot change which move we pick AT this node
+            # -- the fallback term is constant in the candidate and drops out of
+            # the argmax. It changes the node's VALUE, hence the PARENT's choice.
+            # That is the whole mechanism: a deep trap stops paying for itself at
+            # the ancestor that would have to walk into it.
+            #
+            # Frozen-reach approximation: r comes from pass 1's policy, so pass 2
+            # cannot discover that a DIFFERENT move would make a node frequent
+            # enough to remember. Same approximation the learnability tiebreak
+            # already makes off the same export; stated, not hidden.
+            if _recall:
+                r = recall_weight(_recall_reach.get(ph, recall_default_reach),
+                                  recall_midpoint, recall_power)
+                if r < 1.0:
+                    fb_den = sum(mv["total"] for mv in mvs)
+                    fb_num = sum(mv["val"] * mv["total"] for mv in mvs)
+                    if _aux:
+                        i_fb = idx[ph]
+                        a_num, a_den = aux_opp_mix(
+                            aux_term_tot[i_fb], aux_term_sum[i_fb],
+                            aux_oth_tot[i_fb], aux_oth_sum[i_fb],
+                            aux_oth_eval[i_fb], aux_oth_cov[i_fb],
+                            aux_hor_tot[i_fb], aux_hor_sum[i_fb],
+                            (eval_lookup.get(ph) if eval_lookup else None),
+                            eval_weight, eval_weight_min, eval_weight_k,
+                            aux_horizon)
+                        fb_num += a_num; fb_den += a_den
+                    fb = fb_num / fb_den if fb_den else slice_prior
+                    values[ph] = r * values[ph] + (1.0 - r) * fb
             # Blend in the games where the opponent resigned BEFORE we moved. The
             # node's value is otherwise purely prescriptive — "what our book gets
             # from here" — and that is right for the games that continued, but
@@ -1489,12 +1702,19 @@ def run_backwards_induction(
             # value_worst is deliberately untouched: an opponent who resigns is not
             # playing best defence, so worst-case must not improve because of it.
             if _aux:
-                crack = aux_crack[idx[ph]]
+                i_ph = idx[ph]
+                crack = aux_crack[i_ph]
                 if crack:
-                    cont = sum(mv["total"] for mv in mvs)
+                    # THE WHOLE CONTINUING POPULATION, not just the surviving
+                    # edges. Games that continued through a below-floor OTHER
+                    # move, or that the extract's horizon cut off, still arrived
+                    # here and would still have got our book move. Omitting them
+                    # shrank the denominator and over-weighted the collapses,
+                    # worst at thin nodes. See aux_our_blend.
+                    cont = (sum(mv["total"] for mv in mvs)
+                            + float(aux_oth_tot[i_ph]) + float(aux_hor_tot[i_ph]))
                     win = 1.0 if our_color == chess.WHITE else 0.0
-                    if cont + crack:
-                        values[ph] = (values[ph] * cont + win * crack) / (cont + crack)
+                    values[ph] = aux_our_blend(values[ph], cont, crack, win)
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
             best_aug[ph]      = b.get("aug", False)
@@ -1537,41 +1757,22 @@ def run_backwards_induction(
             # all contribute nothing — and the first of those is not noise:
             # measured, the side to move scores 0.0953 at a terminal node, so
             # excluding them deletes precisely the opponent's collapses.
+            # The bucket-by-bucket rules live in aux_opp_mix, which budget_core
+            # imports so both engines value this mass identically. They had
+            # drifted apart (the budget builder read the OTHER bucket raw, with
+            # no other_eval_mean blend), which is a difference in the OBJECTIVE
+            # and not in budget allocation.
             aux_num = aux_den = 0.0
             if _aux:
                 i_ph = idx[ph]
-                t_tot = aux_term_tot[i_ph]
-                if t_tot:
-                    aux_num += aux_term_sum[i_ph]      # a finished game's result
-                    aux_den += t_tot                   # is a fact, not an estimate
-                o_tot = aux_oth_tot[i_ph]
-                if o_tot:
-                    emp_o = aux_oth_sum[i_ph] / o_tot
-                    ev_o = aux_oth_eval[i_ph]
-                    if ev_o == ev_o and eval_weight > 0:      # not NaN
-                        # Sample size for the eval's trust is the COVERED mass, not
-                        # the whole bucket: other_eval_mean describes only the edges
-                        # the eval DB actually knows. Passing o_tot would claim the
-                        # engine's opinion rests on 1/cov times the evidence it has,
-                        # and it would be most wrong exactly on the thin, poorly
-                        # covered lines this bucket exists to describe.
-                        n_eff = o_tot * aux_oth_cov[i_ph]
-                        w_o = effective_eval_weight(eval_weight, eval_weight_min,
-                                                    eval_weight_k, n_eff)
-                        v_o = (1.0 - w_o) * emp_o + w_o * ev_o
-                    else:
-                        v_o = emp_o
-                    aux_num += v_o * o_tot
-                    aux_den += o_tot
-                h_tot = aux_hor_tot[i_ph]
-                if h_tot:
-                    if aux_horizon == "eval":
-                        hv = eval_lookup.get(ph) if eval_lookup else None
-                        v_h = hv if hv is not None else aux_hor_sum[i_ph] / h_tot
-                    else:
-                        v_h = aux_hor_sum[i_ph] / h_tot
-                    aux_num += v_h * h_tot
-                    aux_den += h_tot
+                aux_num, aux_den = aux_opp_mix(
+                    aux_term_tot[i_ph], aux_term_sum[i_ph],
+                    aux_oth_tot[i_ph], aux_oth_sum[i_ph],
+                    aux_oth_eval[i_ph], aux_oth_cov[i_ph],
+                    aux_hor_tot[i_ph], aux_hor_sum[i_ph],
+                    (eval_lookup.get(ph) if eval_lookup else None),
+                    eval_weight, eval_weight_min, eval_weight_k,
+                    aux_horizon)
                 if aux_den:
                     base = values[ph] * total if total else slice_prior * 0.0
                     denom = total + aux_den
@@ -1814,6 +2015,9 @@ def run_backwards_induction(
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
               f"{len(learn_override_nodes):,} nodes", flush=True)
+    if _crush_won:
+        print(f"  crush-won ({crush_won_cp} cp): {len(crush_won_nodes):,} positions "
+              f"already winning for us are crush-absorbing", flush=True)
     # Per-position coverage efficiency = covered opponent-decision depth per memorized
     # branch (the quantity the selection key rewards). Surfaced for output/inspection.
     cover_effs = _ArrMap(sp, np.nan_to_num(cover_depth.arr, nan=0.0)
@@ -2041,6 +2245,18 @@ def main():
                              "artifact). 'zero': assume NO crush until proven by many games — thin "
                              "edges contribute ~0 and value/sample decide. With 'zero' keep --crush-prior "
                              "large or selection-biased thin lines slip through.")
+    parser.add_argument("--crush-won-cp", type=int, default=0,
+                        help="Make positions already WINNING for a side crush-absorbing "
+                             "for that side: no move out of one earns crush, and nothing "
+                             "propagates through it. The winpos histogram records the "
+                             "first winning position after an edge rather than the first "
+                             "crossing into one, so without this every move played in an "
+                             "already-won game is credited as a crush one move later "
+                             "(measured: 81.7%% of games through edges from >= +300 "
+                             "positions). Must equal the threshold the --crush-db "
+                             "histogram was built at (300 for *_t300 -- checked when the "
+                             "name carries it). Needs --eval-db; positions without an "
+                             "eval stay unmasked. 0 (default) = off, an exact no-op.")
     parser.add_argument("--memo-weight", type=float, default=0.0,
                         help="Penalty weight on propagated MEMORIZATION cost in selection. "
                              "Memo cost of a move = its shrunk deviation penalty (value lost "
@@ -2247,6 +2463,20 @@ def main():
     parser.add_argument("--learn-reach-pivot", type=float, default=0.02,
                         help="Reach fraction at/above which a node counts as fully COMMON "
                              "(δ = --learn-delta-main). Default 0.02 (2%% of games).")
+    parser.add_argument("--recall-midpoint", type=float, default=0.0,
+                        help="IMPERFECT RECALL. Per-game reach at which we remember a "
+                             "booked move half the time. 0 (default) disables the model "
+                             "entirely and is an exact no-op. Requires --plan-reach. "
+                             "Typical: 0.001 (a position seen once per 1000 games is a "
+                             "coin flip). UNCALIBRATED -- sweep it, do not trust one value.")
+    parser.add_argument("--recall-power", type=float, default=2.0,
+                        help="Steepness of the recall curve. Higher = sharper cutoff "
+                             "around --recall-midpoint. Default 2.0.")
+    parser.add_argument("--recall-default-reach", type=float, default=0.0,
+                        help="Reach assumed for nodes ABSENT from --plan-reach (beyond "
+                             "its --max-our-moves / --epsilon bounds). Default 0.0, i.e. "
+                             "no recall -- consistent with that export pruning at 1e-6, "
+                             "three decades below a 0.001 midpoint.")
     parser.add_argument("--learn-ctx-pivot", type=float, default=0.05,
                         help="Context share (fraction of all games under the opponent's "
                              "first move) at/above which a context's OWN habits fully "
@@ -2270,6 +2500,18 @@ def main():
     parser.add_argument("--event",       help="Filter to a single event")
     parser.add_argument("--elo-band",    type=int, help="Filter to a single elo band")
     args = parser.parse_args()
+
+    if args.crush_won_cp > 0:
+        if not args.eval_db:
+            sys.exit("FATAL: --crush-won-cp needs --eval-db: whether a position is "
+                     "already winning is read from its engine eval.")
+        # Masking at a different cp than the histogram counted its events at would
+        # absorb the wrong positions with no error anywhere downstream.
+        _t = re.search(r"_t(\d+)\.parquet$", Path(args.crush_db or "").name)
+        if _t and int(_t.group(1)) != args.crush_won_cp:
+            sys.exit(f"FATAL: --crush-won-cp {args.crush_won_cp} disagrees with the "
+                     f"threshold {Path(args.crush_db).name} was built at "
+                     f"({_t.group(1)} cp).")
 
     input_path  = Path(args.input)
     output_path = Path(args.output)
@@ -2356,9 +2598,16 @@ def main():
               + (f"  (γ={args.crush_gamma}, imm-window={args.crush_imm_window})"
                  if args.crush_mode == "relative-propagated" else f"  (horizon={args.crush_horizon})"))
         print(f"Crush prior:       {args.crush_prior}  (baseline={args.crush_baseline})")
+    if args.crush_won_cp > 0:
+        print(f"Crush won-cp:      {args.crush_won_cp}  (positions already winning at this "
+              f"threshold are crush-absorbing)")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
+    if args.recall_midpoint > 0 and not args.plan_reach:
+        sys.exit("FATAL: --recall-midpoint needs --plan-reach: the recall model is a "
+                 "function of per-node reach, which only the pass-1 plan export "
+                 "carries. Run plan_consistency_report.py --export-prefix first.")
     if args.plan_prior or args.plan_reach:
         if not (args.plan_prior and args.plan_reach):
             sys.exit("FATAL: --plan-prior and --plan-reach must be given together "
@@ -2446,6 +2695,9 @@ def main():
     if args.augment_engine and full_eval_hashes is None:
         print("WARNING: --augment-engine set but no usable --eval-db — augmentation "
               "will no-op (needs the full eval DB).")
+    if args.crush_won_cp > 0 and not eval_lookup:
+        # A missing DB only WARNs above; for this flag that would be a silent no-op.
+        sys.exit("FATAL: --crush-won-cp is set but no evals were loaded.")
 
     stats = pl.read_parquet(input_path)
     stats = stats.filter(pl.col("elo_band").is_not_null())
@@ -2488,7 +2740,25 @@ def main():
             keys = ["event", "elo_band", "parent_hash", "move_san"]
             cdb_sql = str(cdb_path).replace("\\", "/")
             con = duckdb.connect()
-            con.execute("SET preserve_insertion_order=false; SET memory_limit='16GB';")
+            # The crush histogram outgrew this connection's original settings
+            # (16GB, all threads, no spill dir). The 2013-2026 DB is 1.20 B rows /
+            # 12.84 GB and this GROUP BY died with "could not allocate block of
+            # size 256.0 KiB (14.9 GiB/14.9 GiB used)" on two of three targets
+            # (2026-08-25); the third passed, so it was marginal, not impossible.
+            # Per CLAUDE.md that error is a genuinely exhausted limit, so: a larger
+            # budget, fewer threads (smaller per-thread hash partitions), and -- the
+            # part that turns a hard crash into a slow success -- a real spill
+            # directory, which this connection never had. con.close() below runs
+            # before backward induction, so this budget does not stack with Stage
+            # 3's own peak (76.8 GB measured, against a 105 GB chain abort).
+            con.execute("SET preserve_insertion_order=false; "
+                        "SET memory_limit='32GB'; SET threads=6;")
+            _spill = os.environ.get("CHESS_DUCKDB_TMP", "D:/chess_duckdb_tmp")
+            if Path(_spill).is_dir():
+                con.execute(f"SET temp_directory='{_spill}'")
+            else:
+                print(f"WARN: spill dir {_spill} missing; crush GROUP BY cannot "
+                      f"offload and may OOM (set CHESS_DUCKDB_TMP)", flush=True)
             if args.crush_mode == "relative-propagated":
                 # Relative histogram (move_bucket = full moves from THIS position to the
                 # decisive end). Per edge precompute, for both colours:
@@ -2581,6 +2851,7 @@ def main():
             crush_gamma=args.crush_gamma,
             crush_imm_window=args.crush_imm_window,
             crush_baseline=args.crush_baseline,
+            crush_won_cp=args.crush_won_cp,
             force_root_move=args.force_root_move,
             require_eval=args.require_eval,
             memo_weight=args.memo_weight,
@@ -2612,6 +2883,9 @@ def main():
             learn_reach_pivot=args.learn_reach_pivot,
             learn_ctx_pivot=args.learn_ctx_pivot,
             learn_depth_horizon=args.learn_depth_horizon,
+            recall_midpoint=args.recall_midpoint,
+            recall_power=args.recall_power,
+            recall_default_reach=args.recall_default_reach,
         )
         elapsed = time.time() - t1
 
