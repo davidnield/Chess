@@ -147,14 +147,20 @@ check("a cycle through the root does not empty the book",
       f"booked={sorted(rroot['booked'])}, "
       f"realized={rroot['root_value_realized']}")
 
-# MATCH-DISTINCT. The per-path overcount above means a book asked for N
-# decisions delivers fewer; the truncation baseline has no such gap, so a
-# like-for-like Phase D comparison needs the DP to actually reach N. Measured
-# on the <=2024 white pool: 17 of 20, 305 of 400, 817 of 1000.
+# MATCH-DISTINCT. A book asked for N decisions delivers fewer; the truncation
+# baseline has no such gap, so a like-for-like Phase D comparison needs the DP
+# to actually reach N. Measured on the <=2024 white pool: 17 of 20, 305 of 400,
+# 817 of 1000.
 #
-# The diamond at the top of this file is the minimal case: 2 path-charged units
-# buy 2 distinct decisions (root + T), and T is charged twice, so asking for 3
-# distinct must charge more than 3.
+# The diamond at the top of this file exercises the per-path overcount, which
+# is what makes the SEARCH necessary in principle: 2 path-charged units buy 2
+# distinct decisions (root + T), T is charged twice, so asking for 3 distinct
+# must charge more than 3. On the real pool that mechanism has never actually
+# fired -- all 104 books written to _budget have spent_paths == spent_distinct
+# -- and the production gap is unspent budget from indivisible chain atoms
+# instead (see match_distinct's docstring, corrected 2026-09-08). Both produce
+# "asked for N, got fewer" and the search fixes both, so this fixture stays:
+# it is the only place the path-charging branch is covered at all.
 from budget_core import flat_curve, match_distinct              # noqa: E402
 
 r2, ch2, ok2, sp2 = match_distinct(g, curves, 2, 10)
@@ -202,6 +208,195 @@ check("probe curves cannot touch a book that meets its target unprobed",
       chp == ch2 and spp == sp2 and okp == ok2
       and rp["booked"] == r2["booked"],
       f"charged {chp} vs {ch2}, booked {spp} vs {sp2}")
+
+# --- the exactness scan over the range GROWTH skips (2026-09-08) -----------
+# The search grows probes by 1.5x, so a target of 20 jumps to 30 and the
+# bisection then narrows only inside [30, 32]: budgets 21..29 are never
+# extracted. fixdp_white_b20 booked 21 moves for a target of 20 because of that
+# blind spot, not because no exact budget existed -- an unequal footprint in
+# the one comparison the ladder exists to make.
+#
+# Driven by a TABLE rather than a graph on purpose. The failure needs the
+# distinct count to be non-monotone in the charged budget (30 and 31 booking
+# FEWER than 32) and to skip the target entirely at the bracket; no fixture
+# small enough to hand-verify does both, and the property under test belongs to
+# the SEARCH, not to any graph. The table mirrors the measured white pool: 23
+# is dp_white_b20's real charged budget, 32 is fixdp_white_b20's.
+import budget_core as _bc                                       # noqa: E402
+
+_REAL_EXTRACT = _bc.extract_book
+
+
+def _table_search(table, target, bmax, scan_cap=64):
+    """Run match_distinct against `table` (charged budget -> distinct count).
+
+    Returns (charged, spent, hit, probed_budgets)."""
+    probed = []
+
+    def stub(g_, curves_, budget, fixed_policy=None, force_booked=None):
+        probed.append(budget)
+        return {"spent_distinct": table[budget], "booked": {}, "b": budget}
+
+    _bc.extract_book = stub
+    try:
+        r, charged, hit, spent = _bc.match_distinct(
+            None, {}, target, bmax, scan_cap=scan_cap)
+    finally:
+        _bc.extract_book = _REAL_EXTRACT
+    return charged, spent, hit, probed, r
+
+
+# 20 books 17 (the flag must engage); 30 and 31 book FEWER than the target
+# while 32 clears it, so the bracket lands on an overshoot of 21; 23 is the
+# smallest budget that lands exactly on 20.
+TBL = {20: 17, 21: 18, 22: 19, 23: 20, 24: 21, 25: 20, 26: 22,
+       27: 21, 28: 22, 29: 23, 30: 19, 31: 19, 32: 21}
+
+ch, sp, hit, probed, _r = _table_search(TBL, 20, 32)
+check("exactness scan finds the target the growth phase jumped over",
+      sp == 20 and hit, f"charged {ch}, booked {sp}, hit={hit}")
+check("the scan takes the SMALLEST charged budget that lands exactly",
+      ch == 23, f"charged {ch} (25 also books 20, 23 is smaller)")
+check("the bracket really did overshoot, so the scan is what fixed it",
+      TBL[32] == 21 and 23 not in (30, 31, 32),
+      "bisection settles on 32 -> 21 distinct")
+check("budgets skipped by the 1.5x growth are the ones now probed",
+      23 in probed and 30 in probed,
+      f"probed {sorted(set(probed))}")
+
+# scan_cap 0 must reproduce the OLD answer exactly -- the cap is a budget on
+# extractions, not a change of verdict, and an inexact book stays visible.
+ch0, sp0, hit0, _p0, _r0 = _table_search(TBL, 20, 32, scan_cap=0)
+check("scan_cap 0 falls back to the smallest-known-good bracket",
+      ch0 == 32 and sp0 == 21 and hit0,
+      f"charged {ch0}, booked {sp0}")
+check("a capped-out search still reports the overshoot to the caller",
+      sp0 > 20, f"booked {sp0} for target 20")
+
+# no exact hit anywhere: every budget skips 20. Must not loop, must return the
+# smallest known-good, and must still say spent > target.
+TBL_NONE = dict(TBL)
+TBL_NONE.update({23: 21, 25: 21, 21: 18, 22: 19})
+chn, spn, hitn, _pn, _rn = _table_search(TBL_NONE, 20, 32)
+check("no exact budget exists -> smallest-known-good, still flagged inexact",
+      spn > 20 and hitn, f"charged {chn}, booked {spn}")
+
+# probes are cached: the scan must not re-extract a budget the bisection
+# already paid for.
+_chd, _spd, _hitd, probed_d, _rd = _table_search(TBL, 20, 32)
+check("probe results are cached, never extracted twice",
+      len(probed_d) == len(set(probed_d)),
+      f"{len(probed_d)} extractions, {len(set(probed_d))} distinct budgets")
+
+# --- an exact hit ABOVE the bracket (2026-09-08) ---------------------------
+# The first version of the scan walked only [target+1, hi) and still missed the
+# production case. Non-monotonicity cuts both ways: measured on dp/white with
+# --scan-distinct, target 6 brackets at charged 12 booking NINE, budgets 7..11
+# book 4/3/3/3/3, and charged 14 books exactly 6 -- above the bracket, and at a
+# higher root value than the 9-move book. This table is that measurement.
+DPW = {6: 3, 7: 4, 8: 3, 9: 3, 10: 3, 11: 3, 12: 9, 13: 10, 14: 6, 15: 12,
+       16: 13, 17: 12, 18: 13, 19: 16, 20: 17, 21: 16, 22: 17, 23: 17,
+       24: 18, 25: 19, 26: 20, 27: 20, 28: 20, 29: 21, 30: 21, 31: 23,
+       32: 23}
+
+ch, sp, hit, probed, _r = _table_search(DPW, 6, 32)
+check("an exact hit ABOVE the bracket is found, not just below it",
+      sp == 6 and ch == 14, f"charged {ch}, booked {sp}")
+check("the bracket alone would have overshot by 3",
+      DPW[12] == 9, "charged 12 books 9 for a target of 6")
+check("budgets above the bracket are actually probed",
+      any(b > 12 for b in probed), f"probed {sorted(set(probed))}")
+
+# ... and when the footprint genuinely does not exist, no budget in range
+# lands on it and the caller still sees the overshoot. fixdp/white, target 6:
+# the count steps 8 -> 5 then 9 -> 7 and never equals 6 anywhere in 1..36.
+FIXW = {6: 3, 7: 4, 8: 5, 9: 7, 10: 7, 11: 8, 12: 9, 13: 10, 14: 11, 15: 12,
+        16: 13, 17: 14, 18: 15, 19: 16, 20: 13, 21: 13, 22: 14, 23: 13,
+        24: 14, 25: 14, 26: 14, 27: 17, 28: 17, 29: 19, 30: 19, 31: 19,
+        32: 21}
+check("6 really is absent from fixdp/white's reachable footprints",
+      6 not in FIXW.values(), f"reachable {sorted(set(FIXW.values()))}")
+chf, spf, hitf, _pf, _rf = _table_search(FIXW, 6, 32)
+check("an unreachable footprint reports the overshoot rather than faking it",
+      spf > 6 and hitf, f"charged {chf}, booked {spf}")
+
+# the scan must not run at all when the bracket already lands exactly --
+# otherwise it would trade the smallest known-good budget for a larger one.
+EXACT = dict(FIXW); EXACT[9] = 6
+che, spe, _hite, probede, _re = _table_search(EXACT, 6, 32)
+check("an exact bracket short-circuits, keeping the smallest charged budget",
+      spe == 6 and che == 9 and max(probede) <= 9,
+      f"charged {che}, booked {spe}, max probe {max(probede)}")
+
+# --- which curve set answers a probe (2026-09-08) --------------------------
+# Inflating a hull only coarsens it, so the plain set is strictly better
+# wherever it reaches. Probing everything on the inflated set cost exactness on
+# the real pool: dp/white b=6 came back charged 12 for NINE distinct off the
+# coarse hull. Every probe at or below plain_bmax must read the plain curves.
+PLAIN, PROBE = {"which": "plain"}, {"which": "probe"}
+
+
+def _which_curves(target, bmax, plain_bmax, table_plain, table_probe):
+    """Returns (charged, spent, [(budget, 'plain'|'probe'), ...])."""
+    used = []
+
+    def stub(g_, curves_, budget, fixed_policy=None, force_booked=None):
+        tag = curves_.get("which", "plain")
+        used.append((budget, tag))
+        tbl = table_plain if tag == "plain" else table_probe
+        return {"spent_distinct": tbl[budget], "booked": {}, "b": budget}
+
+    _bc.extract_book = stub
+    try:
+        _r, charged, _hit, spent = _bc.match_distinct(
+            None, PLAIN, target, bmax, probe_curves=PROBE,
+            plain_bmax=plain_bmax)
+    finally:
+        _bc.extract_book = _REAL_EXTRACT
+    return charged, spent, used
+
+
+# The fine set steps one at a time and reaches 6 at budget 11; the coarse set
+# jumps 3 -> 9 and never lands on 6, which is the production failure.
+FINE = {6: 3, 7: 3, 8: 4, 9: 4, 10: 5, 11: 6, 12: 7, 13: 8, 14: 9,
+        15: 9, 16: 10, 17: 11, 18: 12, 19: 13, 20: 14}
+COARSE = {b: (3 if b < 12 else 9) for b in range(6, 33)}
+
+ch, sp, used = _which_curves(6, 32, 20, FINE, COARSE)
+check("a probe within the plain set's range reads the PLAIN curves",
+      all(tag == "plain" for b, tag in used if b <= 20),
+      f"used {used}")
+check("the finer curves let the search land exactly on the target",
+      sp == 6 and ch == 11, f"charged {ch}, booked {sp}")
+
+# above plain_bmax the plain set cannot express the budget, so the inflated
+# set must still be consulted -- otherwise the search has nowhere to go.
+DEEP_FINE = {b: 2 for b in range(6, 21)}
+DEEP_COARSE = {b: (2 if b < 30 else 6) for b in range(6, 33)}
+ch2, sp2, used2 = _which_curves(6, 32, 20, DEEP_FINE, DEEP_COARSE)
+check("above plain_bmax the search falls back to the inflated curves",
+      any(tag == "probe" for b, tag in used2 if b > 20),
+      f"used {sorted(set(used2))}")
+check("the fallback still reaches a target the plain set cannot",
+      sp2 == 6 and ch2 >= 30, f"charged {ch2}, booked {sp2}")
+
+# plain_bmax omitted = the old behaviour, every probe on the inflated set.
+_bc_used = []
+
+
+def _stub_none(g_, curves_, budget, fixed_policy=None, force_booked=None):
+    _bc_used.append(curves_.get("which", "plain"))
+    return {"spent_distinct": COARSE[budget], "booked": {}, "b": budget}
+
+
+_bc.extract_book = _stub_none
+try:
+    _bc.match_distinct(None, PLAIN, 6, 32, probe_curves=PROBE)
+finally:
+    _bc.extract_book = _REAL_EXTRACT
+check("omitting plain_bmax keeps every probe on the inflated set",
+      all(w == "probe" for w in _bc_used[1:]) and _bc_used[0] == "plain",
+      f"first={_bc_used[0]}, rest={set(_bc_used[1:])}")
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

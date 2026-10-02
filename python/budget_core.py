@@ -963,16 +963,41 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
 
 def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
                    bmax: int, fixed_policy: dict[int, str] | None = None,
-                   probe_curves: dict[int, Curve] | None = None
+                   probe_curves: dict[int, Curve] | None = None,
+                   scan_cap: int = 64, plain_bmax: int | None = None
                    ) -> tuple[dict, int, bool, int]:
-    """Extract a book holding at least `target` DISTINCT decisions.
+    """Extract a book holding EXACTLY `target` DISTINCT decisions where one is
+    reachable, and at least `target` otherwise.
 
-    The curves charge a transposed position once per PATH that reaches it while
-    extraction books it once, so a book asked for N decisions delivers fewer.
-    Measured on the <=2024 white pool: 17 of 20, 305 of 400, 817 of 1000 (15%,
-    24%, 18%). The truncation baseline has no such gap and always books its full
-    budget, so scoring "b=400 dp" against "b=400 trunc" compares 305 memorised
-    moves against 400 -- size rather than method, and biased AGAINST the DP.
+    A book asked for N decisions delivers fewer. Measured on the <=2024 white
+    pool: 17 of 20, 305 of 400, 817 of 1000 (15%, 24%, 18%). The truncation
+    baseline has no such gap and always books its full budget, so scoring
+    "b=400 dp" against "b=400 trunc" compares 305 memorised moves against 400 --
+    size rather than method, and biased AGAINST the DP.
+
+    WHY THE GAP EXISTS -- corrected 2026-09-08, this docstring had it wrong.
+    It used to say the curves charge a transposed position once per PATH while
+    extraction books it once, so the spend inflates past the footprint. That is
+    not what happens: across all 104 books ever written to _budget (the two
+    that produced the numbers above included) `spent_paths == spent_distinct`
+    in EVERY one, so no booked set has ever contained a node reached by two
+    booked paths and per-path charging has never inflated one. The gap is
+    UNSPENT budget, not double-charged budget. Atoms are indivisible and chain
+    compression fuses a prefix and its payoff into a single cost-k atom, so a
+    budget that cannot afford the next whole chain leaves the remainder on the
+    table -- fixdpC_white_b20 books 13 of 20 with the curve's own value at
+    charged equal to the realised value, i.e. the curve agrees there is nothing
+    affordable left to buy.
+
+    The distinction matters because it points at a different lever. Per-path
+    charging would be fixed by a true DAG-cost DP (the plan's out-of-scope
+    item); unspent budget from lumpy atoms is about atom granularity, and this
+    flag -- paying a larger charged budget until the next chain becomes
+    affordable -- is the direct remedy for it. It also means the flag makes the
+    DP buy chains it had priced as not-worth-it at the nominal budget, which is
+    correct for an equal-footprint comparison (trunc books its full N whether
+    or not the last moves earn their place) but is a real handicap to state
+    when the arms are ranked.
 
     So search for the smallest path-charged budget whose extraction books
     `target` distinct decisions: grow geometrically to bracket it, then bisect.
@@ -982,13 +1007,20 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     TWO CURVE SETS, AND WHY. `curves` must be built to the caller's PLAIN bmax
     and is what the target extraction uses, so a book that already meets its
     target comes back bit-identical to the same build without this flag -- the
-    no-op contract. `probe_curves` (built to a larger bmax) is consulted ONLY
-    for probes above the target, which need budgets the plain curves cannot
-    express. Before 2026-08-31 a single inflated set served both and the flag
-    silently changed books it never probed: a hull is global, so admitting far
-    points fuses the cheap early atoms away (see the module note on
-    curve_from_points and scratch/python/match_distinct_repro.py). Passing no
-    probe_curves confines the search to the plain set's range.
+    no-op contract. `probe_curves` (built to a larger bmax) is consulted only
+    where the plain set cannot reach. Before 2026-08-31 a single inflated set
+    served both and the flag silently changed books it never probed: a hull is
+    global, so admitting far points fuses the cheap early atoms away (see the
+    module note on curve_from_points and
+    scratch/python/match_distinct_repro.py). Passing no probe_curves confines
+    the search to the plain set's range.
+
+    `plain_bmax` says how far the plain set reaches, and every probe at or
+    below it reads the plain curves rather than the inflated ones -- see
+    curves_at(). Without it (before 2026-09-08) EVERY probe above the target
+    went to the coarse set even when the fine one covered that budget, which
+    cost exactness outright: dp/white b=6 came back charged 12 for nine
+    distinct off the coarse hull. Pass it whenever probe_curves is passed.
 
     Returns (result, charged_budget, hit_target, spent_distinct). hit_target is
     `spent >= target`; compare `spent == target` for an EQUAL-FOOTPRINT claim,
@@ -999,7 +1031,48 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     one (20->17, 21->18, 22->19, 23->20 on the white pool) but the allocator can
     reshuffle: the same b20 run bracketed 30 and 32 while 31 booked FEWER than
     20. Bisection therefore returns a smallest-KNOWN-good budget, not a proven
-    minimum, and can overshoot the target when the count skips it.
+    minimum.
+
+    THE BRACKET IS WHY THAT USED TO OVERSHOOT, IN TWO WAYS. Probes grow by
+    1.5x, so a target of 20 jumps straight to 30 and the bisection then only
+    narrows inside [30, 32] -- budgets 21..29 are never extracted. And because
+    the count is not monotone, an exact hit sits ABOVE the smallest known-good
+    budget as readily as below it, so stopping the search at the bracket misses
+    those too. A capped ascending LINEAR scan over the whole of
+    [target+1, bmax] now runs whenever the bracket overshoots (it cannot be a
+    bisection -- non-monotone), and the smallest charged budget landing exactly
+    on the target wins. Past `scan_cap` extra extractions the previous
+    smallest-known-good answer stands and the caller still sees
+    `spent > target`, so an inexact book stays visible rather than becoming a
+    silent unequal-footprint comparison.
+
+    MEASURED, with --scan-distinct on the <=2024 white pool 2026-09-08 -- do
+    not re-derive this by intuition, two plausible-sounding guesses about it
+    were wrong before it was measured:
+
+      dp/white     charged 12 -> 9 distinct, 14 -> 6, 19 -> 16, 20 -> 17
+      fixdp/white  charged  8 -> 5 distinct,  9 -> 7, 19 -> 16, 20 -> 13
+
+    Three things follow. (1) The count FALLS as budget rises -- fixdp/white 19
+    books 16 and 20 books 13 -- while root value stays monotone (0.540650 ->
+    0.541724), because the DP maximises value and buys one expensive deep chain
+    over several cheap shallow ones. Non-monotone footprint is a consequence of
+    correct optimisation, not a defect. (2) An exact hit can therefore need a
+    LARGER charged budget than the bracket: dp/white target 6 is unreachable
+    below 12 but sits at 14, with a higher root value than the 9-move book.
+    (3) Some footprints do not exist at all. fixdp/white reaches
+    {1,2,3,4,5,7..17,19,21,22} over charged 1..36 -- 6, 18 and 20 are absent,
+    so no search can deliver a 6-move or 20-move fixdp/white book and an
+    equal-footprint comparison at those rungs is simply not available for that
+    arm. Callers must read `spent_distinct` and decide; this function will not
+    fabricate a book by trimming one the DP never chose.
+
+    scan_cap 64 covers the {1,2,3,6,10,20} ladder completely -- the widest
+    skipped range there is 21..31. It does NOT cover the 400/4000/40000 rung,
+    where growth jumps 400 -> 600 and leaves 199 budgets unprobed: the scan
+    would reach 464 and stop. Raise the cap or tighten the 1.5x growth when
+    that rung is actually run, and size it from a measured distinct-vs-charged
+    curve rather than by guessing which end the exact hit sits at.
     """
     res = extract_book(g, curves, target, fixed_policy=fixed_policy)
     if res["spent_distinct"] >= target or target >= bmax:
@@ -1009,12 +1082,41 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     # Probes only, and only above the target -- see the docstring.
     pc = probe_curves if probe_curves is not None else curves
 
+    seen: dict[int, dict] = {}
+
+    def curves_at(b: int) -> dict[int, Curve]:
+        """The FINEST curve set that can express budget b.
+
+        Inflating a hull can only coarsen it (the module note on
+        curve_from_points), so the plain set is strictly better wherever it
+        reaches -- smaller atoms, finer distinct counts, and a better-valued
+        book at the same charged budget. Probing everything on the inflated
+        set was costing exactness: on the 2026-09-08 white rebuild dp/white
+        b=6 came back charged 12 for NINE distinct because the coarse hull's
+        counts jumped 3 -> 9, while the plain curves step 6 -> 3 and 20 -> 17
+        with room in between for a 6 to exist.
+
+        It also makes `charged` mean the same thing in both book sets: a probe
+        at budget b now reads the same curves the flag-OFF build at budget b
+        reads, so the matched-CHARGED set and a flag-on book charged the same
+        amount are answering the same question.
+        """
+        if plain_bmax is not None and b <= plain_bmax:
+            return curves
+        return pc
+
+    def probe_at(b: int) -> dict:
+        if b not in seen:
+            seen[b] = extract_book(g, curves_at(b), b,
+                                   fixed_policy=fixed_policy)
+        return seen[b]
+
     lo, best_lo = target, res           # books < target
     hi, best_hi = -1, None              # books >= target
     probe = target
     while probe < bmax:
         probe = min(bmax, max(probe + 1, int(probe * 1.5)))
-        r = extract_book(g, pc, probe, fixed_policy=fixed_policy)
+        r = probe_at(probe)
         if r["spent_distinct"] >= target:
             hi, best_hi = probe, r
             break
@@ -1024,11 +1126,38 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
 
     while hi - lo > 1:
         mid = (lo + hi) // 2
-        r = extract_book(g, pc, mid, fixed_policy=fixed_policy)
+        r = probe_at(mid)
         if r["spent_distinct"] >= target:
             hi, best_hi = mid, r
         else:
             lo = mid
+
+    # Exactness scan (see docstring). Ascending, so the smallest charged budget
+    # that lands exactly wins; a linear walk rather than a bisection because the
+    # count is not monotone; capped so the big-budget rung cannot turn into
+    # thousands of extractions.
+    #
+    # The walk runs to BMAX, not to `hi`. Stopping at the bracket was the first
+    # version of this and it still missed the case it was written for: because
+    # the count is not monotone, an exact hit lives ABOVE the smallest
+    # known-good budget as readily as below it. Measured 2026-09-08 on dp/white
+    # with --scan-distinct, target 6: the bracket settles at charged 12 booking
+    # NINE, budgets 7..11 book 4/3/3/3/3, and charged 14 books exactly 6 -- at
+    # a HIGHER root value (0.545478) than the 9-move book it was going to
+    # return (0.543017). Paying a larger charged budget to land on the target
+    # is the whole point of the flag; the charged number is a knob, the
+    # footprint is the deliverable.
+    if best_hi["spent_distinct"] > target:
+        spent_probes = 0
+        for b in range(target + 1, bmax + 1):
+            if b not in seen:
+                if spent_probes >= scan_cap:
+                    break
+                spent_probes += 1
+            r = probe_at(b)
+            if r["spent_distinct"] == target:
+                return r, b, True, target
+
     return best_hi, hi, True, best_hi["spent_distinct"]
 
 

@@ -294,6 +294,13 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--mem", default="24GB")
     ap.add_argument("--tmp-dir", default="D:/chess_duckdb_tmp")
+    ap.add_argument("--scan-distinct", default="",
+                    help="DIAGNOSTIC 'LO:HI'. Build the curves, then print the "
+                         "distinct decision count for every charged budget in "
+                         "[LO, HI] and exit WITHOUT writing books. This is the "
+                         "measurement that says whether a footprint target is "
+                         "reachable at all or whether the distinct count skips "
+                         "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
 
@@ -470,6 +477,28 @@ def main() -> int:
     cap = widest[g.root].capacity if g.root in widest else 0
     log(f"  root capacity {cap:,} (path-sum)")
 
+    # Diagnostic: the distinct-vs-charged curve itself. --match-distinct's
+    # search assumes it can find a charged budget landing exactly on a target,
+    # and when it cannot the honest question is whether the count SKIPS that
+    # target or the search merely failed to look. Guessing at that from the
+    # outside cost two wrong hypotheses on 2026-09-08; this prints the answer.
+    # Writes nothing and returns before the book loop.
+    if a.scan_distinct:
+        lo_s, hi_s = (int(x) for x in a.scan_distinct.split(":"))
+        log(f"scan-distinct {lo_s}..{hi_s} on {'plain' if hi_s <= bmax else 'plain+probe'} curves")
+        log(f"  {'charged':>9}{'distinct':>10}{'paths':>8}{'root value':>14}  curves")
+        prev = None
+        for bb in range(lo_s, hi_s + 1):
+            cs = curves if bb <= bmax else widest
+            r = bc.extract_book(g, cs, bb, fixed_policy=fixed)
+            d = r["spent_distinct"]
+            mark = "" if prev is None or d == prev else f"   <- +{d - prev}"
+            log(f"  {bb:>9}{d:>10}{r['spent_paths']:>8}"
+                f"{r['root_value_realized']:>14.6f}  "
+                f"{'plain' if bb <= bmax else 'probe'}{mark}")
+            prev = d
+        return 0
+
     for b in budgets:
         out = outs[b]
         if b not in todo:
@@ -493,7 +522,7 @@ def main() -> int:
         elif a.match_distinct:
             res, charged, matched, spent = bc.match_distinct(
                 g, curves, b, curve_bmax, fixed_policy=fixed,
-                probe_curves=probe_curves)
+                probe_curves=probe_curves, plain_bmax=bmax)
             # matched is `spent >= b`; the equal-footprint comparison needs
             # `spent == b`, and the two came apart in the wild (fixdp_white_b20
             # booked 21 for a target of 20 and reported success). Say which.
