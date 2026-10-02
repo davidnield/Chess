@@ -76,6 +76,8 @@ At 13:00 the last check was still running: whether the sampled child-only hashes
 
 **Follow-up.** Move that check into a child process too, as already done for the raw scans and verify_book's scan.
 
+**Result.** The check passed at 16:31: ALL PASS, 13 checks. The child-process version is follow-up 4 below.
+
 ## Pilot numbers
 
 | | |
@@ -139,7 +141,139 @@ At 13:00 the last check was still running: whether the sampled child-only hashes
    - Both fixes matter only at full scale.
 6. **NTFS case-insensitivity.** `_DONE` and a `_done/` sentinel directory collide in the output dir, so per-bucket sentinels live in `_bucket_done/`.
 
+## Follow-ups (2026-10-01 to 10-02)
+
+The four follow-ups are:
+1. an `eval_arrays` export;
+2. Stage 3 on the new DB;
+3. retiring `unified_eval_db`;
+4. a fast child-only check.
+
+Items 1, 2 and 4 are done. Item 3 waits on the owner's A/B decision below.
+
+### 4. The child-only check in fresh processes (`verify_evals.py` @ 5bc7aec)
+
+- `book_index` walks `ps/` once and holds it to each bucket's `_done` file list.
+- `_member_scan` runs about 8 book buckets per fresh child process, with the target hashes passed in as a temp table.
+- Timed with `--child-check-only 20000` on the full DB: **394 s, PASS**. The in-process version took about 6.5 h.
+- `_test_verify_evals.py` gains a negative case: it drops the book rows that carry a child-only hash and expects the check to FAIL.
+- Pinned at `D:\chess\bin\verify_evals_5bc7aec\`. `run_eval_build.ps1` now has its own `$vsha`; the old version is backed up as `run_eval_build.ps1.bak_0c97b27`.
+
+### 1. Eval arrays from the eval DB directory (`eval_arrays.py`, `eval_arrays_build.py`)
+
+**Format.** The on-disk format and API are unchanged:
+- a globally sorted `eval_hash.npy` (int64) and `eval_cp.npy` (int16);
+- `MISSING`, `open_eval_arrays` and `lookup_evals` work as before.
+
+Every existing consumer works on the new folder.
+
+**Fingerprint.** The `eval-db-dir-v1` fingerprint covers:
+- `_DONE`;
+- the sha256 of `_manifest.parquet` and `_build.meta.json`;
+- a digest of the 512 bucket files;
+- `source_rows`;
+- the book's `_collisions.parquet` and `_book.meta.json`.
+
+**Build.** Built at `D:\chess\eval_arrays_full` by `D:\chess\bin\eval_arrays_3af185e\`, in 6,458 s: mates 1,066 s, pass 1 3,881 s, pass 2 514 s.
+
+| | |
+|---|---|
+| Entries | 6,033,226,551; 48.3 GB of hashes and 12.1 GB of evals |
+| Excluded | 21 hashes (23 rows), all `book_collision`. None are `hash_ambiguous` or DB duplicates. |
+| Book checkmates added | 100,154,190 at ±2000. The sign comes from ply parity, checked by python-chess replay on a 20K sample. |
+| Canonical pool coverage | 26,460,667 of 26,472,943 hashes (99.95%) |
+
+**Surprise: 98 checkmate positions carried bogus DB values.** These are fishnet classical cp values of 10–58, each with n = 1, on positions python-chess confirms are checkmate.
+- The builder now reads the DB EPD of any mated hash whose DB value disagrees, and checks it with python-chess.
+  - A real checkmate takes the mate value (98 overridden).
+  - Anything else is excluded as `mate_hash_collision` (0 cases).
+- The DB itself is unchanged. `eval_full` serves those 98 values; only the arrays correct them.
+
+The build validates itself before writing the meta:
+- 1M sampled DB rows match the lookup;
+- excluded hashes return MISSING;
+- mates are ±2000.
+
+`_test_eval_arrays.py`: 28/28 PASS. `D:\chess\eval_full` must now be kept, because the arrays verify against it.
+
+### 2. Stage 3 on the arrays (branch `stage3-eval-full` @ 6bb9bd5, off `budget-books` d71dc23)
+
+**Loader.** `load_evals()` accepts the legacy parquet (verbatim legacy path) or an arrays directory.
+- Arrays: a dict for the DAG, plus the memmap for engine augmentation.
+- An eval-DB directory is refused with the build command.
+- Expected scores come from one Polars sigmoid through a lookup table.
+
+`build_sharp_reps.py` gains `--out-dir` and `--pass1-only`, and its `.meta.json` records `eval_source`.
+
+**Checks:**
+- **(b) Loader equivalence**, old DB as parquet vs as arrays: bit-identical, 24,038,615 dict entries and 399,998,944 augmentation entries. Load takes 52 s from arrays vs 238 s from parquet.
+- **(c) No-op.** The refactor on the old DB differs from the 2026-08-25 canonical pass 1 at 241 (white) and 250 (black) best moves.
+  - Attribution: d71dc23 *without* the refactor gives the same white output (tolerance 0, crush wobble ≤ 7e-16). So the refactor is a no-op, and **the canonical reps no longer reproduce from current code**.
+  - The flags match the canonical meta.
+  - The likely cause is 2ad53d2 (shared aux/leaf valuation, 2026-09-04), the commit that also voided the pre-09-08 budget books. The two 10-01 commits only add default-off flags. Not bisected.
+- **(d) A/B**, the same code (`budget-books` plus the refactor) on both sides. A = old DB (`E:\chess\repertoire\_evalnoop`, pass 1). B = new arrays (`E:\chess\repertoire\_evaldb_ab`, full build, 270.6 min).
+
+### The A/B (pass 1, `position_stats_pooled_ge1800_2013_2026_brc`, 17,788,308 positions)
+
+| | white A | white B | black A | black B |
+|---|---|---|---|---|
+| Positions with an eval | 96.9% | 100.0% | 96.9% | 100.0% |
+| Our-turn positions with a best move | 8,177,227 | 8,842,253 | 8,262,180 | 8,936,181 |
+| Engine-augmented recommendations | 83,439 | 216,426 | 101,235 | 270,876 |
+| Best move differs (all our-turn) | | 1,027,647 (11.6%) | | 1,056,379 (11.8%) |
+| Best move differs, reach-weighted (B walk / canonical walk) | | 3.19% / 2.51% | | 3.91% / 2.96% |
+| … within our first 6 moves | | 1.23% | | 1.99% / 1.91% |
+| Main line (30 plies) | | identical | | identical |
+
+**Eval agreement.** On the 17,230,439 positions both DBs cover, the expected-score difference is:
+- median 0.0000;
+- p90 0.0009;
+- p99 0.0116.
+
+11,437 cross 0.5.
+
+**Why decisions changed.** The decisions that changed most by reach keep their own eval: A and B have the same `eval_score` there. They move because of evals deeper in the tree. Examples:
+- white after 1.e4 e5 2.Nf3 d5: Nxe5 → exd5;
+- black in the Two Knights with 5.O-O: Bc5 → Nxe4.
+
+**Scorecards** (`score_repertoire.py`, frequency-weighted):
+
+| | white A | white B | black A | black B |
+|---|---|---|---|---|
+| Effectiveness | 68.70% | 68.75% | 63.34% | 63.45% |
+| Soundness (value_robust) | 51.66% | 51.66% | 48.34% | 48.34% |
+| Soundness (freq-weighted eval) | 57.71% | 57.83% | 54.10% | 54.12% |
+| Worst-case (the gate) | 24.06% | **36.76%** | 28.06% | 27.35% |
+| Coverage ply 16 | 79.27% | 79.92% | 82.31% | 82.76% |
+| Booked moves / game | 10.45 | 10.57 | 9.79 | 9.84 |
+| Positions reached from start | 426,944 | 429,972 | 489,704 | 492,322 |
+
+The scorecard's "eval cover" falls slightly in B (98.2 → 97.8%, 98.0 → 97.7%). That is not missing evals: the B books reach a few more positions outside the repertoire table, and the scorecard counts those as uncovered.
+
+**Cost.**
+- Pass 1 takes 60.0 / 75.1 min (white / black) against 52.6 / 53.3 min.
+- Most of the difference is augmentation lookups on the memmap: 793 s / 944 s against 111 s / 122 s, with about 2.5× as many rescues found.
+- A sparse in-RAM index (every 512th hash, about 93 MB) would cut the cold binary searches. It is not built.
+- Peak memory was not measured.
+- The 4.8 GB of in-RAM augmentation arrays and the full-DB read are gone. Loading takes 52 s.
+
+**Caveat: mixed provenance.** Two inputs still come from the old DB until a pool rebuild:
+- the pool's aux `other_eval`;
+- the t300 crush histogram, and therefore `--crush-won-cp`.
+
+**For the owner to decide.** Should the B repertoires (or a canonical rebuild on the arrays) become canonical? That unlocks item 3:
+- switch defaults to `eval_full` / `eval_arrays_full`;
+- move `annotate/facts.py` to array lookups;
+- add `winpos_reference.py`;
+- move the four legacy scripts to `scratch/`;
+- archive the old DB files.
+
+Whichever way it goes, the 2026-08-25 canonical reps already differ from what current code produces.
+
 ## Leftovers
 
 - The pilot's dirs (`D:\chess\eval_pilot` 4.3 GB, `H:\chess\eval_work_pilot` 18 GB, `D:\chess\eval_pilot_bin`) are kept as evidence. They are safe to delete.
-- Out of scope, per the spec: an `eval_arrays`-style export, pointing Stage 3 at the new DB, and retiring `unified_eval_db`.
+- Also kept, and deletable on the owner's go-ahead:
+  - `H:\chess\eval_work` (1.17 TB of build scratch);
+  - `D:\chess\eval_arrays_full_work` (the arrays build's temp files);
+  - the side rep folders `_evalnoop`, `_evalbase` and `_evaldb_ab` under `E:\chess\repertoire\`.
