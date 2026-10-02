@@ -192,13 +192,17 @@ def meta_path(out: Path) -> Path:
 def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str,
                aux: Path | None = None) -> None:
     """Record how the rep was built so the explorer can recover the crush weight (and the
-    inputs) without the user re-specifying --crush-weight."""
+    inputs) without the user re-specifying --crush-weight. `eval_source` fingerprints the
+    eval DB (a parquet's size/mtime/rows, or an eval-arrays directory's meta and verify
+    status) -- a path alone cannot tell two builds of the eval DB apart."""
+    from eval_arrays import describe_eval_source
     prior, reach = plan_paths(tag)
     meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": "relative-propagated",
             "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
             "reply_shrink": 0.0 if aux else REPLY_SHRINK,
             "aux_stats": str(aux) if aux else None,
             "input": str(stats), "crush_db": str(crush_db), "eval_db": str(eval_db),
+            "eval_source": describe_eval_source(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
     meta_path(out).write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -218,7 +222,7 @@ def run(name: str, cmd: list[str]) -> bool:
 
 def build_color(tag: str, extra: list[str], flags: list[str],
                 stats: Path, crush_db: Path, eval_db: Path, force: bool,
-                aux: Path | None = None) -> bool:
+                aux: Path | None = None, pass1_only: bool = False) -> bool:
     """Pass-1 -> measure -> pass-2 chain for one color. Returns True on success.
     `rerun` cascades: once any step actually executes, every later step reruns too
     (its inputs just changed), regardless of its own output existing."""
@@ -236,6 +240,8 @@ def build_color(tag: str, extra: list[str], flags: list[str],
         rerun = True
     else:
         print(f"  Skipping {tag} pass-1 (exists: {p1.name}).")
+    if pass1_only:
+        return True
 
     # Step 2: measure the plan prior + node reach/ctx/depth from the pass-1 rep.
     if rerun or not (prior.exists() and reach.exists()):
@@ -274,7 +280,15 @@ def main() -> None:
     ap.add_argument("--crush-db", default=str(DEFAULT_CRUSH_REL),
                     help=f"Relative crush histogram parquet (default: {DEFAULT_CRUSH_REL.name}).")
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
-                    help=f"Stockfish eval DB parquet (default: {DEFAULT_EVAL_DB.name}).")
+                    help=f"Stockfish eval source: a (position_hash, eval_cp) parquet or an "
+                         f"eval-arrays directory from eval_arrays.py (default: {DEFAULT_EVAL_DB}).")
+    ap.add_argument("--out-dir", default=str(REP_DIR),
+                    help=f"Where the reps (and _plan/) go (default: {REP_DIR}, the canonical "
+                         f"pair). A/B builds must point elsewhere; logs then go to "
+                         f"logs/sharp_reps/<out-dir name>/.")
+    ap.add_argument("--pass1-only", action="store_true",
+                    help="Stop after each color's pass-1 rep (_plan/pass1_<color>.parquet): the "
+                         "cheap no-op check against the canonical pass-1 reps.")
     ap.add_argument("--aux-stats", default=None,
                     help="position_stats_aux_*.parquet sidecar. Adds the mass an "
                          "opponent node's outgoing edges cannot see (terminations, "
@@ -282,6 +296,11 @@ def main() -> None:
                          "forces --reply-shrink to 0, since the two corrections "
                          "overlap. Omitted = the pre-sidecar recipe unchanged.")
     args = ap.parse_args()
+    global REP_DIR, PLAN_DIR, LOG_DIR
+    out_dir = Path(args.out_dir)
+    if out_dir.resolve() != REP_DIR.resolve():
+        LOG_DIR = LOG_DIR / out_dir.name
+    REP_DIR, PLAN_DIR = out_dir, out_dir / "_plan"
 
     stats, crush_db, eval_db = Path(args.input), Path(args.crush_db), Path(args.eval_db)
     for p in (stats, crush_db, eval_db):
@@ -302,12 +321,16 @@ def main() -> None:
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
-        if not build_color(tag, extra, flags, stats, crush_db, eval_db, args.force, aux):
+        if not build_color(tag, extra, flags, stats, crush_db, eval_db, args.force, aux,
+                           pass1_only=args.pass1_only):
             failures.append(tag)
     print(f"\nDone in {(time.time()-t_all)/60:.1f} min.")
     if failures:
         sys.exit(f"FAILED: {', '.join(failures)}")
-    print("Canonical sharp reps: " + ", ".join(out_path(t).name for t, _ in REPS))
+    if args.pass1_only:
+        print("Pass-1 reps: " + ", ".join(str(pass1_path(t)) for t, _ in REPS))
+    else:
+        print(f"Sharp reps in {REP_DIR}: " + ", ".join(out_path(t).name for t, _ in REPS))
 
 
 if __name__ == "__main__":

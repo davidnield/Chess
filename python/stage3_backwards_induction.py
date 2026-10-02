@@ -164,6 +164,142 @@ def cp_to_expected_score(cp: int) -> float:
     return 1.0 / (1.0 + math.exp(-LICHESS_CP_SCALE * cp))
 
 
+# ── eval source loading ───────────────────────────────────────────────────────
+
+def _es_expr(col: str = "eval_cp") -> pl.Expr:
+    """cp -> expected White score (= cp_to_expected_score) as the ONE Polars expression every
+    eval path uses: its float64 values are what eval_lookup holds."""
+    return 1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col(col)).exp())
+
+
+def _es_lut(cap: int) -> tuple[np.ndarray, np.ndarray]:
+    """(float64, float32) expected scores for cp = -cap..cap, computed BY _es_expr on an Int32
+    series, so indexing the table is bit-identical to applying the expression row by row (and the
+    float32 table to the legacy path's .astype(np.float32))."""
+    f64 = (pl.DataFrame({"eval_cp": pl.Series(range(-cap, cap + 1), dtype=pl.Int32)})
+           .select(_es_expr().alias("_es"))["_es"].to_numpy())
+    return f64, f64.astype(np.float32)
+
+
+class _EsView:
+    """full_eval_es over memory-mapped arrays: es[i] = lut32[cp[i]], the float32 the legacy path
+    stored in RAM. augmented_candidates indexes it with a scalar; arrays work too."""
+
+    def __init__(self, mm_cp, lut32: np.ndarray, cap: int):
+        self._cp, self._lut, self._cap = mm_cp, lut32, cap
+
+    def __len__(self) -> int:
+        return len(self._cp)
+
+    def __getitem__(self, i):
+        if isinstance(i, (int, np.integer)):
+            return self._lut[int(self._cp[i]) + self._cap]
+        return self._lut[np.asarray(self._cp[i]).astype(np.int32) + self._cap]
+
+
+# Engine augmentation's lookups (calls, keys, seconds): with memory-mapped arrays they can page in.
+AUG_STATS = {"calls": 0, "keys": 0, "secs": 0.0}
+
+
+def need_hashes(input_path) -> np.ndarray:
+    """Every position the input DAG can ask an eval for: parents ∪ children of its edges."""
+    h = pl.scan_parquet(str(input_path))
+    need = pl.concat([h.select(pl.col("parent_hash").alias("position_hash")),
+                      h.select(pl.col("child_hash").alias("position_hash")).drop_nulls()]).unique().collect()
+    return need["position_hash"].to_numpy().astype(np.int64)
+
+
+def load_evals(eval_db, input_path, *, eval_mate_cp: int, augment: bool, eval_weight: float
+               ) -> tuple[dict, object, object]:
+    """(eval_lookup, full_eval_hashes, full_eval_es) from --eval-db, which is either
+      - a parquet (position_hash, eval_cp): the legacy path, unchanged; or
+      - an eval-arrays directory (python/eval_arrays.py): verified against its source, then
+        memory-mapped. eval_lookup holds the DAG's positions; engine augmentation searches the
+        mapped arrays in place instead of a full in-RAM copy (~4.8 GB for the old DB; the new
+        eval DB's arrays are ~59 GB and are never loaded).
+    An eval DB DIRECTORY (explorer-extract evals, bkt*.parquet) is refused: build its arrays first.
+    A missing path WARNs and returns no evals, as before."""
+    eval_lookup: dict[int, float] = {}
+    full_eval_hashes = full_eval_es = None
+    edb_path = Path(eval_db)
+    if not edb_path.exists():
+        print(f"WARNING: eval DB not found at {edb_path} — proceeding without evals.")
+        return eval_lookup, None, None
+    if (edb_path / "eval_hash.npy").is_file():
+        from eval_arrays import DIR_KIND, MISSING, lookup_evals, open_eval_arrays, read_meta, verify_eval_arrays
+        status = verify_eval_arrays(edb_path, adopt=False)
+        mm_h, mm_c = open_eval_arrays(edb_path)
+        meta = read_meta(edb_path) or {}
+        # Arrays built from an eval DB directory are capped at +-2000 by their builder; a legacy
+        # pair is measured (400M int16, cheap).
+        cap = 2000 if meta.get("kind") == DIR_KIND else int(np.abs(np.asarray(mm_c, dtype=np.int32)).max())
+        if cap >= eval_mate_cp:
+            sys.exit(f"FATAL: eval arrays {edb_path} reach |cp| {cap} >= --eval-mate-cp {eval_mate_cp}; "
+                     f"the arrays path cannot drop those rows from engine augmentation.")
+        lut64, lut32 = _es_lut(cap)
+        need = need_hashes(input_path)
+        cps = lookup_evals(need, mm_h, mm_c)
+        hit = cps != MISSING
+        eval_lookup = dict(zip(need[hit].tolist(), lut64[cps[hit].astype(np.int32) + cap].tolist()))
+        if augment:
+            full_eval_hashes, full_eval_es = mm_h, _EsView(mm_c, lut32, cap)
+            print(f"Engine augmentation searches the memory-mapped arrays in place "
+                  f"({len(mm_h):,} entries)")
+        print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} (eval arrays: {status}; "
+              f"{int((~hit).sum()):,} of {need.size:,} DAG positions have no eval)")
+    elif edb_path.is_dir():
+        sys.exit(f"FATAL: {edb_path} is an eval DB directory; build its arrays first:\n"
+                 f"    .venv/Scripts/python.exe python/eval_arrays.py --eval-db {edb_path} --out-dir <arrays dir>\n"
+                 f"then pass --eval-db <arrays dir>.")
+    else:
+        edb_raw = pl.read_parquet(str(edb_path))
+        # Drop mate-class sentinels (|cp| >= eval_mate_cp, e.g. the +-10000 Lichess
+        # mate codes). These are corrupt for quiet opening positions (e.g. 1.e4 reads
+        # +10000) and would trivially pass the refutation gate / dominate the eval
+        # blend. Dropping them reverts those positions to empirical (real deep mates
+        # are ~winning empirically too). Full fix = rebuild eval_db with a correct
+        # mate->cp mapping (separate task).
+        n_raw = len(edb_raw)
+        edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < eval_mate_cp)
+        n_drop = n_raw - len(edb_raw)
+        # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
+        # iter_rows over ~300M entries.
+        edb_raw = edb_raw.with_columns(_es_expr().alias("_es"))
+        # Engine augmentation needs the FULL (un-DAG-filtered) eval DB — its rescue
+        # moves reach positions OUTSIDE the input DAG, so the prefiltered eval_lookup
+        # can't see them. Snapshot the full mate-filtered DB as sorted numpy arrays
+        # (~4.8 GB: int64 hash + float32 es) BEFORE the DAG semi-join below prunes it.
+        if augment:
+            fh = edb_raw["position_hash"].to_numpy()
+            fe = edb_raw["_es"].to_numpy().astype(np.float32)
+            order = np.argsort(fh)
+            full_eval_hashes = np.ascontiguousarray(fh[order])
+            full_eval_es = np.ascontiguousarray(fe[order])
+            print(f"Loaded {len(full_eval_hashes):,} evals as sorted arrays for engine "
+                  f"augmentation (full DB, "
+                  f"~{(full_eval_hashes.nbytes + full_eval_es.nbytes)/1e9:.1f} GB)")
+        # Keep only evals for positions that can appear in THIS run's DAG
+        # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
+        # DB costs ~40+ GB of python objects and starved run_backwards_induction
+        # into MemoryError once the input reached 23M edges (2019-2025 pool).
+        _h = pl.scan_parquet(str(input_path))
+        _need = pl.concat([
+            _h.select(pl.col("parent_hash").alias("position_hash")),
+            _h.select(pl.col("child_hash").alias("position_hash")).drop_nulls(),
+        ]).unique().collect()
+        n_prefilter = len(edb_raw)
+        edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
+        eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
+                               edb_raw["_es"].to_list()))
+        print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
+              f"(dropped {n_drop:,} mate-class |cp|>={eval_mate_cp}; "
+              f"{n_prefilter - len(edb_raw):,} outside the input DAG)")
+    if eval_weight <= 0:
+        print("  (eval_weight=0 — evals will appear in output but not "
+              "influence move selection)")
+    return eval_lookup, full_eval_hashes, full_eval_es
+
+
 def forcingness(
     opp_moves: list[dict],
     k_f:      float = 200.0,
@@ -1493,14 +1629,18 @@ def run_backwards_induction(
             child_hashes.append(ch)
         out: list[dict] = []
         if child_hashes:
+            t_aug = time.perf_counter()
             keys = np.asarray(child_hashes, dtype=np.int64)
             idx = np.clip(np.searchsorted(full_eval_hashes, keys), 0,
                           len(full_eval_hashes) - 1)
             hit = full_eval_hashes[idx] == keys
-            for san, ch, i, ok in zip(sans, child_hashes, idx, hit):
+            ess = [float(full_eval_es[i]) if ok else None for i, ok in zip(idx, hit)]
+            AUG_STATS["calls"] += 1
+            AUG_STATS["keys"] += len(keys)
+            AUG_STATS["secs"] += time.perf_counter() - t_aug
+            for san, ch, es, ok in zip(sans, child_hashes, ess, hit):
                 if not ok:
                     continue
-                es = float(full_eval_es[i])
                 # eval-only dict mirroring build_move_vals' shape. worst/robust=es so
                 # passes_gate (which falls back to mv["worst"] when the child isn't in
                 # the prefiltered eval_lookup) gates on the engine eval directly.
@@ -2105,9 +2245,11 @@ def main():
                         help="Baseline forcingness to shrink low-sample positions toward. "
                              "0.30 is roughly typical for opening positions. Default: 0.30")
     parser.add_argument("--eval-db", default=None,
-                        help="Path to eval DB parquet from build_lichess_eval_db.py. When "
-                             "provided, Stockfish evals are used in move selection and written "
-                             "to the output's eval_score column.")
+                        help="Eval source: a (position_hash, eval_cp) parquet (the old "
+                             "unified_eval_db), or an eval-arrays directory from "
+                             "python/eval_arrays.py (verified, then memory-mapped; e.g. the "
+                             "arrays of D:/chess/eval_full). When provided, Stockfish evals are "
+                             "used in move selection and written to the output's eval_score column.")
     parser.add_argument("--eval-mate-cp", type=int, default=3000,
                         help="Drop eval_db entries with |eval_cp| >= this at load. RETIRED "
                              "safety: the old eval DB stamped +-10000 mate sentinels on quiet "
@@ -2639,58 +2781,11 @@ def main():
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
-    full_eval_hashes = full_eval_es = None   # full DB as sorted arrays (engine augmentation)
+    full_eval_hashes = full_eval_es = None   # full DB, sorted (engine augmentation)
     if args.eval_db:
-        edb_path = Path(args.eval_db)
-        if not edb_path.exists():
-            print(f"WARNING: eval DB not found at {edb_path} — proceeding without evals.")
-        else:
-            edb_raw = pl.read_parquet(str(edb_path))
-            # Drop mate-class sentinels (|cp| >= eval_mate_cp, e.g. the +-10000 Lichess
-            # mate codes). These are corrupt for quiet opening positions (e.g. 1.e4 reads
-            # +10000) and would trivially pass the refutation gate / dominate the eval
-            # blend. Dropping them reverts those positions to empirical (real deep mates
-            # are ~winning empirically too). Full fix = rebuild eval_db with a correct
-            # mate->cp mapping (separate task).
-            n_raw = len(edb_raw)
-            edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < args.eval_mate_cp)
-            n_drop = n_raw - len(edb_raw)
-            # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
-            # iter_rows over ~300M entries.
-            edb_raw = edb_raw.with_columns(
-                (1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col("eval_cp")).exp())).alias("_es"))
-            # Engine augmentation needs the FULL (un-DAG-filtered) eval DB — its rescue
-            # moves reach positions OUTSIDE the input DAG, so the prefiltered eval_lookup
-            # can't see them. Snapshot the full mate-filtered DB as sorted numpy arrays
-            # (~4.8 GB: int64 hash + float32 es) BEFORE the DAG semi-join below prunes it.
-            if args.augment_engine:
-                fh = edb_raw["position_hash"].to_numpy()
-                fe = edb_raw["_es"].to_numpy().astype(np.float32)
-                order = np.argsort(fh)
-                full_eval_hashes = np.ascontiguousarray(fh[order])
-                full_eval_es = np.ascontiguousarray(fe[order])
-                print(f"Loaded {len(full_eval_hashes):,} evals as sorted arrays for engine "
-                      f"augmentation (full DB, "
-                      f"~{(full_eval_hashes.nbytes + full_eval_es.nbytes)/1e9:.1f} GB)")
-            # Keep only evals for positions that can appear in THIS run's DAG
-            # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
-            # DB costs ~40+ GB of python objects and starved run_backwards_induction
-            # into MemoryError once the input reached 23M edges (2019-2025 pool).
-            _h = pl.scan_parquet(str(input_path))
-            _need = pl.concat([
-                _h.select(pl.col("parent_hash").alias("position_hash")),
-                _h.select(pl.col("child_hash").alias("position_hash")).drop_nulls(),
-            ]).unique().collect()
-            n_prefilter = len(edb_raw)
-            edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
-            eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
-                                   edb_raw["_es"].to_list()))
-            print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
-                  f"(dropped {n_drop:,} mate-class |cp|>={args.eval_mate_cp}; "
-                  f"{n_prefilter - len(edb_raw):,} outside the input DAG)")
-            if args.eval_weight <= 0:
-                print("  (eval_weight=0 — evals will appear in output but not "
-                      "influence move selection)")
+        eval_lookup, full_eval_hashes, full_eval_es = load_evals(
+            args.eval_db, input_path, eval_mate_cp=args.eval_mate_cp,
+            augment=args.augment_engine, eval_weight=args.eval_weight)
 
     if args.augment_engine and full_eval_hashes is None:
         print("WARNING: --augment-engine set but no usable --eval-db — augmentation "
@@ -2899,6 +2994,8 @@ def main():
             sample = next((pos_epd[ph] for ph, v in bestaug.items() if v), None)
             print(f"    engine-augmented recommendations: {n_aug:,}"
                   + (f"  (e.g. {sample})" if sample else ""))
+            print(f"    augmentation lookups so far: {AUG_STATS['calls']:,} calls, "
+                  f"{AUG_STATS['keys']:,} keys, {AUG_STATS['secs']:.1f}s")
 
         frames.append(_slice_frame(
             ev, eb, values, best_moves, best_forcing, best_err, best_decis,
