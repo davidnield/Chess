@@ -70,12 +70,13 @@ _plan/{tag}_pass1_{prior,reach}.parquet, final rep -> repertoire_pooled_{tag}_sh
 Each step has its own existence skip gate; once a step actually runs, every later step in
 the chain reruns too (its inputs changed). --force reruns the whole chain.
 
-Prerequisites (defaults): position_stats_pooled_ge1800_2013_2025_brc.parquet
-(build_pooled_stats.py --phase merge --no-prune), crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet
-(the extract's fused winpos pass), and the eval arrays D:/chess/eval_arrays_full
-(python/eval_arrays.py, from the explorer book's eval DB D:/chess/eval_full).
-Override the inputs with
---input / --crush-db / --eval-db to build on a different dataset. A
+Prerequisites (defaults, the canonical recipe): position_stats_pooled_ge1800_2013_2026_brc.parquet
+(build_pooled_stats.py --phase merge --no-prune) with its aux sidecar
+position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, the t300 winpos histogram
+crush_hist_relwin_pooled_ge1800_2013_2026_brc_t300.parquet (the extract's fused winpos pass),
+and the eval arrays D:/chess/eval_arrays_full (python/eval_arrays.py, from the explorer
+book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-stats
+(--no-aux for the pre-sidecar recipe) / --crush-db / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
 crush weight, learnability settings and inputs (the explorer reads it back).
 
@@ -103,11 +104,13 @@ REP_DIR = Path("E:/chess/repertoire")
 PLAN_DIR = REP_DIR / "_plan"          # pass-1 reps + plan-prior/reach exports
 LOG_DIR = PROJECT / "logs" / "sharp_reps"
 
-# Canonical inputs default to the combined 2013-2025 mean_elo>=1800 --no-prune pooled
-# build (build_pooled_stats.py) with the winpos crush histogram and the eval arrays of
-# D:/chess/eval_full (eval_arrays.py). Override with --input / --crush-db / --eval-db.
-DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2025_brc.parquet"
-DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2013_2025_brc.parquet"
+# Canonical inputs default to the combined 2013-2026 mean_elo>=1800 --no-prune pooled
+# build (build_pooled_stats.py) with its aux sidecar, the t300 winpos crush histogram and
+# the eval arrays of D:/chess/eval_full (eval_arrays.py). Override with --input /
+# --aux-stats (--no-aux) / --crush-db / --eval-db.
+DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2026_brc.parquet"
+DEFAULT_AUX       = SD / "position_stats_aux_pooled_ge1800_2013_2026_brc.parquet"
+DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2013_2026_brc_t300.parquet"
 DEFAULT_EVAL_DB   = DEFAULT_ARRAY_DIR
 
 # Crush selection weight. Surfaced as a constant because the explorer reads it back (via
@@ -234,6 +237,20 @@ def build_color(tag: str, extra: list[str], flags: list[str],
     stage3 = str(PROJECT / "python/stage3_backwards_induction.py")
     rerun = force
 
+    # The skip gates test existence only, so a rep built from OTHER inputs (an older pool,
+    # the retired eval DB) would be "skipped" and look current. Its meta records the
+    # inputs: a mismatch refuses rather than reporting a stale rep as built.
+    if not force and out.exists() and meta_path(out).exists():
+        old = json.loads(meta_path(out).read_text(encoding="utf-8"))
+        now = {"input": stats, "crush_db": crush_db, "eval_db": eval_db, "aux_stats": aux}
+        drift = [k for k, v in now.items()
+                 if (old.get(k) or None) != (str(v) if v is not None else None)]
+        if drift:
+            print(f"  REFUSING {tag}: {out.name} was built from different inputs "
+                  f"({', '.join(f'{k}: {old.get(k)}' for k in drift)}). "
+                  f"Rebuild with --force.", flush=True)
+            return False
+
     # Step 1: pass-1 rep (recipe without the plan prior).
     if rerun or not p1.exists():
         if not run(f"sharp_{tag}_pass1",
@@ -292,12 +309,15 @@ def main() -> None:
     ap.add_argument("--pass1-only", action="store_true",
                     help="Stop after each color's pass-1 rep (_plan/pass1_<color>.parquet): the "
                          "cheap no-op check against the canonical pass-1 reps.")
-    ap.add_argument("--aux-stats", default=None,
+    ap.add_argument("--aux-stats", default=str(DEFAULT_AUX),
                     help="position_stats_aux_*.parquet sidecar. Adds the mass an "
                          "opponent node's outgoing edges cannot see (terminations, "
                          "the other-moves bucket, ply-cap horizon). Supplying it "
                          "forces --reply-shrink to 0, since the two corrections "
-                         "overlap. Omitted = the pre-sidecar recipe unchanged.")
+                         f"overlap (default: {DEFAULT_AUX.name}).")
+    ap.add_argument("--no-aux", action="store_true",
+                    help="Build without the aux sidecar: the pre-sidecar recipe, "
+                         "with --reply-shrink restored.")
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
     if out_dir.resolve() != REP_DIR.resolve():
@@ -308,13 +328,13 @@ def main() -> None:
     for p in (stats, crush_db, eval_db):
         if not p.exists():
             hint = ("  — build it with build_pooled_stats.py --phase merge, or pass "
-                    "--input/--crush-db to point at the previous "
-                    "position_stats_pooled_1650_1900_2200_brc dataset"
-                    if p in (stats, crush_db) else "")
+                    "--input/--crush-db to point at another pool"
+                    if p in (stats, crush_db) else
+                    "  — build it with python/eval_arrays.py")
             sys.exit(f"FATAL: missing prerequisite {p}{hint}")
     REP_DIR.mkdir(parents=True, exist_ok=True)
     PLAN_DIR.mkdir(parents=True, exist_ok=True)
-    aux = Path(args.aux_stats) if args.aux_stats else None
+    aux = None if args.no_aux or not args.aux_stats else Path(args.aux_stats)
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
     flags = common_flags(stats, crush_db, eval_db, aux)
