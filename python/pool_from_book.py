@@ -728,6 +728,14 @@ def write_metas(a, timings: dict) -> None:
         },
         "gates": gate,
     }
+    # A rewrite (--phase meta) keeps who BUILT the files; it only adds the gates.
+    old = meta_path(pool_out)
+    if old.exists():
+        prev = json.loads(old.read_text(encoding="utf-8"))
+        common["meta_rewritten_by"] = common["git_commit"]
+        common["meta_rewritten_utc"] = common["built_utc"]
+        for k in ("git_commit", "built_utc", "timings_s"):
+            common[k] = prev.get(k, common[k])
     _write_json(meta_path(pool_out), {**common, "file": pool_out.name, "role": "edges"})
     _write_json(meta_path(aux_out), {**common, "file": aux_out.name, "role": "aux",
                                      "pool_file": pool_out.name})

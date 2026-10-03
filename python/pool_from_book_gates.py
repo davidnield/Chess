@@ -495,7 +495,7 @@ def gate_evals(a) -> bool:
                                     & ~pl.col("parent_hash").is_in(list(coll)))
     samp = below.sample(n=min(a.n, below.height), seed=a.seed)
     parents = samp["parent_hash"].unique()
-    edges = below.filter(pl.col("parent_hash").is_in(parents))
+    edges = below.filter(pl.col("parent_hash").is_in(parents.to_list()))
     print(f"  sampled {samp.height:,} edges from buckets {bks}; {parents.len():,} parents, "
           f"{edges.height:,} below-floor edges to evaluate", flush=True)
     db = EvalDB(prm["eval_arrays"])
@@ -515,7 +515,7 @@ def gate_evals(a) -> bool:
             mn, mx = min(mn, es), max(mx, es)
         exp[int(h)] = (num / cov if cov else None, mn if cov else None,
                        mx if cov else None, cov / tot, int(tot), g.height)
-    got = aux.filter(pl.col("position_hash").is_in(parents)).to_dicts()
+    got = aux.filter(pl.col("position_hash").is_in(parents.to_list())).to_dicts()
     bad = []
     worst = 0.0
     for r in got:
