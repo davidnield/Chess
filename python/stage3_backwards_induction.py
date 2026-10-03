@@ -367,6 +367,39 @@ def recall_weight(reach: float, midpoint: float, power: float) -> float:
     return 1.0 / (1.0 + (1.0 / ratio) ** power)
 
 
+def aux_term_reasons(aux_path) -> str:
+    """How an aux sidecar split its terminations, from `<aux>.meta.json`.
+
+    'split' (build_pooled_stats: normal / flag / other by Termination header) is
+    the default when there is no meta. 'pooled' (pool_from_book: the move flows
+    carry no reason, so the whole ended mass sits in term_other_*) is what
+    check_aux_term_flags refuses to drop flags from. An unreadable meta raises:
+    guessing 'split' there would defeat the guard."""
+    import json
+    meta = Path(str(aux_path) + ".meta.json")
+    if not meta.exists():
+        return "split"
+    try:
+        return str(json.loads(meta.read_text(encoding="utf-8"))
+                   .get("term_reasons", "split"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"aux meta {meta} is unreadable ({e}); cannot tell whether "
+                         f"its termination reasons are pooled") from e
+
+
+def check_aux_term_flags(aux_path, term_flags: bool) -> None:
+    """Raise when time-forfeit flags are to be EXCLUDED from a sidecar whose
+    reasons are pooled. Dropping term_flag_* there drops nothing (it is all 0;
+    the flags sit inside term_other_*), so the exclusion would silently not
+    happen. Shared by Stage 3's loader and budget_core.load_aux_rows."""
+    if not term_flags and aux_term_reasons(aux_path) == "pooled":
+        raise ValueError(
+            f"{aux_path}: its aux meta says term_reasons='pooled' (time forfeits are "
+            f"pooled into term_other_*), so excluding term flags "
+            f"(--no-aux-term-flags / term_flags=False) would drop nothing. "
+            f"Keep the flags in, or use a sidecar with split reasons.")
+
+
 def aux_opp_mix(term_tot: float, term_sum: float,
                 oth_tot: float, oth_sum: float,
                 oth_eval: float, oth_cov: float,
@@ -2346,6 +2379,7 @@ def main():
         aux_path = Path(args.aux_stats)
         if not aux_path.exists():
             sys.exit(f"--aux-stats not found: {aux_path}")
+        check_aux_term_flags(aux_path, args.aux_term_flags)
         aux_df = pl.read_parquet(aux_path)
         print(f"Aux stats:         {aux_path.name} ({aux_df.height:,} positions, "
               f"flags={'in' if args.aux_term_flags else 'out'}, "

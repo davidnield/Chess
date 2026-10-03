@@ -207,6 +207,8 @@ python/
   zobrist.py                     the position hash every stage keys on
   process_pgn_parquets.py        ingest + compression (recipe v3)
   build_pooled_stats.py          canonical extract + aggregate
+  pool_from_book.py              the same two files built from the explorer book
+  pool_from_book_gates.py        ... and its acceptance gates
   eval_arrays.py                 the eval DB as mmap'd arrays every consumer can share
   eval_arrays_build.py           ... built from the explorer book's eval DB, plus its checkmates
   stage3_backwards_induction.py  the valuation engine
@@ -250,6 +252,9 @@ Each script's header docstring has its current CLI. Check there before running.
 # Aggregate stats from the source parquets (both phases are resumable)
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year 2019 --end-year 2025 --phase extract
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year 2019 --end-year 2025 --phase merge --tmp-dir D:\chess_duckdb_tmp
+
+# ...or build the pool + aux sidecar from the explorer book (any slice set, ply cap, floor)
+.venv\Scripts\python.exe python\pool_from_book.py --events Blitz Rapid Classical --elo-bands 2000 2200 2500 --max-ply 20 --min-games 50 --tag ge2000_2013_2026_brc_p20 --work H:\chess\pool_work\ge2000_2013_2026_brc_p20
 
 # Build the canonical White + Black repertoires
 .venv\Scripts\python.exe python\build_sharp_reps.py

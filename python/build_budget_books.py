@@ -345,9 +345,7 @@ def main() -> int:
 
     aux_rows = {}
     if aux_path:
-        adf = (pl.scan_parquet(aux_path)
-               .filter(pl.col("position_hash").is_in(parents)).collect())
-        aux_rows = {r["position_hash"]: r for r in adf.iter_rows(named=True)}
+        aux_rows = bc.load_aux_rows(aux_path, parents)
         log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
 
     by_parent: dict[int, list[dict]] = {}
