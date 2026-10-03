@@ -22,6 +22,8 @@ Each gate writes its verdict into <work>/_gates.json (merged by key), which
                  pool total + other_total = population mass at ply <= cap excluding
                  collision parents; per non-root pool parent, SUM A = edges + other +
                  term + horizon component-wise; the root's ply-1 games.
+  mass-split     Not a gate: the report's kept / other / outside / term / horizon
+                 mass per ply, for several --floors in one pass.
   evals          Gate 4. 10,000 random below-floor edges of pool parents; for their
                  parents other_eval_* recomputed with annotate.facts.EvalDB per key.
                  Plus cov in [0, 1] and min <= mean <= max over the whole sidecar.
@@ -538,10 +540,92 @@ def gate_evals(a) -> bool:
     return ok
 
 
+# ── report helper: the mass split by ply, for several floors at once ───────────
+
+def _split_bucket(task: tuple) -> dict:
+    import pool_from_book as P
+    i, book, events, bands, cap, floors, adir, coll, threads, mem, tmp = task
+    files = P.slice_files(Path(book), events, bands, i)
+    con = P._duck(threads, mem, Path(tmp))
+    out = {}
+    try:
+        con.execute("CREATE TEMP TABLE coll (h BIGINT)")
+        if coll:
+            con.executemany("INSERT INTO coll VALUES (?)", [(int(h),) for h in coll])
+        con.execute(f"""CREATE TEMP TABLE r AS SELECT parent_hash, move_san, ply, total
+            FROM {P._read(files, 'parent_hash, move_san, ply, total', f'ply <= {cap}')}""")
+        con.execute("""CREATE TEMP TABLE e AS SELECT parent_hash, move_san, SUM(total) AS t,
+            parent_hash IN (SELECT h FROM coll) AS c FROM r GROUP BY parent_hash, move_san""")
+        P.derive_flows(con, files, _p(Path(adir) / "g*" / f"cb={i}" / "*.parquet"), cap)
+        for F in floors:
+            con.execute(f"""CREATE OR REPLACE TEMP TABLE pp AS SELECT DISTINCT parent_hash AS x
+                FROM e WHERE NOT c AND t >= {F}""")
+            mv = con.execute(f"""
+                SELECT r.ply,
+                  SUM(r.total) FILTER (WHERE NOT e.c AND e.t >= {F}),
+                  SUM(r.total) FILTER (WHERE NOT e.c AND e.t < {F} AND pp.x IS NOT NULL),
+                  SUM(r.total) FILTER (WHERE NOT e.c AND pp.x IS NULL),
+                  SUM(r.total) FILTER (WHERE e.c)
+                FROM r JOIN e USING (parent_hash, move_san)
+                LEFT JOIN pp ON pp.x = r.parent_hash GROUP BY r.ply""").fetchall()
+            en = con.execute("""SELECT p, SUM(total) FILTER (WHERE pp.x IS NOT NULL),
+                SUM(total) FILTER (WHERE pp.x IS NULL) FROM en LEFT JOIN pp ON pp.x = en.x
+                GROUP BY p""").fetchall()
+            hz = con.execute(f"""SELECT SUM(total) FILTER (WHERE pp.x IS NOT NULL),
+                SUM(total) FILTER (WHERE pp.x IS NULL) FROM d LEFT JOIN pp ON pp.x = d.x
+                WHERE q = {cap + 1}""").fetchone()
+            out[str(F)] = {
+                "moves": {int(q): [int(v or 0) for v in rest] for q, *rest in mv},
+                "ended": {int(p): [int(a or 0), int(b or 0)] for p, a, b in en},
+                "horizon": [int(v or 0) for v in hz]}
+    finally:
+        con.close()
+    return {"bucket": i, "split": out}
+
+
+def report_mass_split(a) -> bool:
+    """Per ply: moves played from pool parents along kept edges / below-floor edges
+    (the aux 'other'), moves from positions that are not pool parents (outside),
+    collision parents; games ended at a pool parent / elsewhere; horizon. Both
+    floors in one pass, because survivors and pool parents are functions of the
+    per-edge totals alone. Written to <work>/_mass_split.json."""
+    import polars as pl
+    import pool_from_book as P
+    work = Path(a.work)
+    prm = load_params(work)
+    adir = Path(a.arrivals) if a.arrivals else work / "arrivals"
+    coll = pl.read_parquet(Path(prm["book"]) / "_collisions.parquet")["parent_hash"].unique().to_list()
+    rdir = work / "mass_split"
+    rdir.mkdir(exist_ok=True)
+    tasks = [(i, prm["book"], prm["events"], prm["elo_bands"], int(prm["max_ply"]), a.floors,
+              str(adir), coll, a.threads, a.mem, str(a.tmp_dir))
+             for i in range(512) if not (rdir / f"b{i:03d}.json").exists()]
+    for r in P._pool_run(_split_bucket, tasks, a.workers, lambda r: f"bucket {r['bucket']}"):
+        (rdir / f"b{r['bucket']:03d}.json").write_text(json.dumps(r))
+    tot: dict = {}
+    for i in range(512):
+        r = json.loads((rdir / f"b{i:03d}.json").read_text())
+        for F, s in r["split"].items():
+            t = tot.setdefault(F, {"moves": {}, "ended": {}, "horizon": [0, 0]})
+            for q, v in s["moves"].items():
+                t["moves"][q] = [x + y for x, y in zip(t["moves"].get(q, [0] * 4), v)]
+            for p, v in s["ended"].items():
+                t["ended"][p] = [x + y for x, y in zip(t["ended"].get(p, [0, 0]), v)]
+            t["horizon"] = [x + y for x, y in zip(t["horizon"], s["horizon"])]
+    (work / "_mass_split.json").write_text(json.dumps(
+        {"columns": {"moves": ["kept", "other_at_pool_parent", "outside", "collision"],
+                     "ended": ["at_pool_parent", "elsewhere"],
+                     "horizon": ["at_pool_parent", "elsewhere"]},
+         "floors": tot}, indent=1))
+    print(f"wrote {work / '_mass_split.json'}")
+    return True
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("gate", choices=["term-vs-book", "reimpl", "conservation", "evals"])
+    ap.add_argument("gate", choices=["term-vs-book", "reimpl", "conservation", "evals",
+                                     "mass-split"])
     ap.add_argument("--work", type=Path, required=True)
     ap.add_argument("--out-dir", type=Path, default=Path("E:/chess/position-stats"))
     ap.add_argument("--buckets", nargs="*", type=int,
@@ -551,6 +635,10 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20261003)
     ap.add_argument("--n", type=int, default=10_000, help="evals: edges to sample")
     ap.add_argument("--sample-buckets", type=int, default=8)
+    ap.add_argument("--floors", nargs="+", type=int, default=[50, 20],
+                    help="mass-split: the floors to classify by")
+    ap.add_argument("--arrivals", type=Path, default=None,
+                    help="mass-split: arrivals dir (default <work>/arrivals)")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--mem", default="8GB")
     ap.add_argument("--workers", type=int, default=3)
@@ -561,7 +649,8 @@ def main() -> int:
         a.buckets = a.buckets + [random.Random(a.seed).choice(rest)]
     print(f"gate {a.gate}: buckets {a.buckets}", flush=True)
     fn = {"term-vs-book": gate_term_vs_book, "reimpl": gate_reimpl,
-          "conservation": gate_conservation, "evals": gate_evals}[a.gate]
+          "conservation": gate_conservation, "evals": gate_evals,
+          "mass-split": report_mass_split}[a.gate]
     return 0 if fn(a) else 1
 
 
