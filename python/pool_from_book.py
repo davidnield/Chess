@@ -124,8 +124,16 @@ def _p(path) -> str:
 
 
 def _duck(threads: int, mem: str, tmp: Path):
+    """A connection spilling into its OWN subdirectory of `tmp`. DuckDB's spill
+    file names are not unique per process, so concurrent processes sharing one
+    temp_directory can read each other's blocks: gate 1 (2 workers spilling
+    beside the 4-worker build) died on a per-(position, ply) SUM(total) of 5.9e31,
+    which a fresh, unshared rerun of the same query does not reproduce."""
+    import atexit
     import duckdb
+    tmp = Path(tmp) / f"pid{os.getpid()}"
     tmp.mkdir(parents=True, exist_ok=True)
+    atexit.register(shutil.rmtree, tmp, True)
     con = duckdb.connect()
     con.execute(f"SET memory_limit='{mem}'")
     con.execute(f"SET temp_directory='{_p(tmp)}'")

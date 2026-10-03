@@ -190,7 +190,6 @@ def _rem(x: int) -> int:
 
 
 def gate_reimpl(a) -> bool:
-    import duckdb
     import polars as pl
     import pyarrow.parquet as pq
     from eval_arrays import MISSING, open_eval_arrays
@@ -204,9 +203,7 @@ def gate_reimpl(a) -> bool:
     t0 = time.time()
 
     # Arrivals for the gate's buckets: ONE plain scan of the population.
-    con = duckdb.connect()
-    con.execute(f"SET threads={a.threads}; SET memory_limit='{a.mem}'; "
-                f"SET temp_directory='{_p(a.tmp_dir)}'; SET preserve_insertion_order=false")
+    con = _duck(a)
     globs = ", ".join(f"'{g}'" for g in _slice_globs(book, events, bands))
     bl = ", ".join(map(str, a.buckets))
     arr = pl.from_arrow(con.execute(f"""
@@ -351,16 +348,13 @@ def gate_reimpl(a) -> bool:
 
 def gate_conservation(a) -> bool:
     import chess
-    import duckdb
     from stage1_extract_positions import zobrist_int64
     work = Path(a.work)
     prm = load_params(work)
     book, cap = Path(prm["book"]), int(prm["max_ply"])
     pool_f, aux_f = out_files(work, Path(a.out_dir))
     root = int(zobrist_int64(chess.Board()))
-    con = duckdb.connect()
-    con.execute(f"SET threads={a.threads}; SET memory_limit='{a.mem}'; "
-                f"SET temp_directory='{_p(a.tmp_dir)}'; SET preserve_insertion_order=false")
+    con = _duck(a)
     globs = ", ".join(f"'{g}'" for g in _slice_globs(book, prm["events"], prm["elo_bands"]))
     pop = f"read_parquet([{globs}], hive_partitioning=false)"
     coll = f"(SELECT DISTINCT parent_hash FROM read_parquet('{_p(book / '_collisions.parquet')}'))"
@@ -446,7 +440,6 @@ def gate_conservation(a) -> bool:
 # ── gate 4: evals ──────────────────────────────────────────────────────────────
 
 def gate_evals(a) -> bool:
-    import duckdb
     import polars as pl
     from annotate.facts import EvalDB
     from stage3_backwards_induction import LICHESS_CP_SCALE
@@ -474,8 +467,7 @@ def gate_evals(a) -> bool:
     bks = sorted(rng.sample(range(512), a.sample_buckets))
     coll = set(pl.read_parquet(book / "_collisions.parquet")["parent_hash"].to_list())
     pp = set(aux["position_hash"].to_list())
-    con = duckdb.connect()
-    con.execute(f"SET threads={a.threads}; SET memory_limit='{a.mem}'")
+    con = _duck(a)
     below = []
     for i in bks:
         files = [_p(book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet")
