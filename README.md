@@ -9,14 +9,16 @@ aggregates those into per-position statistics, then runs backwards induction ove
 the position graph to pick a move at every position you can reach.
 
 The goal is to empirically determine the best opening repertoire for ≥1800 Blitz, Rapid
-and Classical: moves that tend to reach a winning position quickly, while staying
-sound enough not to lose against best play. Stockfish pruning throws out
+and Classical: the moves with the best expected score, blending how the games
+actually went with Stockfish's evaluation, while staying sound enough not to lose
+against best play. Stockfish pruning throws out
 lines that score well only because opponents keep falling for them but
 otherwise are losing or throw away an advantage.
 
 The current build covers 1.33 billion games, which give 31.27M position-move edges
-across 17.79M distinct positions, checked against an eval database of 400.0M
-positions.
+across 17.79M distinct positions, checked against an eval database of 5.93B
+positions (every position of the explorer book that Lichess's cloud or server
+analysis ever evaluated).
 
 ## How it works
 
@@ -187,7 +189,6 @@ source parquets (year=/month=/event=)
    ▼
 position_stats_*.parquet      per-edge win/draw/loss counts
 position_stats_aux_*.parquet  per-position: the mass those edges can't see
-crush_hist_*.parquet          "winning position reached early", same replay
    │  build_sharp_reps.py          two-pass driver around the engine below
    │    └─ stage3_backwards_induction.py
    ▼

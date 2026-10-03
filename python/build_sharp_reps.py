@@ -1,5 +1,6 @@
 """Build the canonical SHARP repertoire pair (White + Black) — two-pass learnability
-build over the winpos-crush + relative-eval-gate recipe (2026-07).
+build over the eval-blend + relative-eval-gate recipe. Crush (the early-win bonus) was
+dropped from the recipe on 2026-10-02: selection is on value alone.
 
 Recipe (single pooled slice, event='Pooled', elo_band=0):
   - eval/empirical blend:  --eval-weight 0.5 --require-eval   (leaf value blends engine eval
@@ -24,13 +25,10 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                            improvement both colors — see .meta.json for the swept
                            alternative)
   - no traffic floor:      --min-move-games 0
-  - crush (sharpness):     relative-propagated over the WINPOS histogram (mate/resignation
-                           OR eval >= +300cp achieved — see CLAUDE.md's crush-metric
-                           section), γ=0.99, imm-window 2,
-                           --crush-weight 0.1 --crush-prior 5000 --crush-baseline zero
-                           (zero baseline: a thin line earns NO crush until proven; winpos
-                            rates sit on a different scale than the resignation-proxy
-                            histogram, hence the lower weight)
+  - no crush:              no --crush-db, so Stage 3's crush term is off (weight 0). Until
+                           2026-10-02 the recipe added 0.1 x a relative-propagated winpos
+                           crush potential (γ=0.99, prior 5000, zero baseline); the owner
+                           retired the whole idea and the histograms were deleted.
   - no memorization cost:  --memo-weight 0
   - reply-mass shrinkage:  --reply-shrink 1.0   (adopted 2026-08-03. An opponent node's
                            value is the mean over the replies that CLEAR the pool's
@@ -72,13 +70,12 @@ the chain reruns too (its inputs changed). --force reruns the whole chain.
 
 Prerequisites (defaults, the canonical recipe): position_stats_pooled_ge1800_2013_2026_brc.parquet
 (build_pooled_stats.py --phase merge --no-prune) with its aux sidecar
-position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, the t300 winpos histogram
-crush_hist_relwin_pooled_ge1800_2013_2026_brc_t300.parquet (the extract's fused winpos pass),
-and the eval arrays D:/chess/eval_arrays_full (python/eval_arrays.py, from the explorer
+position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, and the eval arrays D:/chess/eval_arrays_full (python/eval_arrays.py, from the explorer
 book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-stats
-(--no-aux for the pre-sidecar recipe) / --crush-db / --eval-db to build on a different dataset. A
+(--no-aux for the pre-sidecar recipe) / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
-crush weight, learnability settings and inputs (the explorer reads it back).
+inputs, the learnability settings and crush_weight 0 (the explorer reads it back to
+rebuild its selection-key column).
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -105,18 +102,17 @@ PLAN_DIR = REP_DIR / "_plan"          # pass-1 reps + plan-prior/reach exports
 LOG_DIR = PROJECT / "logs" / "sharp_reps"
 
 # Canonical inputs default to the combined 2013-2026 mean_elo>=1800 --no-prune pooled
-# build (build_pooled_stats.py) with its aux sidecar, the t300 winpos crush histogram and
-# the eval arrays of D:/chess/eval_full (eval_arrays.py). Override with --input /
-# --aux-stats (--no-aux) / --crush-db / --eval-db.
+# build (build_pooled_stats.py) with its aux sidecar and the eval arrays of
+# D:/chess/eval_full (eval_arrays.py). Override with --input / --aux-stats (--no-aux) /
+# --eval-db.
 DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2026_brc.parquet"
 DEFAULT_AUX       = SD / "position_stats_aux_pooled_ge1800_2013_2026_brc.parquet"
-DEFAULT_CRUSH_REL = SD / "crush_hist_relwin_pooled_ge1800_2013_2026_brc_t300.parquet"
 DEFAULT_EVAL_DB   = DEFAULT_ARRAY_DIR
 
-# Crush selection weight. Surfaced as a constant because the explorer reads it back (via
-# the .meta.json sidecar) to reconstruct its selection-key column — keep it in sync with
-# the --crush-weight passed in common_flags().
-CRUSH_WEIGHT = 0.1
+# Crush selection weight: 0, the recipe carries no crush term. Recorded in .meta.json
+# because the explorer reads it back to reconstruct its selection-key column (and falls
+# back to a non-zero legacy weight when the field is absent).
+CRUSH_WEIGHT = 0.0
 
 # Reply-mass shrinkage strength (adopted 2026-08-03, see the recipe note above). 1.0 =
 # assign the entire missing reply mass the node's own engine eval; 0.0 = the legacy
@@ -133,10 +129,9 @@ LEARN = {"delta_main": 0.005, "delta_rare": 0.04, "reach_pivot": 0.02,
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
 
-def common_flags(stats: Path, crush_db: Path, eval_db: Path,
-                 aux: Path | None = None) -> list[str]:
-    """The locked sharp recipe (winpos + relative gate, 2026-07), parameterized by
-    input paths.
+def common_flags(stats: Path, eval_db: Path, aux: Path | None = None) -> list[str]:
+    """The locked sharp recipe (eval blend + relative gate; no crush since 2026-10-02),
+    parameterized by input paths.
 
     `aux` supplies the termination / other-moves / horizon sidecar. When present
     it also forces --reply-shrink to 0: both corrections cover overlapping
@@ -153,10 +148,6 @@ def common_flags(stats: Path, crush_db: Path, eval_db: Path,
         "--gate-rel-floor", "0.1",
         "--gate-rel-baseline", "own-eval", "--gate-rel-own-margin", "0.02",
         "--min-move-games", "0",
-        "--crush-mode", "relative-propagated",
-        "--crush-db", str(crush_db),
-        "--crush-gamma", "0.99", "--crush-imm-window", "2",
-        "--crush-weight", str(CRUSH_WEIGHT), "--crush-prior", "5000", "--crush-baseline", "zero",
         "--memo-weight", "0",
         "--reply-shrink", str(reply),
     ]
@@ -194,19 +185,19 @@ def meta_path(out: Path) -> Path:
     return out.with_name(out.name + ".meta.json")
 
 
-def write_meta(out: Path, stats: Path, crush_db: Path, eval_db: Path, tag: str,
+def write_meta(out: Path, stats: Path, eval_db: Path, tag: str,
                aux: Path | None = None) -> None:
-    """Record how the rep was built so the explorer can recover the crush weight (and the
-    inputs) without the user re-specifying --crush-weight. `eval_source` fingerprints the
+    """Record how the rep was built so the explorer can recover the crush weight (0) and
+    the inputs without the user re-specifying --crush-weight. `eval_source` fingerprints the
     eval DB (a parquet's size/mtime/rows, or an eval-arrays directory's meta and verify
     status) -- a path alone cannot tell two builds of the eval DB apart."""
     from eval_arrays import describe_eval_source
     prior, reach = plan_paths(tag)
-    meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": "relative-propagated",
+    meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": None,
             "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
             "reply_shrink": 0.0 if aux else REPLY_SHRINK,
             "aux_stats": str(aux) if aux else None,
-            "input": str(stats), "crush_db": str(crush_db), "eval_db": str(eval_db),
+            "input": str(stats), "crush_db": None, "eval_db": str(eval_db),
             "eval_source": describe_eval_source(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -226,7 +217,7 @@ def run(name: str, cmd: list[str]) -> bool:
 
 
 def build_color(tag: str, extra: list[str], flags: list[str],
-                stats: Path, crush_db: Path, eval_db: Path, force: bool,
+                stats: Path, eval_db: Path, force: bool,
                 aux: Path | None = None, pass1_only: bool = False) -> bool:
     """Pass-1 -> measure -> pass-2 chain for one color. Returns True on success.
     `rerun` cascades: once any step actually executes, every later step reruns too
@@ -242,7 +233,7 @@ def build_color(tag: str, extra: list[str], flags: list[str],
     # inputs: a mismatch refuses rather than reporting a stale rep as built.
     if not force and out.exists() and meta_path(out).exists():
         old = json.loads(meta_path(out).read_text(encoding="utf-8"))
-        now = {"input": stats, "crush_db": crush_db, "eval_db": eval_db, "aux_stats": aux}
+        now = {"input": stats, "crush_db": None, "eval_db": eval_db, "aux_stats": aux}
         drift = [k for k, v in now.items()
                  if (old.get(k) or None) != (str(v) if v is not None else None)]
         if drift:
@@ -280,11 +271,11 @@ def build_color(tag: str, extra: list[str], flags: list[str],
                    [PY, stage3, "--output", str(out)]
                    + flags + extra + learn_flags(prior, reach)):
             return False
-        write_meta(out, stats, crush_db, eval_db, tag, aux)
+        write_meta(out, stats, eval_db, tag, aux)
     else:
         print(f"  Skipping {tag} pass-2 (exists: {out.name}). Use --force to rebuild.")
         if not meta_path(out).exists():
-            write_meta(out, stats, crush_db, eval_db, tag, aux)
+            write_meta(out, stats, eval_db, tag, aux)
     return True
 
 
@@ -297,8 +288,6 @@ def main() -> None:
                          "outputs exist.")
     ap.add_argument("--input", default=str(DEFAULT_STATS),
                     help=f"Pooled position-stats parquet (default: {DEFAULT_STATS.name}).")
-    ap.add_argument("--crush-db", default=str(DEFAULT_CRUSH_REL),
-                    help=f"Relative crush histogram parquet (default: {DEFAULT_CRUSH_REL.name}).")
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
                     help=f"Stockfish eval source: a (position_hash, eval_cp) parquet or an "
                          f"eval-arrays directory from eval_arrays.py (default: {DEFAULT_EVAL_DB}).")
@@ -324,12 +313,12 @@ def main() -> None:
         LOG_DIR = LOG_DIR / out_dir.name
     REP_DIR, PLAN_DIR = out_dir, out_dir / "_plan"
 
-    stats, crush_db, eval_db = Path(args.input), Path(args.crush_db), Path(args.eval_db)
-    for p in (stats, crush_db, eval_db):
+    stats, eval_db = Path(args.input), Path(args.eval_db)
+    for p in (stats, eval_db):
         if not p.exists():
             hint = ("  — build it with build_pooled_stats.py --phase merge, or pass "
-                    "--input/--crush-db to point at another pool"
-                    if p in (stats, crush_db) else
+                    "--input to point at another pool"
+                    if p == stats else
                     "  — build it with python/eval_arrays.py")
             sys.exit(f"FATAL: missing prerequisite {p}{hint}")
     REP_DIR.mkdir(parents=True, exist_ok=True)
@@ -337,13 +326,13 @@ def main() -> None:
     aux = None if args.no_aux or not args.aux_stats else Path(args.aux_stats)
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
-    flags = common_flags(stats, crush_db, eval_db, aux)
+    flags = common_flags(stats, eval_db, aux)
     if aux:
         print(f"Aux stats: {aux.name}  (reply-shrink forced to 0 — see common_flags)")
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
-        if not build_color(tag, extra, flags, stats, crush_db, eval_db, args.force, aux,
+        if not build_color(tag, extra, flags, stats, eval_db, args.force, aux,
                            pass1_only=args.pass1_only):
             failures.append(tag)
     print(f"\nDone in {(time.time()-t_all)/60:.1f} min.")
