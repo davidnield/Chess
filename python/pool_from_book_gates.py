@@ -487,7 +487,7 @@ def gate_evals(a) -> bool:
                  if (book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet").exists()]
         lst = ", ".join(f"'{f}'" for f in files)
         below.append(pl.from_arrow(con.execute(f"""
-            SELECT parent_hash, move_san, MIN(child_hash) AS child_hash, SUM(total) AS total
+            SELECT parent_hash, move_san, MIN(child_hash) AS child_hash, SUM(total)::BIGINT AS total
             FROM read_parquet([{lst}], hive_partitioning=false) WHERE ply <= {cap}
             GROUP BY parent_hash, move_san HAVING SUM(total) < {floor}""").arrow()))
     con.close()
