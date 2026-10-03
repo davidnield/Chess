@@ -190,6 +190,7 @@ def _rem(x: int) -> int:
 def gate_reimpl(a) -> bool:
     import duckdb
     import polars as pl
+    import pyarrow.parquet as pq
     from eval_arrays import MISSING, open_eval_arrays
     from stage3_backwards_induction import LICHESS_CP_SCALE
     work = Path(a.work)
@@ -226,10 +227,12 @@ def gate_reimpl(a) -> bool:
             for b in bands:
                 f = book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet"
                 if f.exists():
-                    frames.append(pl.read_parquet(
-                        f, hive_partitioning=False,
+                    # Polars' own reader rejects the book's parquet-rs files
+                    # ("Invalid thrift: bad data", polars 1.40); pyarrow's
+                    # ParquetFile reads them (README: partitioning stays off).
+                    frames.append(pl.from_arrow(pq.ParquetFile(f).read(
                         columns=["parent_hash", "parent_epd", "move_san", "child_hash",
-                                 "ply", *SUMS]))
+                                 "ply", *SUMS])))
         rows = pl.concat(frames)
         le = rows.filter(pl.col("ply") <= cap)
         edges = (le.filter(~pl.col("parent_hash").is_in(list(coll)))
