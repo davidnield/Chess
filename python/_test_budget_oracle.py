@@ -69,10 +69,10 @@ def random_tree(rng: random.Random) -> Graph:
         for i in range(n_cands):
             if depth >= 4 or rng.random() < 0.4:
                 node.cands.append((f"m{h}_{i}", None, False,
-                                   round(rng.uniform(0.35, 0.90), 3), 0.0))
+                                   round(rng.uniform(0.35, 0.90), 3)))
             else:
                 ch = mk_opp(depth + 1)
-                node.cands.append((f"m{h}_{i}", ch, True, 0.0, 0.0))
+                node.cands.append((f"m{h}_{i}", ch, True, 0.0))
         our[h] = node
         return h
 
@@ -106,7 +106,7 @@ def brute_best(g: Graph, budget: int) -> float:
             if h not in booked:
                 return g.our[h].l_node
             san = policy[h]
-            for s, ch, in_sub, lv, _ in cand_lists[h]:
+            for s, ch, in_sub, lv in cand_lists[h]:
                 if s == san:
                     return realized(ch, booked, policy) if in_sub else lv
             return g.our[h].l_node

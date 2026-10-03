@@ -41,8 +41,8 @@ ROOT, O, T = 1, 2, 3
 g = Graph(
     root=ROOT,
     our={
-        ROOT: OurNode(l_node=0.40, cands=[("m", O, True, 0.0, 0.0)]),
-        T:    OurNode(l_node=0.50, cands=[("t", None, False, 0.90, 0.0)]),
+        ROOT: OurNode(l_node=0.40, cands=[("m", O, True, 0.0)]),
+        T:    OurNode(l_node=0.50, cands=[("t", None, False, 0.90)]),
     },
     opp={O: OppNode(const_base=0.0,
                     kids=[(0.5, T, True, 0.0), (0.5, T, True, 0.0)])},
@@ -84,10 +84,10 @@ C1, C2, COPP = 11, 12, 13
 gcyc = Graph(
     root=ROOT,
     our={
-        ROOT: OurNode(l_node=0.40, cands=[("m", O, True, 0.0, 0.0)]),
-        T:    OurNode(l_node=0.50, cands=[("t", None, False, 0.90, 0.0)]),
-        C1:   OurNode(l_node=0.50, cands=[("c1", COPP, True, 0.0, 0.0)]),
-        C2:   OurNode(l_node=0.50, cands=[("c2", None, False, 0.55, 0.0)]),
+        ROOT: OurNode(l_node=0.40, cands=[("m", O, True, 0.0)]),
+        T:    OurNode(l_node=0.50, cands=[("t", None, False, 0.90)]),
+        C1:   OurNode(l_node=0.50, cands=[("c1", COPP, True, 0.0)]),
+        C2:   OurNode(l_node=0.50, cands=[("c2", None, False, 0.55)]),
     },
     opp={
         O:    OppNode(const_base=0.0, kids=[(0.5, T, True, 0.0),
@@ -128,8 +128,8 @@ RC, ROPP, RLEAF = 21, 22, 23
 groot = Graph(
     root=RC,
     our={
-        RC:    OurNode(l_node=0.40, cands=[("r", ROPP, True, 0.0, 0.0)]),
-        RLEAF: OurNode(l_node=0.50, cands=[("x", None, False, 0.95, 0.0)]),
+        RC:    OurNode(l_node=0.40, cands=[("r", ROPP, True, 0.0)]),
+        RLEAF: OurNode(l_node=0.50, cands=[("x", None, False, 0.95)]),
     },
     opp={ROPP: OppNode(const_base=0.0, kids=[(0.5, RC, True, 0.0),
                                              (0.5, RLEAF, True, 0.0)])},

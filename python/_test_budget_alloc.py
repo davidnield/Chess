@@ -47,10 +47,10 @@ O, X, OX, X2, Y, OY, Y2 = 1, 2, 3, 4, 5, 6, 7
 g = Graph(
     root=O,
     our={
-        X:  OurNode(l_node=0.50, cands=[("x1", OX, True, 0.0, 0.0)]),
-        X2: OurNode(l_node=0.60, cands=[("x2", None, False, 0.62, 0.0)]),
-        Y:  OurNode(l_node=0.50, cands=[("y1", OY, True, 0.0, 0.0)]),
-        Y2: OurNode(l_node=0.57, cands=[("y2", None, False, 0.65, 0.0)]),
+        X:  OurNode(l_node=0.50, cands=[("x1", OX, True, 0.0)]),
+        X2: OurNode(l_node=0.60, cands=[("x2", None, False, 0.62)]),
+        Y:  OurNode(l_node=0.50, cands=[("y1", OY, True, 0.0)]),
+        Y2: OurNode(l_node=0.57, cands=[("y2", None, False, 0.65)]),
     },
     opp={
         O:  OppNode(const_base=0.0, kids=[(0.6, X, True, 0.0),

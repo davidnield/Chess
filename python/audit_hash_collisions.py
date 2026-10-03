@@ -1,7 +1,7 @@
 """Do any two distinct positions share a Zobrist hash in our pool? (#113 step 1)
 
 Everything downstream keys on `parent_hash`: position_stats, the aux sidecar,
-the winpos histograms, Stage 3's whole graph, the repertoire parquets, the
+Stage 3's whole graph, the repertoire parquets, the
 trainer. A collision does not error — it silently merges two unrelated positions
 into one node, averaging their move distributions and their scores. Nobody has
 checked, and the cost of checking is a few hours against a rebuild we cannot

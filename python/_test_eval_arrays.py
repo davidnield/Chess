@@ -1,7 +1,7 @@
 """The mmap'd eval lookup returns what the parquet says, and is fast enough.
 
-Everything in the fused extract keys off this primitive: the winpos crossing
-detection and the other-moves bucket's aggregate eval both come from it. A wrong
+The extract's other-moves bucket eval (child_eval), Stage 3's evals and the
+budget/baseline books all come from this primitive. A wrong
 answer here is not a crash, it is a repertoire built on the wrong evaluations —
 so it is checked against the source of truth rather than against itself.
 
@@ -53,7 +53,7 @@ def check_staleness() -> None:
 
     Nothing about that is visible at read time: a stale array is the right shape,
     sorted, and answers every query. It just answers with the previous DB's
-    evaluations, in both the winpos crossings and the other-moves bucket. So the
+    evaluations, everywhere they are read. So the
     guard is tested here on throwaway arrays rather than trusted.
     """
     tmp = Path(tempfile.mkdtemp(prefix="eval_arrays_stale_"))

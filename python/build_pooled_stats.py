@@ -1,6 +1,6 @@
 """
-build_pooled_stats.py — fast, reusable combined position-stats + relative crush
-histogram, pooled to a SINGLE slice (event='Pooled', elo_band=0).
+build_pooled_stats.py — fast, reusable combined position-stats (plus the terminal-
+accounting aux sidecar), pooled to a SINGLE slice (event='Pooled', elo_band=0).
 
 This is the CANONICAL pooler for new datasets: it fuses extraction + elo/event
 filtering + pooling straight from the source parquets. (build_combined_slice.py is the
@@ -14,26 +14,21 @@ merge, whose tier/shard/fragment machinery was ~OOM-defensive scaffolding for th
   For each source parquet, BEFORE any move parsing, drop games with mean_elo
   below --min-elo (only ~1/3 of Blitz, ~1/5 of Rapid, ~1/6 of Classical qualify
   at 1800 -> ~75% of work skipped). Replay each surviving game ONCE and, per
-  chunk, accumulate BOTH:
-    - position-stats   : (parent_hash, move_san) -> child_hash + white/draw/black/total
-      child_hash falls out of the replay for free (the position after ply p is
-      the position before ply p+1), which is why the merge no longer re-derives
-      it with python-chess in a single-threaded tail. See _walk_game.
-    - relative crush   : (parent_hash, move_san, move_bucket) -> n/white/black
-      move_bucket = clip(move_count - (ply-1)//2, 1, 60) for a decisive NORMAL
-      win, else 0  (full moves from THIS position to the decisive end — same
-      formula as build_crush_stats.py).
-  Each chunk writes two SMALL pre-aggregated partials (never the multi-GB per-ply
-  edge files). Two final single-pass DuckDB GROUP BYs merge the partials. No
-  tiers — filtering + pooling keep cardinality bounded.
+  chunk, accumulate:
+    - position-stats   : (parent_hash, move_san) -> child_hash + child_eval +
+      white/draw/black/total. child_hash falls out of the replay for free (the
+      position after ply p is the position before ply p+1), which is why the merge
+      no longer re-derives it with python-chess in a single-threaded tail. See
+      _walk_game. child_eval (from the mmap'd eval arrays) feeds the aux sidecar's
+      other-moves bucket.
+    - terminal accounting : where each game left the recorded tree (TERM/HORIZON).
+  Each chunk writes SMALL pre-aggregated partials (never the multi-GB per-ply edge
+  files); final single-pass DuckDB GROUP BYs merge them. No tiers — filtering +
+  pooling keep cardinality bounded.
 
-RETIRED OUTPUT: the resignation-proxy crush histogram is no longer merged unless
---crush-hist is passed. Nothing consumes it — build_sharp_reps.py reads the winpos
-histogram (crush_hist_relwin_*, fused into this extract), whose win event is
-the earliest of (eval >= +300cp, decisive-normal end) rather than terminations
-alone. The extract still writes .crush.parquet partials, so it can be merged later
-without re-extracting. The next full rebuild should fuse winpos into THIS script's
-replay instead of running a second pass — see the task note in CLAUDE.md.
+The crush histograms (the resignation-proxy one and the fused winpos one) were
+removed on 2026-10-02 when crush left the recipe; the extract no longer writes
+.crush/.winpos partials.
 
 Reusable: parameterized by --start-year/--end-year/--months, --min-elo, --events,
 --min-games, --max-ply. Resumable: per-chunk partial skip-gate + atomic .tmp
@@ -70,13 +65,6 @@ from stage1_extract_positions import iter_san_moves, zobrist_int64
 from zobrist import IncrementalZobrist
 from eval_arrays import (MISSING as _EVAL_MISSING, lookup_evals,
                          open_eval_arrays, verify_eval_arrays)
-from winpos_fused import winpos_batch
-
-# Winpos crossing thresholds, in centipawns. 300 is the canonical one every
-# shipped repertoire was built against and must stay in the set; the others cost
-# one extra comparison per position because the eval is already in hand, and
-# having them means the threshold can be swept without another extract.
-WINPOS_THRESHOLDS = (200, 300, 500)
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -101,8 +89,8 @@ POOL_ELO = 0
 SKIP_PARTITIONS: set[tuple[int, int]] = set()
 
 # Source columns needed for the fused pass. No game_id needed (we aggregate, never
-# join per-game crush facts). movetext is the heavyweight string.
-SRC_COLUMNS = ["movetext", "white_score", "termination", "move_count", "mean_elo"]
+# join per-game facts). movetext is the heavyweight string.
+SRC_COLUMNS = ["movetext", "white_score", "termination", "mean_elo"]
 READ_BATCH_GAMES = 50_000
 # Compact the per-chunk accumulator every N batches to bound peak memory (the
 # concat+regroup keeps the running frame near the chunk's unique-key count).
@@ -141,26 +129,9 @@ def _agg_ps_resum(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def _agg_crush(df: pl.DataFrame) -> pl.DataFrame:
-    return df.group_by("parent_hash", "move_san", "move_bucket").agg(
-        pl.len().cast(pl.Int64).alias("n"),
-        pl.col("wn").sum().cast(pl.Int64).alias("white_wins"),
-        pl.col("bn").sum().cast(pl.Int64).alias("black_wins"),
-    )
-
-
-def _agg_crush_resum(df: pl.DataFrame) -> pl.DataFrame:
-    return df.group_by("parent_hash", "move_san", "move_bucket").agg(
-        pl.col("n").sum().alias("n"),
-        pl.col("white_wins").sum().alias("white_wins"),
-        pl.col("black_wins").sum().alias("black_wins"),
-    )
-
-
 def _new_buf() -> dict:
     return {k: [] for k in
-            ("parent_hash", "child_hash", "move_san", "parent_epd", "ply",
-             "ws", "wn", "bn", "move_bucket")}
+            ("parent_hash", "child_hash", "move_san", "parent_epd", "ply", "ws")}
 
 
 # ── terminal accounting (TERM / HORIZON) ──────────────────────────────────────
@@ -277,14 +248,10 @@ def classify_maxply(tiers: dict | None, w1: str | None, b1: str | None,
     return tiers["shallow_ply"]
 
 
-def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
-               move_count, tiers, max_ply_cap, hasher=None, epd_memo=None,
-               term_buf=None, reason: int = TERM_OTHER) -> bool:
+def _walk_game(buf: dict, movetext, white_score, tiers, max_ply_cap, hasher=None,
+               epd_memo=None, term_buf=None, reason: int = TERM_OTHER) -> bool:
     """Append one game's per-ply rows into the columnar buffer, capping depth by the
     asymmetric tier (classified from the first two SAN moves). Returns True on parse error.
-
-    NOTE: move_bucket still uses the game's REAL move_count (full length from source),
-    so the relative-crush horizon is unaffected by where we truncate extraction.
 
     `hasher` / `epd_memo` are the two extract-speed optimizations (2026-07 profiling:
     the position hash and board.epd() were 29% and 52% of replay time, against 19%
@@ -312,7 +279,6 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
     w1 = toks[0]
     b1 = toks[1] if len(toks) > 1 else None
     maxply = min(classify_maxply(tiers, w1, b1, max_ply_cap), max_ply_cap, len(toks))
-    decisive = white_norm or black_norm
     board = chess.Board()
     if hasher is None:
         get_hash = lambda: zobrist_int64(board)
@@ -341,11 +307,6 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
             move = board.parse_san(san)
         except (ValueError, AssertionError):
             return True
-        if decisive and move_count is not None:
-            b = move_count - ((ply - 1) // 2)
-            b = 1 if b < 1 else (60 if b > 60 else b)
-        else:
-            b = 0
         push(move)
         ch = get_hash()
         buf["parent_hash"].append(ph)
@@ -354,9 +315,6 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
         buf["parent_epd"].append(epd)
         buf["ply"].append(ply)
         buf["ws"].append(white_score)
-        buf["wn"].append(1 if white_norm else 0)
-        buf["bn"].append(1 if black_norm else 0)
-        buf["move_bucket"].append(b)
         ph = ch
     # `ph` is now the position after the last recorded ply. maxply was clamped to
     # min(tier, cap, len(toks)), so it equals len(toks) exactly when nothing
@@ -373,22 +331,13 @@ def _walk_game(buf: dict, movetext, white_score, white_norm, black_norm,
 _BUF_SCHEMA = {
     "parent_hash": pl.Int64, "child_hash": pl.Int64, "move_san": pl.Utf8,
     "parent_epd": pl.Utf8, "ply": pl.Int32, "ws": pl.Float64,
-    "wn": pl.Int32, "bn": pl.Int32, "move_bucket": pl.Int32,
-}
-
-# Schema-identical to the crush histogram, so Stage 3 consumes a winpos partial
-# with no change at all — --crush-db just points at one.
-_WINPOS_SCHEMA = {
-    "parent_hash": pl.Int64, "move_san": pl.Utf8, "move_bucket": pl.Int32,
-    "n": pl.Int64, "white_wins": pl.Int64, "black_wins": pl.Int64,
 }
 
 
-def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
+def extract_file(src_file: Path, ps_out: Path,
                  min_elo: int, max_ply: int, tiers: dict | None,
                  limit_games: int | None = None, optimize: bool = True,
                  term_out: Path | None = None,
-                 winpos_out: dict[int, Path] | None = None,
                  with_child_eval: bool = True) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
@@ -396,62 +345,30 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     pre-2026-07 replay path byte-for-byte. Only _test_extract_equivalence.py and
     _bench_extract.py pass it; production always runs optimized.
 
-    `crush_out` writes the RETIRED resignation-proxy histogram, and is None unless
-    --crush-hist is passed. It used to be written unconditionally so the retired
-    metric could be re-merged without a re-extract — a cheap hedge when the partial
-    dir held ps + crush alone. Fusing winpos in tripled that dir, and the 2026-08
-    rebuild measured the hedge at ~303 GB against ~280 GB of free-space margin,
-    which is the whole reason it is now gated. The hedge is also redundant: the
-    thing it insures against is the resignation-proxy win event, and the winpos
-    histograms at 200/300/500cp supersede it. Gate the WRITE and the caller's
-    skip-gate together or every completed chunk re-runs (see main).
-
     `term_out` writes the TERM/HORIZON terminal-accounting partial. Optional so the
     equivalence/bench harnesses can call the replay without it; production always
     passes it (see _worker).
 
-    `winpos_out` maps threshold_cp -> partial path. Supplying it FUSES the winpos
-    histogram into this replay, replacing the retired build_crush_winpos_phase2.py's
-    second full pass over the same files (measured 47 h, peak 76 GB). The events are
-    computed by winpos_fused, which is held equal to winpos_reference.winpos_sql
-    by _test_winpos_fused.py — that query remains the definition of the event.
-    Rows are emitted for EVERY edge, not just pool survivors: the `keys` join the
-    SQL performs needs a global min_games decision that does not exist yet while a
-    single file is being extracted, so it moves to the merge's semi-join.
-
     `with_child_eval` populates the child_eval column the merge needs for the
-    other-moves bucket's aggregate evaluation. It is INDEPENDENT of winpos on
-    purpose: both read the same mmap'd arrays, and tying them together meant that
-    turning winpos off — the obvious lever if a threshold's partials are too big —
-    silently emptied the bucket's eval (other_eval_mean all NULL, other_eval_cov
-    0), so Stage 3 fell back to the empirical score with nothing in the logs. Only
+    other-moves bucket's aggregate evaluation, from the mmap'd eval arrays. Only
     the equivalence/bench harnesses pass False, since they replay without the
     eval arrays present.
+
+    (Until 2026-10-02 this also wrote the resignation-proxy crush partial and the
+    fused winpos partials; crush left the recipe and both were removed.)
     """
-    want_crush = crush_out is not None
     want_term = term_out is not None
-    want_wp = bool(winpos_out)
-    want_ev = want_wp or with_child_eval
-    if (ps_out.exists()
-            and (not want_crush or crush_out.exists())
-            and (not want_term or term_out.exists())
-            and (not want_wp or all(p.exists() for p in winpos_out.values()))):
+    if ps_out.exists() and (not want_term or term_out.exists()):
         return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
 
     t0 = time.time()
     n_games = n_kept = n_failed = 0
     ps_parts: list[pl.DataFrame] = []
-    crush_parts: list[pl.DataFrame] = []
     term_parts: list[pl.DataFrame] = []
-    wp_parts: dict[int, list[pl.DataFrame]] = {t: [] for t in (winpos_out or {})}
     buf = _new_buf()
     term_buf = _new_term_buf() if want_term else None
-    # Per-game index ranges into buf + the decisive-end facts winpos needs. Only
-    # collected when fusing, since they cost a tuple per game.
-    spans: list[tuple[int, int]] = []
-    facts: list[tuple[int, int, object]] = []
     mm_h = mm_e = None
-    if want_ev:
+    if with_child_eval:
         mm_h, mm_e = open_eval_arrays()
     # Reused across every game in the file; the memo is cleared per read batch.
     hasher = IncrementalZobrist(chess.Board()) if optimize else None
@@ -463,16 +380,13 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             for v in term_buf.values():
                 v.clear()
         if not buf["parent_hash"]:
-            spans.clear()
-            facts.clear()
             return
         df = pl.DataFrame(buf, schema=_BUF_SCHEMA)
-        # child_eval rides along on the SAME arrays winpos already has open. It is
-        # what lets the merge compute the other-moves bucket's aggregate evaluation
-        # without a separate join over ~2.25B below-floor edges. Stored NULL where
-        # the eval DB has no entry, so SQL aggregates skip it instead of averaging
-        # in a sentinel.
-        if want_ev:
+        # child_eval is what lets the merge compute the other-moves bucket's
+        # aggregate evaluation without a separate join over ~2.25B below-floor
+        # edges. Stored NULL where the eval DB has no entry, so SQL aggregates skip
+        # it instead of averaging in a sentinel.
+        if with_child_eval:
             cev = pl.Series("child_eval",
                             lookup_evals(np.asarray(buf["child_hash"], dtype=np.int64),
                                          mm_h, mm_e), dtype=pl.Int32)
@@ -482,38 +396,15 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
         else:
             df = df.with_columns(pl.lit(None, dtype=pl.Int32).alias("child_eval"))
         ps_parts.append(_agg_ps(df))
-        if want_crush:
-            crush_parts.append(_agg_crush(df))
-        if want_wp and spans:
-            # ONE vectorised lookup for the whole batch. Per-ply binary searches
-            # over a 3.2 GB array would be cache-hostile; lookup_evals sorts the
-            # queries so the searches sweep instead of jumping (see eval_arrays).
-            # The population is buf["parent_hash"] — the position BEFORE each
-            # move — which is exactly winpos_sql's `pm.parent_hash`.
-            ev = lookup_evals(np.asarray(buf["parent_hash"], dtype=np.int64),
-                              mm_h, mm_e).tolist()
-            ph, sa, pl_ = buf["parent_hash"], buf["move_san"], buf["ply"]
-            for thr in wp_parts:
-                raw = winpos_batch(ph, sa, pl_, ev, spans, facts, thr)
-                if raw["parent_hash"]:
-                    wp_parts[thr].append(_agg_crush_resum(pl.DataFrame(
-                        raw, schema=_WINPOS_SCHEMA)))
-        spans.clear()
-        facts.clear()
         for v in buf.values():
             v.clear()
 
     def compact():
-        nonlocal ps_parts, crush_parts, term_parts
+        nonlocal ps_parts, term_parts
         if len(ps_parts) > 1:
             ps_parts = [_agg_ps_resum(pl.concat(ps_parts))]
-        if len(crush_parts) > 1:
-            crush_parts = [_agg_crush_resum(pl.concat(crush_parts))]
         if len(term_parts) > 1:
             term_parts = [_agg_term_resum(pl.concat(term_parts))]
-        for thr, parts in wp_parts.items():
-            if len(parts) > 1:
-                wp_parts[thr] = [_agg_crush_resum(pl.concat(parts))]
 
     pf = pq.ParquetFile(src_file)
     batch_i = 0
@@ -531,24 +422,9 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
             if ws is None:
                 continue
             n_kept += 1
-            term = rec["termination"]
-            normal = term == "Normal"
-            white_norm = normal and ws == 1.0
-            black_norm = normal and ws == 0.0
-            g0 = len(buf["parent_hash"]) if want_wp else 0
-            if _walk_game(buf, rec["movetext"], ws, white_norm, black_norm,
-                          rec["move_count"], tiers, max_ply, hasher, epd_memo,
-                          term_buf, _term_reason(term)):
+            if _walk_game(buf, rec["movetext"], ws, tiers, max_ply, hasher, epd_memo,
+                          term_buf, _term_reason(rec["termination"])):
                 n_failed += 1
-            if want_wp:
-                g1 = len(buf["parent_hash"])
-                if g1 > g0:
-                    # A game that failed SAN parsing keeps the plies it managed,
-                    # and so does the second-pass replay this replaces — the
-                    # populations must match, so partial games are NOT dropped.
-                    spans.append((g0, g1))
-                    facts.append((1 if white_norm else 0,
-                                  1 if black_norm else 0, rec["move_count"]))
         flush_batch()
         # Bound the memo: the 35.1% hit rate is entirely intra-batch, so clearing
         # here costs no hits and keeps the dict at ~one batch's distinct positions.
@@ -566,9 +442,6 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
         "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
         "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
         "total": pl.Int64})
-    crush_df = crush_parts[0] if crush_parts else pl.DataFrame(schema={
-        "parent_hash": pl.Int64, "move_san": pl.Utf8, "move_bucket": pl.Int32,
-        "n": pl.Int64, "white_wins": pl.Int64, "black_wins": pl.Int64})
     term_df = term_parts[0] if term_parts else pl.DataFrame(schema={
         "position_hash": pl.Int64, "kind": pl.Int32, "reason": pl.Int32,
         "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
@@ -577,31 +450,15 @@ def extract_file(src_file: Path, ps_out: Path, crush_out: Path | None,
     ps_out.parent.mkdir(parents=True, exist_ok=True)
     ps_tmp = ps_out.with_suffix(".parquet.tmp")
     ps_df.write_parquet(ps_tmp, compression="zstd")
-    if want_crush:
-        cr_tmp = crush_out.with_suffix(".parquet.tmp")
-        crush_df.write_parquet(cr_tmp, compression="zstd")
     if want_term:
         tm_tmp = term_out.with_suffix(".parquet.tmp")
         term_df.write_parquet(tm_tmp, compression="zstd")
         tm_tmp.replace(term_out)
-    wp_rows = 0
-    for thr, out_path in (winpos_out or {}).items():
-        parts = wp_parts[thr]
-        wdf = parts[0] if parts else pl.DataFrame(schema=_WINPOS_SCHEMA)
-        wp_rows += wdf.height
-        wp_tmp = out_path.with_suffix(".parquet.tmp")
-        wdf.write_parquet(wp_tmp, compression="zstd")
-        wp_tmp.replace(out_path)
     # ps LAST: the caller's skip-gate is conjunctive, so the kind renamed last is
-    # the one whose absence reopens the gate after an interruption. Previously
-    # crush held that slot; with it gated off, ps has to take it or an interrupt
-    # between the two renames would leave a chunk that passes the gate half-built.
-    if want_crush:
-        cr_tmp.replace(crush_out)
+    # the one whose absence reopens the gate after an interruption.
     ps_tmp.replace(ps_out)
     return {"file": src_file.name, "skipped": False, "games": n_games, "kept": n_kept,
-            "failed": n_failed, "ps_rows": ps_df.height, "crush_rows": crush_df.height,
-            "term_rows": term_df.height, "winpos_rows": wp_rows,
+            "failed": n_failed, "ps_rows": ps_df.height, "term_rows": term_df.height,
             "sec": time.time() - t0}
 
 
@@ -617,12 +474,10 @@ def _init_worker(min_elo: int, max_ply: int, tiers: dict | None) -> None:
 
 
 def _worker(task: tuple) -> dict:
-    src_str, ps_str, cr_str, tm_str, wp_map, limit = task
+    src_str, ps_str, tm_str, limit = task
     return extract_file(Path(src_str), Path(ps_str),
-                        Path(cr_str) if cr_str else None,
                         _W["min_elo"], _W["max_ply"], _W["tiers"], limit,
-                        term_out=Path(tm_str),
-                        winpos_out={int(t): Path(p) for t, p in wp_map.items()})
+                        term_out=Path(tm_str))
 
 
 # ── depth-tier seeding (from existing >=1800 frequency stats) ───────────────────
@@ -764,11 +619,6 @@ _OTHER_BUCKET_SCHEMA = {
     "other_eval_mean": pl.Float64, "other_eval_min": pl.Float64,
     "other_eval_max": pl.Float64, "other_eval_cov": pl.Float64,
 }
-_HIST_BUCKET_SCHEMA = {
-    "parent_hash": pl.Int64, "move_san": pl.Utf8, "move_bucket": pl.Int32,
-    "n": pl.Int64, "white_wins": pl.Int64, "black_wins": pl.Int64,
-    "event": pl.Utf8, "elo_band": pl.Int64,
-}
 
 
 def _run_ps_bucket(task: tuple) -> tuple:
@@ -900,7 +750,7 @@ def _consolidate_one_month(task: tuple) -> tuple:
 
 def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
                         tmp_base: Path | None = None,
-                        kinds: tuple[str, ...] = ("ps", "crush")) -> Path:
+                        kinds: tuple[str, ...] = ("ps",)) -> Path:
     """SUM-only per-(year,month) consolidation of the per-file partials.
 
     NO min_games filter here — pure summation, so a position split across files/
@@ -909,35 +759,23 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
     GROUP BY tractable and crash-safe. Resumable: skip-gated per month, atomic write.
     Returns the monthly directory.
 
-    `kinds` selects which partial families to consolidate. The default merge path
-    passes ("ps",) only — the resignation-proxy crush histogram is retired (see
-    --crush-hist), and consolidating its partials is the largest avoidable cost in
-    the merge.
+    `kinds` selects which partial families to consolidate: "ps" and "term".
     """
     mdir = partial_dir / "_monthly"
     mdir.mkdir(parents=True, exist_ok=True)
     tmp_dir = (tmp_base or partial_dir) / "_merge_duckdb_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    # winpos<T> partials are schema-identical to crush by construction, so they
-    # reuse its grouping rather than getting a near-duplicate spec that could drift.
-    _HIST = ("parent_hash, move_san, move_bucket",
-             "SUM(n)::BIGINT AS n, SUM(white_wins)::BIGINT AS white_wins, "
-             "SUM(black_wins)::BIGINT AS black_wins")
     specs = {
         "ps": ("parent_hash, move_san",
                "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
                "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
                "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
                "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
-        "crush": _HIST,
         "term": ("position_hash, kind, reason",
                  "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
                  "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
     }
-    for k in kinds:
-        if k.startswith("winpos"):
-            specs.setdefault(k, _HIST)
     for kind, (grp, sums) in [(k, specs[k]) for k in kinds if k in specs]:
         months: dict[tuple[int, int], list[Path]] = {}
         for f in partial_dir.glob(f"*.{kind}.parquet"):
@@ -1173,7 +1011,7 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
             con.close()
         agg_write.replace(agg_ckpt)
         shutil.rmtree(bdir, ignore_errors=True)
-        shutil.rmtree(pdir, ignore_errors=True)  # ~E: footprint of the inputs; free before crush
+        shutil.rmtree(pdir, ignore_errors=True)  # ~E: footprint of the inputs; free it now
         print(f"  ps GROUP BY done in {(time.time()-t0)/60:.1f} min; stamping...", flush=True)
 
     # Final stamping. child_hash now arrives from the EXTRACT (the position after
@@ -1193,85 +1031,11 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
     agg_ckpt.unlink(missing_ok=True)
     # Repeated here for the checkpoint-resume path: a crash between the checkpoint
     # rename and the else-branch cleanup leaves ~390 GB of partition files behind,
-    # which starved the crush merge of disk once already.
+    # which starved a later merge of disk once already.
     shutil.rmtree(bdir, ignore_errors=True)
     shutil.rmtree(pdir, ignore_errors=True)
     print(f"  position-stats: {out_path.name} ({out_path.stat().st_size/1e6:.0f} MB, "
           f"{df.height:,} rows)", flush=True)
-
-
-def merge_crush(src_dir: Path, partial_dir: Path, ps_path: Path, out_path: Path,
-                threads: int, mem: str, tmp_base: Path | None = None,
-                kind: str = "crush") -> None:
-    """Histogram merge. `kind` selects the partial family — "crush" for the
-    retired resignation-proxy histogram, "winpos<T>" for a fused winpos one.
-
-    The SEMI JOIN to surviving position-stats keys is what makes the fused winpos
-    path correct: the extract cannot apply the pool's min_games floor (it is a
-    global decision made here), so it emits a row for EVERY edge and the
-    restriction happens on this side — the same thing winpos_sql's `keys` INNER
-    JOIN did when winpos was a separate pass.
-    """
-    if out_path.exists():
-        print(f"SKIP {kind} merge: {out_path.name} exists")
-        return
-    tmp_dir = (tmp_base or partial_dir) / "_merge_duckdb_tmp"
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-    out_tmp = out_path.with_suffix(".parquet.tmp")
-    ps = _sql_path(ps_path)
-    t0 = time.time()
-    # Two-phase like the ps merge: Phase A partitions the monthly crush files by
-    # parent_hash bucket; Phase B runs each bucket's GROUP BY + SEMI JOIN to the
-    # surviving position-stats keys (collapse the tail), with the join build side
-    # filtered to the same bucket.
-    bdir = out_path.with_name(out_path.stem + "_buckets")
-    bdir.mkdir(parents=True, exist_ok=True)
-    pdir = out_path.with_name(out_path.stem + "_parts")
-    _partition_by_bucket(src_dir, kind, pdir, threads, mem, tmp_dir)
-    tasks = []
-    for i in range(N_MERGE_BUCKETS):
-        bout = bdir / f"bucket_{i}.parquet"
-        if bout.exists():
-            continue
-        if not _bucket_has_data(pdir, i):
-            _write_empty(bout, _HIST_BUCKET_SCHEMA)
-            continue
-        sql = f"""
-            COPY (
-                SELECT c.parent_hash, c.move_san, c.move_bucket,
-                       SUM(c.n)::BIGINT          AS n,
-                       SUM(c.white_wins)::BIGINT AS white_wins,
-                       SUM(c.black_wins)::BIGINT AS black_wins,
-                       '{POOL_EVENT}' AS event, {POOL_ELO} AS elo_band
-                FROM read_parquet('{_sql_path(pdir)}/month=*/bkt={i}/*.parquet') c
-                SEMI JOIN (SELECT DISTINCT parent_hash, move_san FROM read_parquet('{ps}')
-                           WHERE {_bucket_expr("parent_hash")} = {i}) k
-                  ON c.parent_hash = k.parent_hash AND c.move_san = k.move_san
-                GROUP BY c.parent_hash, c.move_san, c.move_bucket
-            ) TO '{_sql_path(bout.with_suffix(".parquet.tmp"))}' (FORMAT PARQUET, COMPRESSION ZSTD)
-        """
-        tasks.append((sql, str(bout.with_suffix(".parquet.tmp")), str(bout),
-                      threads, mem, str(tmp_dir), f"{kind} bucket {i}"))
-    print(f"  Phase B ({kind}): GROUP BY in {N_MERGE_BUCKETS} hash buckets "
-          f"({len(tasks)} to build)...", flush=True)
-    with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as ex:
-        for fut in as_completed([ex.submit(_run_copy_query, t) for t in tasks]):
-            label, size, secs = fut.result()
-            print(f"    {label}: {size/1e6:.0f} MB ({secs/60:.1f} min)", flush=True)
-    out_tmp.unlink(missing_ok=True)
-    con = _duck(threads, mem, tmp_dir)
-    try:
-        con.execute(f"""
-            COPY (SELECT * FROM read_parquet('{_sql_path(bdir)}/bucket_*.parquet'))
-            TO '{_sql_path(out_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
-        """)
-    finally:
-        con.close()
-    out_tmp.replace(out_path)
-    shutil.rmtree(bdir, ignore_errors=True)
-    shutil.rmtree(pdir, ignore_errors=True)
-    print(f"  {kind}: {out_path.name} ({out_path.stat().st_size/1e6:.0f} MB) "
-          f"in {(time.time()-t0)/60:.1f} min", flush=True)
 
 
 # ── orchestration ──────────────────────────────────────────────────────────────
@@ -1279,7 +1043,7 @@ def merge_crush(src_dir: Path, partial_dir: Path, ps_path: Path, out_path: Path,
 def main() -> None:
     # Declared up front: --source rebinds it below, and the argparse help text
     # reads it, so the declaration has to precede the first use in this scope.
-    global SOURCE_ROOT, WINPOS_THRESHOLDS
+    global SOURCE_ROOT
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--start-year", type=int, required=True)
@@ -1288,36 +1052,13 @@ def main() -> None:
                     help="Restrict to these months (default: all present).")
     ap.add_argument("--min-elo", type=int, default=1800)
     ap.add_argument("--events", nargs="+", default=["Blitz", "Rapid", "Classical"])
-    ap.add_argument("--fuse-winpos", action=argparse.BooleanOptionalAction, default=True,
-                    help=f"Compute the winpos crush histogram inside THIS replay at "
-                         f"thresholds {WINPOS_THRESHOLDS} cp, instead of running "
-                         f"a second full pass over "
-                         f"the same files (measured 47 h, peak 76 GB). Needs the "
-                         f"mmap'd eval arrays (python/eval_arrays.py). Events are "
-                         f"identical to winpos_reference.winpos_sql — see "
-                         f"_test_winpos_fused.py — except that pool-survivor "
-                         f"filtering moves to the merge, since min_games is not "
-                         f"known during extraction. DEFAULT ON.")
     ap.add_argument("--source", default=None,
                     help=f"Derived-parquet root to read (default: {SOURCE_ROOT}). "
                          f"Discovery happens here in main and worker tasks carry "
                          f"absolute paths, so pointing this at a small tree is "
                          f"enough to run the whole pipeline over a bounded slice.")
-    ap.add_argument("--winpos-thresholds", type=int, nargs="+",
-                    default=list(WINPOS_THRESHOLDS),
-                    help=f"Crossing thresholds in cp (default {WINPOS_THRESHOLDS}). "
-                         f"Each one is a separate histogram to build AND to merge, "
-                         f"so cost scales with the count — the eval lookup is shared "
-                         f"but nothing downstream of it is.")
     ap.add_argument("--min-games", type=int, default=50)
     ap.add_argument("--max-ply", type=int, default=30)
-    ap.add_argument("--crush-hist", action="store_true",
-                    help="Also merge the resignation-proxy crush histogram. OFF by "
-                         "default: no consumer reads it (build_sharp_reps.py uses the "
-                         "winpos histogram crush_hist_relwin_*), and consolidating its "
-                         "partials is the largest avoidable cost in the merge. The "
-                         "extract still writes .crush.parquet partials, so this can be "
-                         "turned back on later without re-extracting.")
     ap.add_argument("--workers", type=int, default=11)
     ap.add_argument("--threads", type=int, default=8, help="DuckDB threads for the merge phase.")
     ap.add_argument("--mem", default="48GB", help="DuckDB memory_limit for the merge phase.")
@@ -1349,7 +1090,6 @@ def main() -> None:
 
     if args.source:
         SOURCE_ROOT = Path(args.source)
-    WINPOS_THRESHOLDS = tuple(args.winpos_thresholds)
 
     ev_tag = "".join(e[0].lower() for e in args.events)  # brc
     tag = args.tag or f"ge{args.min_elo}_{args.start_year}_{args.end_year}_{ev_tag}"
@@ -1357,15 +1097,11 @@ def main() -> None:
         STATS_DIR / f"_pooled_partials_{tag}"
     ps_out = STATS_DIR / f"position_stats_pooled_{tag}.parquet"
     aux_out = STATS_DIR / f"position_stats_aux_pooled_{tag}.parquet"
-    crush_out = STATS_DIR / f"crush_hist_rel_pooled_{tag}.parquet"
 
     print(f"Target: events={args.events} mean_elo>={args.min_elo} "
           f"years {args.start_year}-{args.end_year} months={args.months or 'all'}")
     print(f"Partials: {partial_dir}")
-    print(f"Outputs:  {ps_out.name}"
-          + (f" | {crush_out.name}" if args.crush_hist
-             else "  (resignation-proxy crush histogram SKIPPED; --crush-hist to build)"),
-          flush=True)
+    print(f"Outputs:  {ps_out.name} | {aux_out.name}", flush=True)
 
     # Build the asymmetric-depth tier tables (unless disabled).
     tiers = None
@@ -1390,8 +1126,8 @@ def main() -> None:
 
     if args.phase in ("extract", "all"):
         # Fail here, not 6 workers deep. Every extract needs the eval arrays now
-        # (child_eval for the other-moves bucket, plus the winpos crossings when
-        # fused), and open_eval_arrays runs inside the worker — so a missing or
+        # (child_eval for the other-moves bucket), and open_eval_arrays runs inside
+        # the worker — so a missing or
         # STALE pair would otherwise surface as N identical tracebacks out of a
         # process pool at the start of a ~90 h run. Verifying once up front turns
         # that into one line naming the fix.
@@ -1405,21 +1141,10 @@ def main() -> None:
         tasks = []
         for f, y, m, ev in files:
             ps_p = partial_dir / partial_name(f, y, m, ev, "ps")
-            # Gated on the same flag as the merge below. Both must move together:
-            # dropping the write while the gate still demands cr_p.exists() would
-            # fail every already-complete chunk and re-extract the lot.
-            cr_p = (partial_dir / partial_name(f, y, m, ev, "crush")
-                    if args.crush_hist else None)
             tm_p = partial_dir / partial_name(f, y, m, ev, "term")
-            wp_p = {t: partial_dir / partial_name(f, y, m, ev, f"winpos{t}")
-                    for t in (WINPOS_THRESHOLDS if args.fuse_winpos else ())}
-            if (ps_p.exists() and tm_p.exists()
-                    and (cr_p is None or cr_p.exists())
-                    and all(p.exists() for p in wp_p.values())):
+            if ps_p.exists() and tm_p.exists():
                 continue
-            tasks.append((str(f), str(ps_p), str(cr_p) if cr_p else None, str(tm_p),
-                          {str(t): str(p) for t, p in wp_p.items()},
-                          args.limit_games))
+            tasks.append((str(f), str(ps_p), str(tm_p), args.limit_games))
         print(f"Extract: {len(files)} source files, {len(tasks)} to process, "
               f"{args.workers} workers\n", flush=True)
         t0 = time.time()
@@ -1438,7 +1163,7 @@ def main() -> None:
                         rate = tot_games / el if el else 0
                         print(f"  [{done}/{len(tasks)}] {r['file']}: "
                               f"{r.get('kept',0):,}/{r.get('games',0):,} kept, "
-                              f"ps={r.get('ps_rows',0):,} wp={r.get('winpos_rows',0):,} "
+                              f"ps={r.get('ps_rows',0):,} term={r.get('term_rows',0):,} "
                               f"({r['sec']:.0f}s) | {rate:,.0f} games/s agg | "
                               f"{el/60:.1f} min", flush=True)
         el = time.time() - t0
@@ -1449,13 +1174,8 @@ def main() -> None:
         tmp_base = Path(args.tmp_dir) if args.tmp_dir else None
         # Stage 1: SUM-only per-month consolidation (NO min_games filter).
         kinds = ["ps"]
-        if args.crush_hist:
-            kinds.append("crush")
         if any(partial_dir.glob("*.term.parquet")):
             kinds.append("term")
-        if args.fuse_winpos:
-            kinds += [f"winpos{t}" for t in WINPOS_THRESHOLDS
-                      if any(partial_dir.glob(f"*.winpos{t}.parquet"))]
         print("Consolidating per-month (sum only, no filter)...", flush=True)
         monthly_dir = consolidate_monthly(partial_dir, args.threads, args.mem, tmp_base,
                                           tuple(kinds))
@@ -1471,19 +1191,6 @@ def main() -> None:
         merge_aux_stats(partial_dir,
                         ps_out.with_name(ps_out.stem + "_other_buckets"),
                         ps_out, aux_out, args.threads, args.mem, tmp_base)
-        if args.crush_hist:
-            print("Final merge: crush histogram...", flush=True)
-            merge_crush(monthly_dir, partial_dir, ps_out, crush_out, args.threads, args.mem,
-                       tmp_base)
-        if args.fuse_winpos:
-            for thr in WINPOS_THRESHOLDS:
-                wp_out = ps_out.with_name(
-                    ps_out.stem.replace("position_stats_pooled",
-                                        "crush_hist_relwin_pooled")
-                    + f"_t{thr}.parquet")
-                print(f"Final merge: fused winpos histogram @{thr}cp...", flush=True)
-                merge_crush(monthly_dir, partial_dir, ps_out, wp_out,
-                            args.threads, args.mem, tmp_base, kind=f"winpos{thr}")
         shutil.rmtree((tmp_base or partial_dir) / "_merge_duckdb_tmp", ignore_errors=True)
         print("\nDone.", flush=True)
 

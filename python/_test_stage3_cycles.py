@@ -1,6 +1,6 @@
 """Synthetic test for stage3 run_backwards_induction cycle handling — verifies the
 fix for the transposition-loop bug against the EXACT production function (imported,
-not copied; template: _test_winpos.py).
+not copied).
 
 The bug: the position graph contains genuine cycles (reversible piece shuffles, e.g.
 1.Nf3 Nf6 2.Ng1 Ng8 returns to the exact start position), which Kahn's topological
@@ -109,7 +109,7 @@ def main() -> None:
 
     # ── Case 1: the 4-node cycle through the start position ──────────────────
     edges, h = cyclic_fixture()
-    (values, best_moves, _bf, _be, _bd, _bc, _cp, memo_pot, _ce, value_worst,
+    (values, best_moves, _bf, _be, _bd, memo_pot, _ce, value_worst,
      _vr, _pe, _ps, _prior, _aug) = run_backwards_induction(edges, "white", **common)
 
     check(len(values) == 4 and all(v == v and abs(v) < 10 for v in values.values()),

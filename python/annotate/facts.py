@@ -94,7 +94,7 @@ class FactsBuilder:
         # rep metrics for card positions (semi-filtered scan of the 13M-row rep)
         rep = (pl.scan_parquet(rep_path)
                  .filter(pl.col("position_hash").is_in(list(card_hashes)))
-                 .select(["position_hash", "value", "value_worst", "crush_potential",
+                 .select(["position_hash", "value", "value_worst",
                           "opponent_error", "forcingness", "cover_eff", "eval_score"])
                  .collect())
         self.rep = {r["position_hash"]: r for r in rep.iter_rows(named=True)}
@@ -327,7 +327,6 @@ class FactsBuilder:
                 "games": chosen_row["games"] if chosen_row else 0,
                 "emp_score": chosen_row["emp_score"] if chosen_row else None,
                 "value_worst": _r(m.get("value_worst")),
-                "crush_potential": _r(m.get("crush_potential")),
             },
             "candidates": candidates,
             "replies": replies,

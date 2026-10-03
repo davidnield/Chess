@@ -1,6 +1,6 @@
 """T2: POLICY SWITCHING — the feature's thesis in one fixture.
 
-Root chooses between two candidates (crush off, key == value):
+Root chooses between two candidates (selection key == value):
 
   A "early payoff":  --A--> oppA, no replies worth modelling: flat 0.60.
   B "deep trap":     --B--> oppB --t p=0.9--> B1 (our, L=0.45)
@@ -47,10 +47,10 @@ ROOT, OPPA, OPPB, B1, OPPB1, B2 = 1, 2, 3, 4, 5, 6
 g = Graph(
     root=ROOT,
     our={
-        ROOT: OurNode(l_node=0.40, cands=[("A", OPPA, True, 0.0, 0.0),
-                                          ("B", OPPB, True, 0.0, 0.0)]),
-        B1:   OurNode(l_node=0.45, cands=[("b1move", OPPB1, True, 0.0, 0.0)]),
-        B2:   OurNode(l_node=0.48, cands=[("b2move", None, False, 0.95, 0.0)]),
+        ROOT: OurNode(l_node=0.40, cands=[("A", OPPA, True, 0.0),
+                                          ("B", OPPB, True, 0.0)]),
+        B1:   OurNode(l_node=0.45, cands=[("b1move", OPPB1, True, 0.0)]),
+        B2:   OurNode(l_node=0.48, cands=[("b2move", None, False, 0.95)]),
     },
     opp={
         OPPA:  OppNode(const_base=0.60, kids=[]),
@@ -147,9 +147,9 @@ FROOT, FOA, FM, FOB, FD = 31, 32, 33, 34, 35
 gforce = Graph(
     root=FROOT,
     our={
-        FROOT: OurNode(l_node=0.40, cands=[("r", FOA, True, 0.0, 0.0)]),
-        FM:    OurNode(l_node=0.90, cands=[("m", FOB, True, 0.0, 0.0)]),
-        FD:    OurNode(l_node=0.10, cands=[("d", None, False, 0.82, 0.0)]),
+        FROOT: OurNode(l_node=0.40, cands=[("r", FOA, True, 0.0)]),
+        FM:    OurNode(l_node=0.90, cands=[("m", FOB, True, 0.0)]),
+        FD:    OurNode(l_node=0.10, cands=[("d", None, False, 0.82)]),
     },
     opp={
         FOA: OppNode(const_base=0.0, kids=[(1.0, FM, True, 0.0)]),

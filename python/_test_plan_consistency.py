@@ -1,7 +1,7 @@
 """Synthetic test for plan_consistency_report.py: idea_token normalization and
 the reach-weighted path-exact DFS (context split, first-occurrence game mass,
 augmented-move handling, horizon). Imports the production analyze_slice /
-idea_token (template: _test_winpos.py).
+idea_token (template: _test_stage3_cycles.py).
 
 Fixture (black perspective, hashes are arbitrary ints except the root):
   root (white to move): 1.e4 60% -> A, 1.d4 40% -> B

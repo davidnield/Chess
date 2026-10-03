@@ -3,7 +3,7 @@
 THE PROBLEM
 -----------
 Stage 3's book is unbounded: every gated our-turn node gets a move. All its
-learning costs (memo_cost, crush gamma, learnability deltas) are REACH-WEIGHTED —
+learning costs (memo_cost, learnability deltas) are REACH-WEIGHTED —
 they price expected recall, so a rare deep trap is nearly free. A hard budget of
 moves-to-learn is a STORAGE cost: each learned move counts once regardless of
 reach. The two diverge exactly on rare deep lines, which is why a 400-move book
@@ -59,9 +59,9 @@ flipped back. This removes every sign branch from the curve algebra.
 
 KNOWN v1 APPROXIMATIONS (documented, measured — see the plan)
 -------------------------------------------------------------
-- Curves carry pure VALUE; the frozen unconstrained crush term enters only the
-  extraction argmax (mirroring Stage 3, which selects by key but propagates
-  value). Curve-vs-realized value is reported per book.
+- Curves carry pure VALUE, and the extraction argmax selects on value too (a
+  frozen crush bonus used to enter it; crush was removed 2026-10-02).
+  Curve-vs-realized value is reported per book.
 - Transposition budget cost is charged PER PATH (conservative overcount);
   realized distinct decisions are reported alongside.
 - Cycle-leftover nodes get a flat L curve (counted, logged).
@@ -366,11 +366,10 @@ def rel_gate_keep(cand_evals_ws: list[float | None], own_eval_ws: float | None,
 @dataclass
 class OurNode:
     l_node: float                      # our-perspective stop value
-    # candidates: (san, child_hash or None, in_subgraph, leaf_val, crush_bonus)
+    # candidates: (san, child_hash or None, in_subgraph, leaf_val)
     # leaf_val is the our-perspective flat value used when the child is not a
-    # subgraph node (dead end / beyond ply cap); crush_bonus is the frozen
-    # cw*line_crush term, our-perspective, used ONLY in the extraction argmax.
-    cands: list[tuple[str, int | None, bool, float, float]] = field(
+    # subgraph node (dead end / beyond ply cap).
+    cands: list[tuple[str, int | None, bool, float]] = field(
         default_factory=list)
 
 
@@ -446,14 +445,11 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
 def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 our_white: bool, *,
                 rep_moves: dict[int, str] | None = None,
-                rep_crush: dict[int, float] | None = None,
                 eval_ws: dict[int, float] | None = None,
                 aux_rows: dict[int, dict] | None = None,
                 slice_prior: float = 0.5,
                 eps: float = 1e-3, max_ply: int = 40,
                 share_floor: float = 0.002,
-                crush_weight: float = 0.0, crush_gamma: float = 0.99,
-                edge_imm: dict[tuple[int, str], float] | None = None,
                 prior_strength: float = PRIOR_STRENGTH,
                 eval_weight: float = EVAL_WEIGHT,
                 eval_weight_min: float = EVAL_WEIGHT_MIN,
@@ -479,9 +475,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     """
     eval_ws = eval_ws or {}
     rep_moves = rep_moves or {}
-    rep_crush = rep_crush or {}
     aux_rows = aux_rows or {}
-    edge_imm = edge_imm or {}
 
     # Whose turn it is at even ply depends on the perspective: for a Black book
     # the root (ply 0, White to move) is an OPPONENT node, so reach must decay
@@ -501,10 +495,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     g = Graph(root=root, our={}, opp={}, epd={}, ply=dict(ply),
               reach=dict(reach), meta={
                   "eps": eps, "max_ply": max_ply, "share_floor": share_floor,
-                  "slice_prior": slice_prior, "our_white": our_white,
-                  "crush_weight": crush_weight, "crush_gamma": crush_gamma})
-
-    gamma_hop = crush_gamma ** 0.5
+                  "slice_prior": slice_prior, "our_white": our_white})
 
     for h, r in reach.items():
         es = edges_by_parent.get(h)
@@ -612,10 +603,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                                      slice_prior, our_white,
                                      prior_strength, eval_weight,
                                      eval_weight_min, eval_weight_k)
-                imm = edge_imm.get((h, e["move_san"]), 0.0)
-                cp_child = rep_crush.get(ch, 0.0) if ch is not None else 0.0
-                bonus = crush_weight * (imm + (1.0 - imm) * gamma_hop * cp_child)
-                node.cands.append((e["move_san"], ch, in_sub, lv, bonus))
+                node.cands.append((e["move_san"], ch, in_sub, lv))
                 if e["move_san"] == src:
                     seen_src = True
             if src and not seen_src:
@@ -633,9 +621,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                                      slice_prior, our_white,
                                      prior_strength, eval_weight,
                                      eval_weight_min, eval_weight_k)
-                cp_child = rep_crush.get(ch, 0.0) if ch is not None else 0.0
-                bonus = crush_weight * gamma_hop * cp_child
-                node.cands.append((src, ch, in_sub, lv, bonus))
+                node.cands.append((src, ch, in_sub, lv))
             g.our[h] = node
         else:
             tot = sum(e["total"] for e in es)
@@ -688,7 +674,7 @@ def _adjacency(g: Graph) -> tuple[dict[int, list[int]], dict[int, list[int]]]:
     per-path budget accounting depends on them."""
     children: dict[int, list[int]] = {}
     for h, n in g.our.items():
-        children[h] = [ch for _, ch, in_sub, _, _ in n.cands
+        children[h] = [ch for _, ch, in_sub, _ in n.cands
                        if in_sub and ch is not None]
     for h, n in g.opp.items():
         children[h] = [ch for _, ch, in_sub, _ in n.kids
@@ -861,7 +847,7 @@ def _node_curve(g: Graph, h: int, curves: dict[int, Curve], bmax: int,
             want = fixed_policy.get(h)
             cands = [c for c in cands if c[0] == want]
         pts: dict[int, float] = {0: n.l_node}
-        for _san, ch, in_sub, leaf_val, _bonus in cands:
+        for _san, ch, in_sub, leaf_val in cands:
             if in_sub and ch is not None and ch in curves:
                 c = curves[ch]
                 vs = [(1, c.base)] + [
@@ -919,7 +905,7 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
     def one_step_gain(h: int) -> float:
         n = g.our[h]
         want = policy.get(h)
-        for san, ch, in_sub, leaf_val, _ in n.cands:
+        for san, ch, in_sub, leaf_val in n.cands:
             if san != want:
                 continue
             if in_sub and ch is not None and ch in g.opp:
@@ -949,7 +935,7 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
         booked.add(h)
         spent += 1
         want = policy.get(h)
-        for san, ch, in_sub, _, _ in g.our[h].cands:
+        for san, ch, in_sub, _ in g.our[h].cands:
             if san != want or not in_sub or ch not in g.opp:
                 continue
             for p, k, in_s, _ in g.opp[ch].kids:
@@ -1169,8 +1155,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
     tree, per-node allocations, realized bottom-up values, and spend stats.
 
     Our node: book iff the curve strictly beats stopping; move chosen by
-    KEY = value + frozen crush bonus (mirrors Stage 3: select by key, propagate
-    value). Opponent node: greedy density prefix over child atoms with skip-fit
+    value (mirrors Stage 3). Opponent node: greedy density prefix over child atoms with skip-fit
     (a child whose atom is skipped is closed — atoms are prefixes).
 
     force_booked: book these our-nodes unconditionally, skipping both the
@@ -1221,12 +1206,12 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                 want = fixed_policy.get(h)
                 cands = [c for c in cands if c[0] == want]
             best = None
-            for san, ch, in_sub, leaf_val, bonus in cands:
+            for san, ch, in_sub, leaf_val in cands:
                 if in_sub and ch is not None and ch in curves:
                     v = curves[ch].eval(max(b - 1, 0))
                 else:
                     v = leaf_val
-                key = v + bonus
+                key = v
                 if best is None or key > best[0]:
                     best = (key, v, san, ch, in_sub)
             if best is None:
@@ -1276,7 +1261,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
             if mv is None:
                 realized[h] = n.l_node
                 continue
-            for san, ch, in_sub, leaf_val, _ in n.cands:
+            for san, ch, in_sub, leaf_val in n.cands:
                 if san == mv:
                     if in_sub and ch is not None and ch in realized:
                         realized[h] = realized[ch]

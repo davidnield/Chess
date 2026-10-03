@@ -20,11 +20,8 @@ value is preserved in `value_unconstrained`. A .meta.json sidecar records
 budgets requested vs realized (path-sum and distinct), method, epsilon, the
 root value-vs-budget curve, and the source rep's own meta digest.
 
-Crush: the frozen unconstrained crush_potential (from --rep) enters the
-extraction argmax as cw*(imm + (1-imm)*gamma^0.5*crush_pot[child]). The
-per-edge imm term needs an edge-crush cache built from the crush histogram
-(--crush-db, heavy, skip-gated); without a cache the imm=0 approximation is
-used and noted in meta. --crush-weight 0 disables the term entirely.
+The extraction argmax selects on value (a frozen crush bonus used to enter it;
+crush was removed 2026-10-02).
 
 Usage:
     .venv/Scripts/python.exe python/build_budget_books.py \\
@@ -33,8 +30,8 @@ Usage:
         --perspective white --out-prefix E:/chess/repertoire/_budget/dp_white \\
         --budget 400 --budget 4000 --budget 40000 --method dp
 
-Defaults for --aux-stats / --reply-shrink / --crush-weight / --crush-gamma are
-read from the source rep's .meta.json sidecar; explicit flags override.
+Defaults for --aux-stats / --reply-shrink are read from the source rep's
+.meta.json sidecar; explicit flags override.
 reply_shrink > 0 without aux is NOT implemented (every current book is
 aux + reply_shrink 0) — the build refuses rather than silently diverging.
 """
@@ -182,49 +179,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
-def load_edge_imm(cache: Path, our_white: bool) -> dict:
-    df = pl.read_parquet(cache)
-    col = "white_imm_sum" if our_white else "black_imm_sum"
-    out = {}
-    for r in df.iter_rows(named=True):
-        cg = r.get("crush_games") or 0
-        if cg:
-            out[(r["parent_hash"], r["move_san"])] = (r.get(col) or 0.0) / cg
-    return out
-
-
-def build_edge_crush_cache(crush_db: str, parents: list[int], out: Path,
-                           threads: int, mem: str, tmp: str | None) -> None:
-    """Per-edge imm/dfull aggregate over the crush histogram, semi-joined to
-    the subgraph's parents (stage3 main()'s SQL, restricted). Skip-gated."""
-    if out.exists():
-        log(f"  edge-crush cache exists: {out}")
-        return
-    con = duckdb.connect()
-    con.execute(f"SET memory_limit='{mem}'; SET threads={threads}; "
-                "SET preserve_insertion_order=false;")
-    if tmp:
-        con.execute(f"SET temp_directory='{tmp}'")
-    con.execute("CREATE TEMP TABLE keep (h BIGINT)")
-    con.executemany("INSERT INTO keep VALUES (?)", [(h,) for h in parents])
-    tmp_out = out.with_suffix(".parquet.tmp")
-    con.execute(f"""
-        COPY (
-            SELECT c.parent_hash, c.move_san,
-                   SUM(CASE WHEN move_bucket BETWEEN 1 AND 2
-                       THEN white_wins ELSE 0 END)::DOUBLE AS white_imm_sum,
-                   SUM(CASE WHEN move_bucket BETWEEN 1 AND 2
-                       THEN black_wins ELSE 0 END)::DOUBLE AS black_imm_sum,
-                   SUM(n)::BIGINT AS crush_games
-            FROM read_parquet('{crush_db}') c
-            JOIN keep k ON k.h = c.parent_hash
-            GROUP BY c.parent_hash, c.move_san
-        ) TO '{tmp_out.as_posix()}' (FORMAT PARQUET, COMPRESSION ZSTD)
-    """)
-    tmp_out.replace(out)
-    log(f"  built edge-crush cache: {out}")
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -272,10 +226,6 @@ def main() -> int:
     ap.add_argument("--grid-cap", type=int, default=256)
     ap.add_argument("--aux-stats", default=None,
                     help="Default: read from --rep's .meta.json.")
-    ap.add_argument("--crush-weight", type=float, default=None)
-    ap.add_argument("--crush-gamma", type=float, default=None)
-    ap.add_argument("--crush-db", default=None)
-    ap.add_argument("--edge-crush-cache", default=None)
     ap.add_argument("--slice-prior", type=float, default=None,
                     help="Default: computed from the stats root edges.")
     ap.add_argument("--eval-weight", type=float, default=bc.EVAL_WEIGHT,
@@ -323,10 +273,6 @@ def main() -> int:
         log("FATAL: source rep used reply_shrink>0 without aux; the budget "
             "DP does not implement that blend (see header). Refusing.")
         return 1
-    cw = a.crush_weight if a.crush_weight is not None else \
-        float(src_meta.get("crush_weight", 0.0) or 0.0)
-    cg = a.crush_gamma if a.crush_gamma is not None else \
-        float(src_meta.get("crush_gamma", 0.99) or 0.99)
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
@@ -348,8 +294,7 @@ def main() -> int:
             FROM read_parquet('{stats}') WHERE parent_hash = {root}
         """).fetchone()[0] or 0.5
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
-        f"method {a.method}{' fixed-policy' if a.fixed_policy else ''}; "
-        f"crush w={cw} gamma={cg}")
+        f"method {a.method}{' fixed-policy' if a.fixed_policy else ''}")
 
     log("collecting subgraph edges...")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
@@ -379,17 +324,14 @@ def main() -> int:
     rep = (pl.scan_parquet(a.rep)
            .filter(pl.col("position_hash").is_in(list(want)))
            .select(["position_hash", "side_to_move", "value", "best_move",
-                    "crush_potential", "value_robust", "value_worst",
-                    "eval_score"])
+                    "value_robust", "value_worst", "eval_score"])
            .collect())
-    rep_moves, rep_crush, rep_rows = {}, {}, {}
+    rep_moves, rep_rows = {}, {}
     for r in rep.iter_rows(named=True):
         h = r["position_hash"]
         rep_rows[h] = r
         if r["side_to_move"] == a.perspective and r["best_move"]:
             rep_moves[h] = r["best_move"]
-        if r["crush_potential"] is not None:
-            rep_crush[h] = r["crush_potential"]
     log(f"  {len(rep_moves):,} source decisions in slice")
 
     log("evals (mmap)...")
@@ -408,29 +350,15 @@ def main() -> int:
         aux_rows = {r["position_hash"]: r for r in adf.iter_rows(named=True)}
         log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
 
-    edge_imm: dict = {}
-    imm_note = "imm=0 approximation (no edge-crush cache)"
-    if cw > 0:
-        cache = Path(a.edge_crush_cache) if a.edge_crush_cache else \
-            outs[budgets[0]].parent / "edge_crush_cache.parquet"
-        if a.crush_db:
-            build_edge_crush_cache(a.crush_db.replace("\\", "/"), parents,
-                                   cache, a.threads, a.mem, a.tmp_dir)
-        if cache.exists():
-            edge_imm = load_edge_imm(cache, our_white)
-            imm_note = f"edge imm from {cache.name} ({len(edge_imm):,} edges)"
-    log(f"  crush: {imm_note}")
-
     by_parent: dict[int, list[dict]] = {}
     for r in edf.iter_rows(named=True):
         by_parent.setdefault(r["parent_hash"], []).append(r)
 
     log("building graph...")
     g = bc.build_graph(by_parent, root, our_white, rep_moves=rep_moves,
-                       rep_crush=rep_crush, eval_ws=eval_ws,
+                       eval_ws=eval_ws,
                        aux_rows=aux_rows, slice_prior=slice_prior,
                        eps=eps, max_ply=a.max_ply, share_floor=a.share_floor,
-                       crush_weight=cw, crush_gamma=cg, edge_imm=edge_imm,
                        max_cands=a.max_cands, eval_weight=a.eval_weight,
                        prior_strength=a.prior_strength,
                        require_eval=not a.no_gates, gates=not a.no_gates)
@@ -563,7 +491,6 @@ def main() -> int:
                 "value_robust": src.get("value_robust"),
                 "value_worst": src.get("value_worst"),
                 "eval_score": src.get("eval_score"),
-                "crush_potential": src.get("crush_potential"),
                 "value_unconstrained": src.get("value"),
                 "alloc_budget": res["alloc"].get(h, 0),
             })
@@ -590,7 +517,6 @@ def main() -> int:
             "root_value_realized": res["root_value_realized"],
             "root_capacity_paths": cap,
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],
-            "crush_weight": cw, "crush_gamma": cg, "crush_imm": imm_note,
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands,

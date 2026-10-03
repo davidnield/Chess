@@ -1,6 +1,6 @@
 """T1: optimal stopping under a hard budget — the smallest end-to-end fixture.
 
-Tree (our perspective values; crush off so key == value):
+Tree (our perspective values; selection key == value):
 
   R (our, L=0.50) --rmove--> O (opp) --x p=0.8--> U1 (our, L=0.55, book->0.70)
                                       --y p=0.2--> U2 (our, L=0.45, book->0.85)
@@ -44,9 +44,9 @@ R, O, U1, U2 = 1, 2, 3, 4
 g = Graph(
     root=R,
     our={
-        R:  OurNode(l_node=0.50, cands=[("rmove", O, True, 0.0, 0.0)]),
-        U1: OurNode(l_node=0.55, cands=[("u1move", None, False, 0.70, 0.0)]),
-        U2: OurNode(l_node=0.45, cands=[("u2move", None, False, 0.85, 0.0)]),
+        R:  OurNode(l_node=0.50, cands=[("rmove", O, True, 0.0)]),
+        U1: OurNode(l_node=0.55, cands=[("u1move", None, False, 0.70)]),
+        U2: OurNode(l_node=0.45, cands=[("u2move", None, False, 0.85)]),
     },
     opp={O: OppNode(const_base=0.0,
                     kids=[(0.8, U1, True, 0.0), (0.2, U2, True, 0.0)])},

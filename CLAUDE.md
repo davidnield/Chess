@@ -19,12 +19,13 @@ induction on the position DAG to produce an empirical "best move at each positio
 The current product is a "sharp" repertoire for ≥1800 Blitz/Rapid/Classical pooled data: the best
 expected score, blending the empirical results with the Stockfish eval, without being outright
 losing against best play. A Stockfish eval overlay gates out empirically-good-but-losing trap
-lines. (Crush, a bonus for reaching a winning position early, was retired on 2026-10-02.)
+lines. (Crush, a bonus for reaching a winning position early, was removed on 2026-10-02:
+its histograms, the extract's winpos fusion, Stage 3's crush terms and output columns.)
 
 Deeper detail lives in two skills, loaded on demand rather than every session:
 
 - **`chess-pipeline`** — stage-by-stage map, Stage 3's engine and its five selection ingredients,
-  the eval source, the (retired) crush/winpos metric definition, the legacy sliced path.
+  the eval source, the legacy sliced path.
 - **`parquet-recipe`** — recipe v3 compression standards and the lossy movetext invariant.
 
 ## Repo layout
@@ -45,7 +46,7 @@ if that stops being true, move it to `scratch/`.
 | `D:/data/chess/standard-chess-games-compressed/year=Y/month=M/event=E/` | **Canonical source.** Hive-partitioned parquets (2013–present). Every extraction starts here. |
 | `F:/chess/standard-chess-games/data/` | Pre-compression archive only — **never a pipeline input.** F: is a USB spinning disk; never point DuckDB spill/temp at it either. Also the **only** copy retaining `[%clk]`/`[%eval]` movetext comments (recipe v3 strips them from `D:` at ingest). |
 | `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts), `position_stats_aux_*.parquet` (the per-position sidecar of unseen mass). The crush histograms (`crush_hist_*`, and the `_monthly/*.winpos*` partials) were deleted 2026-10-02 when crush left the recipe. `_pooled_partials_*/` are resumable working dirs; their `_monthly/` subdir is the **only** artifact carrying a year, so year-scoped pools depend on it surviving. |
-| `D:/chess/eval_arrays_full/` | **The eval source every consumer reads** (Stage 3 via `build_sharp_reps.py`, the extract's fused winpos, the budget/baseline books, annotations): `D:/chess/eval_full` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16; 6.0B entries, ~60 GB), plus the book's checkmates at ±2000, minus the hashes a hash-only lookup must not answer (`excluded.parquet`). Consumers mmap ONE shared resident copy. **Derived** — `eval_arrays.meta.json` fingerprints the DB and its book and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]` (~2 h). |
+| `D:/chess/eval_arrays_full/` | **The eval source every consumer reads** (Stage 3 via `build_sharp_reps.py`, the extract's `child_eval`, the budget/baseline books, annotations): `D:/chess/eval_full` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16; 6.0B entries, ~60 GB), plus the book's checkmates at ±2000, minus the hashes a hash-only lookup must not answer (`excluded.parquet`). Consumers mmap ONE shared resident copy. **Derived** — `eval_arrays.meta.json` fingerprints the DB and its book and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]` (~2 h). |
 | `E:/chess/repertoire/` | Stage-3 outputs, with `.meta.json` provenance sidecars recording the exact inputs/flags that built each one. |
 | `D:/chess/eval_full/` | **Canonical eval DB**, of the banded explorer book (`explorer-extract evals`, branch `eval-db`; blog repo `docs/eval-db-spec.md`): one eval per book parent (hash, EPD) and child-only hash, Lichess cloud first, else the fishnet newest-tier lower median. 5.9B rows in `bkt<iii>.parquet`; its `README.md` is the read contract; `_DONE` last. Too big to load — read it through its arrays. Keep it: the arrays verify against it. Its few bogus values on checkmated positions are overridden in the arrays. |
 | `E:/chess/_archive/eval_db_2026-07/` | **Archive** (2026-10-02) of the retired eval DB: `unified_eval_db.parquet` (the old 400M-row cloud+fishnet union), `lichess_eval_db.parquet`, `fishnet_eval_agg.parquet`, their arrays `eval_arrays/` and the fishnet aggregation work dir (builders in `scratch/python/`). Not a pipeline input. Until a pool rebuild, the pool's aux `other_eval` still comes from it (mixed provenance). |
@@ -78,7 +79,7 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 
 There is no lint config or build step. Every `python/_test_*.py` is a standalone pass/fail script
 (exit 0/1); `run_tests.py` subprocess-runs all of them with a summary. Convention: synthetic tests
-import the production query/logic rather than copying it (`_test_winpos.py` is the template).
+import the production query/logic rather than copying it (`_test_stage3_cycles.py` is the template).
 
 **Before changing an empirical constant** (batch sizes, memory limits, `min_games`), name the
 failure you expect to fix and the test that would prove it. This codebase has many tuned constants
@@ -102,8 +103,8 @@ Rules that make the ladder load-bearing:
   the aux buckets, the selection key), the columns the extract emits, or anything that changes a
   stored column's meaning. A wrong `child_hash` corrupts every downstream join and nothing fails.
 - **A new flag defaults to off and must be an exact no-op** — rebuild both repertoires without it
-  and diff against canonical at tolerance 0. Known exemption: `crush_rate` / `crush_potential`
-  wobble ~2e-16 from a DuckDB parallel float SUM.
+  and diff against canonical at tolerance 0. (The old exemption, `crush_rate` /
+  `crush_potential` wobbling ~2e-16 from a DuckDB parallel float SUM, went with crush.)
 - **Measure across scales, never at a single slice.** One-slice tier-2 numbers have flipped a
   verdict here twice: the winpos fusion's marginal cost read +19%, then +34.6%, then +13.1%
   depending on which slice was measured. Report the trend, not the fastest run.

@@ -51,8 +51,8 @@ game_end IS PART SIGNAL AND PART CLOCK -- SPLIT IT, DO NOT DROP IT
 A first pass at the sweep read treated the whole game_end population as
 non-evidence and excluded it from the realized-score comparison. That is wrong
 and it biases against exactly the books this project is trying to build.
-Resigning or being mated inside the book is a real chess result, and forcing it
-early is the entire point of the crush term.
+Resigning or being mated inside the book is a real chess result (forcing it
+early was the entire point of the since-retired crush term).
 
 Measured on 7.56M 2025 games at >=1800, with no book involved:
 

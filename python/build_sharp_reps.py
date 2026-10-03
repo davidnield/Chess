@@ -1,6 +1,5 @@
 """Build the canonical SHARP repertoire pair (White + Black) — two-pass learnability
-build over the eval-blend + relative-eval-gate recipe. Crush (the early-win bonus) was
-dropped from the recipe on 2026-10-02: selection is on value alone.
+build over the eval-blend + relative-eval-gate recipe.
 
 Recipe (single pooled slice, event='Pooled', elo_band=0):
   - eval/empirical blend:  --eval-weight 0.5 --require-eval   (leaf value blends engine eval
@@ -25,10 +24,9 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                            improvement both colors — see .meta.json for the swept
                            alternative)
   - no traffic floor:      --min-move-games 0
-  - no crush:              no --crush-db, so Stage 3's crush term is off (weight 0). Until
-                           2026-10-02 the recipe added 0.1 x a relative-propagated winpos
-                           crush potential (γ=0.99, prior 5000, zero baseline); the owner
-                           retired the whole idea and the histograms were deleted.
+  - no crush:              until 2026-10-02 the recipe added 0.1 x a relative-propagated
+                           winpos crush potential (an early-win bonus). The owner retired
+                           the idea; the histograms and Stage 3's crush code are gone.
   - no memorization cost:  --memo-weight 0
   - reply-mass shrinkage:  --reply-shrink 1.0   (adopted 2026-08-03. An opponent node's
                            value is the mean over the replies that CLEAR the pool's
@@ -74,8 +72,7 @@ position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, and the eval arrays D:/c
 book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-stats
 (--no-aux for the pre-sidecar recipe) / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
-inputs, the learnability settings and crush_weight 0 (the explorer reads it back to
-rebuild its selection-key column).
+inputs and the learnability settings.
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -108,11 +105,6 @@ LOG_DIR = PROJECT / "logs" / "sharp_reps"
 DEFAULT_STATS     = SD / "position_stats_pooled_ge1800_2013_2026_brc.parquet"
 DEFAULT_AUX       = SD / "position_stats_aux_pooled_ge1800_2013_2026_brc.parquet"
 DEFAULT_EVAL_DB   = DEFAULT_ARRAY_DIR
-
-# Crush selection weight: 0, the recipe carries no crush term. Recorded in .meta.json
-# because the explorer reads it back to reconstruct its selection-key column (and falls
-# back to a non-zero legacy weight when the field is absent).
-CRUSH_WEIGHT = 0.0
 
 # Reply-mass shrinkage strength (adopted 2026-08-03, see the recipe note above). 1.0 =
 # assign the entire missing reply mass the node's own engine eval; 0.0 = the legacy
@@ -187,17 +179,16 @@ def meta_path(out: Path) -> Path:
 
 def write_meta(out: Path, stats: Path, eval_db: Path, tag: str,
                aux: Path | None = None) -> None:
-    """Record how the rep was built so the explorer can recover the crush weight (0) and
-    the inputs without the user re-specifying --crush-weight. `eval_source` fingerprints the
+    """Record how the rep was built: the inputs and the recipe settings the explorer and
+    trainer read back. `eval_source` fingerprints the
     eval DB (a parquet's size/mtime/rows, or an eval-arrays directory's meta and verify
     status) -- a path alone cannot tell two builds of the eval DB apart."""
     from eval_arrays import describe_eval_source
     prior, reach = plan_paths(tag)
-    meta = {"crush_weight": CRUSH_WEIGHT, "crush_mode": None,
-            "eval_weight": 0.5, "gate_rel_baseline": "own-eval",
+    meta = {"eval_weight": 0.5, "gate_rel_baseline": "own-eval",
             "reply_shrink": 0.0 if aux else REPLY_SHRINK,
             "aux_stats": str(aux) if aux else None,
-            "input": str(stats), "crush_db": None, "eval_db": str(eval_db),
+            "input": str(stats), "eval_db": str(eval_db),
             "eval_source": describe_eval_source(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -233,6 +224,8 @@ def build_color(tag: str, extra: list[str], flags: list[str],
     # inputs: a mismatch refuses rather than reporting a stale rep as built.
     if not force and out.exists() and meta_path(out).exists():
         old = json.loads(meta_path(out).read_text(encoding="utf-8"))
+        # crush_db stays in the comparison: a rep built with the retired crush term
+        # records one, so it is refused rather than mistaken for a current build.
         now = {"input": stats, "crush_db": None, "eval_db": eval_db, "aux_stats": aux}
         drift = [k for k, v in now.items()
                  if (old.get(k) or None) != (str(v) if v is not None else None)]

@@ -207,8 +207,6 @@ python/
   zobrist.py                     the position hash every stage keys on
   process_pgn_parquets.py        ingest + compression (recipe v3)
   build_pooled_stats.py          canonical extract + aggregate
-  winpos_fused.py                "winning position reached early", inside that replay
-  winpos_reference.py            the SQL definition of that event, kept as the test oracle
   eval_arrays.py                 the eval DB as mmap'd arrays every consumer can share
   eval_arrays_build.py           ... built from the explorer book's eval DB, plus its checkmates
   stage3_backwards_induction.py  the valuation engine

@@ -7,7 +7,7 @@ position-stats, and serves a chessboard UI at http://127.0.0.1:8765/ where you c
   - Toggle **time control** (event) and **elo band** — every slice in the files.
   - Toggle **Play as White / Black** — switches which repertoire drives "our move".
   - At our turn: see our recommended move and its propagated metrics
-    (value, value-vs-best-defense, crush rate, decisiveness, opponent-error, eval).
+    (value, value-vs-best-defense, decisiveness, opponent-error, eval).
   - At the opponent's turn: see their top empirical replies with game counts and
     white-score; replies that stay inside our prepared tree are marked "in book".
 
@@ -17,11 +17,10 @@ event/elo/colour is near-instant and no giant per-slice dicts are pre-built.
 
 Usage:
     .venv/Scripts/python.exe python/repertoire_explorer.py \\
-        --white-e4 E:/chess/repertoire/repertoire_..._white_e4_crush.parquet \\
-        --white-d4 E:/chess/repertoire/repertoire_..._white_d4_crush.parquet \\
-        --black    E:/chess/repertoire/repertoire_..._black_crush.parquet
+        --white E:/chess/repertoire/repertoire_pooled_white_sharp.parquet \\
+        --black E:/chess/repertoire/repertoire_pooled_black_sharp.parquet
     # Each repertoire is a labeled entry in the dropdown. --stats defaults to the
-    # combined 2024+2025 position-stats.
+    # canonical 2013-2026 pooled position-stats.
 """
 
 from __future__ import annotations
@@ -39,7 +38,6 @@ from urllib.parse import parse_qs, urlparse
 
 import chess
 import chess.polyglot
-import numpy as np
 import polars as pl
 
 from zobrist import zobrist_int64
@@ -49,48 +47,16 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 # Per-move metric columns we surface if present in the repertoire parquet.
-METRIC_COLS = ["value", "value_worst", "value_robust", "crush_rate", "crush_potential",
+METRIC_COLS = ["value", "value_worst", "value_robust",
                "memo_cost", "cover_eff", "decisiveness", "opponent_error", "forcingness",
                "eval_score"]
-
-
-def _meta_crush_weight(rep_path) -> float | None:
-    """Recover the crush selection weight from a rep's provenance sidecar
-    ('<rep>.parquet.meta.json', written by build_sharp_reps.py). Returns None when the
-    sidecar is absent or unreadable, so the caller can fall back to a default."""
-    side = Path(rep_path).with_name(Path(rep_path).name + ".meta.json")
-    if not side.exists():
-        return None
-    try:
-        cw = json.loads(side.read_text(encoding="utf-8")).get("crush_weight")
-        return float(cw) if cw is not None else None
-    except (ValueError, OSError):
-        return None
 
 
 # ── Data layer ────────────────────────────────────────────────────────────
 
 class Explorer:
-    def __init__(self, rep_specs, stats_path, cache_slices=6, crush_weight=25.0,
-                 crush_totals=None):
+    def __init__(self, rep_specs, stats_path, cache_slices=6):
         # rep_specs: list of (label, perspective, path). label is the dropdown entry.
-        # crush_weight: the Stage-3 crush selection weight, used to reconstruct the
-        # selection key (sign*value + crush_weight*crush_potential) for ranking the
-        # alternative moves at our turn (gold/silver/bronze).
-        # crush_totals: optional per-edge winpos totals parquet (parent_hash, move_san,
-        # n, {white,black}_we[5]) — the UNSHRUNK win-event rate + sample size, shown
-        # next to the prior-shrunk crush so thin-line shrinkage is visible at a glance.
-        self.crush_weight = crush_weight
-        self._ct = None
-        if crush_totals and Path(crush_totals).exists():
-            ct = pl.read_parquet(crush_totals).sort("parent_hash")
-            self._ct_ph = ct["parent_hash"].to_numpy()
-            self._ct_san = ct["move_san"].to_list()
-            self._ct = {c: ct[c].to_numpy()
-                        for c in ("n", "white_we", "white_we5", "black_we", "black_we5")}
-            print(f"Loaded crush edge totals: {ct.height:,} edges from {Path(crush_totals).name}")
-        elif crush_totals:
-            print(f"NOTE: crush totals not found ({crush_totals}) — raw-crush column off.")
         self.reps: dict[str, pl.DataFrame] = {}
         self.persp: dict[str, str] = {}
         self.labels: list[str] = []
@@ -133,7 +99,7 @@ class Explorer:
                 f"({Path(stats_path).name}); opponent moves would be empty.\n"
                 + "\n".join(problems)
                 + "\n  Pass the matching --stats — e.g. the canonical "
-                  "position_stats_pooled_ge1800_2013_2025_brc.parquet for pooled reps.")
+                  "position_stats_pooled_ge1800_2013_2026_brc.parquet for pooled reps.")
 
         # Slices available = union of (event, elo_band) across the loaded reps.
         sl = (pl.concat([r.select(["event", "elo_band"]) for r in self.reps.values()])
@@ -186,23 +152,6 @@ class Explorer:
             self._cache.popitem(last=False)
         return entry
 
-    def _raw_crush(self, ph: int, san: str, persp: str, ev: str, eb: int) -> dict | None:
-        """Unshrunk winpos win-event rate + histogram n for edge (ph, san), from the
-        offline per-edge totals. Pooled-slice only (the totals were aggregated there)."""
-        if self._ct is None or ev != "Pooled" or eb != 0:
-            return None
-        lo = int(np.searchsorted(self._ct_ph, ph, "left"))
-        hi = int(np.searchsorted(self._ct_ph, ph, "right"))
-        side = "white" if persp == "white" else "black"
-        for i in range(lo, hi):
-            if self._ct_san[i] == san:
-                n = int(self._ct["n"][i])
-                if n == 0:
-                    return None
-                return {"n": n, "raw": int(self._ct[f"{side}_we"][i]) / n,
-                        "raw5": int(self._ct[f"{side}_we5"][i]) / n}
-        return None
-
     def list_slices(self) -> dict:
         return {
             "reps": [{"label": lb, "perspective": self.persp[lb]} for lb in self.labels],
@@ -245,7 +194,6 @@ class Explorer:
             sc = sl["st_cols"]
             rc_val = sl["rep_cols"].get("value")  # propagated value column, if present
             rc_eval = sl["rep_cols"].get("eval_score")        # engine eval of child
-            rc_crush = sl["rep_cols"].get("crush_potential")  # crush potential of child
             total_all = sum(sc["total"][i] for i in group) or 1
             for i in group[:12]:
                 child = sc["child_hash"][i]
@@ -265,11 +213,9 @@ class Explorer:
                     "share": sc["total"][i] / total_all,
                     "white_score": float(sc["white_score_avg"][i]),
                     "rep_value": _child(rc_val),
-                    # Engine eval + crush potential of the position THIS reply reaches:
-                    # surfaces which opponent replies are mistakes and how crushable.
+                    # Engine eval of the position THIS reply reaches: surfaces
+                    # which opponent replies are mistakes.
                     "eval_score": _child(rc_eval),
-                    "crush_potential": _child(rc_crush),
-                    "crush_raw": self._raw_crush(ph, sc["move_san"][i], persp, ev, eb),
                     "in_book": (child in sl["pos_set"]) if child is not None else None,
                 })
 
@@ -284,10 +230,8 @@ class Explorer:
             rc_worst = sl["rep_cols"].get("value_worst")     # OUR book vs best defense (<= rep value)
             rc_rob   = sl["rep_cols"].get("value_robust")    # objective gate metric (best play both sides)
             rc_eval  = sl["rep_cols"].get("eval_score")      # engine eval of child
-            rc_crush = sl["rep_cols"].get("crush_potential") # propagated crush of child
             rc_memo  = sl["rep_cols"].get("memo_cost")       # propagated memo cost of child
             sign = 1.0 if persp == "white" else -1.0
-            cw = self.crush_weight
             total_all = sum(sc["total"][i] for i in group) or 1
             best = out["our_best_move"]
             moves = []
@@ -299,22 +243,16 @@ class Explorer:
                     return (float(col[cri]) if (col is not None and cri is not None
                             and col[cri] is not None) else None)
 
-                val = _c(rc_val); rob = _c(rc_rob); ev = _c(rc_eval); cr = _c(rc_crush)
+                val = _c(rc_val); rob = _c(rc_rob); ev = _c(rc_eval)
                 mc = _c(rc_memo); worst = _c(rc_worst)
-                if val is not None and cr is not None:
-                    key = sign * val + cw * cr
-                elif val is not None:
-                    key = sign * val
-                else:
-                    key = None
+                key = sign * val if val is not None else None
                 moves.append({
                     "san": sc["move_san"][i],
                     "total": int(sc["total"][i]),
                     "share": sc["total"][i] / total_all,
                     "white_score": float(sc["white_score_avg"][i]),
                     "value": val, "value_worst": worst, "value_robust": rob,
-                    "eval_score": ev, "crush_potential": cr, "memo_cost": mc,
-                    "crush_raw": self._raw_crush(ph, sc["move_san"][i], persp, ev, eb),
+                    "eval_score": ev, "memo_cost": mc,
                     "key": key,
                     "in_book": (child in sl["pos_set"]) if child is not None else None,
                     "is_recommended": (sc["move_san"][i] == best),
@@ -342,7 +280,7 @@ class Explorer:
                     return (float(col[cri]) if (col is not None and cri is not None
                             and col[cri] is not None) else None)
 
-                val = _c(rc_val); cr = _c(rc_crush)
+                val = _c(rc_val)
                 worst, rob, ev = _c(rc_worst), _c(rc_rob), _c(rc_eval)
                 if val is None and out["metrics"]:
                     # Terminal rescue: the child is off-book (no rep row), but the
@@ -354,10 +292,8 @@ class Explorer:
                     "san": best, "total": 0, "share": 0.0, "white_score": None,
                     "value": val, "value_worst": worst,
                     "value_robust": rob, "eval_score": ev,
-                    "crush_potential": cr, "memo_cost": _c(rc_memo),
-                    "crush_raw": None,   # unplayed engine move: no histogram edge
-                    "key": (sign * val + cw * cr) if (val is not None and cr is not None)
-                           else (sign * val if val is not None else None),
+                    "memo_cost": _c(rc_memo),
+                    "key": sign * val if val is not None else None,
                     "in_book": (ch in sl["pos_set"]) if ch is not None else None,
                     "is_recommended": True, "augmented": True, "rank": None,
                 }
@@ -461,19 +397,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 <script>
 const SOURCE = "__SOURCE__";
-const CRUSH_W = __CRUSH_W__;   // Stage-3 crush selection weight (for the key column)
-// "raw · n" cell: unshrunk win-event rate + histogram sample size for an edge.
-const fmtN = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(1)+"k" : String(n);
-const crushRawCell = cr => (cr === null || cr === undefined)
-  ? "&mdash;" : `${(cr.raw*100).toFixed(0)}% &middot; ${fmtN(cr.n)}`;
 document.getElementById("source").textContent = SOURCE;
 
 const METRIC_LABELS = {
   value: "value (white-score)",
   value_worst: "vs best defense (our book)",
   value_robust: "gate eval (objective best play)",
-  crush_rate: "crush rate (local)",
-  crush_potential: "crush potential (propagated)",
   memo_cost: "memorization cost (propagated)",
   cover_eff: "coverage efficiency (depth / lines)",
   decisiveness: "decisiveness (1 - draws)",
@@ -584,7 +513,6 @@ function renderOurTurn(data) {
   const cls   = r => r === 1 ? "gold" : r === 2 ? "silver" : r === 3 ? "bronze" : "";
   const fx = v => (v === null || v === undefined) ? "&mdash;" : Number(v).toFixed(3);
   const rows = data.our_moves.map(m => {
-    const raw = crushRawCell(m.crush_raw);
     let bk = m.in_book === true ? `<span class="badge">in book</span>`
            : m.in_book === false ? `<span class="badge off">off</span>` : "";
     const rec = m.is_recommended ? ` <span class="badge rec">rec</span>` : "";
@@ -599,8 +527,6 @@ function renderOurTurn(data) {
       <td class="num">${fx(m.value_worst)}</td>
       <td class="num">${fx(m.value_robust)}</td>
       <td class="num">${fx(m.eval_score)}</td>
-      <td class="num">${fx(m.crush_potential)}</td>
-      <td class="num">${raw}</td>
       <td class="num">${fx(m.memo_cost)}</td>
       <td class="num">${fx(m.key)}</td>
       <td>${bk}</td></tr>`;
@@ -617,16 +543,12 @@ function renderOurTurn(data) {
       every move (a true worst case, always &le; rep value in our favour) &middot; <b>gate</b> =
       the objective engine eval of the line assuming best play by BOTH sides (what the
       refutation gate uses; can exceed rep value when our book gambits) &middot; <b>eng eval</b>
-      = engine white-score of the position the move reaches &middot; <b>crush</b> = propagated
-      crush potential &middot; <b>memo</b> = propagated memorization cost of the subtree this
-      move enters (lower = cheaper to maintain) &middot;
-      <b>key</b> = selection score (sign&middot;rep value + ${CRUSH_W}&middot;crush; higher = preferred)
-      &middot; <b>raw &middot; n</b> = UNSHRUNK win-event rate of this edge (winpos histogram) and its
-      sample size — the crush column is this shrunk toward 0 by a 5,000-game prior
-      (&asymp; raw&times;n/(n+5000)), so thin already-won lines show low crush despite raw &asymp; 100%</div>
+      = engine white-score of the position the move reaches &middot; <b>memo</b> = propagated
+      memorization cost of the subtree this move enters (lower = cheaper to maintain) &middot;
+      <b>key</b> = selection score (sign&middot;rep value; higher = preferred)</div>
     <table><thead><tr><th></th><th>move</th><th class="num">games</th><th class="num">share</th>
       <th class="num">emp score</th><th class="num">rep value</th><th class="num">vs def</th><th class="num">gate</th><th class="num">eng eval</th>
-      <th class="num">crush</th><th class="num">raw &middot; n</th><th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
+      <th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
     ${playBtn}
   </div>`;
@@ -647,8 +569,6 @@ function renderOpponentTurn(data) {
       <td class="num">${m.white_score.toFixed(3)}</td>
       <td class="num">${fx(m.rep_value)}</td>
       <td class="num">${fx(m.eval_score)}</td>
-      <td class="num">${fx(m.crush_potential)}</td>
-      <td class="num">${crushRawCell(m.crush_raw)}</td>
       <td>${bk}</td></tr>`;
   }).join("");
   return `<div class="info-box opp">
@@ -657,12 +577,10 @@ function renderOpponentTurn(data) {
       white-score from that position &middot; <b>rep value</b> = our repertoire's
       propagated expected white-score if we then follow the book &middot;
       <b>eng eval</b> = engine expected white-score of the position this reply reaches
-      (lower = bigger White mistake) &middot; <b>crush</b> = propagated crush potential
-      of punishing it &middot; <b>raw &middot; n</b> = unshrunk win-event rate of this reply's
-      edge and its histogram sample size (crush = this shrunk by the 5,000-game prior)</div>
+      (lower = bigger White mistake)</div>
     <table><thead><tr><th>move</th><th class="num">games</th><th class="num">share</th>
       <th class="num">emp score</th><th class="num">rep value</th>
-      <th class="num">eng eval</th><th class="num">crush</th><th class="num">raw &middot; n</th><th></th></tr></thead>
+      <th class="num">eng eval</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
   </div>`;
 }
@@ -751,7 +669,6 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             html = (INDEX_HTML
                     .replace("__SOURCE__", self.server.source_label)
-                    .replace("__CRUSH_W__", repr(self.server.explorer.crush_weight))
                     .encode("utf-8"))
             self._send(html, "text/html; charset=utf-8")
             return
@@ -803,10 +720,10 @@ def main():
                     help="Generic labeled repertoire, repeatable. e.g. "
                          "--rep 'White 1.e4=white=E:/.../rep.parquet'")
     ap.add_argument("--stats",
-                    default="E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet",
+                    default="E:/chess/position-stats/position_stats_pooled_ge1800_2013_2026_brc.parquet",
                     help="Position-stats parquet supplying opponent replies. Must contain "
                          "every loaded rep's (event, elo_band) slice (checked at startup). "
-                         "Defaults to the canonical ge1800/2013-2025 --no-prune pooled stats; "
+                         "Defaults to the canonical ge1800/2013-2026 --no-prune pooled stats; "
                          "point it at the pool a rep was BUILT on, or the reply frequencies "
                          "and the rep will disagree.")
     ap.add_argument("--cache-slices", type=int, default=None,
@@ -822,19 +739,6 @@ def main():
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
-    ap.add_argument("--crush-weight", type=float, default=None,
-                    help="Stage-3 crush selection weight, used only to reconstruct the "
-                         "selection-key column / gold-silver-bronze ranking at our turn. "
-                         "Default: read from the rep's .parquet.meta.json provenance sidecar "
-                         "(written by build_sharp_reps.py); falls back to 25 if absent.")
-    ap.add_argument("--crush-totals",
-                    default="E:/chess/position-stats/crush_edge_totals_pooled_ge1800_2013_2025_brc.parquet",
-                    help="Per-edge winpos totals parquet (parent_hash, move_san, n, "
-                         "{white,black}_we[5]) for the raw-crush column. Built by collapsing "
-                         "the winpos histogram (Pooled slice). Missing file = column off. "
-                         "NOTE: no 2013-2025 file has been built yet, so this default "
-                         "currently turns the column OFF by design — that is deliberate, "
-                         "because the 2019-2025 file would show rates from a different pool.")
     args = ap.parse_args()
 
     specs = []  # (label, perspective, path)
@@ -856,20 +760,7 @@ def main():
     if not Path(args.stats).exists():
         sys.exit(f"Stats not found: {args.stats}")
 
-    # Crush weight for the selection-key column: an explicit --crush-weight wins; else
-    # recover it from the first rep's provenance sidecar (build_sharp_reps writes it),
-    # else fall back to 25 (the canonical sharp build weight).
-    crush_weight = args.crush_weight
-    if crush_weight is None:
-        crush_weight = _meta_crush_weight(specs[0][2])
-        if crush_weight is None:
-            crush_weight = 25.0
-        else:
-            print(f"Crush weight {crush_weight:g} (from {Path(specs[0][2]).name}.meta.json)",
-                  flush=True)
-
-    explorer = Explorer(specs, args.stats, cache_slices=args.cache_slices or 1,
-                        crush_weight=crush_weight, crush_totals=args.crush_totals)
+    explorer = Explorer(specs, args.stats, cache_slices=args.cache_slices or 1)
 
     # Pre-warm per-slice views. The first access to a slice materialises millions of
     # rows into Python dicts (~76 s on the 2013-2025 pool); doing that lazily on the

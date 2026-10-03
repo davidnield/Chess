@@ -8,7 +8,7 @@ pure speedups with zero observable effect, so the bar is exact equality — not
 
 This runs the SAME real source file through extract_file twice, with
 optimize=False (the original code path) and optimize=True, and asserts the ps
-and crush partials are frame-equal on every column at tolerance 0.
+and term partials are frame-equal on every column at tolerance 0.
 
 Why this one test covers both optimizations end-to-end:
   - a wrong hash delta changes parent_hash, which regroups every aggregate;
@@ -109,19 +109,19 @@ def main() -> None:
         out = {}
         for tag, opt in (("baseline", False), ("optimized", True)):
             ps = tmp / f"{tag}.ps.parquet"
-            cr = tmp / f"{tag}.crush.parquet"
+            tm = tmp / f"{tag}.term.parquet"
             t0 = time.time()
             # with_child_eval=False: this test is about the replay path (hasher
             # + EPD memo), and the eval join is a lookup against E: arrays that
             # is identical on both sides by construction. Leaving it out keeps
             # the test runnable without the eval arrays built.
-            r = extract_file(src, ps, cr, min_elo=1800, max_ply=30, tiers=None,
-                             limit_games=args.games, optimize=opt,
+            r = extract_file(src, ps, min_elo=1800, max_ply=30, tiers=None,
+                             limit_games=args.games, optimize=opt, term_out=tm,
                              with_child_eval=False)
             el = time.time() - t0
-            out[tag] = (ps, cr, el, r)
+            out[tag] = (ps, tm, el, r)
             print(f"  {tag:<10} {r['kept']:,}/{r['games']:,} kept  "
-                  f"ps={r['ps_rows']:,} crush={r['crush_rows']:,}  {el:.1f}s "
+                  f"ps={r['ps_rows']:,} term={r['term_rows']:,}  {el:.1f}s "
                   f"({r['kept']/el:,.0f} kept-games/s)")
 
         b_el, o_el = out["baseline"][2], out["optimized"][2]
@@ -130,13 +130,13 @@ def main() -> None:
         compare(out["baseline"][0], out["optimized"][0],
                 ["parent_hash", "move_san"], "position-stats partial")
         compare(out["baseline"][1], out["optimized"][1],
-                ["parent_hash", "move_san", "move_bucket"], "crush partial")
+                ["position_hash", "kind", "reason"], "term partial")
 
         # On-disk byte-identity is reported for information only, never asserted:
         # zstd/parquet writes are not required to be reproducible byte-for-byte
         # (metadata, compression-block boundaries), so a mismatch here is not a
         # defect. Frame equality above is the binding check.
-        for kind, i in (("ps", 0), ("crush", 1)):
+        for kind, i in (("ps", 0), ("term", 1)):
             a, b = out["baseline"][i], out["optimized"][i]
             same = a.read_bytes() == b.read_bytes()
             print(f"  info  {kind} partial bytes identical on disk: {same} "

@@ -76,9 +76,8 @@ def main() -> None:
 
     tmp = Path(tempfile.mkdtemp(prefix="extract_acct_"))
     try:
-        ps_p, cr_p, tm_p = (tmp / "a.ps.parquet", tmp / "a.crush.parquet",
-                            tmp / "a.term.parquet")
-        r = extract_file(src, ps_p, cr_p, min_elo=1800, max_ply=30, tiers=None,
+        ps_p, tm_p = tmp / "a.ps.parquet", tmp / "a.term.parquet"
+        r = extract_file(src, ps_p, min_elo=1800, max_ply=30, tiers=None,
                          limit_games=args.games, term_out=tm_p)
         print(f"  kept {r['kept']:,}/{r['games']:,}  ps_rows {r['ps_rows']:,}  "
               f"term_rows {r['term_rows']:,}  failed {r['failed']}\n")

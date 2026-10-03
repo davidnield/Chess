@@ -229,7 +229,7 @@ def create_app(data_dir: Path) -> FastAPI:
     def explorer_page():
         require_explorer()
         from fastapi.responses import HTMLResponse
-        return HTMLResponse(render_explorer_html(svc.source_label, svc.crush_weight))
+        return HTMLResponse(render_explorer_html(svc.source_label))
 
     # Original repertoire_explorer API paths, as INDEX_HTML expects them.
     @app.get("/api/slices")

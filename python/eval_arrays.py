@@ -115,9 +115,9 @@ def book_fingerprint(book: Path) -> dict:
 # These arrays are a DERIVED copy of the eval DB, and the skip gate used to be
 # `if the .npy files exist, use them`. That is silent corruption waiting to
 # happen: rebuild the eval DB (which has already happened twice) and every later
-# extract keeps reading the OLD evals, with no error. It would land in two places at once — the winpos crossing plies and
-# the child_eval feeding the other-moves bucket — so the repertoire would shift
-# for a reason nothing in the logs could explain.
+# extract keeps reading the OLD evals, with no error. It would land in the
+# child_eval feeding the other-moves bucket (and in Stage 3 itself), so the
+# repertoire would shift for a reason nothing in the logs could explain.
 #
 # So the arrays record what they were built from, and callers verify.
 
