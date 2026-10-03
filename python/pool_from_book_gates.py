@@ -19,9 +19,11 @@ Each gate writes its verdict into <work>/_gates.json (merged by key), which
                  FINISHED outputs: pool rows exactly, aux integers exactly, doubles
                  within 1e-12.
   conservation   Gate 3. From the finished files against fresh book scans:
-                 pool total + other_total = population mass at ply <= cap excluding
-                 collision parents; per non-root pool parent, SUM A = edges + other +
-                 term + horizon component-wise; the root's ply-1 games.
+                 pool total + other_total + outside (below-floor moves of positions
+                 that are not pool parents, from the book) = population mass at
+                 ply <= cap excluding collision parents; per non-root pool parent,
+                 SUM A = edges + other + term + horizon component-wise; the root's
+                 ply-1 games.
   mass-split     Not a gate: the report's kept / other / outside / term / horizon
                  mass per ply, for several --floors in one pass.
   evals          Gate 4. 10,000 random below-floor edges of pool parents; for their
@@ -361,13 +363,22 @@ def gate_conservation(a) -> bool:
     t0 = time.time()
     pool_t = con.execute(f"SELECT SUM(total) FROM read_parquet('{_p(pool_f)}')").fetchone()[0]
     oth_t = con.execute(f"SELECT SUM(other_total) FROM read_parquet('{_p(aux_f)}')").fetchone()[0]
-    pop_t, pop_coll = con.execute(f"""
+    # The aux has a row per POOL PARENT only (merge_aux_stats' scope), so the
+    # below-floor moves of positions with no surviving edge are in neither file:
+    # Stage 3 never reaches them. Measured here from the book, independently,
+    # as the third term; the spec's two-term identity omits it.
+    con.execute(f"""CREATE TEMP TABLE pp0 AS SELECT DISTINCT parent_hash AS x
+                    FROM read_parquet('{_p(pool_f)}')""")
+    pop_t, pop_coll, outside = con.execute(f"""
         SELECT SUM(total) FILTER (WHERE parent_hash NOT IN {coll}),
-               SUM(total) FILTER (WHERE parent_hash IN {coll})
+               SUM(total) FILTER (WHERE parent_hash IN {coll}),
+               SUM(total) FILTER (WHERE parent_hash NOT IN {coll}
+                                  AND parent_hash NOT IN (SELECT x FROM pp0))
         FROM {pop} WHERE ply <= {cap}""").fetchone()
-    mass_ok = int(pool_t) + int(oth_t) == int(pop_t)
-    print(f"  mass: pool {pool_t:,} + other {oth_t:,} = {pool_t + oth_t:,} vs population "
-          f"{pop_t:,} (collision parents {pop_coll:,}) -> {'OK' if mass_ok else 'MISMATCH'} "
+    mass_ok = int(pool_t) + int(oth_t) + int(outside) == int(pop_t)
+    print(f"  mass: pool {pool_t:,} + other {oth_t:,} + outside (non-pool parents) "
+          f"{outside:,} = {pool_t + oth_t + outside:,} vs population {pop_t:,} "
+          f"(collision parents {pop_coll:,}) -> {'OK' if mass_ok else 'MISMATCH'} "
           f"({time.time()-t0:.0f}s)", flush=True)
 
     # Per pool parent: SUM_{p<=cap} A = edges + other + term + horizon.
@@ -426,6 +437,7 @@ def gate_conservation(a) -> bool:
     record(work, "conservation", {
         "pass": ok, "pool_total": int(pool_t), "other_total": int(oth_t),
         "population_le_cap_excl_collisions": int(pop_t),
+        "outside_mass_non_pool_parents": int(outside),
         "collision_parent_mass": int(pop_coll or 0), "mass_identity": mass_ok,
         "non_root_parents": int(n_par), "per_parent_mismatches": int(mism),
         "arrivals_into_pool_parents": int(a_tot or 0),
