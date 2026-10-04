@@ -85,6 +85,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from stage3_backwards_induction import (  # noqa: E402  (path insert above)
     aux_opp_mix,
     aux_our_blend,
+    aux_term_reasons,
+    check_aux_term_flags,
     cp_to_expected_score,
     effective_eval_weight,
     forcingness,
@@ -271,6 +273,26 @@ def leaf_node_value(edges_ws_total: list[tuple[float, int]],
                            eval_weight_k)
 
 
+# Key load_aux_rows stamps on every row it returns: the sidecar's term_reasons
+# ('split' or 'pooled'), so the guard travels with the data into aux_row_buckets.
+TERM_REASONS_KEY = "_term_reasons"
+
+
+def load_aux_rows(aux_path, positions=None, term_flags: bool = True
+                  ) -> dict[int, dict]:
+    """The aux sidecar as position_hash -> row dict (optionally only `positions`),
+    each row stamped with the sidecar's term_reasons. Raises up front when
+    term_flags=False meets a pooled-reason sidecar (check_aux_term_flags)."""
+    import polars as pl
+    check_aux_term_flags(aux_path, term_flags)
+    reasons = aux_term_reasons(aux_path)
+    lf = pl.scan_parquet(aux_path)
+    if positions is not None:
+        lf = lf.filter(pl.col("position_hash").is_in(list(positions)))
+    return {r["position_hash"]: {**r, TERM_REASONS_KEY: reasons}
+            for r in lf.collect().iter_rows(named=True)}
+
+
 def aux_row_buckets(aux: dict | None, our_white: bool,
                     term_flags: bool = True
                     ) -> tuple[float, float, float, float, float,
@@ -297,6 +319,10 @@ def aux_row_buckets(aux: dict | None, our_white: bool,
     """
     if not aux:
         return (0.0, 0.0, 0.0, 0.0, 0.0, float("nan"), 0.0, 0.0, 0.0)
+    if not term_flags and aux.get(TERM_REASONS_KEY) == "pooled":
+        raise ValueError("aux row comes from a sidecar with term_reasons='pooled': "
+                         "term_flag_* is 0 and the flags sit in term_other_*, so "
+                         "term_flags=False would drop nothing")
 
     def g(name: str) -> float:
         return float(aux.get(name) or 0.0)

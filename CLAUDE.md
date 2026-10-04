@@ -66,6 +66,11 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year Y1 --end-year Y2 --phase extract
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year Y1 --end-year Y2 --phase merge --tmp-dir D:\chess_duckdb_tmp
 
+# Pool + aux sidecar from the explorer book instead (slices, cap and floor are flags; gates in
+# pool_from_book_gates.py). Its aux pools termination reasons: term_flag_* is 0, the meta says
+# term_reasons='pooled', and Stage 3 / budget_core refuse to exclude flags on it.
+.venv\Scripts\python.exe python\pool_from_book.py --events ... --elo-bands ... --max-ply C --min-games N --tag T --work H:\chess\pool_work\T
+
 # Sharp repertoires from pooled stats
 .venv\Scripts\python.exe python\build_sharp_reps.py
 
