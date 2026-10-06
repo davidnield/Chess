@@ -85,9 +85,15 @@ def main() -> None:
         pdir = tmp / "partials"
         pdir.mkdir(parents=True)
         stem = "year=2025_month=1_event=Blitz_part-0"
+        # The whole fixture sits in ONE (event, elo_band) cell. position-stats is
+        # keyed on those two as well now, so a cell-per-row fixture would change
+        # what min_games means here; keeping it constant leaves every expected
+        # number below exactly as it was when the key was (parent_hash, move_san).
         pl.DataFrame(
             {"parent_hash": [r[0] for r in PS_ROWS],
              "move_san": [r[1] for r in PS_ROWS],
+             "event": ["Blitz" for _ in PS_ROWS],
+             "elo_band": [1800 for _ in PS_ROWS],
              "parent_epd": [f"epd{r[0]}" for r in PS_ROWS],
              "child_hash": [r[2] for r in PS_ROWS],
              "child_eval": [r[3] for r in PS_ROWS],
@@ -97,6 +103,7 @@ def main() -> None:
              "black_wins": [r[6] for r in PS_ROWS],
              "total": [r[7] for r in PS_ROWS]},
             schema={"parent_hash": pl.Int64, "move_san": pl.Utf8,
+                    "event": pl.Utf8, "elo_band": pl.Int64,
                     "parent_epd": pl.Utf8, "child_hash": pl.Int64,
                     "child_eval": pl.Int32, "ply": pl.Int32,
                     "white_wins": pl.Int64, "draws": pl.Int64,

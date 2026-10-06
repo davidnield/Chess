@@ -7,6 +7,7 @@ Run:  .venv/Scripts/python.exe python/_test_trainer_m5.py
 """
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -33,7 +34,35 @@ def check(name, cond, detail=""):
         FAILS += 1
 
 
-pack = TrainingPack(r"C:\Users\David\Documents\Chess\trainer_data\pack")
+# Resolution mirrors trainer_app/config.py's documented contract
+# (TRAINER_DATA env var > <repo root>/trainer_data) but does NOT call
+# resolve_data_dir(): that mkdirs the data dir and pack/ as a side effect, so
+# merely running the suite would leave an empty trainer_data/pack behind on
+# every machine.
+#
+# This was a hardcoded C:\Users\David\... absolute path -- the only one in the
+# repo, contradicting the convention every other trainer module honours, and it
+# made the test unrunnable outside one user profile on one machine.
+_DATA_DIR = (Path(os.environ["TRAINER_DATA"]) if os.environ.get("TRAINER_DATA")
+             else config.REPO_ROOT / "trainer_data")
+PACK_DIR = _DATA_DIR / "pack"
+
+# This test runs against the REAL pack on purpose -- the docstring is explicit,
+# and the expected book moves below are derived from the pack rather than
+# asserted. But the pack is a build artifact: trainer_data is gitignored and is
+# excluded from the robocopy that stages this repo onto other machines, so it is
+# legitimately absent nearly everywhere. Skip rather than fail.
+#
+# run_tests.py is binary on exit code, so exiting 0 counts as PASS. That is a
+# deliberate use of the harness: the alternative is a permanent red on every
+# machine that has no reason to hold personal training data.
+if not (PACK_DIR / "pack_meta.json").exists():
+    print(f"SKIP: no training pack at {PACK_DIR}")
+    print("      (set TRAINER_DATA to an existing data dir, or run "
+          "python/build_training_pack.py)")
+    sys.exit(0)
+
+pack = TrainingPack(PACK_DIR)
 tmp = Path(tempfile.mkdtemp(prefix="trainer_m5_"))
 con = db.connect(tmp)
 settings = config.get_settings(con)

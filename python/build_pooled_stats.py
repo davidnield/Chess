@@ -1,11 +1,27 @@
 """
 build_pooled_stats.py — fast, reusable combined position-stats (plus the terminal-
-accounting aux sidecar), pooled to a SINGLE slice (event='Pooled', elo_band=0).
+accounting aux sidecar), keyed per (event, elo_band) slice.
 
-This is the CANONICAL pooler for new datasets: it fuses extraction + elo/event
-filtering + pooling straight from the source parquets. (build_combined_slice.py is the
+This is the CANONICAL extractor for new datasets: it fuses extraction + elo/event
+filtering straight from the source parquets. (build_combined_slice.py is the
 OTHER pooling path — it re-pools stats that were already aggregated per (event,elo_band).
 Use that only when you already have per-band position_stats and just want to combine them.)
+
+SLICING (2026-09): position-stats are aggregated on
+(parent_hash, move_san, event, elo_band), so the output reproduces the Lichess
+opening explorer's two filters — speed and rating band. `elo_band` is
+rating_bands.lichess_rating_group(mean_elo): lila-openingexplorer's
+RatingGroup::select_avg, nine labels 0/1000/.../2500, NOT the old 100-wide
+floor(mean_elo/100)*100. Measured cost is 1.05x in rows, because 97% of rows are
+singletons and a singleton lives in exactly one band.
+
+Two consequences worth knowing before reading a merged output:
+  - --min-games is now a PER-CELL floor. A move with 100 games spread thinly
+    across six events and nine bands can have no cell reach 50 and land wholly
+    in the below-floor bucket, where the same move would have survived under the
+    old pooled key. Pass a lower --min-games for a census.
+  - (The crush/winpos histograms, which were never sliced, left the recipe on
+    2026-10-02 together with merge_crush.)
 
 Fused single-pass design (replaces the old Stage-1 raw-edge dump + Stage-2 tier
 merge, whose tier/shard/fragment machinery was ~OOM-defensive scaffolding for the
@@ -44,10 +60,19 @@ Usage:
 
   # merge phase only (after partials exist)
   .venv/Scripts/python.exe python/build_pooled_stats.py --start-year 2019 --end-year 2025 --phase merge
+
+  # B1: an EPD on every row, so the month needs no EPD backfill. Consolidate as
+  # usual, then python/bucket_month.py writes the backfill's bucketed layout.
+  .venv/Scripts/python.exe python/build_pooled_stats.py ... --phase extract --epd-max-ply 30
+
+Every extract run locks its settings in <partial-dir>/_extract_params.json and
+refuses to resume a dir built with different ones (see lock_extract_params).
 """
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import re
 import shutil
 import sys
@@ -65,6 +90,7 @@ from stage1_extract_positions import iter_san_moves, zobrist_int64
 from zobrist import IncrementalZobrist
 from eval_arrays import (MISSING as _EVAL_MISSING, lookup_evals,
                          open_eval_arrays, verify_eval_arrays)
+from rating_bands import lichess_rating_group
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -90,18 +116,60 @@ SKIP_PARTITIONS: set[tuple[int, int]] = set()
 
 # Source columns needed for the fused pass. No game_id needed (we aggregate, never
 # join per-game facts). movetext is the heavyweight string.
-SRC_COLUMNS = ["movetext", "white_score", "termination", "mean_elo"]
+SRC_COLUMNS = ["movetext", "white_score", "termination", "mean_elo",
+               "white_title", "black_title", "white_elo", "black_elo"]
 READ_BATCH_GAMES = 50_000
 # Compact the per-chunk accumulator every N batches to bound peak memory (the
 # concat+regroup keeps the running frame near the chunk's unique-key count).
 COMPACT_EVERY = 8
 
+# ── game-level filters (explorer run, decided 2026-08-13) ─────────────────────
+# Measured on 1M rows of 2024-06 Blitz: bot 0.1134%, terminations 0.004%,
+# rating gap >300 0.49% -- ~0.64% of games total, and the same share of walk
+# time saved. All three are expressible from the D: schema, so they belong HERE
+# rather than in process_pgn_parquets.py (re-deriving D: is a multi-day ~9 TB
+# rewrite that would also destroy what the repertoire pipeline reads).
+#
+# What is ALREADY excluded upstream, and must not be re-added: the ingest's
+# single filter is `Event isin(EVENT_MAP.keys())`, an EXACT string match, so D:
+# holds rated, non-tournament, standard-chess games only -- arena and swiss
+# games, casual games, variants and simuls are all gone (~10% of raw rows).
+EXCLUDED_TERMINATIONS = frozenset({"Rules infraction", "Abandoned"})
+DEFAULT_MAX_RATING_GAP = 300
+
+# Games read per output partial. The accumulator is bounded by THIS, not by the
+# source file's 2M rows -- which is what lets a worker run in ~3 GB instead of
+# ~23 GB, and is the difference between 2 workers per machine and 7-8.
+#
+# Boundaries are on games READ, not games KEPT, so they do not move when
+# --min-elo or the filters change and a partly-written file stays resumable.
+CHUNK_GAMES = 250_000
+
+# Deepest ply that carries a parent_epd. Past this the column is NULL.
+# 16 covers 3,424 of the 3,810 named openings in lichess-org/chess-openings (90%),
+# which is the entire population anything would ever render an EPD for. Set to a
+# huge number to restore the old always-populate behaviour.
+EPD_MAX_PLY = 16
+
 
 # ── per-chunk fused extraction ────────────────────────────────────────────────
 
+# parent_epd is kept in the SCHEMA but populated only to EPD_MAX_PLY (below).
+# Measured from a real partial's footer it was 19.55 B/row = 50.3% of the file,
+# the largest column by a wide margin, and it is redundant for identity:
+# parent_hash discriminates at least as finely (polyglot sets the ep key on pawn
+# adjacency, board.epd() prints ep only when the capture is legal). It exists for
+# display/debug -- and nothing displays a ply-40 position. Nulling it past the
+# opening keeps every downstream consumer, the merge SQL and ~20 tests working
+# unchanged while recovering most of the bytes, since a mostly-null column
+# compresses to almost nothing.
+#
+# drop_nulls().first() rather than .first(): a transposition can reach one
+# (parent_hash, move_san) group at two different plies, one inside the EPD window
+# and one outside, and we want the populated value when it exists.
 def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
-    return df.group_by("parent_hash", "move_san").agg(
-        pl.col("parent_epd").first().alias("parent_epd"),
+    return df.group_by("parent_hash", "move_san", "event", "elo_band").agg(
+        pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         # child_hash is a FUNCTION of the group key (same position + same move
         # reaches the same position), so .first() is exact, not a representative.
         # child_eval is a function of child_hash, hence also of the key.
@@ -117,8 +185,8 @@ def _agg_ps(df: pl.DataFrame) -> pl.DataFrame:
 
 def _agg_ps_resum(df: pl.DataFrame) -> pl.DataFrame:
     # Re-aggregate already-aggregated ps frames (sum the counts; keep a representative epd/ply).
-    return df.group_by("parent_hash", "move_san").agg(
-        pl.col("parent_epd").first().alias("parent_epd"),
+    return df.group_by("parent_hash", "move_san", "event", "elo_band").agg(
+        pl.col("parent_epd").drop_nulls().first().alias("parent_epd"),
         pl.col("child_hash").first().alias("child_hash"),
         pl.col("child_eval").first().alias("child_eval"),
         pl.col("ply").first().alias("ply"),
@@ -130,8 +198,27 @@ def _agg_ps_resum(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def _new_buf() -> dict:
+    # `event` is deliberately NOT here: it is constant for a whole source file
+    # (the source is hive-partitioned by event), so it is attached once to the
+    # frame in flush_batch instead of appended per row. `elo_band` varies per
+    # GAME, so it has to ride along per ply.
     return {k: [] for k in
-            ("parent_hash", "child_hash", "move_san", "parent_epd", "ply", "ws")}
+            ("parent_hash", "child_hash", "move_san", "parent_epd", "ply",
+             "ws", "elo_band")}
+
+
+def _event_of(src_file: Path) -> str:
+    """The hive `event=` component of a source path (`.../event=Blitz/x.parquet`).
+
+    A FALLBACK only: main() passes the event discovery already knows, which is
+    authoritative. This exists so a caller that hands over a bare path (the
+    replay harnesses) still gets the right label instead of a NULL column. A
+    path with no `event=` component yields POOL_EVENT.
+    """
+    for parent in src_file.parents:
+        if parent.name.startswith("event="):
+            return parent.name.split("=", 1)[1]
+    return POOL_EVENT
 
 
 # ── terminal accounting (TERM / HORIZON) ──────────────────────────────────────
@@ -249,9 +336,21 @@ def classify_maxply(tiers: dict | None, w1: str | None, b1: str | None,
 
 
 def _walk_game(buf: dict, movetext, white_score, tiers, max_ply_cap, hasher=None,
-               epd_memo=None, term_buf=None, reason: int = TERM_OTHER) -> bool:
+               epd_memo=None, term_buf=None, reason: int = TERM_OTHER, band: int = 0,
+               epd_max_ply: int = EPD_MAX_PLY) -> bool:
     """Append one game's per-ply rows into the columnar buffer, capping depth by the
     asymmetric tier (classified from the first two SAN moves). Returns True on parse error.
+
+    `band` is the game's Lichess rating group, computed ONCE per game by the
+    caller (see extract_file) and stamped onto every ply row. It defaults to 0
+    only so the replay-path harnesses (_test_epd_memo, _test_extract_child_hash)
+    can keep calling this without caring about the band; production always
+    passes it.
+
+    `epd_max_ply` is the deepest ply that gets a parent_epd (--epd-max-ply). It is
+    a parameter rather than a read of EPD_MAX_PLY because spawned workers
+    re-import this module: a value set on the constant in the parent never
+    reaches them. At the default the output is exactly the pre-flag extract's.
 
     `hasher` / `epd_memo` are the two extract-speed optimizations (2026-07 profiling:
     the position hash and board.epd() were 29% and 52% of replay time, against 19%
@@ -296,7 +395,13 @@ def _walk_game(buf: dict, movetext, white_score, tiers, max_ply_cap, hasher=None
     ph = get_hash()
     for ply in range(1, maxply + 1):
         san = toks[ply - 1]
-        if epd_memo is None:
+        # EPD only inside the opening window -- see EPD_MAX_PLY. Past it the value
+        # is never displayed, costs 19.55 B/row on disk, and board.epd() was
+        # measured at 52% of replay time (against 19% for parse_san+push), so
+        # skipping it is a throughput win as well as a storage one.
+        if ply > epd_max_ply:
+            epd = None
+        elif epd_memo is None:
             epd = board.epd()
         else:
             epd = epd_memo.get(ph)
@@ -315,6 +420,7 @@ def _walk_game(buf: dict, movetext, white_score, tiers, max_ply_cap, hasher=None
         buf["parent_epd"].append(epd)
         buf["ply"].append(ply)
         buf["ws"].append(white_score)
+        buf["elo_band"].append(band)
         ph = ch
     # `ph` is now the position after the last recorded ply. maxply was clamped to
     # min(tier, cap, len(toks)), so it equals len(toks) exactly when nothing
@@ -331,6 +437,7 @@ def _walk_game(buf: dict, movetext, white_score, tiers, max_ply_cap, hasher=None
 _BUF_SCHEMA = {
     "parent_hash": pl.Int64, "child_hash": pl.Int64, "move_san": pl.Utf8,
     "parent_epd": pl.Utf8, "ply": pl.Int32, "ws": pl.Float64,
+    "elo_band": pl.Int64,
 }
 
 
@@ -338,7 +445,13 @@ def extract_file(src_file: Path, ps_out: Path,
                  min_elo: int, max_ply: int, tiers: dict | None,
                  limit_games: int | None = None, optimize: bool = True,
                  term_out: Path | None = None,
-                 with_child_eval: bool = True) -> dict:
+                 with_child_eval: bool = True,
+                 exclude_bots: bool = False,
+                 excluded_terminations: frozenset = frozenset(),
+                 max_rating_gap: int | None = None,
+                 chunk_games: int | None = None,
+                 event: str | None = None,
+                 epd_max_ply: int = EPD_MAX_PLY) -> dict:
     """Fused per-file extractor: filter -> replay once -> pre-aggregated partials.
 
     `optimize=False` disables the incremental hasher + EPD memo, restoring the
@@ -356,13 +469,41 @@ def extract_file(src_file: Path, ps_out: Path,
 
     (Until 2026-10-02 this also wrote the resignation-proxy crush partial and the
     fused winpos partials; crush left the recipe and both were removed.)
+
+    `event` labels every row this file produces. It is constant for the whole
+    file (the source is hive-partitioned by event), so it is attached once to
+    each frame rather than appended per row -- unlike `elo_band`, which varies
+    per game. None means "derive it from the source path" (see _event_of).
+
+    `epd_max_ply` (--epd-max-ply) is the deepest ply given a parent_epd. The
+    default is today's EPD_MAX_PLY and changes nothing; 30 with --max-ply 30
+    writes an EPD on every row, which is what makes the EPD backfill
+    unnecessary (bucket_month.py then buckets the consolidated month).
     """
+    ev_label = event if event is not None else _event_of(src_file)
     want_term = term_out is not None
-    if ps_out.exists() and (not want_term or term_out.exists()):
+    _chunked = chunk_games is not None and chunk_games > 0
+    if _chunked:
+        # One cheap test instead of a conjunction over an unknown chunk count.
+        if _done_sentinel(ps_out).exists():
+            return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
+        # No sentinel => the previous attempt died mid-file. Clear its chunks
+        # before rewriting: if CHUNK_GAMES changed between runs the old tail
+        # would otherwise survive as orphans and be double-counted by the merge,
+        # which globs rather than enumerating.
+        _stem = ps_out.name.rsplit(".", 2)[0]
+        for stale in ps_out.parent.glob(f"{_stem}_c[0-9][0-9][0-9].*"):
+            stale.unlink(missing_ok=True)
+    elif ps_out.exists() and (not want_term or term_out.exists()):
         return {"file": src_file.name, "skipped": True, "games": 0, "sec": 0.0}
 
     t0 = time.time()
     n_games = n_kept = n_failed = 0
+    # Per-filter drop counts, returned so the merge can stamp them into the run's
+    # .meta.json. What was EXCLUDED carries provenance just as much as what was
+    # counted -- a census whose filter set is implied by the code version rather
+    # than recorded is not reproducible.
+    n_drop = {"elo": 0, "no_score": 0, "termination": 0, "bot": 0, "rating_gap": 0}
     ps_parts: list[pl.DataFrame] = []
     term_parts: list[pl.DataFrame] = []
     buf = _new_buf()
@@ -373,6 +514,12 @@ def extract_file(src_file: Path, ps_out: Path,
     # Reused across every game in the file; the memo is cleared per read batch.
     hasher = IncrementalZobrist(chess.Board()) if optimize else None
     epd_memo: dict[int, str] | None = {} if optimize else None
+    chunked = chunk_games is not None and chunk_games > 0
+    if chunked and chunk_games < READ_BATCH_GAMES:
+        # A chunk cannot close mid-batch (flush_batch works on the whole buffer),
+        # so a value below the batch size would silently collapse to ONE chunk
+        # and defeat the memory bound entirely. Round up rather than accept it.
+        chunk_games = READ_BATCH_GAMES
 
     def flush_batch():
         if term_buf is not None and term_buf["position_hash"]:
@@ -381,7 +528,8 @@ def extract_file(src_file: Path, ps_out: Path,
                 v.clear()
         if not buf["parent_hash"]:
             return
-        df = pl.DataFrame(buf, schema=_BUF_SCHEMA)
+        df = pl.DataFrame(buf, schema=_BUF_SCHEMA).with_columns(
+            pl.lit(ev_label, dtype=pl.Utf8).alias("event"))
         # child_eval is what lets the merge compute the other-moves bucket's
         # aggregate evaluation without a separate join over ~2.25B below-floor
         # edges. Stored NULL where the eval DB has no entry, so SQL aggregates skip
@@ -406,9 +554,59 @@ def extract_file(src_file: Path, ps_out: Path,
         if len(term_parts) > 1:
             term_parts = [_agg_term_resum(pl.concat(term_parts))]
 
+    tot_rows = {"ps": 0, "term": 0}
+    chunk_i = 0
+
+    def write_chunk() -> None:
+        """Finalise the accumulators to one numbered partial set and reset them.
+
+        Called every `chunk_games` games READ, and once at the end. Splitting the
+        WRITE rather than the READ is what keeps the source scan sequential: a
+        per-chunk *task* design would re-read the file prefix for every chunk
+        (~3.5x read amplification on a 2M-row file at 250K chunks).
+
+        This is what bounds worker memory. The accumulators used to grow across a
+        whole 2M-game source file -- measured at ~23 GB RSS per worker, which held
+        the fleet to 2 workers on the Ryzen's 31 GB and 2 on the i9's 64 GB. Bound
+        to a chunk instead, the same run fits 7-8 workers per machine.
+        """
+        nonlocal chunk_i, ps_parts, term_parts
+        compact()
+        ps_df = ps_parts[0] if ps_parts else pl.DataFrame(schema={
+            "parent_hash": pl.Int64, "move_san": pl.Utf8, "event": pl.Utf8,
+            "elo_band": pl.Int64, "parent_epd": pl.Utf8,
+            "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
+            "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
+            "total": pl.Int64})
+        term_df = term_parts[0] if term_parts else pl.DataFrame(schema={
+            "position_hash": pl.Int64, "kind": pl.Int32, "reason": pl.Int32,
+            "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
+            "total": pl.Int64})
+
+        k = chunk_i if chunked else None
+        ps_p = _chunk_path(ps_out, k)
+        ps_p.parent.mkdir(parents=True, exist_ok=True)
+        ps_tmp = ps_p.with_suffix(".parquet.tmp")
+        ps_df.write_parquet(ps_tmp, compression="zstd")
+        if want_term:
+            tm_p = _chunk_path(term_out, k)
+            tm_tmp = tm_p.with_suffix(".parquet.tmp")
+            term_df.write_parquet(tm_tmp, compression="zstd")
+            tm_tmp.replace(tm_p)
+        # ps LAST, WITHIN each chunk. The whole-file gate is the _DONE sentinel,
+        # but keeping this ordering means a half-written chunk never presents a
+        # complete-looking ps partial beside a missing sibling.
+        ps_tmp.replace(ps_p)
+
+        tot_rows["ps"] += ps_df.height
+        tot_rows["term"] += term_df.height
+        ps_parts, term_parts = [], []
+        chunk_i += 1
+
     pf = pq.ParquetFile(src_file)
     batch_i = 0
     done = False
+    chunk_start = 0
     for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=SRC_COLUMNS):
         for rec in batch.to_pylist():
             if limit_games is not None and n_games >= limit_games:
@@ -417,13 +615,47 @@ def extract_file(src_file: Path, ps_out: Path,
             n_games += 1
             me = rec["mean_elo"]
             if me is None or me < min_elo:
+                n_drop["elo"] += 1
                 continue
             ws = rec["white_score"]
             if ws is None:
+                n_drop["no_score"] += 1
                 continue
+            # `term` is read here rather than after n_kept because the
+            # termination filter needs it. Order is cheapest-and-most-selective
+            # first; all three are scalar comparisons ahead of the expensive walk.
+            term = rec["termination"]
+            if term in excluded_terminations:
+                n_drop["termination"] += 1
+                continue
+            # Bots are 0.11% of games but play thousands each, many engine- or
+            # book-backed, so a handful of accounts can dominate the counts for
+            # exactly the rare openings a popularity census is about.
+            #
+            # Note this is an == test on a possibly-None field. Do NOT restate it
+            # as `!= "BOT"` in polars/SQL: titles are ~99.9% null and != would
+            # propagate nulls, dropping nearly everything.
+            if exclude_bots and (rec["white_title"] == "BOT"
+                                 or rec["black_title"] == "BOT"):
+                n_drop["bot"] += 1
+                continue
+            # A 1200-vs-2000 game lands in the 1600 elo_band while representing
+            # neither player. The extract is keyed on that band, so this is about
+            # making the slicing honest, not about win-rate distortion.
+            if max_rating_gap is not None:
+                we, be = rec["white_elo"], rec["black_elo"]
+                if we is not None and be is not None and abs(we - be) > max_rating_gap:
+                    n_drop["rating_gap"] += 1
+                    continue
             n_kept += 1
+            # ONE band per game, stamped onto every ply row by _walk_game. This
+            # is lila-openingexplorer's RatingGroup::select_avg, not our old
+            # 100-wide floor(mean_elo/100)*100 -- see rating_bands.py, which
+            # also documents the <=1-point floor-vs-round difference from
+            # theirs that riding on the stored mean_elo inherits.
+            band = lichess_rating_group(me)
             if _walk_game(buf, rec["movetext"], ws, tiers, max_ply, hasher, epd_memo,
-                          term_buf, _term_reason(rec["termination"])):
+                          term_buf, _term_reason(term), band, epd_max_ply):
                 n_failed += 1
         flush_batch()
         # Bound the memo: the 35.1% hit rate is entirely intra-batch, so clearing
@@ -433,32 +665,31 @@ def extract_file(src_file: Path, ps_out: Path,
         batch_i += 1
         if batch_i % COMPACT_EVERY == 0:
             compact()
+        # Chunk boundary on games READ (not kept) so it does not move when
+        # --min-elo or the filters change.
+        #
+        # Evaluated HERE, at a batch end, not per record: flush_batch() works on
+        # the whole buffer, so a chunk cannot close mid-batch. Effective
+        # granularity is therefore READ_BATCH_GAMES (50,000) and chunk_games is
+        # rounded UP to the next multiple of it -- see the guard in extract_file.
+        if chunked and n_games - chunk_start >= chunk_games:
+            write_chunk()
+            chunk_start = n_games
         if done:
             break
 
-    compact()
-    ps_df = ps_parts[0] if ps_parts else pl.DataFrame(schema={
-        "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
-        "child_hash": pl.Int64, "child_eval": pl.Int32, "ply": pl.Int32,
-        "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
-        "total": pl.Int64})
-    term_df = term_parts[0] if term_parts else pl.DataFrame(schema={
-        "position_hash": pl.Int64, "kind": pl.Int32, "reason": pl.Int32,
-        "white_wins": pl.Int64, "draws": pl.Int64, "black_wins": pl.Int64,
-        "total": pl.Int64})
-
-    ps_out.parent.mkdir(parents=True, exist_ok=True)
-    ps_tmp = ps_out.with_suffix(".parquet.tmp")
-    ps_df.write_parquet(ps_tmp, compression="zstd")
-    if want_term:
-        tm_tmp = term_out.with_suffix(".parquet.tmp")
-        term_df.write_parquet(tm_tmp, compression="zstd")
-        tm_tmp.replace(term_out)
-    # ps LAST: the caller's skip-gate is conjunctive, so the kind renamed last is
-    # the one whose absence reopens the gate after an interruption.
-    ps_tmp.replace(ps_out)
+    flush_batch()
+    # Write the tail only if it holds something, or if nothing has been written
+    # at all (a source file with zero kept games must still yield one partial set
+    # so the merge's globs and the run's file accounting stay consistent).
+    if ps_parts or term_parts or chunk_i == 0:
+        write_chunk()
+    if chunked:
+        _done_sentinel(ps_out).touch()
     return {"file": src_file.name, "skipped": False, "games": n_games, "kept": n_kept,
-            "failed": n_failed, "ps_rows": ps_df.height, "term_rows": term_df.height,
+            "failed": n_failed, "ps_rows": tot_rows["ps"],
+            "term_rows": tot_rows["term"],
+            "chunks": chunk_i, "drop": dict(n_drop),
             "sec": time.time() - t0}
 
 
@@ -467,17 +698,79 @@ def extract_file(src_file: Path, ps_out: Path,
 _W: dict = {}
 
 
-def _init_worker(min_elo: int, max_ply: int, tiers: dict | None) -> None:
+def _init_worker(min_elo: int, max_ply: int, tiers: dict | None,
+                 with_child_eval: bool = True, exclude_bots: bool = False,
+                 excluded_terminations: frozenset = frozenset(),
+                 max_rating_gap: int | None = None,
+                 chunk_games: int | None = None,
+                 epd_max_ply: int = EPD_MAX_PLY) -> None:
     _W["min_elo"] = min_elo
     _W["max_ply"] = max_ply
     _W["tiers"] = tiers
+    _W["with_child_eval"] = with_child_eval
+    _W["exclude_bots"] = exclude_bots
+    _W["excluded_terminations"] = excluded_terminations
+    _W["max_rating_gap"] = max_rating_gap
+    _W["chunk_games"] = chunk_games
+    # Carried explicitly: Windows spawn re-imports this module in every worker,
+    # so the parent's --epd-max-ply only arrives through the initializer.
+    _W["epd_max_ply"] = epd_max_ply
 
 
 def _worker(task: tuple) -> dict:
-    src_str, ps_str, tm_str, limit = task
+    src_str, ps_str, tm_str, limit, event = task
     return extract_file(Path(src_str), Path(ps_str),
                         _W["min_elo"], _W["max_ply"], _W["tiers"], limit,
-                        term_out=Path(tm_str))
+                        term_out=Path(tm_str),
+                        with_child_eval=_W["with_child_eval"],
+                        exclude_bots=_W["exclude_bots"],
+                        excluded_terminations=_W["excluded_terminations"],
+                        max_rating_gap=_W["max_rating_gap"],
+                        chunk_games=_W["chunk_games"],
+                        event=event,
+                        epd_max_ply=_W["epd_max_ply"])
+
+
+# ── the partial dir's parameter lock ──────────────────────────────────────────
+#
+# Resume is gated per source file on its _DONE sentinel, so nothing stops a rerun
+# with different settings from finishing a half-built dir: the first files would
+# carry epd-16 partials, the rest epd-30, and the merge would read the mixture
+# as one extract. The lock is written on first use and every later run must
+# match it. `producer` is part of it on purpose: the Rust extract writes the
+# same file with "rust", so the two can never share a dir either.
+EXTRACT_PARAMS_FILE = "_extract_params.json"
+
+
+def extract_params(args, excluded_terms: frozenset) -> dict:
+    """What the lock records: every setting that changes a partial's content
+    under the explorer contract."""
+    return {"epd_max_ply": args.epd_max_ply, "max_ply": args.max_ply,
+            "chunk_games": args.chunk_games, "events": list(args.events),
+            "min_elo": args.min_elo, "exclude_bots": bool(args.exclude_bots),
+            "excluded_terminations": sorted(excluded_terms),
+            "producer": "python"}
+
+
+def lock_extract_params(partial_dir: Path, params: dict) -> Path:
+    """Write the lock if the dir has none; otherwise refuse unless it matches."""
+    p = partial_dir / EXTRACT_PARAMS_FILE
+    if p.exists():
+        have = json.loads(p.read_text(encoding="utf-8"))
+        if have != params:
+            diff = {k: {"locked": have.get(k), "this run": params.get(k)}
+                    for k in sorted(set(have) | set(params))
+                    if have.get(k) != params.get(k)}
+            raise SystemExit(
+                f"FATAL: {p} records different extract parameters: {diff}. "
+                f"Partials built under different settings must not share a "
+                f"directory -- use a new --partial-dir.")
+        return p
+    partial_dir.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(params, indent=2), encoding="utf-8")
+    tmp.replace(p)
+    return p
 
 
 # ── depth-tier seeding (from existing >=1800 frequency stats) ───────────────────
@@ -547,6 +840,34 @@ def partial_name(src_file: Path, year: int, month: int, event: str, kind: str) -
     return f"year={year}_month={month}_event={event}_{src_file.stem}.{kind}.parquet"
 
 
+def _chunk_path(base: Path, k: int | None) -> Path:
+    """`...part-0.ps.parquet` -> `...part-0_c000.ps.parquet` (k=None: unchanged).
+
+    The chunk marker goes on the STEM, not the extension, so the merge's
+    `*.ps.parquet` globs keep matching without modification.
+    """
+    if k is None:
+        return base
+    stem, kind, ext = base.name.rsplit(".", 2)
+    return base.with_name(f"{stem}_c{k:03d}.{kind}.{ext}")
+
+
+def _done_sentinel(ps_out: Path) -> Path:
+    """Whole-source-file completion marker for the chunked skip gate.
+
+    With one partial per file the gate could just test the partials' existence.
+    Chunking breaks that: the number of chunks is not known until the file has
+    been read, so "are all of them present?" is unanswerable from the filesystem
+    alone. A sentinel written after the LAST chunk restores a single, cheap,
+    conjunctive test -- and keeps resume granularity per-file, exactly as before.
+
+    Leading underscore so it is invisible to pyarrow dataset discovery and to the
+    merge's `*.parquet` globs.
+    """
+    stem = ps_out.name.rsplit(".", 2)[0]
+    return ps_out.with_name(f"_{stem}.DONE")
+
+
 # ── final merges (DuckDB, single pass) ─────────────────────────────────────────
 
 def _sql_path(p) -> str:
@@ -582,11 +903,11 @@ _MONTH_RE = re.compile(r"year=(\d+)_month=(\d+)_event=")
 N_MERGE_BUCKETS = 32
 
 
-def _bucket_expr(col: str) -> str:
+def _bucket_expr(col: str, n: int = N_MERGE_BUCKETS) -> str:
     # Arithmetic bucketing (not hash()) so resumed runs assign identical buckets
     # regardless of DuckDB version. Zobrist hashes are uniform in the low bits;
     # the double-modulo folds negative int64 values into [0, N).
-    return f"(({col} % {N_MERGE_BUCKETS}) + {N_MERGE_BUCKETS}) % {N_MERGE_BUCKETS}"
+    return f"(({col} % {n}) + {n}) % {n}"
 
 
 def _bucket_has_data(part_dir: Path, i: int) -> bool:
@@ -608,7 +929,8 @@ def _write_empty(path: Path, schema: dict) -> None:
 
 
 _PS_BUCKET_SCHEMA = {
-    "parent_hash": pl.Int64, "move_san": pl.Utf8, "parent_epd": pl.Utf8,
+    "parent_hash": pl.Int64, "move_san": pl.Utf8, "event": pl.Utf8,
+    "elo_band": pl.Int64, "parent_epd": pl.Utf8,
     "child_hash": pl.Int64, "ply": pl.Int32, "white_wins": pl.Int64,
     "draws": pl.Int64, "black_wins": pl.Int64, "total": pl.Int64,
 }
@@ -748,9 +1070,254 @@ def _consolidate_one_month(task: tuple) -> tuple:
     return label, len(in_files), out.stat().st_size, time.time() - t0
 
 
+# ── sub-bucketed consolidation (explorer scale, 2026-09) ──────────────────────
+#
+# _consolidate_one_month was tuned on brc months of ~5-7 GB of ps partials. The
+# banded explorer extract writes 43-47 GB (1.7-1.8B rows) of ps partials per
+# month, and one GROUP BY over that does not finish:
+#   - 2024-06, --mem 24GB --threads 4: OutOfMemoryException
+#     "could not allocate block of size 256.0 KiB (22.3 GiB/22.3 GiB used)".
+#   - 2026, --mem 48GB --threads 8: months 1-5 each ran ~87 min and wrote
+#     nothing; month 6 had spilled 309 GB to temp within the hour while holding
+#     47 GB. Out-of-core aggregation does engage for this query. It does not
+#     rescue it.
+# With sub_buckets = K a month runs as K GROUP BYs over disjoint key-hash slices
+# of the same files. Every group key starts with the sliced column (parent_hash,
+# or position_hash for term), so each key lands wholly in one slice and the
+# union of the K results IS the single-query aggregate, holding 1/K of its
+# state. The parts are then concatenated into the usual one-file monthly, so no
+# reader of _monthly changes.
+
+# (GROUP BY key, aggregates) per partial kind.
+_CONSOLIDATION_SPECS = {
+    "ps": ("parent_hash, move_san, event, elo_band",
+           "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
+           "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
+           "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
+           "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
+    "term": ("position_hash, kind, reason",
+             "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
+             "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
+}
+
+
+def consolidation_spec(kind: str) -> tuple[str, str] | None:
+    """(GROUP BY key, aggregates) for one partial kind; None for an unknown kind.
+    The FIRST key column is the one sub-bucketing slices on."""
+    return _CONSOLIDATION_SPECS.get(kind)
+
+
+# sub_buckets='auto' sizing, calibrated 2026-09-15 on the 2024-06 banded month
+# (327 ps partials, 44.67 GB, 1.73B rows -> 1.355B groups) with --threads 8
+# --mem 48GB, one slice at each K:
+#     K    input/slice   groups/slice   peak commit   seconds   month total
+#     64      0.70 GB        21.2M         10.5 GB        90       1.6 h
+#     32      1.40 GB        42.3M         18.4 GB       185       1.6 h
+#     16      2.79 GB        84.7M         32.3 GB       545       2.4 h
+# Peak commit ~= 3.2 GB + 10.4 x slice input bytes. Aggregation also slows
+# superlinearly once a slice passes ~1.5 GB of input, so auto takes the larger
+# of a memory K and a speed K. The filter itself is cheap: DuckDB pushes it into
+# the parquet scan (a filtered read of all twelve columns took 44 s).
+SUB_BUCKET_BYTES_FACTOR = 12.0          # peak commit per input byte (10.4 measured, +15%)
+SUB_BUCKET_BASE_BYTES = 4 * 10**9       # per-query overhead (3.2 GB measured)
+SUB_BUCKET_MAX_INPUT_BYTES = 15 * 10**8  # slice input above this aggregates slowly
+
+
+def _mem_bytes(mem: str) -> int:
+    """A DuckDB memory_limit string as bytes. DuckDB reads KB/MB/GB/TB as powers
+    of 1000 and KiB/MiB/GiB/TiB as powers of 1024 — --mem 24GB surfaced in its
+    OOM message as 22.3 GiB."""
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGT]I?B|B)?\s*", mem.upper())
+    if not m:
+        raise ValueError(f"unparseable memory size: {mem!r}")
+    unit = m.group(2) or "B"
+    if unit == "B":
+        return int(float(m.group(1)))
+    base = 1024 if "I" in unit else 1000
+    return int(float(m.group(1)) * base ** ("KMGT".index(unit[0]) + 1))
+
+
+def resolve_sub_buckets(spec: int | str, input_bytes: int, mem: str) -> int:
+    """K for one month: an explicit count, or 'auto' — the smallest power of two
+    that both fits each slice in the memory limit (base + factor * input / K) and
+    keeps each slice's input under SUB_BUCKET_MAX_INPUT_BYTES."""
+    if isinstance(spec, str) and spec.strip().lower() == "auto":
+        mem_b = _mem_bytes(mem)
+        usable = max(mem_b - SUB_BUCKET_BASE_BYTES, mem_b // 4)
+        need = max(math.ceil(input_bytes * SUB_BUCKET_BYTES_FACTOR / usable),
+                   math.ceil(input_bytes / SUB_BUCKET_MAX_INPUT_BYTES), 1)
+        return 1 << (need - 1).bit_length()
+    k = int(spec)
+    if k < 1:
+        raise ValueError(f"sub_buckets must be a positive integer or 'auto', got {spec!r}")
+    return k
+
+
+def sub_buckets_arg(value: str) -> int | str:
+    """argparse type for --sub-buckets: a positive integer or 'auto'."""
+    v = value.strip().lower()
+    if v == "auto":
+        return v
+    if v.isdigit() and int(v) >= 1:
+        return int(v)
+    raise argparse.ArgumentTypeError(f"expected a positive integer or 'auto', got {value!r}")
+
+
+def _peak_commit_bytes() -> int | None:
+    """This process's peak private commit (Windows PeakPagefileUsage) — commit,
+    not RAM, is the ceiling on these machines. Peak RSS elsewhere; None if the
+    platform will not say."""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            from ctypes import wintypes
+
+            class _Counters(ctypes.Structure):
+                _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                            ("PeakWorkingSetSize", ctypes.c_size_t),
+                            ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                            ("PagefileUsage", ctypes.c_size_t),
+                            ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            current = ctypes.windll.kernel32.GetCurrentProcess
+            current.restype = wintypes.HANDLE
+            info = ctypes.windll.psapi.GetProcessMemoryInfo
+            info.argtypes = [wintypes.HANDLE, ctypes.POINTER(_Counters), wintypes.DWORD]
+            info.restype = wintypes.BOOL
+            c = _Counters()
+            c.cb = ctypes.sizeof(c)
+            return int(c.PeakPagefileUsage) if info(current(), ctypes.byref(c), c.cb) else None
+        import resource
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * 1024   # Linux: KiB
+    except Exception:                                                        # noqa: BLE001
+        return None
+
+
+def _peak_note(peak: int | None) -> str:
+    return "" if peak is None else f", peak {peak / 1e9:.1f} GB"
+
+
+def _parquet_rows(p) -> int:
+    # Closed before any rename: Windows will not rename a file that is still open.
+    with pq.ParquetFile(p) as f:
+        return f.metadata.num_rows
+
+
+def _run_isolated(fn, task: tuple):
+    """fn(task) in a fresh worker process; its result, or its exception, NOW.
+
+    A fresh process per query is the allocator isolation _consolidate_one_month
+    explains. Submitting ONE task at a time is the other half. The old loop
+    submitted every month and read results with as_completed, so the first
+    month's OutOfMemoryException was raised inside the `with` block, whose exit
+    (shutdown(wait=True)) first ran every remaining month to completion. Home's
+    2026 consolidation failed five months in a row that way, over ~7 h, with
+    nothing in its log."""
+    with ProcessPoolExecutor(max_workers=1) as ex:
+        return ex.submit(fn, task).result()
+
+
+def _consolidate_sub_bucket(task: tuple) -> tuple:
+    """ONE key-hash slice of one month's GROUP BY, in a fresh process. The query
+    is _consolidate_one_month's plus a WHERE on the slice. Atomic .tmp -> rename:
+    a part exists only when complete, which is what lets a killed month resume
+    from the parts it already has."""
+    grp, sums, in_files, bucket_col, nsub, j, part_str, threads, mem, tmp_str = task
+    part = Path(part_str)
+    part_tmp = part.with_suffix(".parquet.tmp")
+    part_tmp.unlink(missing_ok=True)
+    in_list = ", ".join(f"'{_sql_path(Path(p))}'" for p in in_files)
+    t0 = time.time()
+    con = _duck(threads, mem, Path(tmp_str))
+    try:
+        con.execute(f"""
+            COPY (
+                SELECT {grp}, {sums}
+                FROM read_parquet([{in_list}])
+                WHERE {_bucket_expr(bucket_col, nsub)} = {j}
+                GROUP BY {grp}
+            ) TO '{_sql_path(part_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+    finally:
+        con.close()
+    part_tmp.replace(part)
+    return _parquet_rows(part), part.stat().st_size, time.time() - t0, _peak_commit_bytes()
+
+
+def _assemble_sub_buckets(task: tuple) -> tuple:
+    """Concatenate one month's parts into its single monthly file, in a fresh
+    process. A streaming COPY with no GROUP BY, so memory stays at scan and writer
+    buffers. The row count is checked against the parts' footers BEFORE the
+    rename, so a short monthly can never pass the skip gate."""
+    parts, out_str, threads, mem, tmp_str = task
+    out = Path(out_str)
+    out_tmp = out.with_suffix(".parquet.tmp")
+    out_tmp.unlink(missing_ok=True)
+    want = sum(_parquet_rows(p) for p in parts)
+    in_list = ", ".join(f"'{_sql_path(Path(p))}'" for p in parts)
+    t0 = time.time()
+    con = _duck(threads, mem, Path(tmp_str))
+    try:
+        con.execute(f"""
+            COPY (SELECT * FROM read_parquet([{in_list}]))
+            TO '{_sql_path(out_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
+        """)
+    finally:
+        con.close()
+    got = _parquet_rows(out_tmp)
+    if got != want:
+        raise RuntimeError(f"{out.name}: assembled {got:,} rows from parts holding {want:,}")
+    out_tmp.replace(out)
+    return got, out.stat().st_size, time.time() - t0, _peak_commit_bytes()
+
+
+def _consolidate_month_in_parts(grp: str, sums: str, files: list[Path], out: Path,
+                                nsub: int, threads: int, mem: str, tmp_dir: Path,
+                                label: str) -> None:
+    """One month as `nsub` key-hash slices, then one concatenation. Parts live in
+    a directory named for their K, so a re-run that resolves a different K
+    discards them instead of mixing two slicings."""
+    t0 = time.time()
+    bucket_col = grp.split(",")[0].strip()
+    stem = out.name[: -len(".parquet")]                      # year=Y_month=M.<kind>
+    part_dir = out.parent / f"_tmp_{stem}.k{nsub}"
+    for stale in out.parent.glob(f"_tmp_{stem}.k*"):
+        if stale != part_dir:
+            print(f"      discarding {stale.name}: parts sliced with a different K", flush=True)
+            shutil.rmtree(stale)
+    part_dir.mkdir(exist_ok=True)
+    for stale in part_dir.glob("*.tmp"):
+        stale.unlink()
+    in_gb = sum(f.stat().st_size for f in files) / 1e9
+    print(f"    {label} {stem.rsplit('.', 1)[1]}: {len(files)} files, {in_gb:,.1f} GB -> "
+          f"{nsub} sub-buckets on {bucket_col}", flush=True)
+    parts = [part_dir / f"part-{j:04d}.parquet" for j in range(nsub)]
+    for j, part in enumerate(parts):
+        if part.exists():
+            print(f"      part {j + 1}/{nsub}: kept from an earlier run", flush=True)
+            continue
+        rows, size, secs, peak = _run_isolated(
+            _consolidate_sub_bucket,
+            (grp, sums, [str(p) for p in files], bucket_col, nsub, j, str(part),
+             threads, mem, str(tmp_dir)))
+        print(f"      part {j + 1}/{nsub}: {rows:,} rows, {size / 1e6:,.0f} MB "
+              f"({secs:,.0f}s{_peak_note(peak)})", flush=True)
+    rows, size, secs, peak = _run_isolated(
+        _assemble_sub_buckets, ([str(p) for p in parts], str(out), threads, mem, str(tmp_dir)))
+    shutil.rmtree(part_dir, ignore_errors=True)
+    print(f"    {label} {stem.rsplit('.', 1)[1]}: {nsub} parts -> {size / 1e6:,.0f} MB, "
+          f"{rows:,} rows (assembly {secs:,.0f}s{_peak_note(peak)}; "
+          f"month {time.time() - t0:,.0f}s)", flush=True)
+
+
 def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
                         tmp_base: Path | None = None,
-                        kinds: tuple[str, ...] = ("ps",)) -> Path:
+                        kinds: tuple[str, ...] = ("ps",),
+                        sub_buckets: int | str = 1) -> Path:
     """SUM-only per-(year,month) consolidation of the per-file partials.
 
     NO min_games filter here — pure summation, so a position split across files/
@@ -760,23 +1327,19 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
     Returns the monthly directory.
 
     `kinds` selects which partial families to consolidate: "ps" and "term".
+
+    `sub_buckets` (--sub-buckets): 1 runs each month as one GROUP BY, exactly as
+    before. K > 1 runs K disjoint key-hash slices and concatenates them, resumable
+    per slice; 'auto' picks K per month from its input size (resolve_sub_buckets).
+    See the note above SUB_BUCKET_BYTES_FACTOR.
     """
     mdir = partial_dir / "_monthly"
     mdir.mkdir(parents=True, exist_ok=True)
     tmp_dir = (tmp_base or partial_dir) / "_merge_duckdb_tmp"
     tmp_dir.mkdir(parents=True, exist_ok=True)
 
-    specs = {
-        "ps": ("parent_hash, move_san",
-               "any_value(parent_epd) AS parent_epd, any_value(child_hash) AS child_hash, "
-               "any_value(child_eval) AS child_eval, any_value(ply) AS ply, "
-               "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
-               "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
-        "term": ("position_hash, kind, reason",
-                 "SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws, "
-                 "SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total"),
-    }
-    for kind, (grp, sums) in [(k, specs[k]) for k in kinds if k in specs]:
+    for kind, (grp, sums) in [(k, consolidation_spec(k)) for k in kinds
+                              if consolidation_spec(k)]:
         months: dict[tuple[int, int], list[Path]] = {}
         for f in partial_dir.glob(f"*.{kind}.parquet"):
             m = _MONTH_RE.search(f.name)
@@ -784,24 +1347,32 @@ def consolidate_monthly(partial_dir: Path, threads: int, mem: str,
                 months.setdefault((int(m.group(1)), int(m.group(2))), []).append(f)
         todo = [(ym, fs) for ym, fs in sorted(months.items())
                 if not (mdir / f"year={ym[0]}_month={ym[1]}.{kind}.parquet").exists()]
+        # Part dirs left by a crash between a monthly's rename and their removal.
+        for stale in mdir.glob(f"_tmp_year=*.{kind}.k*"):
+            m = re.fullmatch(rf"_tmp_year=(\d+)_month=(\d+)\.{re.escape(kind)}\.k\d+",
+                             stale.name)
+            if m and (mdir / f"year={m.group(1)}_month={m.group(2)}.{kind}.parquet").exists():
+                shutil.rmtree(stale, ignore_errors=True)
         print(f"  consolidate {kind}: {len(months)} months, {len(todo)} to build", flush=True)
-        if not todo:
-            continue
-        # Per-month process isolation: each GROUP BY runs in a worker that is recycled
-        # after one task (max_tasks_per_child=1), resetting the native-allocator
-        # fragmentation that otherwise degrades throughput ~3x over a few months.
-        # max_workers=1 keeps months sequential — each may use the full --mem budget.
-        tasks = [
-            (kind, grp, sums, [str(p) for p in files],
-             str(mdir / f"year={y}_month={mo}.{kind}.parquet"),
-             threads, mem, str(tmp_dir), f"{y}/{mo}")
-            for (y, mo), files in todo
-        ]
-        with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as ex:
-            for fut in as_completed([ex.submit(_consolidate_one_month, t) for t in tasks]):
-                label, nfiles, size, secs = fut.result()
-                print(f"    {label} {kind}: {nfiles} files -> "
-                      f"{size/1e6:.0f} MB ({secs:.0f}s)", flush=True)
+        # Months run strictly one after another, one fresh process per GROUP BY
+        # (_run_isolated): each may use the full --mem budget, the native-allocator
+        # fragmentation that degrades a long-lived process ~3x is reset every time,
+        # and a failure stops the run at that month.
+        for (y, mo), files in todo:
+            label = f"{y}/{mo}"
+            out = mdir / f"year={y}_month={mo}.{kind}.parquet"
+            nsub = resolve_sub_buckets(sub_buckets, sum(f.stat().st_size for f in files), mem)
+            if nsub > 1:
+                _consolidate_month_in_parts(grp, sums, files, out, nsub, threads, mem,
+                                            tmp_dir, label)
+                continue
+            label, nfiles, size, secs = _run_isolated(
+                _consolidate_one_month,
+                (kind, grp, sums, [str(p) for p in files], str(out),
+                 threads, mem, str(tmp_dir), label))
+            print(f"    {label} {kind}: {nfiles} files -> "
+                  f"{size/1e6:.0f} MB ({secs:.0f}s)"
+                  + ("" if sub_buckets == 1 else " [1 sub-bucket]"), flush=True)
     return mdir
 
 
@@ -946,7 +1517,7 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
             otmp = oout.with_suffix(".parquet.tmp")
             sql_group = f"""
                 CREATE TEMP TABLE g AS
-                SELECT parent_hash, move_san,
+                SELECT parent_hash, move_san, event, elo_band,
                        any_value(parent_epd)  AS parent_epd,
                        any_value(child_hash)  AS child_hash,
                        any_value(child_eval)  AS child_eval,
@@ -956,10 +1527,11 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
                        SUM(black_wins)::BIGINT AS black_wins,
                        SUM(total)::BIGINT      AS total
                 FROM read_parquet('{_sql_path(pdir)}/month=*/bkt={i}/*.parquet')
-                GROUP BY parent_hash, move_san
+                GROUP BY parent_hash, move_san, event, elo_band
             """
             surv_sql = f"""
-                COPY (SELECT parent_hash, move_san, parent_epd, child_hash, ply,
+                COPY (SELECT parent_hash, move_san, event, elo_band,
+                             parent_epd, child_hash, ply,
                              white_wins, draws, black_wins, total
                       FROM g WHERE total >= {int(min_games)})
                 TO '{_sql_path(btmp)}' (FORMAT PARQUET, COMPRESSION ZSTD)
@@ -1020,9 +1592,10 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
     # 11,286 rows/s (88.6 µs/row, ~40 min on 27.4M rows) in the merge's serial tail.
     # _test_extract_child_hash.py is what holds the extract to the same answer.
     df = pl.read_parquet(agg_ckpt)
+    # event/elo_band are carried through from the extract now (they are part of
+    # the aggregation key), so nothing is stamped here. Re-adding a pl.lit for
+    # either would silently overwrite the real slice with the pooled sentinel.
     df = df.with_columns(
-        pl.lit(POOL_EVENT).alias("event"),
-        pl.lit(POOL_ELO, dtype=pl.Int64).alias("elo_band"),
         ((pl.col("white_wins") + 0.5 * pl.col("draws")) / pl.col("total")).alias("white_score_avg"),
     )
     out_tmp = out_path.with_suffix(".parquet.tmp")
@@ -1057,8 +1630,58 @@ def main() -> None:
                          f"Discovery happens here in main and worker tasks carry "
                          f"absolute paths, so pointing this at a small tree is "
                          f"enough to run the whole pipeline over a bounded slice.")
+    # Winpos fusion left the recipe on 2026-10-02. The explorer contract's command
+    # line (and the Rust extract, which accepts the same flag as a no-op) still
+    # carries --no-fuse-winpos, so it stays accepted and does nothing.
+    ap.add_argument("--no-fuse-winpos", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--child-eval", action=argparse.BooleanOptionalAction, default=True,
+                    help="Populate the child_eval column the merge needs for the "
+                         "other-moves bucket's aggregate evaluation. Requires the "
+                         "mmap'd eval arrays at D:/chess/eval_arrays_full. "
+                         "--no-child-eval is REQUIRED to run on a machine without "
+                         "that path (the distributed explorer run), and costs "
+                         "nothing recoverable: child_hash is still emitted, so the "
+                         "eval join can be done at merge time on a machine where "
+                         "the arrays are local. Doing it here instead would mean "
+                         "binary-searching a 2.98 GB mmap over SMB.")
+    # NOTE: argparse runs help strings through `%`-formatting, so every literal
+    # percent below must be doubled or --help dies with a TypeError.
+    ap.add_argument("--exclude-bots", action=argparse.BooleanOptionalAction, default=False,
+                    help="Drop games with title 'BOT' on either side (~0.11%% of "
+                         "games). Off by default so the repertoire pipeline's "
+                         "behaviour is unchanged; ON for the explorer census.")
+    ap.add_argument("--exclude-terminations", nargs="*", default=None,
+                    metavar="TERM",
+                    help="Drop games whose termination is in this list. The "
+                         "explorer run passes 'Rules infraction' 'Abandoned' "
+                         "(~0.004%% combined). Default: keep everything.")
+    ap.add_argument("--max-rating-gap", type=int, default=None,
+                    help="Drop games where abs(white_elo - black_elo) exceeds "
+                         "this (explorer run uses 300, ~0.49%% of games). The point "
+                         "is that a 1200-vs-2000 game lands in the 1600 elo_band "
+                         "while representing neither player, and the extract is "
+                         "keyed on that band. Default: no cap.")
+    ap.add_argument("--chunk-games", type=int, default=0, metavar="N",
+                    help=f"Write a numbered partial set every N games READ, "
+                         f"instead of one set per source file. This is what "
+                         f"bounds worker memory: the accumulators grow with the "
+                         f"chunk, not with the file's 2M rows. At the default 0 "
+                         f"(off) behaviour is unchanged. The distributed explorer "
+                         f"run uses {CHUNK_GAMES:,}, which takes a worker from "
+                         f"~23 GB to ~3 GB and the fleet from 2 workers per "
+                         f"machine to 7-8. Boundaries are on games READ, not "
+                         f"kept, so they do not move when --min-elo or the "
+                         f"filters change.")
     ap.add_argument("--min-games", type=int, default=50)
     ap.add_argument("--max-ply", type=int, default=30)
+    ap.add_argument("--epd-max-ply", type=int, default=EPD_MAX_PLY, metavar="N",
+                    help=f"Deepest ply whose rows carry a parent_epd (default "
+                         f"{EPD_MAX_PLY}, today's extract exactly). 30 with the "
+                         f"default --max-ply writes an EPD on every row, so the "
+                         f"month needs no EPD backfill: consolidate it, then "
+                         f"bucket it with bucket_month.py. Locked per "
+                         f"--partial-dir in {EXTRACT_PARAMS_FILE}, with the "
+                         f"other settings that change a partial.")
     ap.add_argument("--workers", type=int, default=11)
     ap.add_argument("--threads", type=int, default=8, help="DuckDB threads for the merge phase.")
     ap.add_argument("--mem", default="48GB", help="DuckDB memory_limit for the merge phase.")
@@ -1069,6 +1692,14 @@ def main() -> None:
                     help="Override the DuckDB merge-phase temp/spill directory "
                          "(default: <partial-dir>/_merge_duckdb_tmp). Point this at a "
                          "drive with ample free space if the default drive is tight.")
+    ap.add_argument("--sub-buckets", type=sub_buckets_arg, default=1, metavar="N|auto",
+                    help="Run each month's consolidation GROUP BY as N disjoint "
+                         "key-hash slices (one fresh process each, resumable per "
+                         "slice), then concatenate them into the usual monthly. "
+                         "'auto' picks the smallest power of two that fits --mem "
+                         "for each month's input size. Default 1: one GROUP BY per "
+                         "month, as before. Banded explorer months (~45 GB of ps "
+                         "partials) need auto.")
     ap.add_argument("--tag", default=None, help="Override the output filename tag.")
     # ── asymmetric-depth prune (seeded from existing >=1800 frequency stats) ──
     ap.add_argument("--no-prune", action="store_true",
@@ -1124,40 +1755,77 @@ def main() -> None:
     else:
         print("\nDepth prune: DISABLED (full depth)\n", flush=True)
 
-    if args.phase in ("extract", "all"):
-        # Fail here, not 6 workers deep. Every extract needs the eval arrays now
-        # (child_eval for the other-moves bucket), and open_eval_arrays runs inside
-        # the worker — so a missing or
-        # STALE pair would otherwise surface as N identical tracebacks out of a
-        # process pool at the start of a ~90 h run. Verifying once up front turns
-        # that into one line naming the fix.
-        try:
-            print(f"Eval arrays: {verify_eval_arrays()}", flush=True)
-        except (FileNotFoundError, ValueError) as e:
-            sys.exit(f"FATAL: {e}")
+    excluded_terms = frozenset(args.exclude_terminations or ())
+    if args.exclude_bots or excluded_terms or args.max_rating_gap is not None:
+        print("Game filters: "
+              + ", ".join(filter(None, [
+                  "exclude BOT" if args.exclude_bots else "",
+                  f"exclude termination in {sorted(excluded_terms)}" if excluded_terms else "",
+                  f"exclude rating gap > {args.max_rating_gap}"
+                  if args.max_rating_gap is not None else "",
+              ])), flush=True)
 
+    if args.phase in ("extract", "all"):
+        # Fail here, not 6 workers deep. open_eval_arrays runs INSIDE the worker,
+        # so a missing or STALE pair would otherwise surface as N identical
+        # tracebacks out of a process pool at the start of a multi-day run.
+        # Verifying once up front turns that into one line naming the fix.
+        #
+        # Gated on whether evals are actually needed. This used to be
+        # unconditional, which made the extract refuse to start on any machine
+        # without the local eval arrays and the DB they were built from
+        # (verify_eval_arrays raises FileNotFoundError if either is absent, and
+        # resolves the DB path from the arrays' own meta.json). That blocked the
+        # distributed explorer run outright: neither remote machine has them.
+        # With --no-child-eval nothing reads the arrays, so demanding them was a
+        # hard stop for no reason.
+        if args.child_eval:
+            try:
+                print(f"Eval arrays: {verify_eval_arrays()}", flush=True)
+            except (FileNotFoundError, ValueError) as e:
+                sys.exit(f"FATAL: {e}")
+        else:
+            print("Eval arrays: not needed (--no-child-eval)", flush=True)
+
+        if args.epd_max_ply < 0:
+            sys.exit(f"FATAL: --epd-max-ply must be >= 0, got {args.epd_max_ply}")
         files = discover_source_files(args.start_year, args.end_year, args.months, args.events)
         partial_dir.mkdir(parents=True, exist_ok=True)
+        lock = lock_extract_params(partial_dir, extract_params(args, excluded_terms))
+        print(f"Params lock: {lock} (epd_max_ply={args.epd_max_ply})", flush=True)
         tasks = []
         for f, y, m, ev in files:
             ps_p = partial_dir / partial_name(f, y, m, ev, "ps")
             tm_p = partial_dir / partial_name(f, y, m, ev, "term")
-            if ps_p.exists() and tm_p.exists():
+            if args.chunk_games > 0:
+                # Chunked: the sentinel is the gate (chunk count is not knowable
+                # from the filesystem). Must match extract_file's own test.
+                if _done_sentinel(ps_p).exists():
+                    continue
+            elif ps_p.exists() and tm_p.exists():
                 continue
-            tasks.append((str(f), str(ps_p), str(tm_p), args.limit_games))
+            tasks.append((str(f), str(ps_p), str(tm_p), args.limit_games, ev))
         print(f"Extract: {len(files)} source files, {len(tasks)} to process, "
               f"{args.workers} workers\n", flush=True)
         t0 = time.time()
         done = tot_games = tot_kept = 0
+        tot_drop: dict[str, int] = {}
         if tasks:
-            with ProcessPoolExecutor(max_workers=args.workers, initializer=_init_worker,
-                                     initargs=(args.min_elo, args.max_ply, tiers)) as ex:
+            with ProcessPoolExecutor(
+                    max_workers=args.workers, initializer=_init_worker,
+                    initargs=(args.min_elo, args.max_ply, tiers,
+                              args.child_eval, args.exclude_bots,
+                              excluded_terms, args.max_rating_gap,
+                              args.chunk_games or None,
+                              args.epd_max_ply)) as ex:
                 futs = [ex.submit(_worker, t) for t in tasks]
                 for fut in as_completed(futs):
                     r = fut.result()
                     done += 1
                     tot_games += r.get("games", 0)
                     tot_kept += r.get("kept", 0)
+                    for k, v in (r.get("drop") or {}).items():
+                        tot_drop[k] = tot_drop.get(k, 0) + v
                     if done % 10 == 0 or done == len(tasks):
                         el = time.time() - t0
                         rate = tot_games / el if el else 0
@@ -1168,7 +1836,14 @@ def main() -> None:
                               f"{el/60:.1f} min", flush=True)
         el = time.time() - t0
         print(f"\nExtract done: {tot_kept:,}/{tot_games:,} games kept in {el/60:.1f} min "
-              f"({tot_games/el if el else 0:,.0f} games/s)\n", flush=True)
+              f"({tot_games/el if el else 0:,.0f} games/s)", flush=True)
+        # Provenance: what was excluded, and by which rule. Without this the
+        # filter set is implied by the code version rather than recorded.
+        if tot_games and tot_drop:
+            print("  dropped:", ", ".join(
+                f"{k} {v:,} ({100*v/tot_games:.3f}%)"
+                for k, v in sorted(tot_drop.items(), key=lambda kv: -kv[1]) if v))
+        print(flush=True)
 
     if args.phase in ("merge", "all"):
         tmp_base = Path(args.tmp_dir) if args.tmp_dir else None
@@ -1178,7 +1853,7 @@ def main() -> None:
             kinds.append("term")
         print("Consolidating per-month (sum only, no filter)...", flush=True)
         monthly_dir = consolidate_monthly(partial_dir, args.threads, args.mem, tmp_base,
-                                          tuple(kinds))
+                                          tuple(kinds), sub_buckets=args.sub_buckets)
         # Stage 2: final global merge — min_games applied here ONCE, over all months.
         print("Final merge: position-stats (min_games applied here)...", flush=True)
         merge_position_stats(monthly_dir, partial_dir, ps_out, args.min_games,

@@ -1,0 +1,5 @@
+# The toolchain every build and test of this crate was verified with. On a
+# machine whose `stable` is this version, RUSTUP_TOOLCHAIN=stable builds with it
+# without rustup fetching a second copy.
+[toolchain]
+channel = "1.98.1"
