@@ -150,15 +150,14 @@ def main() -> None:
     # self_err_pot converges and would look fine even if it were gated.) The
     # invariant is therefore asserted against the source: memo_pot and
     # self_err_pot accumulate additively along the chosen chain and must both stay
-    # out of gate_dicts; crush_pot / crush_pot_opp are bounded and multiplicative
-    # and must both be in it.
+    # out of gate_dicts; the three bounded values must be in it.
     src = (Path(__file__).parent / "stage3_backwards_induction.py").read_text(encoding="utf-8")
-    raw = src.split("gate_dicts = [", 1)[1].split("gate_dicts, gate_names", 1)[0]
+    raw = src.split("gate_dicts = (", 1)[1].split("gate_names = (", 1)[0]
     # Strip comments — the block explains WHY each term is in or out, so naming a
     # term in prose there must not read as including it.
     gate_block = "\n".join(ln.split("#", 1)[0] for ln in raw.splitlines())
     for name, want_in in (("self_err_pot", False), ("memo_pot", False),
-                          ("crush_pot_opp", True), ("crush_pot", True)):
+                          ("values_robust", True), ("value_worst", True)):
         present = name in gate_block
         check(present == want_in,
               f"{name} {'IS' if want_in else 'is NOT'} in the SCC convergence gate "

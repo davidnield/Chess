@@ -248,9 +248,21 @@ def main() -> int:
             continue
         if mm is not None:
             df = attach_evals(df, *mm)
+        # BEST-FIRST BY REACH is this script's documented contract (see the
+        # header), but group_by emits parents in hash order, and the batch above
+        # drained the WHOLE heap -- so without this sort the budget goes to
+        # whichever parents the grouping happened to yield first. The error is
+        # confined to the final partial level, hence invisible at b=40000 and
+        # total at b=2: measured 2026-08-29, the b=2 white book booked
+        # `1.e4 g6 2.d4` while b=3 booked e5 and e6 and dropped g6 -- a
+        # truncation ladder that is not even nested.
+        groups = []
         for ph, grp in df.group_by("parent_hash"):
             ph = ph[0] if isinstance(ph, tuple) else ph
-            reach, ply = by_hash.get(ph, (0.0, 0))
+            groups.append((by_hash.get(ph, (0.0, 0))[0], ph, grp))
+        groups.sort(key=lambda t: -t[0])
+        for reach, ph, grp in groups:
+            _r, ply = by_hash.get(ph, (0.0, 0))
             if ply >= a.max_ply:
                 continue
             first = grp.row(0, named=True)

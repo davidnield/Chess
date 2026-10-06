@@ -225,6 +225,39 @@ def main() -> None:
           f"I: opponent resigning on OUR turn IS counted, at score 1.0 "
           f"({vi2[sh]:.9f} vs {want_i:.9f}, was {vh0[sh]:.9f})")
 
+    # I2 — the crack denominator is the WHOLE CONTINUING POPULATION (fixed
+    #      2026-09-04, found by external review). `cont` used to be the sum of
+    #      surviving outgoing edges only, which omits games that continued
+    #      through a below-floor OTHER move. Those games arrived here and would
+    #      have got our book move too; dropping them shrinks the denominator and
+    #      over-weights the collapse — worst exactly at thin nodes, where the
+    #      surviving edges are the smallest share of arrivals. 100 continuations
+    #      + 900 OTHER + 100 collapses at 0.6 reads as 0.8 under the old rule
+    #      against an arrival-weighted 0.63636.
+    aux_i2 = [aux_row(sh, term_normal_total=500, term_normal_white_wins=500,
+                      other_total=1500, other_white_wins=750,
+                      other_black_wins=750)]
+    vi3, _ = go(edges, aux_i2)
+    want_i2 = (vh0[sh] * (2000 + 1500) + 1.0 * 500) / (2000 + 1500 + 500)
+    stale_i2 = (vh0[sh] * 2000 + 1.0 * 500) / 2500
+    check(abs(vi3[sh] - want_i2) < TOL,
+          f"I2: below-floor OTHER continuations sit in the crack denominator "
+          f"({vi3[sh]:.9f} vs {want_i2:.9f}; the old cont gave {stale_i2:.9f})")
+    check(abs(vi3[sh] - stale_i2) > TOL,
+          f"I2b: ...and the correction is real, not rounding "
+          f"(moved {abs(vi3[sh] - stale_i2):.6f})")
+
+    # I3 — horizon-truncated games continue as well: only their PATH is missing,
+    #      not their arrival, so they belong in the same denominator.
+    aux_i3 = [aux_row(sh, term_normal_total=500, term_normal_white_wins=500,
+                      horizon_total=1000, horizon_white_wins=500,
+                      horizon_black_wins=500)]
+    vi4, _ = go(edges, aux_i3)
+    want_i3 = (vh0[sh] * 3000 + 1.0 * 500) / 3500
+    check(abs(vi4[sh] - want_i3) < TOL,
+          f"I3: horizon continuations sit in it too "
+          f"({vi4[sh]:.9f} vs {want_i3:.9f})")
+
     # J — draws at our node stay out (usually a draw we agreed = deviation, and
     #     the data cannot separate that from stalemate or repetition).
     aux_j = [aux_row(sh, term_normal_total=500, term_normal_draws=500)]

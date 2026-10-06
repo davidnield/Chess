@@ -1,7 +1,7 @@
 """The mmap'd eval lookup returns what the parquet says, and is fast enough.
 
-Everything in the fused extract keys off this primitive: the winpos crossing
-detection and the other-moves bucket's aggregate eval both come from it. A wrong
+The extract's other-moves bucket eval (child_eval), Stage 3's evals and the
+budget/baseline books all come from this primitive. A wrong
 answer here is not a crash, it is a repertoire built on the wrong evaluations —
 so it is checked against the source of truth rather than against itself.
 
@@ -53,7 +53,7 @@ def check_staleness() -> None:
 
     Nothing about that is visible at read time: a stale array is the right shape,
     sorted, and answers every query. It just answers with the previous DB's
-    evaluations, in both the winpos crossings and the other-moves bucket. So the
+    evaluations, everywhere they are read. So the
     guard is tested here on throwaway arrays rather than trusted.
     """
     tmp = Path(tempfile.mkdtemp(prefix="eval_arrays_stale_"))
@@ -68,8 +68,8 @@ def check_staleness() -> None:
         check("verified against" in verify_eval_arrays(adir, db),
               "freshly built arrays verify against their source")
 
-        # Rebuild the source with different content. This is exactly the
-        # build_fishnet_eval_db.py path that has already happened once.
+        # Rebuild the source with different content. This is exactly what
+        # the fishnet union did to the old eval DB once.
         pl.DataFrame({"position_hash": [5, 1, 9, 3, 7],
                       "eval_cp": [10, -20, 30, -40, 50]}).write_parquet(db)
         check(raises(lambda: verify_eval_arrays(adir, db), ValueError),
@@ -284,8 +284,22 @@ def main() -> None:
     check(bool(np.all(np.asarray(h[:1_000_000])[:-1] <= np.asarray(h[:1_000_000])[1:])),
           "hash array is sorted (prefix check — searchsorted requires it)")
 
-    # Ground truth straight from the parquet, not from the arrays under test.
-    src = pl.read_parquet(DEFAULT_EVAL_DB, columns=["position_hash", "eval_cp"]).head(a.sample)
+    # Ground truth straight from the source DB, not from the arrays under test.
+    if DEFAULT_EVAL_DB.is_dir():
+        # One bucket file, sampled at random (its rows span the whole hash range;
+        # a head() would query only the lowest hashes). Hashes the arrays
+        # deliberately do not answer from the DB are dropped: excluded ones,
+        # ambiguous ones, and checkmates (a verified mate overrides the DB).
+        b = pl.read_parquet(DEFAULT_EVAL_DB / "bkt000.parquet",
+                            columns=["position_hash", "eval_cp", "hash_ambiguous"])
+        drop = pl.concat([pl.read_parquet(DEFAULT_ARRAY_DIR / f, columns=["position_hash"])
+                          for f in ("excluded.parquet", "terminal_mates.parquet")])
+        src = (b.filter(~pl.col("hash_ambiguous"))
+                .filter(pl.col("position_hash").is_unique())
+                .join(drop, on="position_hash", how="anti")
+                .sample(n=min(a.sample, b.height), seed=20261002))
+    else:
+        src = pl.read_parquet(DEFAULT_EVAL_DB, columns=["position_hash", "eval_cp"]).head(a.sample)
     keys = src["position_hash"].to_numpy().astype(np.int64)
     want = src["eval_cp"].to_numpy().astype(np.int16)
 

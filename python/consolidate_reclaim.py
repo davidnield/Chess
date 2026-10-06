@@ -6,7 +6,8 @@ WHY THIS EXISTS
 at its peak the drive holds all the per-file partials AND all the monthly files
 at once. Measured for the 2013-2026 rebuild:
 
-    partials at extract end        ~2,469 GB   (ps 959, winpos200/300/500 ~500 ea)
+    partials at extract end        ~2,469 GB   (ps 959, winpos200/300/500 ~500 ea —
+                                                the winpos kinds no longer exist)
     monthly files, all kinds       ~1,727 GB   (compaction ratio ~0.70, measured)
     free on E: at extract end      ~1,599 GB
 
@@ -16,8 +17,8 @@ the merge then wants another ~671 GB for the largest bucket dir on top.
 Interleaving fixes it. Peak extra space becomes the LARGEST SINGLE KIND's monthly
 output (~671 GB for ps) instead of the sum of all of them, because each kind's
 partials are released before the next kind is built. Consolidating everything
-also releases 742 GB net, which is what makes the final merge fit with all three
-winpos thresholds instead of forcing us to drop two of them.
+also released 742 GB net on that rebuild. (The winpos partials it was sized
+around were removed with crush on 2026-10-02; ps and term remain.)
 
 WHY DELETING THE PARTIALS IS SAFE
 ---------------------------------
@@ -26,7 +27,6 @@ by reading the call sites, not assumed:
 
     merge_position_stats(monthly_dir, ...)     the pooled position_stats
     merge_aux_stats  -> mdir = partial_dir/"_monthly"/"*.term.parquet"
-    merge_crush(monthly_dir, ..., kind=...)    each winpos histogram
 
 Task #113's year-scoped <=2024 pool also reads `_monthly` — the year is in the
 monthly filename, which is exactly why task #94's reclaim gate names `_monthly`
@@ -91,21 +91,20 @@ EVENTS = ("Blitz", "Rapid", "Classical")
 
 # ps first: it is the largest kind, so reclaiming it releases the most soonest
 # (959 GB of partials for 671 GB of monthly = +288 GB net).
-DEFAULT_KINDS = ("ps", "term", "winpos300", "winpos200", "winpos500")
+DEFAULT_KINDS = ("ps", "term")
 
 # The columns consolidation SUMs, per kind. Anything not listed here is carried
 # through by any_value() and cannot be checked by conservation.
 SUM_COLS = {
     "ps": ("total", "white_wins", "draws", "black_wins"),
     "term": ("total", "white_wins", "draws", "black_wins"),
-    "_hist": ("n", "white_wins", "black_wins"),
 }
 MONTH_RE = re.compile(r"year=(\d+)_month=(\d+)_")
 GB = 1024 ** 3
 
 
 def sum_cols(kind: str) -> tuple[str, ...]:
-    return SUM_COLS.get(kind, SUM_COLS["_hist"])
+    return SUM_COLS[kind]
 
 
 def totals(con, files: list[Path] | Path, cols: tuple[str, ...]) -> tuple[int, ...]:
@@ -191,7 +190,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--partial-dir", default=None)
-    ap.add_argument("--kinds", nargs="+", default=list(DEFAULT_KINDS))
+    ap.add_argument("--kinds", nargs="+", default=list(DEFAULT_KINDS), choices=list(SUM_COLS))
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--mem", default="48GB")
     ap.add_argument("--sub-buckets", type=sub_buckets_arg, default=1, metavar="N|auto",

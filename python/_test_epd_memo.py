@@ -134,11 +134,7 @@ def main() -> None:
         def replay(hasher, memo):
             buf = _new_buf()
             for r in recs:
-                ws = r["white_score"]
-                normal = r["termination"] == "Normal"
-                _walk_game(buf, r["movetext"], ws, normal and ws == 1.0,
-                           normal and ws == 0.0, r["move_count"], None, 30,
-                           hasher, memo)
+                _walk_game(buf, r["movetext"], r["white_score"], None, 30, hasher, memo)
             return buf
 
         plain = replay(None, None)
@@ -157,10 +153,7 @@ def main() -> None:
         for i, r in enumerate(recs):
             if i % 500 == 0:
                 cleared_memo.clear()
-            ws = r["white_score"]
-            normal = r["termination"] == "Normal"
-            _walk_game(buf, r["movetext"], ws, normal and ws == 1.0,
-                       normal and ws == 0.0, r["move_count"], None, 30, h, cleared_memo)
+            _walk_game(buf, r["movetext"], r["white_score"], None, 30, h, cleared_memo)
         check(all(plain[k] == buf[k] for k in plain),
               "periodically-cleared memo also identical (bounding it is free)")
 

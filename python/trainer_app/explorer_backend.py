@@ -5,10 +5,10 @@ Instead of copying get_position (150 lines of debugged edge cases — augmented
 gold synthesis, child-metric lookups), we subclass Explorer and override ONLY
 _slice(): the original materializes every column into Python dicts/lists
 (~40 GB after pre-warm for the pooled reps); this version sorts the slice
-frames once and serves the same interface through numpy-searchsorted views
-(the technique _raw_crush already uses), keeping RSS at the polars frames
-(~a few GB). get_position/list_slices/slice_info/_raw_crush are inherited
-unchanged, so the JSON contract is identical by construction.
+frames once and serves the same interface through numpy-searchsorted views,
+keeping RSS at the polars frames (~a few GB). get_position/list_slices/
+slice_info are inherited unchanged, so the JSON contract is identical by
+construction.
 
 The frontend is likewise the original INDEX_HTML with its CDN asset URLs
 rewritten to the locally vendored copies (offline-safe) and a tiny deep-link
@@ -26,7 +26,7 @@ import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # python/
 from repertoire_explorer import (  # noqa: E402
-    INDEX_HTML, METRIC_COLS, Explorer, _meta_crush_weight)
+    INDEX_HTML, METRIC_COLS, Explorer)
 
 
 # ── searchsorted-backed stand-ins for the original dict/list/set views ──────
@@ -161,12 +161,11 @@ window.addEventListener("load", () => {
 </body>"""
 
 
-def render_explorer_html(source_label: str, crush_weight: float) -> str:
+def render_explorer_html(source_label: str) -> str:
     html = INDEX_HTML
     for old, new in _ASSET_REWRITES.items():
         html = html.replace(old, new)
     html = html.replace("__SOURCE__", source_label)
-    html = html.replace("__CRUSH_W__", repr(crush_weight))
     return html.replace("</body>", _DEEPLINK_SHIM, 1)
 
 
@@ -181,7 +180,6 @@ class ExplorerService:
         self.error: str | None = None
         self.explorer: LazyExplorer | None = None
         self.source_label = ""
-        self.crush_weight = 25.0
         self._lock = threading.Lock()
 
     def start_load(self, settings: dict) -> str:
@@ -207,11 +205,7 @@ class ExplorerService:
             if not stats or not Path(stats).exists():
                 raise FileNotFoundError(
                     f"stats parquet not found ({stats}) — set it in Settings")
-            cw = _meta_crush_weight(specs[0][2])
-            self.crush_weight = 25.0 if cw is None else cw
-            self.explorer = LazyExplorer(
-                specs, stats, crush_weight=self.crush_weight,
-                crush_totals=settings.get("crush_totals"))
+            self.explorer = LazyExplorer(specs, stats)
             self.source_label = " + ".join(s[2].rsplit("/", 1)[-1] for s in specs)
             self.status = "ready"
         except SystemExit as e:          # Explorer.__init__ guards sys.exit

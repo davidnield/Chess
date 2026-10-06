@@ -71,10 +71,7 @@ def replay(src: Path, optimize: bool) -> pl.DataFrame:
             if me is None or me < 1800 or ws is None:
                 continue
             n += 1
-            normal = rec["termination"] == "Normal"
-            _walk_game(buf, rec["movetext"], ws, normal and ws == 1.0,
-                       normal and ws == 0.0, rec["move_count"], None, 30,
-                       hasher, memo)
+            _walk_game(buf, rec["movetext"], ws, None, 30, hasher, memo)
         if memo is not None:
             memo.clear()
         if n >= GAMES:

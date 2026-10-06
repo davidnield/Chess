@@ -21,7 +21,7 @@ Outputs (per color, into <data>/pack/, atomic writes):
   dev_lookup_<color>.parquet  ALL in-book our-turn (position_hash, best_move)
       from the full repertoire (no reach cutoff) — the deviation scanner's
       probe table, detecting deviations deeper than the training region.
-  pack_meta.json         provenance + counts + the rep sidecar's crush_weight.
+  pack_meta.json         provenance + counts + the rep sidecar's recipe settings.
 
 Usage (defaults = canonical paths from trainer_app.config):
     set PYTHONPATH=<repo>\\python
@@ -322,7 +322,7 @@ def main() -> None:
         dev = dev.sort("position_hash")
         write_atomic(dev, pack_dir / f"dev_lookup_{color}.parquet")
 
-        # Provenance: rep sidecar (crush_weight etc.) if present.
+        # Provenance: rep sidecar (eval_weight etc.) if present.
         sidecar = {}
         sc_path = Path(str(rep_path) + ".meta.json")
         if sc_path.exists():
@@ -334,7 +334,7 @@ def main() -> None:
             "rep": str(rep_path), "tree_nodes": len(tree_rows),
             "cards": len(cards), "dev_lookup_rows": dev.height,
             "rep_meta": {k: sidecar.get(k) for k in
-                         ("crush_weight", "eval_weight", "built") if k in sidecar},
+                         ("eval_weight", "built") if k in sidecar},
         }
         print(f"  tree {len(tree_rows):,} nodes | cards {len(cards):,} | "
               f"dev_lookup {dev.height:,} rows ({time.time()-t0:.0f}s)", flush=True)

@@ -50,7 +50,6 @@ const SETTING_LABELS = {
   white_rep: "White repertoire parquet",
   black_rep: "Black repertoire parquet",
   stats: "Position stats parquet",
-  crush_totals: "Crush edge totals parquet",
 };
 
 async function loadSettings() {

@@ -48,12 +48,21 @@ def _r(x, nd=3):
 
 
 class EvalDB:
-    """Sorted-array eval lookup (stage3 full-DB pattern)."""
+    """Sorted-array eval lookup: an eval-arrays directory (eval_arrays.py; verified,
+    then memory-mapped -- the default, 6B entries, cannot be loaded) or a legacy
+    (position_hash, eval_cp) parquet read whole."""
 
     def __init__(self, path: str):
+        from eval_arrays import META_NAME, open_eval_arrays, verify_eval_arrays
+        p = Path(path)
+        if (p / META_NAME).is_file():
+            self.status = verify_eval_arrays(p, adopt=False)
+            self.ph, self.cp = open_eval_arrays(p)
+            return
         df = pl.read_parquet(path, columns=["position_hash", "eval_cp"]).sort("position_hash")
         self.ph = df["position_hash"].to_numpy()
         self.cp = df["eval_cp"].to_numpy()
+        self.status = f"read {p.name}"
 
     def get_cp(self, h: int) -> int | None:
         i = int(np.searchsorted(self.ph, h))
@@ -85,7 +94,7 @@ class FactsBuilder:
         # rep metrics for card positions (semi-filtered scan of the 13M-row rep)
         rep = (pl.scan_parquet(rep_path)
                  .filter(pl.col("position_hash").is_in(list(card_hashes)))
-                 .select(["position_hash", "value", "value_worst", "crush_potential",
+                 .select(["position_hash", "value", "value_worst",
                           "opponent_error", "forcingness", "cover_eff", "eval_score"])
                  .collect())
         self.rep = {r["position_hash"]: r for r in rep.iter_rows(named=True)}
@@ -318,7 +327,6 @@ class FactsBuilder:
                 "games": chosen_row["games"] if chosen_row else 0,
                 "emp_score": chosen_row["emp_score"] if chosen_row else None,
                 "value_worst": _r(m.get("value_worst")),
-                "crush_potential": _r(m.get("crush_potential")),
             },
             "candidates": candidates,
             "replies": replies,

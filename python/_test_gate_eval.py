@@ -1,7 +1,7 @@
 """Synthetic test for --gate-metric eval: an objectively-losing move whose ONLY
 recorded opponent reply is favorable (the 3.Bh6 missing-refutation pattern) must be
 REJECTED by the eval gate but ACCEPTED by the worst gate. Imports the production
-run_backwards_induction (template: _test_winpos.py / _test_stage3_cycles.py).
+run_backwards_induction (template: _test_stage3_cycles.py).
 
 Fixture (White to move at start):
   good  -> child G, eval 0.60 (sound), recorded reply leads to ~0.55

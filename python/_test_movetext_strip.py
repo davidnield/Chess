@@ -6,7 +6,8 @@ the F: raw archive. The whole justification for doing that is a claim of no
 downstream effect, and that claim has TWO parts, both asserted here:
 
   1. the SAN token stream is unchanged  -> every position-stats edge is unchanged
-  2. move_count is unchanged            -> every crush move_bucket is unchanged
+  2. move_count is unchanged            -> the stored column stays exact (it fed the
+                                           retired crush histograms' move_bucket)
      (move_count counts white "N. " tokens via \\d+\\.\\s, computed pre-strip)
 
 It rests on two INDEPENDENT implementations agreeing: the polars regex chain in

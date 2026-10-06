@@ -2,9 +2,9 @@
 Stage 3: backwards induction on the position DAG.
 
 Takes the aggregated (event, elo_band, position, move) statistics from Stage 2
-and computes the best opening repertoire for the specified perspective. The goal
-is a SHARP-but-SOUND blitz repertoire: fast wins where the data supports them,
-without lines that collapse if the opponent finds the refutation.
+and computes the best opening repertoire for the specified perspective: the best
+expected score the data supports, without lines that collapse if the opponent
+finds the refutation.
 
 Each position is valued by backwards induction in topological order (Kahn's
 algorithm on the DAG), so transpositions are valued exactly once. TWO values
@@ -27,8 +27,7 @@ Stockfish eval (--eval-weight; may vary by sample size via --eval-weight-k).
 
 SELECTION at our turn maximises (white) / minimises (black):
 
-    score = sign * value + crush_weight   * crush_rate
-                         + decisiveness_weight * (1 - draw_rate)
+    score = sign * value + decisiveness_weight * (1 - draw_rate)
                          + error_weight   * opponent_error
                          + forcing_weight * forcingness
                          + cover_weight   * coverage_efficiency
@@ -42,17 +41,10 @@ best-play-by-both-sides eval; --gate-metric robust). This drops lines refuted by
 defence (1...g5) while keeping lines that hold (Blackmar-Diemer). floor >= 1.0 disables
 the gate. If every candidate is gated, the gate is dropped for that node (sparse-tail fallback).
 
-  crush_rate   -- the PRIMARY sharpness driver: fraction of games through the
-                  edge where OUR side wins decisively (mate/resignation) by
-                  full-move --crush-horizon (flat, result-based). Empirical-Bayes
-                  shrunk toward the slice-mean crush with pseudocount --crush-prior,
-                  so thin-sample edges can't manufacture a crush bonus. Requires
-                  --crush-db (the crush_hist histogram) and --crush-weight > 0.
   decisiveness -- 1 - draws/total of the edge (legacy knob; ~flat in blitz).
   opponent_error -- expected score the opponent leaves on the table vs their
                   Stockfish-best reply, frequency-weighted. Requires --eval-db.
-  forcingness  -- Simpson concentration of the opponent's replies (legacy; the
-                  crush term superseded it as the sharpness driver).
+  forcingness  -- Simpson concentration of the opponent's replies (legacy).
   coverage_efficiency -- covered opponent-decision DEPTH (reach-weighted) per
                   memorized prepared BRANCH in the subtree a move enters. The propagated,
                   mass-weighted generalization of forcingness: rewards forcing /
@@ -65,7 +57,10 @@ the gate. If every candidate is gated, the gate is dropped for that node (sparse
                   Complements coverage_efficiency (criticality vs volume of lines).
 
 --force-root-move commits OUR first move at the start position (e.g. e4/d4/Nf3),
-letting the rest of the tree (and crush) sharpen the continuations.
+letting the rest of the tree choose the continuations.
+
+Crush (a bonus for reaching a winning position early, from the crush/winpos
+histograms) was removed on 2026-10-02, along with its flags and output columns.
 
 NOTE on opponent modelling: at opponent-turn positions the MEAN value uses their
 EMPIRICAL move distribution, not optimal play, so white- and black-perspective
@@ -74,8 +69,8 @@ opponent plays like a typical player at this elo". The right framing for a
 human-vs-human repertoire; the robustness gate is what guards the worst case.
 
 Output columns per (event, elo_band, position): value, best_move (null at opp
-turn), value_robust, value_worst, crush_rate, crush_potential, memo_cost, cover_eff,
-decisiveness, opponent_error, forcingness, eval_score.
+turn), value_robust, value_worst, memo_cost, cover_eff, decisiveness,
+opponent_error, forcingness, eval_score, augmented.
 
 Usage:
     .venv/Scripts/python.exe python/stage3_backwards_induction.py --perspective black
@@ -163,6 +158,142 @@ def cp_to_expected_score(cp: int) -> float:
     return 1.0 / (1.0 + math.exp(-LICHESS_CP_SCALE * cp))
 
 
+# ── eval source loading ───────────────────────────────────────────────────────
+
+def _es_expr(col: str = "eval_cp") -> pl.Expr:
+    """cp -> expected White score (= cp_to_expected_score) as the ONE Polars expression every
+    eval path uses: its float64 values are what eval_lookup holds."""
+    return 1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col(col)).exp())
+
+
+def _es_lut(cap: int) -> tuple[np.ndarray, np.ndarray]:
+    """(float64, float32) expected scores for cp = -cap..cap, computed BY _es_expr on an Int32
+    series, so indexing the table is bit-identical to applying the expression row by row (and the
+    float32 table to the legacy path's .astype(np.float32))."""
+    f64 = (pl.DataFrame({"eval_cp": pl.Series(range(-cap, cap + 1), dtype=pl.Int32)})
+           .select(_es_expr().alias("_es"))["_es"].to_numpy())
+    return f64, f64.astype(np.float32)
+
+
+class _EsView:
+    """full_eval_es over memory-mapped arrays: es[i] = lut32[cp[i]], the float32 the legacy path
+    stored in RAM. augmented_candidates indexes it with a scalar; arrays work too."""
+
+    def __init__(self, mm_cp, lut32: np.ndarray, cap: int):
+        self._cp, self._lut, self._cap = mm_cp, lut32, cap
+
+    def __len__(self) -> int:
+        return len(self._cp)
+
+    def __getitem__(self, i):
+        if isinstance(i, (int, np.integer)):
+            return self._lut[int(self._cp[i]) + self._cap]
+        return self._lut[np.asarray(self._cp[i]).astype(np.int32) + self._cap]
+
+
+# Engine augmentation's lookups (calls, keys, seconds): with memory-mapped arrays they can page in.
+AUG_STATS = {"calls": 0, "keys": 0, "secs": 0.0}
+
+
+def need_hashes(input_path) -> np.ndarray:
+    """Every position the input DAG can ask an eval for: parents ∪ children of its edges."""
+    h = pl.scan_parquet(str(input_path))
+    need = pl.concat([h.select(pl.col("parent_hash").alias("position_hash")),
+                      h.select(pl.col("child_hash").alias("position_hash")).drop_nulls()]).unique().collect()
+    return need["position_hash"].to_numpy().astype(np.int64)
+
+
+def load_evals(eval_db, input_path, *, eval_mate_cp: int, augment: bool, eval_weight: float
+               ) -> tuple[dict, object, object]:
+    """(eval_lookup, full_eval_hashes, full_eval_es) from --eval-db, which is either
+      - a parquet (position_hash, eval_cp): the legacy path, unchanged; or
+      - an eval-arrays directory (python/eval_arrays.py): verified against its source, then
+        memory-mapped. eval_lookup holds the DAG's positions; engine augmentation searches the
+        mapped arrays in place instead of a full in-RAM copy (~4.8 GB for the old DB; the new
+        eval DB's arrays are ~59 GB and are never loaded).
+    An eval DB DIRECTORY (explorer-extract evals, bkt*.parquet) is refused: build its arrays first.
+    A missing path WARNs and returns no evals, as before."""
+    eval_lookup: dict[int, float] = {}
+    full_eval_hashes = full_eval_es = None
+    edb_path = Path(eval_db)
+    if not edb_path.exists():
+        print(f"WARNING: eval DB not found at {edb_path} — proceeding without evals.")
+        return eval_lookup, None, None
+    if (edb_path / "eval_hash.npy").is_file():
+        from eval_arrays import DIR_KIND, MISSING, lookup_evals, open_eval_arrays, read_meta, verify_eval_arrays
+        status = verify_eval_arrays(edb_path, adopt=False)
+        mm_h, mm_c = open_eval_arrays(edb_path)
+        meta = read_meta(edb_path) or {}
+        # Arrays built from an eval DB directory are capped at +-2000 by their builder; a legacy
+        # pair is measured (400M int16, cheap).
+        cap = 2000 if meta.get("kind") == DIR_KIND else int(np.abs(np.asarray(mm_c, dtype=np.int32)).max())
+        if cap >= eval_mate_cp:
+            sys.exit(f"FATAL: eval arrays {edb_path} reach |cp| {cap} >= --eval-mate-cp {eval_mate_cp}; "
+                     f"the arrays path cannot drop those rows from engine augmentation.")
+        lut64, lut32 = _es_lut(cap)
+        need = need_hashes(input_path)
+        cps = lookup_evals(need, mm_h, mm_c)
+        hit = cps != MISSING
+        eval_lookup = dict(zip(need[hit].tolist(), lut64[cps[hit].astype(np.int32) + cap].tolist()))
+        if augment:
+            full_eval_hashes, full_eval_es = mm_h, _EsView(mm_c, lut32, cap)
+            print(f"Engine augmentation searches the memory-mapped arrays in place "
+                  f"({len(mm_h):,} entries)")
+        print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} (eval arrays: {status}; "
+              f"{int((~hit).sum()):,} of {need.size:,} DAG positions have no eval)")
+    elif edb_path.is_dir():
+        sys.exit(f"FATAL: {edb_path} is an eval DB directory; build its arrays first:\n"
+                 f"    .venv/Scripts/python.exe python/eval_arrays.py --eval-db {edb_path} --out-dir <arrays dir>\n"
+                 f"then pass --eval-db <arrays dir>.")
+    else:
+        edb_raw = pl.read_parquet(str(edb_path))
+        # Drop mate-class sentinels (|cp| >= eval_mate_cp, e.g. the +-10000 Lichess
+        # mate codes). These are corrupt for quiet opening positions (e.g. 1.e4 reads
+        # +10000) and would trivially pass the refutation gate / dominate the eval
+        # blend. Dropping them reverts those positions to empirical (real deep mates
+        # are ~winning empirically too). Full fix = rebuild eval_db with a correct
+        # mate->cp mapping (separate task).
+        n_raw = len(edb_raw)
+        edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < eval_mate_cp)
+        n_drop = n_raw - len(edb_raw)
+        # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
+        # iter_rows over ~300M entries.
+        edb_raw = edb_raw.with_columns(_es_expr().alias("_es"))
+        # Engine augmentation needs the FULL (un-DAG-filtered) eval DB — its rescue
+        # moves reach positions OUTSIDE the input DAG, so the prefiltered eval_lookup
+        # can't see them. Snapshot the full mate-filtered DB as sorted numpy arrays
+        # (~4.8 GB: int64 hash + float32 es) BEFORE the DAG semi-join below prunes it.
+        if augment:
+            fh = edb_raw["position_hash"].to_numpy()
+            fe = edb_raw["_es"].to_numpy().astype(np.float32)
+            order = np.argsort(fh)
+            full_eval_hashes = np.ascontiguousarray(fh[order])
+            full_eval_es = np.ascontiguousarray(fe[order])
+            print(f"Loaded {len(full_eval_hashes):,} evals as sorted arrays for engine "
+                  f"augmentation (full DB, "
+                  f"~{(full_eval_hashes.nbytes + full_eval_es.nbytes)/1e9:.1f} GB)")
+        # Keep only evals for positions that can appear in THIS run's DAG
+        # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
+        # DB costs ~40+ GB of python objects and starved run_backwards_induction
+        # into MemoryError once the input reached 23M edges (2019-2025 pool).
+        _h = pl.scan_parquet(str(input_path))
+        _need = pl.concat([
+            _h.select(pl.col("parent_hash").alias("position_hash")),
+            _h.select(pl.col("child_hash").alias("position_hash")).drop_nulls(),
+        ]).unique().collect()
+        n_prefilter = len(edb_raw)
+        edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
+        eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
+                               edb_raw["_es"].to_list()))
+        print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
+              f"(dropped {n_drop:,} mate-class |cp|>={eval_mate_cp}; "
+              f"{n_prefilter - len(edb_raw):,} outside the input DAG)")
+    if eval_weight <= 0:
+        print("  (eval_weight=0 — evals will appear in output but not "
+              "influence move selection)")
+    return eval_lookup, full_eval_hashes, full_eval_es
+
+
 def forcingness(
     opp_moves: list[dict],
     k_f:      float = 200.0,
@@ -209,6 +340,162 @@ def effective_eval_weight(ew_max: float, ew_min: float, k: float, n: int) -> flo
     if ew_max <= 0 or k <= 0 or ew_min >= ew_max:
         return ew_max
     return ew_min + (ew_max - ew_min) * k / (k + n)
+
+
+def recall_weight(reach: float, midpoint: float, power: float) -> float:
+    """Probability we actually REMEMBER the booked move at a node we reach with
+    per-game probability `reach`.  Hill curve:  r = (f/m)^p / (1 + (f/m)^p).
+
+    At reach = midpoint:  r = 0.5.  Monotone increasing, r(0) = 0, r -> 1.
+
+    midpoint <= 0 DISABLES the model and returns 1.0 (perfect recall), which is
+    what makes the flag an exact no-op when unset: every blend below collapses
+    to the prescriptive value it already had.
+
+    The two branches are algebraically identical; each is the one that stays
+    accurate on its side of the midpoint, since reach here spans many decades
+    (the plan export prunes at 1e-6, three decades below the default midpoint).
+    """
+    if midpoint <= 0 or power <= 0:
+        return 1.0                       # disabled: perfect recall
+    if reach <= 0:
+        return 0.0
+    ratio = reach / midpoint
+    if ratio <= 1:
+        v = ratio ** power
+        return v / (1.0 + v)
+    return 1.0 / (1.0 + (1.0 / ratio) ** power)
+
+
+def aux_term_reasons(aux_path) -> str:
+    """How an aux sidecar split its terminations, from `<aux>.meta.json`.
+
+    'split' (build_pooled_stats: normal / flag / other by Termination header) is
+    the default when there is no meta. 'pooled' (pool_from_book: the move flows
+    carry no reason, so the whole ended mass sits in term_other_*) is what
+    check_aux_term_flags refuses to drop flags from. An unreadable meta raises:
+    guessing 'split' there would defeat the guard."""
+    import json
+    meta = Path(str(aux_path) + ".meta.json")
+    if not meta.exists():
+        return "split"
+    try:
+        return str(json.loads(meta.read_text(encoding="utf-8"))
+                   .get("term_reasons", "split"))
+    except (OSError, ValueError) as e:
+        raise ValueError(f"aux meta {meta} is unreadable ({e}); cannot tell whether "
+                         f"its termination reasons are pooled") from e
+
+
+def check_aux_term_flags(aux_path, term_flags: bool) -> None:
+    """Raise when time-forfeit flags are to be EXCLUDED from a sidecar whose
+    reasons are pooled. Dropping term_flag_* there drops nothing (it is all 0;
+    the flags sit inside term_other_*), so the exclusion would silently not
+    happen. Shared by Stage 3's loader and budget_core.load_aux_rows."""
+    if not term_flags and aux_term_reasons(aux_path) == "pooled":
+        raise ValueError(
+            f"{aux_path}: its aux meta says term_reasons='pooled' (time forfeits are "
+            f"pooled into term_other_*), so excluding term flags "
+            f"(--no-aux-term-flags / term_flags=False) would drop nothing. "
+            f"Keep the flags in, or use a sidecar with split reasons.")
+
+
+def aux_opp_mix(term_tot: float, term_sum: float,
+                oth_tot: float, oth_sum: float,
+                oth_eval: float, oth_cov: float,
+                hor_tot: float, hor_sum: float,
+                hor_eval: float | None,
+                eval_weight: float, eval_weight_min: float = 0.0,
+                eval_weight_k: float = 0.0,
+                horizon_mode: str = "empirical") -> tuple[float, float]:
+    """WHITE-SCORE (numerator, denominator) one position's aux buckets add to an
+    OPPONENT node's mean. Callers in other perspectives flip with `den - num`,
+    which is exact because the mix is linear in the bucket sums.
+
+    SHARED BY BOTH ENGINES (2026-09-04). Stage 3 and budget_core each grew their
+    own copy and they had drifted: the budget builder used the OTHER bucket's raw
+    empirical score while Stage 3 blended `other_eval_mean` at a coverage-weighted
+    eval weight. That is a difference in the objective being optimised, not in
+    budget allocation, so the four-arm comparison was partly measuring it. One
+    implementation, imported by both.
+
+    The three buckets are NOT interchangeable and are deliberately valued by
+    different rules:
+      term     the game ended here. A finished game's result is a fact, so it
+               enters at its empirical score with no engine opinion at all.
+      other    replies pruned under min_games. Their outcomes ARE observed but
+               their continuations are not, so the engine gets a say -- weighted
+               by n_eff = oth_tot * oth_cov, the eval-COVERED mass, because
+               `other_eval_mean` only describes the edges the eval DB knows.
+               Passing the whole bucket would claim the engine's opinion rests on
+               1/cov times the evidence it has, and would be most wrong on
+               exactly the thin lines this bucket exists to describe.
+      horizon  the extract's ply cap cut the game off. The OUTCOME is observed
+               and only the path is missing, so 'empirical' (the default) trusts
+               it; 'eval' substitutes the node's own engine score.
+
+    A NaN `oth_eval` means no eval-covered child, and must fall back to the
+    empirical mean rather than read as 0.0 (dead lost).
+    """
+    num = den = 0.0
+    if term_tot:
+        num += term_sum          # a finished game's result is a fact
+        den += term_tot
+    if oth_tot:
+        emp_o = oth_sum / oth_tot
+        if oth_eval == oth_eval and eval_weight > 0:      # not NaN
+            n_eff = oth_tot * oth_cov
+            w_o = effective_eval_weight(eval_weight, eval_weight_min,
+                                        eval_weight_k, n_eff)
+            v_o = (1.0 - w_o) * emp_o + w_o * oth_eval
+        else:
+            v_o = emp_o
+        num += v_o * oth_tot
+        den += oth_tot
+    if hor_tot:
+        if horizon_mode == "eval" and hor_eval is not None:
+            v_h = hor_eval
+        else:
+            v_h = hor_sum / hor_tot
+        num += v_h * hor_tot
+        den += hor_tot
+    return num, den
+
+
+def aux_our_blend(value: float, cont_mass: float, crack_mass: float,
+                  win_score: float) -> float:
+    """Fold opponent collapses BEFORE our move into an our-node's value.
+
+    `1.e4 e5 {Black resigns}` ends at a White-to-move position, so it lands on
+    one of OUR nodes. The node's value is otherwise purely prescriptive -- "what
+    our book gets from here" -- which is right for the games that continued, but
+    some fraction of arrivals never gave us a move to play at all. Those are ours.
+
+    Unit-agnostic: pass `win_score` in the caller's convention (1.0 for a White
+    book in white-score units, 0.0 for a Black one, always 1.0 for engines that
+    work in our-perspective units).
+
+    cont_mass IS THE WHOLE CONTINUING POPULATION, not just the surviving edges
+    (corrected 2026-09-04, found by external review). Stage 3 used to pass only
+    the sum of surviving outgoing edges, which omits games that continued through
+    below-floor OTHER moves and through the extract's horizon. Our policy
+    replaces those games' historical move choices, but it does not make them stop
+    arriving, so leaving them out shrinks the denominator and over-weights the
+    resignations -- worst precisely at thin nodes, where the surviving edges are
+    the smallest share of arrivals. With 100 surviving continuations, 900 OTHER
+    continuations and 100 collapses against a prepared value of 0.6, the old
+    denominator gave 0.8 where the arrival-weighted answer is
+    (1000*0.6 + 100)/1100 = 0.63636.
+
+    Non-crack terminations (our-node losses and draws) are deliberately NOT in
+    either term: a game we lost with us to move ABANDONED the book, and charging
+    the recipe for a resignation it never recommended would be worse than
+    dropping it. That is a modelling choice, and a stated one -- see the loader.
+    """
+    total = cont_mass + crack_mass
+    if crack_mass <= 0.0 or total <= 0.0:
+        return value
+    return (value * cont_mass + win_score * crack_mass) / total
 
 
 def opponent_error(
@@ -267,29 +554,6 @@ def opponent_error(
     return (k_e * baseline + raw_error * n) / (k_e + n)
 
 
-def crush(our_crush_sum: float | None, n_games: int | None,
-          k_c: float = 20000.0, baseline: float = 0.0) -> float:
-    """Flat result-based rate at which OUR side wins fast (mate/resignation).
-
-    our_crush_sum is the count of OUR decisive wins (mate/resignation) through this
-    edge that land on or before full-move `--crush-horizon` — a FLAT cutoff, no
-    earliness decay — summed from the crush_hist histogram in main(). Dividing by
-    n_games (all games through the edge) gives crush_rate = "fraction of games we
-    crush by move H from here."
-
-    Empirical-Bayes shrunk toward `baseline` with pseudocount k_c. Callers pass
-    baseline = the SLICE-MEAN crush (compute_slice_mean_crush), NOT 0, so a
-    thin-sample edge defaults to the mean (no spurious bonus) and value decides
-    there; only well-sampled edges keep a real deviation. k_c large (default
-    20000) is deliberate — see compute_slice_mean_crush / the crush-metric-design
-    note. Returns `baseline` when the edge has no crush data (uncovered slice).
-    """
-    if not n_games or n_games <= 0 or our_crush_sum is None:
-        return baseline
-    raw = our_crush_sum / n_games
-    return (k_c * baseline + raw * n_games) / (k_c + n_games)
-
-
 def compute_slice_prior(edges: list[dict], start_hash: int, min_games: int = 100) -> float:
     """Average white_score across all games in this slice (from the starting position).
 
@@ -305,31 +569,6 @@ def compute_slice_prior(edges: list[dict], start_hash: int, min_games: int = 100
     if game_sum < min_games:
         return 0.5
     return score_sum / game_sum
-
-
-def compute_slice_mean_crush(edges: list[dict], start_hash: int, sum_col: str,
-                             min_games: int = 100, fallback: float = 0.02) -> float:
-    """Slice-wide OUR-crush rate for the per-edge crush sum column `sum_col`,
-    measured at the starting position — the empirical-Bayes prior mean that the
-    per-edge crush shrinks toward (analogous to compute_slice_prior for the win
-    rate). Summing the start-position edges is exact: every game passes through
-    exactly one first move, so Σ(sum_col)/Σ(crush_games) = the slice's overall rate.
-
-    `sum_col` is e.g. "white_crush_sum" (absolute), "white_imm_sum" or
-    "white_dfull_sum" (relative-propagated). Falls back to `fallback` if the slice
-    has no crush data at the start.
-    """
-    crush_sum = 0.0
-    game_sum  = 0
-    for e in edges:
-        if e["parent_hash"] == start_hash and e.get("crush_games"):
-            cs = e.get(sum_col)
-            if cs is not None:
-                crush_sum += cs
-                game_sum  += e["crush_games"]
-    if game_sum < min_games:
-        return fallback
-    return crush_sum / game_sum
 
 
 def _tarjan_sccs(nodes: set[int], succ: dict[int, list[int]]) -> list[list[int]]:
@@ -505,11 +744,9 @@ class _CSRChildren:
     (same keys the old build produced), materialized on demand from CSR arrays. A
     leaf / unknown hash -> [] (matches the old defaultdict(list))."""
     __slots__ = ("sp", "off", "e_child_hash", "e_san", "e_score", "e_total",
-                 "e_draws", "e_wcs", "e_bcs", "e_wimm", "e_bimm", "e_wdf", "e_bdf",
-                 "e_cg")
+                 "e_draws")
 
-    def __init__(self, sp, off, e_child_hash, e_san, e_score, e_total, e_draws,
-                 e_wcs, e_bcs, e_wimm, e_bimm, e_wdf, e_bdf, e_cg):
+    def __init__(self, sp, off, e_child_hash, e_san, e_score, e_total, e_draws):
         self.sp = sp
         self.off = off
         self.e_child_hash = e_child_hash
@@ -517,34 +754,19 @@ class _CSRChildren:
         self.e_score = e_score
         self.e_total = e_total
         self.e_draws = e_draws
-        self.e_wcs, self.e_bcs = e_wcs, e_bcs
-        self.e_wimm, self.e_bimm = e_wimm, e_bimm
-        self.e_wdf, self.e_bdf = e_wdf, e_bdf
-        self.e_cg = e_cg
 
     def _rows(self, i):
         lo, hi = int(self.off[i]), int(self.off[i + 1])
         san, ch = self.e_san, self.e_child_hash
         sc, tot, dr = self.e_score, self.e_total, self.e_draws
-        wcs, bcs, wimm, bimm = self.e_wcs, self.e_bcs, self.e_wimm, self.e_bimm
-        wdf, bdf, cg = self.e_wdf, self.e_bdf, self.e_cg
         out = []
         for j in range(lo, hi):
-            a, b, c, d = wcs[j], bcs[j], wimm[j], bimm[j]
-            e, f, g = wdf[j], bdf[j], cg[j]
             out.append({
                 "move_san":  san[j],
                 "child_hash": int(ch[j]),
                 "score_avg": float(sc[j]),
                 "total":     int(tot[j]),
                 "draws":     int(dr[j]),
-                "white_crush_sum": None if a != a else float(a),
-                "black_crush_sum": None if b != b else float(b),
-                "white_imm_sum":   None if c != c else float(c),
-                "black_imm_sum":   None if d != d else float(d),
-                "white_dfull_sum": None if e != e else float(e),
-                "black_dfull_sum": None if f != f else float(f),
-                "crush_games":     None if g != g else int(g),
             })
         return out
 
@@ -560,15 +782,11 @@ class _CSRChildren:
 
 
 # Edge columns the induction needs, with their dtypes. Missing columns (tests may
-# omit the crush overlay) are added as null so the CSR build sees a uniform schema.
+# omit some) are added as null so the CSR build sees a uniform schema.
 _EDGE_COLS = {
     "parent_hash": pl.Int64, "move_san": pl.Utf8, "child_hash": pl.Int64,
     "white_score_avg": pl.Float64, "total": pl.Int64, "draws": pl.Int64,
     "parent_epd": pl.Utf8,
-    "white_crush_sum": pl.Float64, "black_crush_sum": pl.Float64,
-    "white_imm_sum": pl.Float64, "black_imm_sum": pl.Float64,
-    "white_dfull_sum": pl.Float64, "black_dfull_sum": pl.Float64,
-    "crush_games": pl.Float64,
 }
 
 
@@ -589,12 +807,11 @@ def _as_edges_df(edges) -> "pl.DataFrame":
 # Columns that carry None in the old per-row dicts (opponent-turn / no-move nodes,
 # uncovered eval) and so must serialize as null, not NaN. All other float columns are
 # always set for a valued node.
-_NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "crush_rate",
-                 "crush_potential", "eval_score"]
+_NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "eval_score"]
 
 
 def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_decis,
-                 best_crush, crush_pot, memo_pot, cover_eff, value_worst,
+                 memo_pot, cover_eff, value_worst,
                  values_robust, position_epd, position_side, best_aug, eval_lookup):
     """Build one slice's output rows straight from the numpy-backed value arrays
     (memory refactor Step 5 — replaces the 13M-row list[dict] + pl.from_dicts). Emits
@@ -620,8 +837,6 @@ def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_deci
         "forcingness":     best_forcing.arr,
         "opponent_error":  best_error.arr,
         "decisiveness":    best_decis.arr,
-        "crush_rate":      best_crush.arr,
-        "crush_potential": crush_pot.arr,
         "memo_cost":       memo_pot.arr,
         "cover_eff":       cover_eff.arr,
         "value_worst":     value_worst.arr,
@@ -655,13 +870,6 @@ def run_backwards_induction(
     gate_rel_baseline: str = "candidates",
     gate_rel_own_margin: float = 0.02,
     robust_eval_weight: float = 1.0,
-    crush_weight:     float = 0.0,
-    crush_penalty:    float = 0.0,
-    crush_prior:      float = 200.0,
-    crush_mode:       str = "absolute",
-    crush_gamma:      float = 0.8,
-    crush_imm_window: int = 2,
-    crush_baseline:   str = "mean",
     force_root_move:  str | None = None,
     require_eval:     bool = False,
     memo_weight:      float = 0.0,
@@ -693,9 +901,12 @@ def run_backwards_induction(
     learn_reach_pivot: float = 0.02,
     learn_ctx_pivot:  float = 0.05,
     learn_depth_horizon: int = 6,
+    recall_midpoint:  float = 0.0,
+    recall_power:     float = 2.0,
+    recall_default_reach: float = 0.0,
 ) -> tuple[dict[int, float], dict[int, str | None], dict[int, float | None],
-           dict[int, float | None], dict[int, float | None], dict[int, float | None],
-           dict[int, float], dict[int, float], dict[int, float],
+           dict[int, float | None], dict[int, float | None],
+           dict[int, float], dict[int, float],
            dict[int, float], dict[int, float | None], dict[int, str],
            dict[int, chess.Color], float, dict[int, bool]]:
     """
@@ -746,11 +957,6 @@ def run_backwards_induction(
         best_forcing   -- position_hash -> forcingness of chosen move (None at opp turn)
         best_error     -- position_hash -> opponent_error of chosen move (None at opp turn)
         best_decis     -- position_hash -> decisiveness of chosen move (None at opp turn)
-        best_crush     -- position_hash -> crush_rate of chosen move (None at opp turn).
-                          In relative-propagated mode this is the LOCAL relative crush
-                          (dfull) of the chosen move; in absolute mode the crush@H rate.
-        crush_pot      -- position_hash -> propagated crush_potential (relative mode only;
-                          empty dict in absolute mode). All positions (our + opp).
         memo_pot       -- position_hash -> propagated memorization cost. Our nodes:
                           shrunk deviation penalty of the chosen move + child's memo;
                           opp nodes: reach (frequency) weighted expected child memo.
@@ -776,33 +982,6 @@ def run_backwards_induction(
     df = _as_edges_df(edges)
     start_rows = df.filter(pl.col("parent_hash") == start_hash).to_dicts()
     slice_prior = compute_slice_prior(start_rows, start_hash)
-    gamma_hop = crush_gamma ** 0.5   # per-PLY discount (one propagation hop = one ply)
-    # Empirical-Bayes prior means for crush: thin-sample edges shrink toward the
-    # slice-wide rate (not 0), so noise can't manufacture a crush bonus. Absolute
-    # mode shrinks the crush@H rate; relative mode shrinks the immediate-window and
-    # discounted-full rates separately (different scales).
-    # crush_baseline="zero" shrinks each edge's crush toward 0 (assume NO crush until
-    # proven by many games), not toward the slice mean. This stops a thin-sample edge
-    # from defaulting to the average crush and out-pointing a well-sampled below-average
-    # move (the 9.f4-over-9.Qg6+ artifact). With baseline 0 the pseudocount must stay
-    # large or selection-biased thin lines slip through — hence crush_prior is swept.
-    col = "white" if our_color == chess.WHITE else "black"
-    opp_col = "black" if our_color == chess.WHITE else "white"
-    if crush_baseline == "zero":
-        slice_mean_crush = slice_mean_imm = slice_mean_dfull = 0.0
-        slice_mean_opp_imm = slice_mean_opp_dfull = 0.0
-    else:
-        slice_mean_crush = compute_slice_mean_crush(start_rows, start_hash, f"{col}_crush_sum")
-        slice_mean_imm   = compute_slice_mean_crush(start_rows, start_hash, f"{col}_imm_sum")
-        slice_mean_dfull = compute_slice_mean_crush(start_rows, start_hash, f"{col}_dfull_sum")
-        # Mirror images for the COUNTER-crush term (--crush-penalty). These columns
-        # have always been computed, joined and carried in the CSR arrays; until now
-        # nothing read them, so the sharpness term saw only the half of the position
-        # where WE win fast and was blind to the half where we get mated.
-        slice_mean_opp_imm   = compute_slice_mean_crush(start_rows, start_hash,
-                                                        f"{opp_col}_imm_sum")
-        slice_mean_opp_dfull = compute_slice_mean_crush(start_rows, start_hash,
-                                                        f"{opp_col}_dfull_sum")
 
     # ── Build the columnar graph (CSR) + id-indexed value arrays ───────────────
     # Internal nodes = positions with >=1 resolved-child edge (child_hash NOT NULL,
@@ -828,9 +1007,6 @@ def run_backwards_induction(
         child_id = np.zeros(0, np.int64)
         order = np.zeros(0, np.int64)
 
-    def _col(name):
-        return df2[name].to_numpy().astype(np.float64)[order]
-
     e_child_hash = child_h[order]
     e_child_id   = child_id[order]
     _san         = df2["move_san"].to_list()
@@ -838,17 +1014,13 @@ def run_backwards_induction(
     e_score      = df2["white_score_avg"].to_numpy().astype(np.float64)[order]
     e_total      = df2["total"].to_numpy().astype(np.int64)[order]
     e_draws      = df2["draws"].to_numpy().astype(np.int64)[order]
-    e_wcs, e_bcs   = _col("white_crush_sum"), _col("black_crush_sum")
-    e_wimm, e_bimm = _col("white_imm_sum"), _col("black_imm_sum")
-    e_wdf, e_bdf   = _col("white_dfull_sum"), _col("black_dfull_sum")
-    e_cg           = _col("crush_games")
 
     p_sorted = parent_id[order]
     child_off = np.zeros(N + 1, np.int64)
     if N:
         np.cumsum(np.bincount(p_sorted, minlength=N), out=child_off[1:])
     children = _CSRChildren(sp, child_off, e_child_hash, e_san, e_score, e_total,
-                            e_draws, e_wcs, e_bcs, e_wimm, e_bimm, e_wdf, e_bdf, e_cg)
+                            e_draws)
 
     # EPD + side per internal node (any edge of the node — all share the parent
     # position). Side read from the EPD field == chess.Board(epd).turn, no board build.
@@ -867,8 +1039,6 @@ def run_backwards_induction(
     values        = _ArrMap(sp, np.full(N, np.nan))   # expected vs AVERAGE opponent
     values_robust = _ArrMap(sp, np.full(N, np.nan))   # value along opponent's BEST reply
     value_worst   = _ArrMap(sp, np.full(N, np.nan))   # OUR-book value vs opponent's BEST defence
-    crush_pot     = _ArrMap(sp, np.full(N, np.nan))   # propagated crush_potential (relative mode)
-    crush_pot_opp = _ArrMap(sp, np.full(N, np.nan))   # ...the OPPONENT's (--crush-penalty)
     self_err_pot  = _ArrMap(sp, np.full(N, np.nan))   # propagated OUR-error cost (--self-error-weight)
     memo_pot      = _ArrMap(sp, np.full(N, np.nan))   # propagated memorization cost
     cover_depth   = _ArrMap(sp, np.full(N, np.nan))   # reach-weighted covered opp-decision depth
@@ -877,7 +1047,6 @@ def run_backwards_induction(
     best_forcing  = _ArrMap(sp, np.full(N, np.nan))
     best_error    = _ArrMap(sp, np.full(N, np.nan))
     best_decis    = _ArrMap(sp, np.full(N, np.nan))
-    best_crush    = _ArrMap(sp, np.full(N, np.nan))
     best_aug      = _BoolMap(sp, np.zeros(N, dtype=bool))
     best_moves    = _ObjMap(sp, [None] * N)
     values_arr = values.arr    # direct handle for the topological drain / cycle phase
@@ -936,6 +1105,14 @@ def run_backwards_induction(
     # wildly different sizes — on 2018-01 the other-moves bucket carried 1,253,751
     # of edge mass against 4,224 for terminations — so "aux on" measures the bucket
     # unless the parts can be separated.
+    # Recall model. OFF unless --recall-midpoint is positive; reach comes from
+    # the SAME pass-1 export the learnability tiebreak already consumes, so this
+    # adds no new plumbing and inherits that export's bounds (--max-our-moves,
+    # --epsilon). Nodes absent from it are genuinely beyond those bounds, where
+    # the curve is ~0 anyway, so recall_default_reach=0.0 is self-consistent.
+    _recall = recall_midpoint > 0.0
+    _recall_reach = learn_reach or {}
+
     _parts = {p.strip().lower() for p in (aux_parts or "").split(",") if p.strip()}
     _bad = _parts - {"term", "other", "horizon"}
     if _bad:
@@ -1011,16 +1188,13 @@ def run_backwards_induction(
 
     # ── Backwards induction (value stores are the numpy-backed views built above) ─
     opp_is_white = (our_color == chess.BLACK)
-    # Counter-crush and self-error are OFF by default, and every site that touches
-    # them is gated on these flags, so the default recipe computes and pays for
-    # nothing new — that is what makes the no-op equivalence check exact.
-    _counter_crush = crush_penalty > 0
+    # Self-error is OFF by default, and every site that touches it is gated on
+    # this flag, so the default recipe computes and pays for nothing new — that
+    # is what makes the no-op equivalence check exact.
     _self_err = self_error_weight > 0 and bool(eval_lookup)
     _reply_shrink = reply_shrink > 0 and bool(eval_lookup)
     # No eval_lookup needed: this correction is pure reply mass, not engine eval.
     _cover_mass = cover_mass_shrink > 0
-    relative_crush = (crush_mode == "relative-propagated"
-                      and (crush_weight > 0 or _counter_crush))
     # Engine-candidate augmentation is only live when the caller supplied the full
     # (un-prefiltered) eval DB as sorted arrays — the prefiltered eval_lookup can't
     # see legal-but-unplayed children (they're outside the input DAG).
@@ -1071,7 +1245,7 @@ def run_backwards_induction(
         # and playing the most-played (natural) move instead — from OUR perspective
         # (sign-corrected, floored at 0). Bayesian-shrunk toward a small baseline by
         # the node's sample size, so a thin position can't look spuriously cheap (or
-        # expensive); same shrink pattern as crush()/forcingness().
+        # expensive); same shrink pattern as forcingness().
         d_raw = max(0.0, sign * (mv_val - nat_val))
         return ((memo_prior * memo_baseline + d_raw * n_p) / (memo_prior + n_p)
                 if (memo_prior + n_p) > 0 else d_raw)
@@ -1119,56 +1293,13 @@ def run_backwards_induction(
                                   k_e=error_prior) if error_weight > 0 else 0.0
             tot  = m["total"]
             dec  = 1.0 - (m.get("draws", 0) / tot) if tot else 0.0
-            ng = m.get("crush_games")
-            # ABSOLUTE crush rate: flat decisive-win-by-move-H rate for this edge,
-            # shrunk toward the slice mean. A per-edge bonus, NOT propagated.
-            our_crush_sum = (m.get("white_crush_sum") if our_color == chess.WHITE
-                             else m.get("black_crush_sum"))
-            cr = (crush(our_crush_sum, ng, crush_prior, slice_mean_crush)
-                  if (crush_weight > 0 and not relative_crush) else 0.0)
-            # RELATIVE-PROPAGATED crush: LineCrush = hazard of crushing within the
-            # immediate window + (1-hazard)·γ_hop·(child's propagated crush_potential);
-            # at the tree frontier (child not valued) fall back to the discounted
-            # empirical tail dfull, which captures kills beyond the ply-30 tree.
-            line_crush = 0.0
-            dfull = 0.0
-            opp_line_crush = 0.0
-            if relative_crush:
-                imm_sum   = (m.get("white_imm_sum") if our_color == chess.WHITE
-                             else m.get("black_imm_sum"))
-                dfull_sum = (m.get("white_dfull_sum") if our_color == chess.WHITE
-                             else m.get("black_dfull_sum"))
-                imm   = crush(imm_sum,   ng, crush_prior, slice_mean_imm)
-                dfull = crush(dfull_sum, ng, crush_prior, slice_mean_dfull)
-                if ch in crush_pot:
-                    line_crush = imm + (1.0 - imm) * gamma_hop * crush_pot[ch]
-                else:
-                    line_crush = dfull   # frontier / leaf: empirical discounted tail
-                if _counter_crush:
-                    # COUNTER-crush: identical construction on the opponent's colour.
-                    # `value` already absorbs our losses in expectation, but the crush
-                    # BONUS was added on top with no symmetric penalty, so selection
-                    # was paid to enter double-edged positions: winning fast 30% /
-                    # losing fast 30% scored the same as winning fast 30% / drawing 70%.
-                    o_imm_sum   = (m.get("black_imm_sum") if our_color == chess.WHITE
-                                   else m.get("white_imm_sum"))
-                    o_dfull_sum = (m.get("black_dfull_sum") if our_color == chess.WHITE
-                                   else m.get("white_dfull_sum"))
-                    o_imm   = crush(o_imm_sum,   ng, crush_prior, slice_mean_opp_imm)
-                    o_dfull = crush(o_dfull_sum, ng, crush_prior, slice_mean_opp_dfull)
-                    if ch in crush_pot_opp:
-                        opp_line_crush = o_imm + (1.0 - o_imm) * gamma_hop * crush_pot_opp[ch]
-                    else:
-                        opp_line_crush = o_dfull
             # Opponent's preference for THIS reply on the white-expected-score
             # scale (eval where covered, else empirical edge score).
             pref = eval_lookup[ch] if (eval_lookup and ch in eval_lookup) else m["score_avg"]
             mvs.append({"san": m["move_san"], "val": child_val, "robust": child_robust,
                         "worst": value_worst.get(ch, child_val),
                         "total": tot, "frc": frc, "opp_err": oerr, "dec": dec,
-                        "crush": cr, "line_crush": line_crush, "dfull": dfull, "pref": pref,
-                        "opp_line_crush": opp_line_crush,
-                        "covered": covered, "child": ch})
+                        "pref": pref, "covered": covered, "child": ch})
         return mvs
 
     def gate_rv(mv):
@@ -1262,11 +1393,6 @@ def run_backwards_induction(
                 rel_own_nodes.add(ph)   # the own-eval raise was (part of) the cut
         return kept
 
-    def crush_term(mv):
-        # Selection crush contribution: the propagated LineCrush in relative mode,
-        # else the flat per-edge crush@H.
-        return mv["line_crush"] if relative_crush else mv["crush"]
-
     def cover_eff(ch):
         # Coverage efficiency of the subtree entered by playing into child `ch`: covered
         # opponent-decision DEPTH (reach-weighted) per memorized BRANCH. High = forcing /
@@ -1300,7 +1426,7 @@ def run_backwards_induction(
         the eval DB. Fixes the missing-improvement blind spot where the sole recorded
         continuation is objectively lost but a better move exists unplayed (e.g. the
         6...c6 rescue in a deep Englund line). Returns only gate-passing moves as
-        eval-only move-val dicts (no empirical stats, no crush). Memoized per node."""
+        eval-only move-val dicts (no empirical stats). Memoized per node."""
         cached = _aug_cache.get(ph)
         if cached is not None:
             return cached
@@ -1318,24 +1444,24 @@ def run_backwards_induction(
             child_hashes.append(ch)
         out: list[dict] = []
         if child_hashes:
+            t_aug = time.perf_counter()
             keys = np.asarray(child_hashes, dtype=np.int64)
             idx = np.clip(np.searchsorted(full_eval_hashes, keys), 0,
                           len(full_eval_hashes) - 1)
             hit = full_eval_hashes[idx] == keys
-            for san, ch, i, ok in zip(sans, child_hashes, idx, hit):
+            ess = [float(full_eval_es[i]) if ok else None for i, ok in zip(idx, hit)]
+            AUG_STATS["calls"] += 1
+            AUG_STATS["keys"] += len(keys)
+            AUG_STATS["secs"] += time.perf_counter() - t_aug
+            for san, ch, es, ok in zip(sans, child_hashes, ess, hit):
                 if not ok:
                     continue
-                es = float(full_eval_es[i])
                 # eval-only dict mirroring build_move_vals' shape. worst/robust=es so
                 # passes_gate (which falls back to mv["worst"] when the child isn't in
                 # the prefiltered eval_lookup) gates on the engine eval directly.
                 cand = {"san": san, "val": es, "robust": es, "worst": es,
                         "total": 0, "frc": 0.0, "opp_err": 0.0, "dec": 0.0,
-                        "crush": 0.0, "line_crush": 0.0, "dfull": 0.0, "pref": es,
-                        # An engine rescue has NO games behind it, so neither side's
-                        # empirical crush exists — 0 like the other crush fields.
-                        "opp_line_crush": 0.0,
-                        "covered": True, "child": ch, "aug": True}
+                        "pref": es, "covered": True, "child": ch, "aug": True}
                 if passes_gate(cand):
                     out.append(cand)
         _aug_cache[ph] = out
@@ -1369,8 +1495,7 @@ def run_backwards_induction(
         # cost already propagated into the child. memo_weight=0 → term vanishes.
         n_p = sum(mv["total"] for mv in mvs) or 0
         nat_val = max(mvs, key=lambda mv: mv["total"])["val"]
-        keyf = lambda mv: (sign * mv["val"] + crush_weight * crush_term(mv)
-                           - crush_penalty * mv["opp_line_crush"]
+        keyf = lambda mv: (sign * mv["val"]
                            + decisiveness_weight * mv["dec"]
                            + error_weight * mv["opp_err"] + forcing_weight * mv["frc"]
                            + cover_weight * cover_eff(mv["child"])
@@ -1421,11 +1546,7 @@ def run_backwards_induction(
         if not mvs:
             values[ph] = values_robust[ph] = value_worst[ph] = slice_prior
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
-            best_decis[ph] = best_crush[ph] = None
-            if relative_crush:
-                crush_pot[ph] = 0.0
-            if _counter_crush:
-                crush_pot_opp[ph] = 0.0
+            best_decis[ph] = None
             if _self_err:
                 self_err_pot[ph] = 0.0
             # A childless node at OUR turn = we've left book (no prepared continuation)
@@ -1460,11 +1581,7 @@ def run_backwards_induction(
                 v = own if own is not None else slice_prior
                 values[ph] = values_robust[ph] = value_worst[ph] = v
                 best_moves[ph] = best_forcing[ph] = best_error[ph] = None
-                best_decis[ph] = best_crush[ph] = None
-                if relative_crush:
-                    crush_pot[ph] = 0.0
-                if _counter_crush:
-                    crush_pot_opp[ph] = 0.0
+                best_decis[ph] = None
                 if _self_err:
                     self_err_pot[ph] = 0.0
                 # We are out of book here — assign the leaving-book penalty.
@@ -1475,6 +1592,44 @@ def run_backwards_induction(
                 mem_nodes[ph] = 0.0
                 return
             values[ph]        = b["val"]
+            # ── imperfect recall ────────────────────────────────────────────
+            # We play the booked move only with probability r; otherwise we wing
+            # it and play the population's move here. So the node is worth
+            #     r * (prescriptive) + (1-r) * (what the population scores here)
+            # and the second term is the SAME mixture an opponent node computes,
+            # because "we play like the population" and "they play like the
+            # population" are the same arithmetic over the same edge list.
+            #
+            # Like the collapse blend below, r depends on the POSITION and not on
+            # the candidate, so this cannot change which move we pick AT this node
+            # -- the fallback term is constant in the candidate and drops out of
+            # the argmax. It changes the node's VALUE, hence the PARENT's choice.
+            # That is the whole mechanism: a deep trap stops paying for itself at
+            # the ancestor that would have to walk into it.
+            #
+            # Frozen-reach approximation: r comes from pass 1's policy, so pass 2
+            # cannot discover that a DIFFERENT move would make a node frequent
+            # enough to remember. Same approximation the learnability tiebreak
+            # already makes off the same export; stated, not hidden.
+            if _recall:
+                r = recall_weight(_recall_reach.get(ph, recall_default_reach),
+                                  recall_midpoint, recall_power)
+                if r < 1.0:
+                    fb_den = sum(mv["total"] for mv in mvs)
+                    fb_num = sum(mv["val"] * mv["total"] for mv in mvs)
+                    if _aux:
+                        i_fb = idx[ph]
+                        a_num, a_den = aux_opp_mix(
+                            aux_term_tot[i_fb], aux_term_sum[i_fb],
+                            aux_oth_tot[i_fb], aux_oth_sum[i_fb],
+                            aux_oth_eval[i_fb], aux_oth_cov[i_fb],
+                            aux_hor_tot[i_fb], aux_hor_sum[i_fb],
+                            (eval_lookup.get(ph) if eval_lookup else None),
+                            eval_weight, eval_weight_min, eval_weight_k,
+                            aux_horizon)
+                        fb_num += a_num; fb_den += a_den
+                    fb = fb_num / fb_den if fb_den else slice_prior
+                    values[ph] = r * values[ph] + (1.0 - r) * fb
             # Blend in the games where the opponent resigned BEFORE we moved. The
             # node's value is otherwise purely prescriptive — "what our book gets
             # from here" — and that is right for the games that continued, but
@@ -1489,25 +1644,25 @@ def run_backwards_induction(
             # value_worst is deliberately untouched: an opponent who resigns is not
             # playing best defence, so worst-case must not improve because of it.
             if _aux:
-                crack = aux_crack[idx[ph]]
+                i_ph = idx[ph]
+                crack = aux_crack[i_ph]
                 if crack:
-                    cont = sum(mv["total"] for mv in mvs)
+                    # THE WHOLE CONTINUING POPULATION, not just the surviving
+                    # edges. Games that continued through a below-floor OTHER
+                    # move, or that the extract's horizon cut off, still arrived
+                    # here and would still have got our book move. Omitting them
+                    # shrank the denominator and over-weighted the collapses,
+                    # worst at thin nodes. See aux_our_blend.
+                    cont = (sum(mv["total"] for mv in mvs)
+                            + float(aux_oth_tot[i_ph]) + float(aux_hor_tot[i_ph]))
                     win = 1.0 if our_color == chess.WHITE else 0.0
-                    if cont + crack:
-                        values[ph] = (values[ph] * cont + win * crack) / (cont + crack)
+                    values[ph] = aux_our_blend(values[ph], cont, crack, win)
             values_robust[ph] = b["robust"]
             best_moves[ph]    = b["san"]
             best_aug[ph]      = b.get("aug", False)
             best_forcing[ph]  = b["frc"]
             best_error[ph]    = b["opp_err"]
             best_decis[ph]    = b["dec"]
-            # crush_rate column: local relative crush (dfull) in relative mode, else crush@H.
-            best_crush[ph]    = b["dfull"] if relative_crush else b["crush"]
-            if relative_crush:
-                # crush_potential of THIS position = the line we actually play.
-                crush_pot[ph] = b["line_crush"]
-            if _counter_crush:
-                crush_pot_opp[ph] = b["opp_line_crush"]
             if _self_err:
                 # Additive along the chosen chain, exactly like memo_pot.
                 self_err_pot[ph] = local_self_error(ph) + self_err_pot.get(b["child"], 0.0)
@@ -1537,41 +1692,22 @@ def run_backwards_induction(
             # all contribute nothing — and the first of those is not noise:
             # measured, the side to move scores 0.0953 at a terminal node, so
             # excluding them deletes precisely the opponent's collapses.
+            # The bucket-by-bucket rules live in aux_opp_mix, which budget_core
+            # imports so both engines value this mass identically. They had
+            # drifted apart (the budget builder read the OTHER bucket raw, with
+            # no other_eval_mean blend), which is a difference in the OBJECTIVE
+            # and not in budget allocation.
             aux_num = aux_den = 0.0
             if _aux:
                 i_ph = idx[ph]
-                t_tot = aux_term_tot[i_ph]
-                if t_tot:
-                    aux_num += aux_term_sum[i_ph]      # a finished game's result
-                    aux_den += t_tot                   # is a fact, not an estimate
-                o_tot = aux_oth_tot[i_ph]
-                if o_tot:
-                    emp_o = aux_oth_sum[i_ph] / o_tot
-                    ev_o = aux_oth_eval[i_ph]
-                    if ev_o == ev_o and eval_weight > 0:      # not NaN
-                        # Sample size for the eval's trust is the COVERED mass, not
-                        # the whole bucket: other_eval_mean describes only the edges
-                        # the eval DB actually knows. Passing o_tot would claim the
-                        # engine's opinion rests on 1/cov times the evidence it has,
-                        # and it would be most wrong exactly on the thin, poorly
-                        # covered lines this bucket exists to describe.
-                        n_eff = o_tot * aux_oth_cov[i_ph]
-                        w_o = effective_eval_weight(eval_weight, eval_weight_min,
-                                                    eval_weight_k, n_eff)
-                        v_o = (1.0 - w_o) * emp_o + w_o * ev_o
-                    else:
-                        v_o = emp_o
-                    aux_num += v_o * o_tot
-                    aux_den += o_tot
-                h_tot = aux_hor_tot[i_ph]
-                if h_tot:
-                    if aux_horizon == "eval":
-                        hv = eval_lookup.get(ph) if eval_lookup else None
-                        v_h = hv if hv is not None else aux_hor_sum[i_ph] / h_tot
-                    else:
-                        v_h = aux_hor_sum[i_ph] / h_tot
-                    aux_num += v_h * h_tot
-                    aux_den += h_tot
+                aux_num, aux_den = aux_opp_mix(
+                    aux_term_tot[i_ph], aux_term_sum[i_ph],
+                    aux_oth_tot[i_ph], aux_oth_sum[i_ph],
+                    aux_oth_eval[i_ph], aux_oth_cov[i_ph],
+                    aux_hor_tot[i_ph], aux_hor_sum[i_ph],
+                    (eval_lookup.get(ph) if eval_lookup else None),
+                    eval_weight, eval_weight_min, eval_weight_k,
+                    aux_horizon)
                 if aux_den:
                     base = values[ph] * total if total else slice_prior * 0.0
                     denom = total + aux_den
@@ -1608,18 +1744,11 @@ def run_backwards_induction(
                         values[ph] = w * values[ph] + (1.0 - w) * es
             values_robust[ph] = opp_robust(mvs)
             best_moves[ph] = best_forcing[ph] = best_error[ph] = None
-            if relative_crush:
-                # crush_potential = EXPECTED LineCrush over their empirical replies.
-                crush_pot[ph] = (sum(mv["line_crush"] * mv["total"] for mv in mvs) / total
-                                 if total else 0.0)
-            if _counter_crush:
-                crush_pot_opp[ph] = (sum(mv["opp_line_crush"] * mv["total"] for mv in mvs)
-                                     / total if total else 0.0)
             if _self_err:
                 # Reach-weighted expectation over their replies (mirrors memo_pot).
                 self_err_pot[ph] = (sum(self_err_pot.get(mv["child"], 0.0) * mv["total"]
                                         for mv in mvs) / total if total else 0.0)
-            best_decis[ph] = best_crush[ph] = None
+            best_decis[ph] = None
             # memo cost = reach (frequency) weighted expected memo over their replies
             # (an out-of-book child contributes the leaving-book penalty, not 0).
             memo_pot[ph] = (sum(memo_pot.get(mv["child"], memo_leave) * mv["total"] for mv in mvs)
@@ -1729,18 +1858,12 @@ def run_backwards_induction(
         # exactly, improve with hysteresis) — deliberately not built for the ~80
         # affected SCCs out of 13M positions.
         EPS, SWEEP_CAP, ALPHA = 1e-7, 1500, 0.5
-        gate_dicts = [values, values_robust, value_worst, crush_pot]
-        gate_names = ["value", "value_robust", "value_worst", "crush_pot"]
-        # crush_pot_opp is bounded in [0,1] and propagates MULTIPLICATIVELY (same
-        # recurrence as crush_pot), so it converges and belongs in the gate.
-        # self_err_pot deliberately does NOT: like memo_pot it accumulates
+        # self_err_pot deliberately is NOT gated: like memo_pot it accumulates
         # ADDITIVELY along the chosen chain, so a converged best-move chain that
         # stays inside an SCC diverges there by construction — gating on it would
         # report false non-convergence forever.
-        if _counter_crush:
-            gate_dicts.append(crush_pot_opp)
-            gate_names.append("crush_pot_opp")
-        gate_dicts, gate_names = tuple(gate_dicts), tuple(gate_names)
+        gate_dicts = (values, values_robust, value_worst)
+        gate_names = ("value", "value_robust", "value_worst")
 
         def _sweep(members: list[int], alpha: float = 1.0):
             """One Gauss-Seidel sweep. Returns (residual, worst_node, worst_dict).
@@ -1819,7 +1942,7 @@ def run_backwards_induction(
     cover_effs = _ArrMap(sp, np.nan_to_num(cover_depth.arr, nan=0.0)
                          / (1.0 + np.nan_to_num(mem_nodes.arr, nan=0.0)))
     return (values, best_moves, best_forcing, best_error,
-            best_decis, best_crush, crush_pot, memo_pot, cover_effs, value_worst,
+            best_decis, memo_pot, cover_effs, value_worst,
             values_robust, position_epd, position_side, slice_prior, best_aug)
 
 
@@ -1901,14 +2024,16 @@ def main():
                         help="Baseline forcingness to shrink low-sample positions toward. "
                              "0.30 is roughly typical for opening positions. Default: 0.30")
     parser.add_argument("--eval-db", default=None,
-                        help="Path to eval DB parquet from build_lichess_eval_db.py. When "
-                             "provided, Stockfish evals are used in move selection and written "
-                             "to the output's eval_score column.")
+                        help="Eval source: an eval-arrays directory from python/eval_arrays.py "
+                             "(verified, then memory-mapped; canonical: D:/chess/eval_arrays_full, "
+                             "the arrays of D:/chess/eval_full), or a legacy (position_hash, "
+                             "eval_cp) parquet such as the retired unified_eval_db. When provided, Stockfish evals are "
+                             "used in move selection and written to the output's eval_score column.")
     parser.add_argument("--eval-mate-cp", type=int, default=3000,
                         help="Drop eval_db entries with |eval_cp| >= this at load. RETIRED "
                              "safety: the old eval DB stamped +-10000 mate sentinels on quiet "
-                             "positions (1.e4 read +10000), which this dropped. The rebuilt "
-                             "build_lichess_eval_db.py caps decisive evals at +-2000, so nothing "
+                             "positions (1.e4 read +10000), which this dropped. Every eval DB "
+                             "since caps decisive evals at +-2000, so nothing "
                              "reaches 3000 and this guard is now inert. Kept as a cheap backstop.")
     parser.add_argument("--eval-weight", type=float, default=0.0,
                         help="Blending weight for Stockfish eval at leaf positions. "
@@ -1999,48 +2124,6 @@ def main():
                              "so the mean objective can stay empirical (trap value) while the "
                              "gate uses objective eval. 1.0 = pure eval where covered (default), "
                              "empirical where not. Requires --eval-db for effect.")
-    parser.add_argument("--crush-db", default=None,
-                        help="Path to crush_stats parquet (from build_crush_stats.py). "
-                             "When set with --crush-weight>0, adds the crush term (rate of "
-                             "early decisive wins by mate/resignation) to move selection.")
-    parser.add_argument("--crush-weight", type=float, default=0.0,
-                        help="Weight on crush_rate in selection — the PRIMARY sharpness driver. "
-                             "Rewards moves that lead to fast opponent resignations/mates "
-                             "(earlier = higher). 0.0 = disabled (default). Try 0.3.")
-    parser.add_argument("--crush-prior", type=float, default=20000.0,
-                        help="Pseudocount (in games) for empirical-Bayes shrinkage of crush_rate "
-                             "toward the SLICE-MEAN crush rate. An edge needs ~this many games "
-                             "before its raw crush is trusted; thin-sample edges default to the "
-                             "mean (no spurious crush bonus). Default 20000 (tuned: keeps "
-                             "well-sampled gambits like the Danish/Smith-Morra while routing "
-                             "thin-sample lines onto sound mainlines).")
-    parser.add_argument("--crush-horizon", type=int, default=15,
-                        help="ABSOLUTE-mode only. Crush = fraction of games through an edge where "
-                             "OUR side wins decisively by this FULL-MOVE number, flat. Default 15. "
-                             "Summed from the crush_hist histogram buckets 1..horizon.")
-    parser.add_argument("--crush-mode", choices=["absolute", "relative-propagated"],
-                        default="absolute",
-                        help="absolute (default, back-compat): per-edge crush@--crush-horizon from "
-                             "the absolute crush_hist; used as a flat additive bonus, NOT propagated. "
-                             "relative-propagated: consume the RELATIVE crush_hist_rel (move_bucket = "
-                             "moves from THIS position to the decisive end) and propagate a "
-                             "crush_potential through the DAG (LineCrush/NodeCrush) so a move is "
-                             "rewarded for steering into crushing positions at any depth.")
-    parser.add_argument("--crush-gamma", type=float, default=0.8,
-                        help="relative-propagated only. Per-FULL-MOVE discount (earlier crush = "
-                             "better). Applied to relative buckets for the discounted edge crush and, "
-                             "as gamma**0.5 per ply, across propagation hops. Default 0.8.")
-    parser.add_argument("--crush-imm-window", type=int, default=2,
-                        help="relative-propagated only. Immediate-window W (full moves): the per-edge "
-                             "'we crush almost now' hazard = shrunk share of games decisive within W "
-                             "moves of the edge. Default 2.")
-    parser.add_argument("--crush-baseline", choices=["mean", "zero"], default="mean",
-                        help="What the per-edge crush shrinks toward. 'mean' (default, back-compat): "
-                             "the slice-mean crush — a thin edge defaults to AVERAGE crushiness, which "
-                             "can out-point a well-sampled below-average move (the 9.f4-over-9.Qg6+ "
-                             "artifact). 'zero': assume NO crush until proven by many games — thin "
-                             "edges contribute ~0 and value/sample decide. With 'zero' keep --crush-prior "
-                             "large or selection-biased thin lines slip through.")
     parser.add_argument("--memo-weight", type=float, default=0.0,
                         help="Penalty weight on propagated MEMORIZATION cost in selection. "
                              "Memo cost of a move = its shrunk deviation penalty (value lost "
@@ -2073,17 +2156,7 @@ def main():
                              "few lines to learn (the propagated, mass-weighted generalization of "
                              "forcingness). A bare leaf scores 0, so it can't be gamed by leaving "
                              "book early. 0.0 = disabled (default, back-compat); needs a sweep to "
-                             "tune (lives on a different scale than value/crush).")
-    parser.add_argument("--crush-penalty", type=float, default=0.0,
-                        help="COUNTER-CRUSH weight: subtract the propagated rate at which the "
-                             "OPPONENT reaches a winning position early through this move — the "
-                             "exact mirror of --crush-weight, built from the histogram's "
-                             "opposite-colour columns (computed and carried all along, never "
-                             "read until now). Without it the sharpness term is one-sided: a "
-                             "line that wins fast 30%% and LOSES fast 30%% scores the same crush "
-                             "bonus as one that wins fast 30%% and draws 70%%, so selection is "
-                             "paid to enter double-edged positions. 0.0 = disabled (default, "
-                             "exact back-compat). Needs a sweep — same scale as --crush-weight.")
+                             "tune (lives on a different scale than value).")
     parser.add_argument("--self-error-weight", type=float, default=0.0,
                         help="Penalty on OUR propagated expected eval loss down the line a move "
                              "enters — the symmetric counterpart to --error-weight, which "
@@ -2247,6 +2320,20 @@ def main():
     parser.add_argument("--learn-reach-pivot", type=float, default=0.02,
                         help="Reach fraction at/above which a node counts as fully COMMON "
                              "(δ = --learn-delta-main). Default 0.02 (2%% of games).")
+    parser.add_argument("--recall-midpoint", type=float, default=0.0,
+                        help="IMPERFECT RECALL. Per-game reach at which we remember a "
+                             "booked move half the time. 0 (default) disables the model "
+                             "entirely and is an exact no-op. Requires --plan-reach. "
+                             "Typical: 0.001 (a position seen once per 1000 games is a "
+                             "coin flip). UNCALIBRATED -- sweep it, do not trust one value.")
+    parser.add_argument("--recall-power", type=float, default=2.0,
+                        help="Steepness of the recall curve. Higher = sharper cutoff "
+                             "around --recall-midpoint. Default 2.0.")
+    parser.add_argument("--recall-default-reach", type=float, default=0.0,
+                        help="Reach assumed for nodes ABSENT from --plan-reach (beyond "
+                             "its --max-our-moves / --epsilon bounds). Default 0.0, i.e. "
+                             "no recall -- consistent with that export pruning at 1e-6, "
+                             "three decades below a 0.001 midpoint.")
     parser.add_argument("--learn-ctx-pivot", type=float, default=0.05,
                         help="Context share (fraction of all games under the opponent's "
                              "first move) at/above which a context's OWN habits fully "
@@ -2264,8 +2351,8 @@ def main():
                              "Default 6.")
     parser.add_argument("--force-root-move", default=None,
                         help="Commit OUR first move at the start position to this SAN "
-                             "(e.g. 'e4' or 'd4'), letting the rest of the tree (and crush) "
-                             "sharpen the continuations. Only meaningful for --perspective white. "
+                             "(e.g. 'e4' or 'd4'), letting the rest of the tree choose the "
+                             "continuations. Only meaningful for --perspective white. "
                              "Errors if the move isn't a known edge for a slice.")
     parser.add_argument("--event",       help="Filter to a single event")
     parser.add_argument("--elo-band",    type=int, help="Filter to a single elo band")
@@ -2292,6 +2379,7 @@ def main():
         aux_path = Path(args.aux_stats)
         if not aux_path.exists():
             sys.exit(f"--aux-stats not found: {aux_path}")
+        check_aux_term_flags(aux_path, args.aux_term_flags)
         aux_df = pl.read_parquet(aux_path)
         print(f"Aux stats:         {aux_path.name} ({aux_df.height:,} positions, "
               f"flags={'in' if args.aux_term_flags else 'out'}, "
@@ -2334,9 +2422,6 @@ def main():
     if args.robustness_floor < 1.0:
         print(f"Gate anchor:       {args.gate_anchor}"
               f"{'  (symmetric across colours)' if args.gate_anchor == 'even' else ''}")
-    if args.crush_penalty > 0:
-        print(f"Crush penalty:     {args.crush_penalty}  (counter-crush: opponent's "
-              f"propagated early-win rate)")
     if args.self_error_weight > 0:
         print(f"Self-error weight: {args.self_error_weight}  (our propagated expected "
               f"eval loss down the line)")
@@ -2349,16 +2434,13 @@ def main():
           f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
     if args.gate_rel_floor < 1.0 and args.gate_rel_baseline == "own-eval":
         print(f"Rel gate baseline: own-eval (margin {args.gate_rel_own_margin})")
-    print(f"Crush weight:      {args.crush_weight}"
-          f"{'  (crush DB: ' + str(args.crush_db) + ')' if args.crush_weight > 0 else ''}")
-    if args.crush_weight > 0:
-        print(f"Crush mode:        {args.crush_mode}"
-              + (f"  (γ={args.crush_gamma}, imm-window={args.crush_imm_window})"
-                 if args.crush_mode == "relative-propagated" else f"  (horizon={args.crush_horizon})"))
-        print(f"Crush prior:       {args.crush_prior}  (baseline={args.crush_baseline})")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
+    if args.recall_midpoint > 0 and not args.plan_reach:
+        sys.exit("FATAL: --recall-midpoint needs --plan-reach: the recall model is a "
+                 "function of per-node reach, which only the pass-1 plan export "
+                 "carries. Run plan_consistency_report.py --export-prefix first.")
     if args.plan_prior or args.plan_reach:
         if not (args.plan_prior and args.plan_reach):
             sys.exit("FATAL: --plan-prior and --plan-reach must be given together "
@@ -2390,58 +2472,11 @@ def main():
 
     # ── Load eval DB (position_hash -> expected white score) ──────────────
     eval_lookup: dict[int, float] = {}
-    full_eval_hashes = full_eval_es = None   # full DB as sorted arrays (engine augmentation)
+    full_eval_hashes = full_eval_es = None   # full DB, sorted (engine augmentation)
     if args.eval_db:
-        edb_path = Path(args.eval_db)
-        if not edb_path.exists():
-            print(f"WARNING: eval DB not found at {edb_path} — proceeding without evals.")
-        else:
-            edb_raw = pl.read_parquet(str(edb_path))
-            # Drop mate-class sentinels (|cp| >= eval_mate_cp, e.g. the +-10000 Lichess
-            # mate codes). These are corrupt for quiet opening positions (e.g. 1.e4 reads
-            # +10000) and would trivially pass the refutation gate / dominate the eval
-            # blend. Dropping them reverts those positions to empirical (real deep mates
-            # are ~winning empirically too). Full fix = rebuild eval_db with a correct
-            # mate->cp mapping (separate task).
-            n_raw = len(edb_raw)
-            edb_raw = edb_raw.filter(pl.col("eval_cp").abs() < args.eval_mate_cp)
-            n_drop = n_raw - len(edb_raw)
-            # Vectorized sigmoid (= cp_to_expected_score) + zip, far faster than
-            # iter_rows over ~300M entries.
-            edb_raw = edb_raw.with_columns(
-                (1.0 / (1.0 + (-LICHESS_CP_SCALE * pl.col("eval_cp")).exp())).alias("_es"))
-            # Engine augmentation needs the FULL (un-DAG-filtered) eval DB — its rescue
-            # moves reach positions OUTSIDE the input DAG, so the prefiltered eval_lookup
-            # can't see them. Snapshot the full mate-filtered DB as sorted numpy arrays
-            # (~4.8 GB: int64 hash + float32 es) BEFORE the DAG semi-join below prunes it.
-            if args.augment_engine:
-                fh = edb_raw["position_hash"].to_numpy()
-                fe = edb_raw["_es"].to_numpy().astype(np.float32)
-                order = np.argsort(fh)
-                full_eval_hashes = np.ascontiguousarray(fh[order])
-                full_eval_es = np.ascontiguousarray(fe[order])
-                print(f"Loaded {len(full_eval_hashes):,} evals as sorted arrays for engine "
-                      f"augmentation (full DB, "
-                      f"~{(full_eval_hashes.nbytes + full_eval_es.nbytes)/1e9:.1f} GB)")
-            # Keep only evals for positions that can appear in THIS run's DAG
-            # (parents ∪ children of the input edges). Dict-ifying the full ~388M-row
-            # DB costs ~40+ GB of python objects and starved run_backwards_induction
-            # into MemoryError once the input reached 23M edges (2019-2025 pool).
-            _h = pl.scan_parquet(str(input_path))
-            _need = pl.concat([
-                _h.select(pl.col("parent_hash").alias("position_hash")),
-                _h.select(pl.col("child_hash").alias("position_hash")).drop_nulls(),
-            ]).unique().collect()
-            n_prefilter = len(edb_raw)
-            edb_raw = edb_raw.join(_need, on="position_hash", how="semi")
-            eval_lookup = dict(zip(edb_raw["position_hash"].to_list(),
-                                   edb_raw["_es"].to_list()))
-            print(f"Loaded {len(eval_lookup):,} Stockfish evals from {edb_path} "
-                  f"(dropped {n_drop:,} mate-class |cp|>={args.eval_mate_cp}; "
-                  f"{n_prefilter - len(edb_raw):,} outside the input DAG)")
-            if args.eval_weight <= 0:
-                print("  (eval_weight=0 — evals will appear in output but not "
-                      "influence move selection)")
+        eval_lookup, full_eval_hashes, full_eval_es = load_evals(
+            args.eval_db, input_path, eval_mate_cp=args.eval_mate_cp,
+            augment=args.augment_engine, eval_weight=args.eval_weight)
 
     if args.augment_engine and full_eval_hashes is None:
         print("WARNING: --augment-engine set but no usable --eval-db — augmentation "
@@ -2466,80 +2501,7 @@ def main():
             "with the updated stage2_aggregate.py to populate it."
         )
 
-    # ── Crush overlay: LEFT JOIN the crush histogram so each edge carries crush
-    # sums. Missing keys → nulls → no crush effect. Only when --crush-weight>0.
-    if args.crush_weight > 0 and args.crush_db:
-        cdb_path = Path(args.crush_db)
-        if not cdb_path.exists():
-            print(f"WARNING: crush DB not found at {cdb_path} — proceeding without crush.")
-        elif "move_bucket" not in pl.scan_parquet(str(cdb_path)).collect_schema().names():
-            # Legacy pre-baked crush_stats (no histogram): absolute mode only.
-            crush_df = pl.read_parquet(str(cdb_path)).select(
-                ["event", "elo_band", "parent_hash", "move_san",
-                 "white_crush_sum", "black_crush_sum", "crush_games"])
-            stats = stats.join(crush_df, on=["event", "elo_band", "parent_hash", "move_san"],
-                               how="left")
-        else:
-            # The histogram can be ~1B rows (10+ GB parquet); an eager polars
-            # read_parquet + group_by segfaults (0xC0000005) at that scale on Windows.
-            # Reduce per-edge in DuckDB (streaming scan, bounded memory) and hand
-            # polars only the ~one-row-per-edge result.
-            import duckdb
-            keys = ["event", "elo_band", "parent_hash", "move_san"]
-            cdb_sql = str(cdb_path).replace("\\", "/")
-            con = duckdb.connect()
-            con.execute("SET preserve_insertion_order=false; SET memory_limit='16GB';")
-            if args.crush_mode == "relative-propagated":
-                # Relative histogram (move_bucket = full moves from THIS position to the
-                # decisive end). Per edge precompute, for both colours:
-                #   *_imm_sum  = decisive wins within W moves (the "crush almost now" hazard)
-                #   *_dfull_sum= Σ γ^bucket · decisive wins over all buckets (discounted tail)
-                # Stage 3 then shrinks these per edge and propagates crush_potential.
-                W = args.crush_imm_window
-                crush_df = pl.from_arrow(con.execute(f"""
-                    SELECT event, elo_band, parent_hash, move_san,
-                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(W)}
-                                    THEN white_wins ELSE 0 END) AS DOUBLE) AS white_imm_sum,
-                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(W)}
-                                    THEN black_wins ELSE 0 END) AS DOUBLE) AS black_imm_sum,
-                           SUM(CASE WHEN move_bucket >= 1 THEN white_wins
-                               * POW({args.crush_gamma}, move_bucket) ELSE 0 END) AS white_dfull_sum,
-                           SUM(CASE WHEN move_bucket >= 1 THEN black_wins
-                               * POW({args.crush_gamma}, move_bucket) ELSE 0 END) AS black_dfull_sum,
-                           CAST(SUM(n) AS BIGINT) AS crush_games
-                    FROM read_parquet('{cdb_sql}')
-                    GROUP BY event, elo_band, parent_hash, move_san
-                """).arrow())
-                print(f"Crush = RELATIVE-PROPAGATED (γ={args.crush_gamma}, imm-window="
-                      f"{W} moves) from {cdb_path}")
-            else:
-                # Absolute crush@horizon: flat count of OUR decisive wins by move H.
-                H = args.crush_horizon
-                crush_df = pl.from_arrow(con.execute(f"""
-                    SELECT event, elo_band, parent_hash, move_san,
-                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(H)}
-                                    THEN white_wins ELSE 0 END) AS DOUBLE) AS white_crush_sum,
-                           CAST(SUM(CASE WHEN move_bucket BETWEEN 1 AND {int(H)}
-                                    THEN black_wins ELSE 0 END) AS DOUBLE) AS black_crush_sum,
-                           CAST(SUM(n) AS BIGINT) AS crush_games
-                    FROM read_parquet('{cdb_sql}')
-                    GROUP BY event, elo_band, parent_hash, move_san
-                """).arrow())
-                print(f"Crush = absolute decisive-win rate by move {H} (flat) from {cdb_path}")
-            con.close()
-            stats = stats.join(crush_df, on=keys, how="left")
-            n_cov = stats.filter(pl.col("crush_games").is_not_null()).height
-            print(f"Joined crush data: {n_cov:,}/{len(stats):,} edges have crush data")
-    # Ensure every crush column the edge dict reads exists (None when absent), so
-    # to_dicts() yields them regardless of mode / whether crush is on.
-    for col, dt in [("white_crush_sum", pl.Float64), ("black_crush_sum", pl.Float64),
-                    ("white_imm_sum", pl.Float64), ("black_imm_sum", pl.Float64),
-                    ("white_dfull_sum", pl.Float64), ("black_dfull_sum", pl.Float64),
-                    ("crush_games", pl.Int64)]:
-        if col not in stats.columns:
-            stats = stats.with_columns(pl.lit(None, dtype=dt).alias(col))
-
-    _memlog("post crush-join / pre-slice")
+    _memlog("pre-slice")
     slices   = stats.select(["event", "elo_band"]).unique().sort(["event", "elo_band"])
     frames: list = []
     t_total  = time.time()
@@ -2551,7 +2513,7 @@ def main():
         _memlog(f"post edge-slice ({ev}/{eb}, {edges.height:,} edges)")
 
         t1 = time.time()
-        (values, best_moves, best_forcing, best_err, best_decis, best_crush, crushpot,
+        (values, best_moves, best_forcing, best_err, best_decis,
          memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior,
          bestaug) = run_backwards_induction(
             edges, args.perspective,
@@ -2574,13 +2536,6 @@ def main():
             gate_rel_baseline=args.gate_rel_baseline,
             gate_rel_own_margin=args.gate_rel_own_margin,
             robust_eval_weight=args.robust_eval_weight,
-            crush_weight=args.crush_weight,
-            crush_penalty=args.crush_penalty,
-            crush_prior=args.crush_prior,
-            crush_mode=args.crush_mode,
-            crush_gamma=args.crush_gamma,
-            crush_imm_window=args.crush_imm_window,
-            crush_baseline=args.crush_baseline,
             force_root_move=args.force_root_move,
             require_eval=args.require_eval,
             memo_weight=args.memo_weight,
@@ -2612,6 +2567,9 @@ def main():
             learn_reach_pivot=args.learn_reach_pivot,
             learn_ctx_pivot=args.learn_ctx_pivot,
             learn_depth_horizon=args.learn_depth_horizon,
+            recall_midpoint=args.recall_midpoint,
+            recall_power=args.recall_power,
+            recall_default_reach=args.recall_default_reach,
         )
         elapsed = time.time() - t1
 
@@ -2625,10 +2583,12 @@ def main():
             sample = next((pos_epd[ph] for ph, v in bestaug.items() if v), None)
             print(f"    engine-augmented recommendations: {n_aug:,}"
                   + (f"  (e.g. {sample})" if sample else ""))
+            print(f"    augmentation lookups so far: {AUG_STATS['calls']:,} calls, "
+                  f"{AUG_STATS['keys']:,} keys, {AUG_STATS['secs']:.1f}s")
 
         frames.append(_slice_frame(
             ev, eb, values, best_moves, best_forcing, best_err, best_decis,
-            best_crush, crushpot, memopot, covereff, worstvals, vals_robust,
+            memopot, covereff, worstvals, vals_robust,
             pos_epd, pos_side, bestaug, eval_lookup))
 
     _memlog(f"pre-output-build ({len(frames)} slice frame(s))")

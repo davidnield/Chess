@@ -16,14 +16,16 @@ here last days, and a compaction that drops them turns a status check into a re-
 Chess opening repertoire builder. Ingests Lichess monthly PGN dumps, extracts position-move edges
 from millions of games, aggregates them into per-position move statistics, then runs backwards
 induction on the position DAG to produce an empirical "best move at each position" repertoire.
-The current product is a memorization-efficient "sharp" repertoire for ≥1800 Blitz/Rapid/Classical
-pooled data: reach a winning position as early as possible without being outright losing against
-best play, with a Stockfish eval overlay gating out empirically-good-but-losing trap lines.
+The current product is a "sharp" repertoire for ≥1800 Blitz/Rapid/Classical pooled data: the best
+expected score, blending the empirical results with the Stockfish eval, without being outright
+losing against best play. A Stockfish eval overlay gates out empirically-good-but-losing trap
+lines. (Crush, a bonus for reaching a winning position early, was removed on 2026-10-02:
+its histograms, the extract's winpos fusion, Stage 3's crush terms and output columns.)
 
 Deeper detail lives in two skills, loaded on demand rather than every session:
 
 - **`chess-pipeline`** — stage-by-stage map, Stage 3's engine and its five selection ingredients,
-  the crush/winpos metric definition, the legacy sliced path.
+  the eval source, the legacy sliced path.
 - **`parquet-recipe`** — recipe v3 compression standards and the lossy movetext invariant.
 
 ## Repo layout
@@ -48,11 +50,11 @@ them after changing the Python side of the contract, never hand-edit them.
 |------|------|
 | `D:/data/chess/standard-chess-games-compressed/year=Y/month=M/event=E/` | **Canonical source.** Hive-partitioned parquets (2013–present). Every extraction starts here. |
 | `F:/chess/standard-chess-games/data/` | Pre-compression archive only — **never a pipeline input.** F: is a USB spinning disk; never point DuckDB spill/temp at it either. Also the **only** copy retaining `[%clk]`/`[%eval]` movetext comments (recipe v3 strips them from `D:` at ingest). |
-| `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts), `position_stats_aux_*.parquet` (the per-position sidecar of unseen mass), `crush_hist_*.parquet` (histograms). `_pooled_partials_*/` are resumable working dirs; their `_monthly/` subdir is the **only** artifact carrying a year, so year-scoped pools depend on it surviving. |
-| `E:/chess/eval_arrays/` | `unified_eval_db.parquet` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16) so extract workers mmap ONE shared resident copy instead of N private 4.8 GB loads. **Derived** — `eval_arrays.meta.json` fingerprints the source and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]`. |
+| `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts), `position_stats_aux_*.parquet` (the per-position sidecar of unseen mass). The crush histograms (`crush_hist_*`, and the `_monthly/*.winpos*` partials) were deleted 2026-10-02 when crush left the recipe. `_pooled_partials_*/` are resumable working dirs; their `_monthly/` subdir is the **only** artifact carrying a year, so year-scoped pools depend on it surviving. |
+| `D:/chess/eval_arrays_full/` | **The eval source every consumer reads** (Stage 3 via `build_sharp_reps.py`, the extract's `child_eval`, the budget/baseline books, annotations): `D:/chess/eval_full` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16; 6.0B entries, ~60 GB), plus the book's checkmates at ±2000, minus the hashes a hash-only lookup must not answer (`excluded.parquet`). Consumers mmap ONE shared resident copy. **Derived** — `eval_arrays.meta.json` fingerprints the DB and its book and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]` (~2 h). |
 | `E:/chess/repertoire/` | Stage-3 outputs, with `.meta.json` provenance sidecars recording the exact inputs/flags that built each one. |
-| `E:/chess/unified_eval_db.parquet` | **Canonical eval DB.** `lichess_eval_db.parquet` (cloud-eval Stockfish, whose raw dump has been deleted — rebuilding needs a re-download from database.lichess.org) unioned with the aggregated fishnet-evals dump. Default `--eval-db` for Stage 3 and `build_sharp_reps.py`. |
-| `D:/chess/eval_full/` | The eval DB of the banded explorer book (`explorer-extract evals`, blog repo `docs/eval-db-spec.md`): one eval per book parent (hash, EPD) and child-only hash, cloud first, else the fishnet newest-tier lower median. `bkt<iii>.parquet` by `bucket_of(position_hash)`; its `README.md` is the read contract; `_DONE` last. Checked by `python/verify_evals.py`. Too big to load (15x `unified_eval_db`): consumers read it through its arrays, `D:/chess/eval_arrays_full/` (`python/eval_arrays.py`, which also adds the book's checkmates and overrides the DB's few bogus values on checkmated positions). Keep it: the arrays verify against it. |
+| `D:/chess/eval_full/` | **Canonical eval DB**, of the banded explorer book (`explorer-extract evals`, branch `eval-db`; blog repo `docs/eval-db-spec.md`): one eval per book parent (hash, EPD) and child-only hash, Lichess cloud first, else the fishnet newest-tier lower median. 5.9B rows in `bkt<iii>.parquet`; its `README.md` is the read contract; `_DONE` last. Too big to load — read it through its arrays. Keep it: the arrays verify against it. Checked by `python/verify_evals.py`. Its few bogus values on checkmated positions are overridden in the arrays. |
+| `E:/chess/_archive/eval_db_2026-07/` | **Archive** (2026-10-02) of the retired eval DB: `unified_eval_db.parquet` (the old 400M-row cloud+fishnet union), `lichess_eval_db.parquet`, `fishnet_eval_agg.parquet`, their arrays `eval_arrays/` and the fishnet aggregation work dir (builders in `scratch/python/`). Not a pipeline input. Until a pool rebuild, the pool's aux `other_eval` still comes from it (mixed provenance). |
 
 **IMPORTANT: never reference `D:/data/chess/standard-chess-games/`** (without `-compressed`). It is
 a deleted path, and pipelines that pointed at it silently produced incomplete output rather than
@@ -69,6 +71,11 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year Y1 --end-year Y2 --phase extract
 .venv\Scripts\python.exe python\build_pooled_stats.py --start-year Y1 --end-year Y2 --phase merge --tmp-dir D:\chess_duckdb_tmp
 
+# Pool + aux sidecar from the explorer book instead (slices, cap and floor are flags; gates in
+# pool_from_book_gates.py). Its aux pools termination reasons: term_flag_* is 0, the meta says
+# term_reasons='pooled', and Stage 3 / budget_core refuse to exclude flags on it.
+.venv\Scripts\python.exe python\pool_from_book.py --events ... --elo-bands ... --max-ply C --min-games N --tag T --work H:\chess\pool_work\T
+
 # Sharp repertoires from pooled stats
 .venv\Scripts\python.exe python\build_sharp_reps.py
 
@@ -83,7 +90,7 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 There is no lint config, and no build step except the Rust extract below. Every
 `python/_test_*.py` is a standalone pass/fail script (exit 0/1); `run_tests.py` subprocess-runs all
 of them with a summary. Convention: synthetic tests import the production query/logic rather than
-copying it (`_test_winpos.py` is the template).
+copying it (`_test_stage3_cycles.py` is the template).
 
 ### The explorer book's three producers
 
@@ -158,8 +165,8 @@ Rules that make the ladder load-bearing:
   the aux buckets, the selection key), the columns the extract emits, or anything that changes a
   stored column's meaning. A wrong `child_hash` corrupts every downstream join and nothing fails.
 - **A new flag defaults to off and must be an exact no-op** — rebuild both repertoires without it
-  and diff against canonical at tolerance 0. Known exemption: `crush_rate` / `crush_potential`
-  wobble ~2e-16 from a DuckDB parallel float SUM.
+  and diff against canonical at tolerance 0. (The old exemption, `crush_rate` /
+  `crush_potential` wobbling ~2e-16 from a DuckDB parallel float SUM, went with crush.)
 - **Measure across scales, never at a single slice.** One-slice tier-2 numbers have flipped a
   verdict here twice: the winpos fusion's marginal cost read +19%, then +34.6%, then +13.1%
   depending on which slice was measured. Report the trend, not the fastest run.
