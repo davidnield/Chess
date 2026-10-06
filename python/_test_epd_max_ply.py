@@ -22,12 +22,14 @@ Run: .venv/Scripts/python.exe python/_test_epd_max_ply.py
 """
 from __future__ import annotations
 
+import inspect
 import importlib.util
 import json
 import shutil
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 import chess
@@ -131,7 +133,9 @@ def write_source(path: Path, games: list[tuple]) -> Path:
 def load_base(d: Path):
     """d79a0c7's build_pooled_stats as a separate module, or None without git.
     Its sibling imports (stage1_extract_positions, zobrist, ...) resolve to this
-    checkout's, which B1 does not touch."""
+    checkout's, which B1 does not touch -- except winpos_fused, which the crush
+    removal deleted. The base imports it but never calls it here (no winpos_out),
+    so a stub stands in."""
     try:
         src = subprocess.run(
             ["git", "-C", str(REPO), "show", f"{BASE_COMMIT}:python/build_pooled_stats.py"],
@@ -143,7 +147,14 @@ def load_base(d: Path):
     f.write_bytes(src)
     spec = importlib.util.spec_from_file_location("bps_base_d79a0c7", f)
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    stubbed = "winpos_fused" not in sys.modules
+    if stubbed:
+        sys.modules["winpos_fused"] = types.SimpleNamespace(winpos_batch=None)
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        if stubbed:
+            sys.modules.pop("winpos_fused", None)
     return mod
 
 
@@ -168,7 +179,10 @@ def truth_epds(src: Path, limit: int | None) -> dict[int, str]:
 
 def run(mod, src: Path, out: Path, tag: str, limit: int | None, **kw) -> tuple:
     ps, tm = out / f"{tag}.ps.parquet", out / f"{tag}.term.parquet"
-    r = mod.extract_file(src, ps, None, limit_games=limit, term_out=tm,
+    # d79a0c7 predates the crush removal: its extract_file takes crush_out third.
+    pre = ((None,) if "crush_out" in inspect.signature(mod.extract_file).parameters
+           else ())
+    r = mod.extract_file(src, ps, *pre, limit_games=limit, term_out=tm,
                          event="Blitz", **EXPLORER, **kw)
     return pl.read_parquet(ps).sort(KEY), pl.read_parquet(tm).sort(TERM_KEY), r
 

@@ -513,7 +513,7 @@ def gen_mini(out: Path) -> None:
         res = {}
         for epd in (16, 30):
             ps, tm = d / f"e{epd}.ps.parquet", d / f"e{epd}.term.parquet"
-            r = bps.extract_file(src, ps, None, min_elo=0, max_ply=30, tiers=None,
+            r = bps.extract_file(src, ps, min_elo=0, max_ply=30, tiers=None,
                                  term_out=tm, with_child_eval=False, exclude_bots=True,
                                  excluded_terminations=frozenset({"Rules infraction",
                                                                    "Abandoned"}),
