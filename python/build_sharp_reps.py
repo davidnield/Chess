@@ -7,7 +7,10 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                            0.5 Pareto-dominated 1.0/0.75/0.25 and a dynamic n-weighted
                            variant on empirical pick quality, eval steering, AND ply-16
                            coverage simultaneously, both colors. The line still truncates
-                           where the eval DB's coverage ends)
+                           where the eval DB's coverage ends. OPEN (2026-10-08): a
+                           2026-08-31 holdout on the fixed pool put 1.0 ahead of 0.5 on
+                           faithful% and survival in both colours; --eval-weight exists to
+                           settle it out of sample)
   - refutation gate:       --robustness-floor 0.1 --gate-metric eval   (gate on the engine
                            eval of the reached position)
   - relative gate:         --gate-rel-floor 0.1 --gate-rel-baseline own-eval
@@ -28,7 +31,9 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                            winpos crush potential (an early-win bonus). The owner retired
                            the idea; the histograms and Stage 3's crush code are gone.
   - no memorization cost:  --memo-weight 0
-  - reply-mass shrinkage:  --reply-shrink 1.0   (adopted 2026-08-03. An opponent node's
+  - reply-mass shrinkage:  --reply-shrink 1.0 ONLY WITHOUT the aux sidecar (--no-aux).
+                           The canonical recipe supplies the sidecar, which forces it to 0
+                           (see common_flags). (Adopted 2026-08-03. An opponent node's
                            value is the mean over the replies that CLEAR the pool's
                            min_games, renormalised to 100% — so when the alternatives
                            fragment below the threshold the survivors get modelled as
@@ -72,7 +77,11 @@ position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, and the eval arrays D:/c
 book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-stats
 (--no-aux for the pre-sidecar recipe) / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
-inputs and the learnability settings.
+inputs, the full Stage-3 flag list, a hash of the recipe, the git commit and the
+learnability settings; the skip gate refuses a rep whose recipe differs.
+
+Opt-in flags (default off, each an exact no-op when off) for A/B builds that must go
+to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend.
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -80,6 +89,7 @@ Usage:
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -121,7 +131,13 @@ LEARN = {"delta_main": 0.005, "delta_rare": 0.04, "reach_pivot": 0.02,
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
 
-def common_flags(stats: Path, eval_db: Path, aux: Path | None = None) -> list[str]:
+RECIPE_DEFAULTS = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False}
+
+
+def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
+                 eval_weight: float = RECIPE_DEFAULTS["eval_weight"],
+                 gate_fallback: str = RECIPE_DEFAULTS["gate_fallback"],
+                 other_cov_blend: bool = RECIPE_DEFAULTS["other_cov_blend"]) -> list[str]:
     """The locked sharp recipe (eval blend + relative gate; no crush since 2026-10-02),
     parameterized by input paths.
 
@@ -134,7 +150,7 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None) -> list[st
     return [
         "--input", str(stats),
         *(["--aux-stats", str(aux)] if aux else []),
-        "--eval-db", str(eval_db), "--eval-weight", "0.5",
+        "--eval-db", str(eval_db), "--eval-weight", f"{eval_weight:g}",
         "--require-eval",
         "--robustness-floor", "0.1", "--gate-metric", "eval",
         "--gate-rel-floor", "0.1",
@@ -142,7 +158,38 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None) -> list[st
         "--min-move-games", "0",
         "--memo-weight", "0",
         "--reply-shrink", str(reply),
+        # opt-in fixes: appended only when on, so the default argv is byte-identical
+        *(["--gate-fallback", gate_fallback] if gate_fallback != "legacy" else []),
+        *(["--other-cov-blend"] if other_cov_blend else []),
     ]
+
+
+_PATH_FLAGS = {"--input", "--aux-stats", "--eval-db", "--output",
+               "--plan-prior", "--plan-reach"}
+
+
+def recipe_hash(flags: list[str]) -> str:
+    """Hash of the recipe with input/output PATHS removed: two builds share a hash
+    iff they ran Stage 3 with the same settings. Paths are compared separately
+    (the input-drift check in build_color)."""
+    out, skip = [], False
+    for f in flags:
+        if skip:
+            skip = False
+            continue
+        if f in _PATH_FLAGS:
+            skip = True
+            continue
+        out.append(f)
+    return hashlib.sha256("\x1f".join(out).encode()).hexdigest()[:16]
+
+
+def git_commit() -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                              check=True, cwd=PROJECT).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def learn_flags(prior: Path, reach: Path) -> list[str]:
@@ -178,19 +225,24 @@ def meta_path(out: Path) -> Path:
 
 
 def write_meta(out: Path, stats: Path, eval_db: Path, tag: str,
-               aux: Path | None = None) -> None:
+               aux: Path | None = None, recipe: dict | None = None,
+               flags: list[str] | None = None) -> None:
     """Record how the rep was built: the inputs and the recipe settings the explorer and
     trainer read back. `eval_source` fingerprints the
     eval DB (a parquet's size/mtime/rows, or an eval-arrays directory's meta and verify
     status) -- a path alone cannot tell two builds of the eval DB apart."""
     from eval_arrays import describe_eval_source
     prior, reach = plan_paths(tag)
-    meta = {"eval_weight": 0.5, "gate_rel_baseline": "own-eval",
+    recipe = {**RECIPE_DEFAULTS, **(recipe or {})}
+    meta = {**recipe, "gate_rel_baseline": "own-eval",
             "reply_shrink": 0.0 if aux else REPLY_SHRINK,
             "aux_stats": str(aux) if aux else None,
             "input": str(stats), "eval_db": str(eval_db),
             "eval_source": describe_eval_source(eval_db),
             "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
+            "stage3_flags": flags,
+            "recipe_hash": recipe_hash(flags) if flags else None,
+            "git_commit": git_commit(),
             "built": time.strftime("%Y-%m-%d %H:%M:%S")}
     meta_path(out).write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -209,7 +261,8 @@ def run(name: str, cmd: list[str]) -> bool:
 
 def build_color(tag: str, extra: list[str], flags: list[str],
                 stats: Path, eval_db: Path, force: bool,
-                aux: Path | None = None, pass1_only: bool = False) -> bool:
+                aux: Path | None = None, pass1_only: bool = False,
+                recipe: dict | None = None) -> bool:
     """Pass-1 -> measure -> pass-2 chain for one color. Returns True on success.
     `rerun` cascades: once any step actually executes, every later step reruns too
     (its inputs just changed), regardless of its own output existing."""
@@ -229,6 +282,10 @@ def build_color(tag: str, extra: list[str], flags: list[str],
         now = {"input": stats, "crush_db": None, "eval_db": eval_db, "aux_stats": aux}
         drift = [k for k, v in now.items()
                  if (old.get(k) or None) != (str(v) if v is not None else None)]
+        # Recipe drift: a meta written before these keys existed is a default build.
+        want = {**RECIPE_DEFAULTS, **(recipe or {})}
+        drift += [k for k, v in want.items()
+                  if old.get(k, RECIPE_DEFAULTS[k]) != v]
         if drift:
             print(f"  REFUSING {tag}: {out.name} was built from different inputs "
                   f"({', '.join(f'{k}: {old.get(k)}' for k in drift)}). "
@@ -264,11 +321,13 @@ def build_color(tag: str, extra: list[str], flags: list[str],
                    [PY, stage3, "--output", str(out)]
                    + flags + extra + learn_flags(prior, reach)):
             return False
-        write_meta(out, stats, eval_db, tag, aux)
+        write_meta(out, stats, eval_db, tag, aux, recipe,
+                   flags + extra + learn_flags(prior, reach))
     else:
         print(f"  Skipping {tag} pass-2 (exists: {out.name}). Use --force to rebuild.")
         if not meta_path(out).exists():
-            write_meta(out, stats, eval_db, tag, aux)
+            write_meta(out, stats, eval_db, tag, aux, recipe,
+                       flags + extra + learn_flags(prior, reach))
     return True
 
 
@@ -300,6 +359,17 @@ def main() -> None:
     ap.add_argument("--no-aux", action="store_true",
                     help="Build without the aux sidecar: the pre-sidecar recipe, "
                          "with --reply-shrink restored.")
+    ap.add_argument("--eval-weight", type=float, default=RECIPE_DEFAULTS["eval_weight"],
+                    help="Leaf eval/empirical blend weight (default 0.5, the locked "
+                         "recipe). For out-of-sample A/B arms; recorded in the meta.")
+    ap.add_argument("--gate-fallback", choices=["legacy", "strict"],
+                    default=RECIPE_DEFAULTS["gate_fallback"],
+                    help="Stage 3 --gate-fallback (default legacy). strict never books a "
+                         "move that failed the absolute gate when a passing one exists, "
+                         "and books the least-losing move by engine eval otherwise.")
+    ap.add_argument("--other-cov-blend", action="store_true",
+                    help="Stage 3 --other-cov-blend: blend the other-moves bucket's eval "
+                         "only over its eval-covered share.")
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
     if out_dir.resolve() != REP_DIR.resolve():
@@ -319,14 +389,22 @@ def main() -> None:
     aux = None if args.no_aux or not args.aux_stats else Path(args.aux_stats)
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
-    flags = common_flags(stats, eval_db, aux)
+    recipe = {"eval_weight": args.eval_weight, "gate_fallback": args.gate_fallback,
+              "other_cov_blend": bool(args.other_cov_blend)}
+    flags = common_flags(stats, eval_db, aux, **recipe)
+    off = {k: v for k, v in recipe.items() if v != RECIPE_DEFAULTS[k]}
+    if off:
+        print(f"Recipe overrides: {off}")
+        if out_dir.resolve() == Path("E:/chess/repertoire").resolve():
+            sys.exit("FATAL: recipe overrides must not write the canonical pair; "
+                     "pass --out-dir.")
     if aux:
         print(f"Aux stats: {aux.name}  (reply-shrink forced to 0 — see common_flags)")
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
         if not build_color(tag, extra, flags, stats, eval_db, args.force, aux,
-                           pass1_only=args.pass1_only):
+                           pass1_only=args.pass1_only, recipe=recipe):
             failures.append(tag)
     print(f"\nDone in {(time.time()-t_all)/60:.1f} min.")
     if failures:
