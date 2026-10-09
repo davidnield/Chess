@@ -915,6 +915,7 @@ def run_backwards_induction(
     learn_reach:      dict[int, float] | None = None,
     learn_ctx_share:  dict[str, float] | None = None,
     learn_depth:      dict[int, int] | None = None,
+    select_margin:    float = 0.0,
     learn_delta_main: float = 0.005,
     learn_delta_rare: float = 0.04,
     learn_reach_pivot: float = 0.02,
@@ -1225,6 +1226,16 @@ def run_backwards_induction(
     rel_own_nodes: set[int] = set()     # nodes where the OWN-EVAL raise was part of the cut
     _learn = learn_prior is not None and learn_delta_rare > 0.0
     learn_override_nodes: set[int] = set()  # nodes where the plan-prior tiebreak changed the pick
+    # --select-margin (2026-10-09). Every change to the value model so far -- the
+    # chess.com pool, --other-cov-blend -- flipped decisions whose value gap was
+    # ~0.001 (1.e4 e5 2.Nf3 Nc6: Bc4 -> d4 in 20% of games at a gap of 0.0002),
+    # i.e. sampling noise decides them. With a margin, every candidate whose key is
+    # within select_margin of the best is treated as a tie, and the tie goes to the
+    # MOST-PLAYED move (then the key, then SAN): the move with the most data under
+    # it, so the choice that is least likely to move when the data does. 0 = off.
+    if select_margin < 0:
+        raise ValueError(f"select_margin must be >= 0, got {select_margin}")
+    margin_override_nodes: set[int] = set()
     # --gate-fallback. Counted in BOTH modes so a legacy build reports how many nodes
     # the strict chain would change (see select_our):
     #   fallback_abs_nodes — the relative gate (and the engine rescue) emptied a set
@@ -1554,6 +1565,14 @@ def run_backwards_induction(
                            - memo_weight * (shrunk_dev(mv["val"], nat_val, n_p)
                                             + memo_pot.get(mv["child"], memo_leave)))
         best = max(cands, key=keyf)
+        if select_margin > 0.0 and len(cands) > 1:
+            bk0 = keyf(best)
+            band = [mv for mv in cands if keyf(mv) >= bk0 - select_margin]
+            if len(band) > 1:
+                pick = max(band, key=lambda mv: (mv["total"], keyf(mv), mv["san"]))
+                if pick is not best:
+                    margin_override_nodes.add(ph)
+                    best = pick
         if _learn and len(cands) > 1:
             # LEARNABILITY tiebreak: among candidates within δ of the best selection
             # key (near-optimal by our own objective — gates already applied, so all
@@ -1987,6 +2006,9 @@ def run_backwards_induction(
               + ("" if _strict_fallback else
                  " (legacy: both pick among ALL recorded moves by blended value)"),
               flush=True)
+    if select_margin > 0.0:
+        print(f"  select margin {select_margin}: most-played move chosen over the key's "
+              f"best at {len(margin_override_nodes):,} nodes", flush=True)
     if _learn:
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
@@ -2377,6 +2399,12 @@ def main():
                         help="Companion reach parquet (position_hash, ctx, reach) from the "
                              "same --export-prefix run: per-node dominant context + fraction "
                              "of games reaching the node. Drives the δ scaling below.")
+    parser.add_argument("--select-margin", type=float, default=0.0,
+                        help="Treat our-turn candidates within this many expected-score "
+                             "units of the best selection key as tied, and play the "
+                             "most-played of them (then key, then SAN). Default 0 = off. "
+                             "For stability: near-ties are otherwise decided by sampling "
+                             "noise (see run_backwards_induction).")
     parser.add_argument("--learn-delta-main", type=float, default=0.005,
                         help="δ window (selection-key units ≈ expected score) at COMMON "
                              "nodes (reach >= --learn-reach-pivot): main lines stay sharp. "
@@ -2506,6 +2534,8 @@ def main():
         print(f"Rel gate baseline: own-eval (margin {args.gate_rel_own_margin})")
     if args.gate_fallback != "legacy":
         print(f"Gate fallback:     {args.gate_fallback}")
+    if args.select_margin > 0:
+        print(f"Select margin:     {args.select_margin}  (near-ties go to the most-played move)")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
@@ -2636,6 +2666,7 @@ def main():
             learn_reach=learn_reach,
             learn_ctx_share=learn_ctx_share,
             learn_depth=learn_depth,
+            select_margin=args.select_margin,
             learn_delta_main=args.learn_delta_main,
             learn_delta_rare=args.learn_delta_rare,
             learn_reach_pivot=args.learn_reach_pivot,

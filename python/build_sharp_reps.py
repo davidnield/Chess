@@ -81,7 +81,8 @@ inputs, the full Stage-3 flag list, a hash of the recipe, the git commit and the
 learnability settings; the skip gate refuses a rep whose recipe differs.
 
 Opt-in flags (default off, each an exact no-op when off) for A/B builds that must go
-to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend.
+to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend,
+--select-margin.
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -131,13 +132,15 @@ LEARN = {"delta_main": 0.005, "delta_rare": 0.04, "reach_pivot": 0.02,
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
 
-RECIPE_DEFAULTS = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False}
+RECIPE_DEFAULTS = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
+                   "select_margin": 0.0}
 
 
 def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
                  eval_weight: float = RECIPE_DEFAULTS["eval_weight"],
                  gate_fallback: str = RECIPE_DEFAULTS["gate_fallback"],
-                 other_cov_blend: bool = RECIPE_DEFAULTS["other_cov_blend"]) -> list[str]:
+                 other_cov_blend: bool = RECIPE_DEFAULTS["other_cov_blend"],
+                 select_margin: float = RECIPE_DEFAULTS["select_margin"]) -> list[str]:
     """The locked sharp recipe (eval blend + relative gate; no crush since 2026-10-02),
     parameterized by input paths.
 
@@ -161,6 +164,7 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
         # opt-in fixes: appended only when on, so the default argv is byte-identical
         *(["--gate-fallback", gate_fallback] if gate_fallback != "legacy" else []),
         *(["--other-cov-blend"] if other_cov_blend else []),
+        *(["--select-margin", f"{select_margin:g}"] if select_margin > 0 else []),
     ]
 
 
@@ -370,6 +374,9 @@ def main() -> None:
     ap.add_argument("--other-cov-blend", action="store_true",
                     help="Stage 3 --other-cov-blend: blend the other-moves bucket's eval "
                          "only over its eval-covered share.")
+    ap.add_argument("--select-margin", type=float, default=RECIPE_DEFAULTS["select_margin"],
+                    help="Stage 3 --select-margin: near-ties within this many expected-"
+                         "score units go to the most-played move (default 0 = off).")
     args = ap.parse_args()
     out_dir = Path(args.out_dir)
     if out_dir.resolve() != REP_DIR.resolve():
@@ -390,7 +397,8 @@ def main() -> None:
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
     recipe = {"eval_weight": args.eval_weight, "gate_fallback": args.gate_fallback,
-              "other_cov_blend": bool(args.other_cov_blend)}
+              "other_cov_blend": bool(args.other_cov_blend),
+              "select_margin": args.select_margin}
     flags = common_flags(stats, eval_db, aux, **recipe)
     off = {k: v for k, v in recipe.items() if v != RECIPE_DEFAULTS[k]}
     if off:
