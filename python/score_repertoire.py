@@ -41,7 +41,15 @@ Usage:
     .venv/Scripts/python.exe python/score_repertoire.py \\
         --repertoire E:/chess/repertoire/repertoire_pooled_white_sharp.parquet \\
         --perspective white \\
-        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2025_brc.parquet
+        --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2026_brc.parquet \\
+        --aux-stats E:/chess/position-stats/position_stats_aux_pooled_ge1800_2013_2026_brc.parquet
+
+    --aux-stats makes Coverage honest: without it an opponent node's reply mass is only
+    the replies that cleared the pool's min_games, so when the alternatives fragment
+    below the floor the survivors read as 100% of play and the book looks fully
+    covered. With it, the below-floor ("other") and ply-cap ("horizon") mass count as
+    leaving prep. Terminations are left out of the denominator: those games ENDED at
+    the node, they did not leave our preparation.
 
     # Capture to a file and tag the machine-readable SUMMARY line:
     .venv/Scripts/python.exe python/score_repertoire.py ... --label A_cw0 --output card.txt
@@ -78,6 +86,7 @@ def score_slice(
     stats_slice: pl.DataFrame | None,
     perspective: str,
     max_ply: int,
+    aux_extra: dict[int, int] | None = None,
 ) -> dict:
     """Score one (event, elo_band) slice.
 
@@ -166,6 +175,10 @@ def score_slice(
                 opp_dec += w
                 moves = opp_idx.get(ph, [])
                 tot   = sum(t for _, t, _ in moves)
+                if aux_extra:
+                    # games that continued with a below-floor reply (or past the
+                    # extract's ply cap): never prepared, so they leave the book here
+                    tot += aux_extra.get(ph, 0)
                 if tot == 0:
                     exit_depth_w += w * depth
                     continue
@@ -279,6 +292,10 @@ def main() -> None:
     ap.add_argument("--stats", default=None,
                     help="Matching Stage 2 stats parquet (needs child_hash). When omitted, "
                          "only the headline rollups + raw size are reported.")
+    ap.add_argument("--aux-stats", default=None,
+                    help="The pool's position_stats_aux_*.parquet sidecar. Counts the "
+                         "below-floor and ply-cap reply mass as leaving prep, so Coverage "
+                         "is not overstated at thin nodes (see the module docstring).")
     ap.add_argument("--max-ply", type=int, default=30,
                     help="Forward-walk horizon in plies (default: 30 = whole tree).")
     ap.add_argument("--label", default=None,
@@ -304,6 +321,22 @@ def main() -> None:
             sys.exit("ERROR: stats parquet missing child_hash column "
                      "(re-run Stage 2 / build_pooled_stats.py).")
 
+    aux_extra = None
+    if args.aux_stats:
+        if stats is None:
+            sys.exit("ERROR: --aux-stats needs --stats (it only affects the coverage walk).")
+        # only the positions the book can reach matter; semi-join keeps memory small
+        aux = (pl.scan_parquet(args.aux_stats)
+               .join(rep.lazy().select("position_hash"), on="position_hash", how="semi")
+               .select("position_hash",
+                       (pl.col("other_total").fill_null(0)
+                        + pl.col("horizon_total").fill_null(0)).alias("extra"))
+               .filter(pl.col("extra") > 0)
+               .collect())
+        aux_extra = dict(zip(aux["position_hash"].to_list(), aux["extra"].to_list()))
+        print(f"Aux stats:     {args.aux_stats} ({len(aux_extra):,} positions with "
+              f"below-floor / horizon reply mass)\n")
+
     slices = rep.select(["event", "elo_band"]).unique().sort(["event", "elo_band"])
 
     cards: list[str] = []
@@ -313,7 +346,8 @@ def main() -> None:
         rep_slice = rep.filter((pl.col("event") == ev) & (pl.col("elo_band") == eb))
         stats_slice = (stats.filter((pl.col("event") == ev) & (pl.col("elo_band") == eb))
                        if stats is not None else None)
-        r = score_slice(rep_slice, stats_slice, args.perspective, args.max_ply)
+        r = score_slice(rep_slice, stats_slice, args.perspective, args.max_ply,
+                        aux_extra=aux_extra)
         if r["decisions"] == 0 and r["positions"] > 0:
             print(f"  WARNING: 0 decisions for {ev}/elo{eb} -- wrong --perspective?",
                   file=sys.stderr)
