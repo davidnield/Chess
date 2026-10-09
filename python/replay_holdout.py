@@ -148,6 +148,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import sys
 import time
 from collections import Counter, defaultdict
@@ -203,6 +205,61 @@ CALIB_NOTE = {
 # Used only to print an SE next to each mean, because the first run of this
 # reported a +0.0065 difference whose standard error was 0.0081.
 SCORE_SD = 0.49
+
+
+# ── in-sample guard (2026-10-08) ─────────────────────────────────────────────
+# A holdout is only evidence if the replayed games were NOT in the pool the book
+# was built from. Nothing checked that before: the defaults (2025) replayed games
+# inside the canonical 2013-2026 pool. Provenance chain, followed per book:
+#   <book>.meta.json  "input" | "stats" (a pool)  or  "source_rep" (budget books)
+#   <pool>.meta.json  population.months = ["YYYY_M", "YYYY_M"]   (first, last)
+# A pool with no meta falls back to its filename's _YYYY_YYYY_ tag, read as whole
+# years -- conservative, it can only refuse more.
+_POOL_YEARS_RE = re.compile(r"_((?:19|20)\d\d)_((?:19|20)\d\d)_")
+
+
+def _meta(path: Path) -> dict | None:
+    mp = path.with_name(path.name + ".meta.json")
+    if not mp.exists():
+        return None
+    try:
+        return json.loads(mp.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def pool_month_range(pool: Path) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """(first, last) (year, month) a pool was built from, or None if unknown."""
+    m = _meta(pool)
+    months = ((m or {}).get("population") or {}).get("months")
+    if months and len(months) == 2:
+        (y0, m0), (y1, m1) = (tuple(int(x) for x in str(v).split("_")) for v in months)
+        return (y0, m0), (y1, m1)
+    hit = _POOL_YEARS_RE.search(pool.name)
+    if hit:
+        return (int(hit.group(1)), 1), (int(hit.group(2)), 12)
+    return None
+
+
+def book_training_range(book: Path, _depth: int = 0
+                        ) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """The month range of the pool behind a book, following its provenance."""
+    m = _meta(book)
+    if not m or _depth > 3:
+        return None
+    pool = m.get("input") or m.get("stats")
+    if pool:
+        return pool_month_range(Path(pool))
+    src = m.get("source_rep")
+    if src:
+        return book_training_range(Path(src), _depth + 1)
+    return None
+
+
+def in_sample_months(files, rng) -> list[tuple[int, int]]:
+    """The (year, month)s among `files` that fall inside `rng` (inclusive)."""
+    lo, hi = rng
+    return sorted({(y, m) for _src, y, m, _ev in files if lo <= (y, m) <= hi})
 
 
 class Book:
@@ -486,6 +543,11 @@ def main() -> int:
     ap.add_argument("--max-ply", type=int, default=30)
     ap.add_argument("--out-dir", default=None,
                     help="Write <label>.nodes.parquet per book.")
+    ap.add_argument("--allow-in-sample", action="store_true",
+                    help="Replay games even when they fall inside the month range "
+                         "of the pool a book was built from, or when that range "
+                         "cannot be determined. Without it the run REFUSES: an "
+                         "in-sample replay measures fit, not holdout performance.")
     a = ap.parse_args()
 
     months = [int(m) for m in a.months.split(",")] if a.months else None
@@ -495,6 +557,24 @@ def main() -> int:
 
     files = discover_source_files(a.start_year, a.end_year, months,
                                   a.events.split(","))
+    bad = []
+    for p in a.repertoire:
+        rng = book_training_range(Path(p))
+        if rng is None:
+            bad.append(f"{Path(p).name}: training months unknown (no .meta.json "
+                       f"chain to a pool meta or a dated pool name)")
+            continue
+        hits = in_sample_months(files, rng)
+        if hits:
+            bad.append(f"{Path(p).name}: built on {rng[0][0]}-{rng[0][1]:02d}.."
+                       f"{rng[1][0]}-{rng[1][1]:02d}, which contains "
+                       f"{len(hits)} replayed month(s) "
+                       f"({hits[0][0]}-{hits[0][1]:02d}..{hits[-1][0]}-{hits[-1][1]:02d})")
+    if bad:
+        print(("WARNING (--allow-in-sample): " if a.allow_in_sample else "FATAL: ")
+              + "in-sample or unverifiable holdout:\n  " + "\n  ".join(bad))
+        if not a.allow_in_sample:
+            return 2
     print(f"holdout: {len(files):,} source files, {a.start_year}-{a.end_year}, "
           f"mean_elo>={a.min_elo}, {len(books)} book(s) in one pass")
     if not files:

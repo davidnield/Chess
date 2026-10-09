@@ -75,6 +75,7 @@ import json
 import math
 import re
 import shutil
+import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -1613,6 +1614,68 @@ def merge_position_stats(src_dir: Path, partial_dir: Path, out_path: Path, min_g
 
 # ── orchestration ──────────────────────────────────────────────────────────────
 
+_MONTHLY_RE = re.compile(r"year=(\d{4})_month=(\d{1,2})\.ps\.parquet$")
+
+
+def monthly_months(monthly_dir: Path) -> list[tuple[int, int]]:
+    """The (year, month) list a merge actually consumed: the `_monthly/*.ps.parquet`
+    files are the only artifact carrying a month, so they -- not --start-year /
+    --end-year, which the merge ignores -- define the pool's population."""
+    out = []
+    for f in monthly_dir.glob("*.ps.parquet"):
+        m = _MONTHLY_RE.search(f.name)
+        if m:
+            out.append((int(m.group(1)), int(m.group(2))))
+    return sorted(out)
+
+
+def _git_commit() -> str:
+    try:
+        return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                              text=True, check=True,
+                              cwd=Path(__file__).resolve().parent).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
+
+
+def write_pool_meta(ps_out: Path, aux_out: Path, monthly_dir: Path, args) -> None:
+    """`<pool>.parquet.meta.json` (and the aux sidecar's), the same shape
+    pool_from_book writes: population.months = [first, last] as "YYYY_M".
+    replay_holdout reads it to refuse in-sample games -- before 2026-10-08 this
+    script wrote no meta at all, so a holdout could not tell which months a pool
+    had seen."""
+    months = monthly_months(monthly_dir)
+    if not months:
+        print(f"WARNING: no monthly partials in {monthly_dir}; pool meta not written",
+              flush=True)
+        return
+    common = {
+        "producer": "build_pooled_stats",
+        "git_commit": _git_commit(),
+        "written": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "population": {
+            "events": list(args.events), "mean_elo_min": args.min_elo,
+            "months": [f"{months[0][0]}_{months[0][1]}",
+                       f"{months[-1][0]}_{months[-1][1]}"],
+            "n_months": len(months),
+            "month_list": [f"{y}_{m}" for y, m in months],
+        },
+        "min_games": args.min_games,
+        "monthly_dir": str(monthly_dir),
+        "event": "Pooled", "elo_band": 0,
+    }
+    for path, kind in ((ps_out, "position_stats"), (aux_out, "aux_stats")):
+        if not path.exists():
+            continue
+        meta = dict(common, kind=kind)
+        mp = path.with_name(path.name + ".meta.json")
+        tmp = mp.with_name(mp.name + ".tmp")
+        tmp.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        tmp.replace(mp)
+        print(f"  wrote {mp.name}: {common['population']['months'][0]} .. "
+              f"{common['population']['months'][1]} ({len(months)} months)", flush=True)
+
+
 def main() -> None:
     # Declared up front: --source rebinds it below, and the argparse help text
     # reads it, so the declaration has to precede the first use in this scope.
@@ -1685,7 +1748,10 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=11)
     ap.add_argument("--threads", type=int, default=8, help="DuckDB threads for the merge phase.")
     ap.add_argument("--mem", default="48GB", help="DuckDB memory_limit for the merge phase.")
-    ap.add_argument("--phase", choices=["extract", "merge", "all"], default="all")
+    ap.add_argument("--phase", choices=["extract", "merge", "meta", "all"], default="all",
+                    help="'meta' only (re)writes the pool's .meta.json from the "
+                         "_monthly partials -- the backfill for pools merged before "
+                         "the merge wrote one.")
     ap.add_argument("--limit-games", type=int, default=None, help="Per-file game cap (benchmarking).")
     ap.add_argument("--partial-dir", default=None, help="Override the partials directory.")
     ap.add_argument("--tmp-dir", default=None,
@@ -1867,7 +1933,11 @@ def main() -> None:
                         ps_out.with_name(ps_out.stem + "_other_buckets"),
                         ps_out, aux_out, args.threads, args.mem, tmp_base)
         shutil.rmtree((tmp_base or partial_dir) / "_merge_duckdb_tmp", ignore_errors=True)
+        write_pool_meta(ps_out, aux_out, monthly_dir, args)
         print("\nDone.", flush=True)
+
+    if args.phase == "meta":
+        write_pool_meta(ps_out, aux_out, partial_dir / "_monthly", args)
 
 
 if __name__ == "__main__":
