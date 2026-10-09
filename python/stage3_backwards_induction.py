@@ -869,6 +869,7 @@ def run_backwards_induction(
     gate_rel_floor:   float = 1.0,
     gate_rel_baseline: str = "candidates",
     gate_rel_own_margin: float = 0.02,
+    gate_fallback:    str = "legacy",
     robust_eval_weight: float = 1.0,
     force_root_move:  str | None = None,
     require_eval:     bool = False,
@@ -1206,6 +1207,17 @@ def run_backwards_induction(
     rel_own_nodes: set[int] = set()     # nodes where the OWN-EVAL raise was part of the cut
     _learn = learn_prior is not None and learn_delta_rare > 0.0
     learn_override_nodes: set[int] = set()  # nodes where the plan-prior tiebreak changed the pick
+    # --gate-fallback. Counted in BOTH modes so a legacy build reports how many nodes
+    # the strict chain would change (see select_our):
+    #   fallback_abs_nodes — the relative gate (and the engine rescue) emptied a set
+    #       that PASSED the absolute gate; legacy then reverts to every recorded move,
+    #       absolute-gate failures included, ranked by blended value.
+    #   forced_losing_nodes — nothing passes the absolute gate and no rescue exists.
+    if gate_fallback not in ("legacy", "strict"):
+        raise ValueError(f"gate_fallback must be 'legacy' or 'strict', got {gate_fallback!r}")
+    _strict_fallback = gate_fallback == "strict"
+    fallback_abs_nodes: set[int] = set()
+    forced_losing_nodes: set[int] = set()
 
     def learn_delta(ph):
         # δ window for the learnability tiebreak: loose ONLY at SHALLOW-but-RARE
@@ -1477,8 +1489,8 @@ def run_backwards_induction(
             if not cov:
                 return None
             base = cov
-        gated = [mv for mv in base if passes_gate(mv)]
-        gated = apply_rel_gate(ph, gated)
+        abs_pass = [mv for mv in base if passes_gate(mv)]
+        gated = apply_rel_gate(ph, abs_pass)
         if not gated and _augment:
             # Forced-losing node: no recorded move passes the gate. Try engine-move
             # rescues (legal, possibly unplayed, eval-covered, gate-passing) before
@@ -1489,6 +1501,23 @@ def run_backwards_induction(
                 # relative gate applies among the rescues too (sibling baseline
                 # only — see apply_rel_gate's own-eval note)
                 gated = apply_rel_gate(ph, aug, own_eval=False)
+        if not gated:
+            (fallback_abs_nodes if abs_pass else forced_losing_nodes).add(ph)
+            if _strict_fallback:
+                # --gate-fallback strict. The legacy `gated or base` below hands the
+                # pick to EVERY recorded move ranked by blended value, so an
+                # empirically strong but refuted move (empirical 0.95, eval 0.20 ->
+                # blended 0.575) can beat a sound one. Instead:
+                #  - moves that passed the ABSOLUTE gate and only lost to the
+                #    relative cut are still sound: choose among them;
+                #  - if nothing passes the absolute gate, book the LEAST-LOSING move
+                #    by the gate's own measure (the engine eval under
+                #    --gate-metric eval), never the blended value, and skip the
+                #    learnability tiebreak: "least losing" is the whole criterion.
+                if abs_pass:
+                    gated = abs_pass
+                else:
+                    return max(base, key=lambda mv: sign * gate_rv(mv))
         cands = gated or base
         # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
         # move (shrunk deviation vs the natural move) + the reach-weighted downstream
@@ -1933,6 +1962,13 @@ def run_backwards_induction(
         if _rel_own_eval:
             print(f"  own-eval baseline (margin {gate_rel_own_margin}) raised the "
                   f"cut at {len(rel_own_nodes):,} of them", flush=True)
+    if robustness_floor < 1.0 or gate_rel_floor < 1.0:
+        print(f"  gate fallback ({gate_fallback}): {len(fallback_abs_nodes):,} nodes where "
+              f"only the relative gate emptied an absolute-passing set, "
+              f"{len(forced_losing_nodes):,} where nothing passes the absolute gate"
+              + ("" if _strict_fallback else
+                 " (legacy: both pick among ALL recorded moves by blended value)"),
+              flush=True)
     if _learn:
         print(f"  learnability tiebreak (δ {learn_delta_main}/{learn_delta_rare}, "
               f"pivot {learn_reach_pivot}) overrode the pick at "
@@ -2118,6 +2154,15 @@ def main():
                              "the relative-gate baseline (own-eval mode only). Absorbs "
                              "parent/child eval-depth inconsistency in the eval DB. "
                              "Default 0.02.")
+    parser.add_argument("--gate-fallback", choices=["legacy", "strict"], default="legacy",
+                        help="What our-turn selection does when the gates leave nothing "
+                             "(after the engine rescue). legacy (default): every recorded "
+                             "move, ranked by blended value -- which can book a move that "
+                             "FAILED the absolute gate when only the relative gate emptied "
+                             "the set. strict: keep the moves that passed the absolute gate; "
+                             "if none did, book the least-losing move by the gate's own "
+                             "measure (the engine eval under --gate-metric eval). The "
+                             "end-of-run diagnostics count both node kinds in either mode.")
     parser.add_argument("--robust-eval-weight", type=float, default=1.0,
                         help="Eval weight used ONLY for the robust (critical-line) value "
                              "that drives the refutation gate. Decoupled from --eval-weight "
@@ -2434,6 +2479,8 @@ def main():
           f"{'  (rel gate disabled)' if args.gate_rel_floor >= 1.0 else ''}")
     if args.gate_rel_floor < 1.0 and args.gate_rel_baseline == "own-eval":
         print(f"Rel gate baseline: own-eval (margin {args.gate_rel_own_margin})")
+    if args.gate_fallback != "legacy":
+        print(f"Gate fallback:     {args.gate_fallback}")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
@@ -2535,6 +2582,7 @@ def main():
             gate_rel_floor=args.gate_rel_floor,
             gate_rel_baseline=args.gate_rel_baseline,
             gate_rel_own_margin=args.gate_rel_own_margin,
+            gate_fallback=args.gate_fallback,
             robust_eval_weight=args.robust_eval_weight,
             force_root_move=args.force_root_move,
             require_eval=args.require_eval,

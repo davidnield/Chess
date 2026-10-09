@@ -117,6 +117,70 @@ def main() -> None:
     check(bm_off.get(eh) == "h6",
           f"black mirror candidates: recorded kept (move={bm_off.get(eh)!r}, want 'h6')")
 
+    # 7. --gate-fallback. h3 PASSES the absolute gate but the own-eval raise cuts it;
+    #    g4 is a refuted trap (eval 0.20 < 0.5 - 0.25) with a great empirical score.
+    #    The full DB holds no legal child, so the engine rescue finds nothing.
+    #    Blended (eval weight 0.5): h3 0.525, g4 0.575.
+    #    legacy: falls back to ALL recorded moves by blended value -> the trap g4.
+    #    strict: keeps the absolute-passing h3.
+    dummy_h, dummy_es = sorted_arrays({12345: 0.5})       # no legal child of start
+    fb = dict(prior_strength=0.0, min_move_games=0, eval_weight=0.5, require_eval=True,
+              robustness_floor=0.25, gate_metric="eval", gate_anchor="even",
+              gate_rel_floor=0.1, gate_rel_baseline="own-eval", augment_engine=True,
+              full_eval_hashes=dummy_h, full_eval_es=dummy_es)
+    edges7 = [edge(start, "h3", 0.50, 1000), edge(start, "g4", 0.95, 1000)]
+    ev7 = {child_hash(start, "h3"): 0.55, child_hash(start, "g4"): 0.20, sh: 0.70}
+    picks7 = {}
+    for mode in ("legacy", "strict"):
+        (_v, bm, *_r) = run_backwards_induction(
+            edges7, "white", eval_lookup=dict(ev7), gate_fallback=mode, **fb)
+        picks7[mode] = bm.get(sh)
+    (_v, bm_def, *_r) = run_backwards_induction(edges7, "white", eval_lookup=dict(ev7), **fb)
+    check(picks7["legacy"] == "g4" and bm_def.get(sh) == "g4",
+          f"legacy (and default) fallback books the refuted trap "
+          f"(legacy={picks7['legacy']!r}, default={bm_def.get(sh)!r}, want 'g4')")
+    check(picks7["strict"] == "h3",
+          f"strict fallback keeps the absolute-passing move (root={picks7['strict']!r}, want 'h3')")
+
+    # 8. nothing passes the absolute gate (threshold 0.25): strict books the
+    #    LEAST-LOSING move by engine eval (a4, 0.24), not the blended best (g4).
+    edges8 = [edge(start, "h3", 0.50, 1000), edge(start, "g4", 0.95, 1000),
+              edge(start, "a4", 0.40, 1000)]
+    ev8 = {child_hash(start, "h3"): 0.22, child_hash(start, "g4"): 0.20,
+           child_hash(start, "a4"): 0.24, sh: 0.70}
+    picks8 = {}
+    for mode in ("legacy", "strict"):
+        (_v, bm, *_r) = run_backwards_induction(
+            edges8, "white", eval_lookup=dict(ev8), gate_fallback=mode, **fb)
+        picks8[mode] = bm.get(sh)
+    check(picks8["legacy"] == "g4",
+          f"all fail, legacy: blended-value pick (root={picks8['legacy']!r}, want 'g4')")
+    check(picks8["strict"] == "a4",
+          f"all fail, strict: least-losing by engine eval (root={picks8['strict']!r}, want 'a4')")
+
+    # 9. black mirror of 7: after 1.e4, h6 (eval 0.45) passes the absolute gate
+    #    (<= 0.75) but own eval 0.30 cuts it (cutoff 0.42); g5 is refuted (0.80) yet
+    #    scores 95% for black. Blended white-score: h6 0.475, g5 0.425 -> legacy g5.
+    edges9 = [edge(start, "e4", 0.55, 5000), edge(e4n, "h6", 0.50, 1000),
+              edge(e4n, "g5", 0.05, 1000)]
+    ev9 = {child_hash(e4n, "h6"): 0.45, child_hash(e4n, "g5"): 0.80, eh: 0.30}
+    picks9 = {}
+    for mode in ("legacy", "strict"):
+        (_v, bm, *_r) = run_backwards_induction(
+            edges9, "black", eval_lookup=dict(ev9), gate_fallback=mode, **fb)
+        picks9[mode] = bm.get(eh)
+    check(picks9 == {"legacy": "g5", "strict": "h6"},
+          f"black mirror: legacy books the trap, strict the sound move ({picks9}, "
+          f"want legacy 'g5', strict 'h6')")
+
+    # 10. bad mode is refused, not silently treated as legacy
+    try:
+        run_backwards_induction(edges7, "white", eval_lookup=dict(ev7),
+                                gate_fallback="lenient", **fb)
+        check(False, "unknown gate_fallback rejected")
+    except ValueError:
+        check(True, "unknown gate_fallback rejected")
+
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print(f"\n{'ALL PASS' if n_fail == 0 else f'{n_fail} FAILURES'} ({len(_checks)} checks)")
     sys.exit(0 if n_fail == 0 else 1)
