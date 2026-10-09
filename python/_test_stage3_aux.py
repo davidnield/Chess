@@ -170,6 +170,42 @@ def main() -> None:
     check(w_half > w_full,
           f"D2: and half coverage trusts the engine more ({w_half:.4f} > {w_full:.4f})")
 
+    # D3 — --other-cov-blend (D2 above pins the LEGACY rule, which this replaces when
+    #      the flag is on). The engine speaks only for the covered share:
+    #      v = emp + cov * w * (eval - emp), w at n = other_total.
+    def bucket(cov):
+        return [aux_row(opp, other_total=500, other_white_wins=250,
+                        other_black_wins=250, other_edges=9, other_eval_mean=0.30,
+                        other_eval_cov=cov)]
+
+    def want_cb(cov, k):
+        w = effective_eval_weight(EW, 0.1, k, 500.0)
+        v = 0.5 + cov * w * (0.30 - 0.5)
+        return (0.60 * 400 + 0.40 * 600 + v * 500) / 1500
+
+    for cov, k in ((0.1, 0.0), (1.0, 0.0), (0.5, K)):
+        vcb, _ = go(edges, bucket(cov), eval_weight=EW, eval_weight_min=0.1,
+                    eval_weight_k=k, other_cov_blend=True)
+        check(abs(vcb[opp] - want_cb(cov, k)) < TOL,
+              f"D3: cov-blend cov={cov} k={k} ({vcb[opp]:.9f} vs {want_cb(cov, k):.9f})")
+    v_lo, _ = go(edges, bucket(0.1), eval_weight=EW, eval_weight_min=0.1,
+                 eval_weight_k=0.0, other_cov_blend=True)
+    v_lo_legacy, _ = go(edges, bucket(0.1), eval_weight=EW, eval_weight_min=0.1,
+                        eval_weight_k=0.0)
+    v_hi, _ = go(edges, bucket(1.0), eval_weight=EW, eval_weight_min=0.1,
+                 eval_weight_k=0.0, other_cov_blend=True)
+    # the engine says 0.30 < emp 0.5, so engine trust LOWERS the node
+    check(v_lo[opp] > v_hi[opp],
+          f"D3: at k=0 a 10%-covered bucket moves LESS toward the eval than a fully "
+          f"covered one ({v_lo[opp]:.6f} > {v_hi[opp]:.6f})")
+    check(abs(v_lo_legacy[opp] - v_hi[opp]) < TOL,
+          f"D3: whereas legacy ignores coverage at k=0 "
+          f"({v_lo_legacy[opp]:.9f} == full-coverage {v_hi[opp]:.9f})")
+    vh_leg, _ = go(edges, bucket(1.0), eval_weight=EW, eval_weight_min=0.1, eval_weight_k=0.0)
+    check(abs(vh_leg[opp] - v_hi[opp]) < TOL,
+          f"D3: full coverage at k=0 is identical in both modes "
+          f"({vh_leg[opp]:.9f} vs {v_hi[opp]:.9f})")
+
     # E — NULL bucket eval must not read as 0.0
     aux_e = [aux_row(opp, other_total=500, other_white_wins=250,
                      other_black_wins=250, other_edges=9, other_eval_mean=None)]

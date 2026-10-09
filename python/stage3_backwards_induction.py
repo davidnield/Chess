@@ -407,7 +407,8 @@ def aux_opp_mix(term_tot: float, term_sum: float,
                 hor_eval: float | None,
                 eval_weight: float, eval_weight_min: float = 0.0,
                 eval_weight_k: float = 0.0,
-                horizon_mode: str = "empirical") -> tuple[float, float]:
+                horizon_mode: str = "empirical",
+                cov_blend: bool = False) -> tuple[float, float]:
     """WHITE-SCORE (numerator, denominator) one position's aux buckets add to an
     OPPONENT node's mean. Callers in other perspectives flip with `den - num`,
     which is exact because the mix is linear in the bucket sums.
@@ -436,6 +437,18 @@ def aux_opp_mix(term_tot: float, term_sum: float,
 
     A NaN `oth_eval` means no eval-covered child, and must fall back to the
     empirical mean rather than read as 0.0 (dead lost).
+
+    COVERAGE, legacy vs cov_blend (--other-cov-blend, 2026-10-08). The legacy
+    rule above passes n_eff = oth_tot * oth_cov to effective_eval_weight -- but
+    that function's `n` is EMPIRICAL evidence (more games -> LESS engine weight),
+    so thinner coverage RAISES the engine's share: the less of the bucket
+    `other_eval_mean` describes, the more it is trusted. And under the canonical
+    fixed weight (eval_weight_k 0) coverage is ignored outright: a 1%-covered
+    bucket gets the full weight over all its games. cov_blend applies the engine
+    only to the share it describes:
+        v_o = emp_o + oth_cov * w_o * (oth_eval - emp_o),  w_o at n = oth_tot
+    (uncovered mass has no engine opinion, so it stays empirical). Identical to
+    legacy at full coverage with k = 0.
     """
     num = den = 0.0
     if term_tot:
@@ -443,7 +456,11 @@ def aux_opp_mix(term_tot: float, term_sum: float,
         den += term_tot
     if oth_tot:
         emp_o = oth_sum / oth_tot
-        if oth_eval == oth_eval and eval_weight > 0:      # not NaN
+        if oth_eval == oth_eval and eval_weight > 0 and cov_blend:
+            w_o = effective_eval_weight(eval_weight, eval_weight_min,
+                                        eval_weight_k, oth_tot)
+            v_o = emp_o + oth_cov * w_o * (oth_eval - emp_o)
+        elif oth_eval == oth_eval and eval_weight > 0:      # not NaN
             n_eff = oth_tot * oth_cov
             w_o = effective_eval_weight(eval_weight, eval_weight_min,
                                         eval_weight_k, n_eff)
@@ -889,6 +906,7 @@ def run_backwards_induction(
     aux_term_flags:   bool = True,
     aux_horizon:      str = "empirical",
     aux_parts:        str = "term,other,horizon",
+    other_cov_blend:  bool = False,
     augment_engine:   bool = False,
     full_eval_hashes: "np.ndarray | None" = None,
     full_eval_es:     "np.ndarray | None" = None,
@@ -1655,7 +1673,7 @@ def run_backwards_induction(
                             aux_hor_tot[i_fb], aux_hor_sum[i_fb],
                             (eval_lookup.get(ph) if eval_lookup else None),
                             eval_weight, eval_weight_min, eval_weight_k,
-                            aux_horizon)
+                            aux_horizon, cov_blend=other_cov_blend)
                         fb_num += a_num; fb_den += a_den
                     fb = fb_num / fb_den if fb_den else slice_prior
                     values[ph] = r * values[ph] + (1.0 - r) * fb
@@ -1736,7 +1754,7 @@ def run_backwards_induction(
                     aux_hor_tot[i_ph], aux_hor_sum[i_ph],
                     (eval_lookup.get(ph) if eval_lookup else None),
                     eval_weight, eval_weight_min, eval_weight_k,
-                    aux_horizon)
+                    aux_horizon, cov_blend=other_cov_blend)
                 if aux_den:
                     base = values[ph] * total if total else slice_prior * 0.0
                     denom = total + aux_den
@@ -2239,6 +2257,13 @@ def main():
                              "bucket carried 1,253,751 of edge mass against 4,224 "
                              "for terminations — so isolating a part is the only "
                              "way to attribute an effect to it.")
+    parser.add_argument("--other-cov-blend", action="store_true",
+                        help="Blend the other-moves bucket's engine eval only over the "
+                             "eval-COVERED share of its mass (the rest stays empirical). "
+                             "Default off = legacy, which weights the engine by covered "
+                             "mass as if it were empirical sample size -- so thinner "
+                             "coverage means MORE engine weight, and under a fixed "
+                             "--eval-weight coverage is ignored. See aux_opp_mix.")
     parser.add_argument("--aux-horizon", choices=["empirical", "eval"],
                         default="empirical",
                         help="How to value games the ply cap cut off. 'empirical' "
@@ -2602,6 +2627,7 @@ def main():
             aux_term_flags=args.aux_term_flags,
             aux_horizon=args.aux_horizon,
             aux_parts=args.aux_parts,
+            other_cov_blend=args.other_cov_blend,
             augment_engine=args.augment_engine,
             full_eval_hashes=full_eval_hashes,
             full_eval_es=full_eval_es,

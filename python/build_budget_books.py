@@ -273,6 +273,12 @@ def main() -> int:
         log("FATAL: source rep used reply_shrink>0 without aux; the budget "
             "DP does not implement that blend (see header). Refusing.")
         return 1
+    # The other-moves bucket's coverage rule is part of the objective, so it must
+    # match the Stage-3 build that produced the source rep (aux_opp_mix, shared).
+    other_cov_blend = bool(src_meta.get("other_cov_blend", False))
+    if other_cov_blend:
+        log("other-moves bucket: coverage-scaled engine blend (source rep's "
+            "--other-cov-blend)")
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
@@ -359,7 +365,8 @@ def main() -> int:
                        eps=eps, max_ply=a.max_ply, share_floor=a.share_floor,
                        max_cands=a.max_cands, eval_weight=a.eval_weight,
                        prior_strength=a.prior_strength,
-                       require_eval=not a.no_gates, gates=not a.no_gates)
+                       require_eval=not a.no_gates, gates=not a.no_gates,
+                       other_cov_blend=other_cov_blend)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
 
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None

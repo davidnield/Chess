@@ -485,7 +485,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
                 require_eval: bool = True,
                 max_cands: int = 0,
-                gates: bool = True) -> Graph:
+                gates: bool = True,
+                other_cov_blend: bool = False) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -667,7 +668,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 w_num, aux_den = aux_opp_mix(
                     t_tot, t_sum, o_tot, o_sum, o_eval, o_cov,
                     hr_tot, hr_sum, eval_ws.get(h),
-                    eval_weight, eval_weight_min, eval_weight_k)
+                    eval_weight, eval_weight_min, eval_weight_k,
+                    cov_blend=other_cov_blend)   # mirror the source rep's Stage-3 flag
                 # One flip to our-perspective. Exact because the mix is linear in
                 # the bucket sums, so the our-score numerator is den - num.
                 aux_num = w_num if our_white else aux_den - w_num
