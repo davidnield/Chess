@@ -7,6 +7,7 @@ provenance hash (2026-10-08).
      them (the exact-no-op rule for new flags).
   C  recipe_hash ignores input/output paths, but changes with any setting.
   D  without aux, reply-shrink is restored to 1.0 (the pre-sidecar recipe).
+  E  single pass: the learnability pass-2 is retired (2026-10-14).
 """
 from __future__ import annotations
 
@@ -48,8 +49,10 @@ def main() -> None:
     check(h == b.recipe_hash(b.common_flags(Path("x"), Path("y"), Path("z"))),
           "C: hash is path-independent")
     check(h != b.recipe_hash(on), "C: hash changes with the recipe")
-    check(h != b.recipe_hash(f + b.learn_flags(Path("p"), Path("r"))),
-          "C: pass-2 learnability flags are part of the recipe")
+    check(h != b.recipe_hash(f + ["--plan-prior", "p", "--learn-delta-rare", "0.04"]),
+          "C: a learnability setting would be part of the recipe (paths excluded)")
+    check(not hasattr(b, "learn_flags") and not hasattr(b, "LEARN"),
+          "E: the driver is single-pass (learnability pass retired 2026-10-14)")
 
     nf = b.common_flags(S, E, None)
     check(nf[nf.index("--reply-shrink") + 1] == str(b.REPLY_SHRINK) == "1.0",

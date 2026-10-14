@@ -189,7 +189,7 @@ source parquets (year=/month=/event=)
    ▼
 position_stats_*.parquet      per-edge win/draw/loss counts
 position_stats_aux_*.parquet  per-position: the mass those edges can't see
-   │  build_sharp_reps.py          two-pass driver around the engine below
+   │  build_sharp_reps.py          the locked recipe: one engine run per colour
    │    └─ stage3_backwards_induction.py
    ▼
 repertoire_{white,black}_sharp.parquet
@@ -212,7 +212,7 @@ python/
   eval_arrays.py                 the eval DB as mmap'd arrays every consumer can share
   eval_arrays_build.py           ... built from the explorer book's eval DB, plus its checkmates
   stage3_backwards_induction.py  the valuation engine
-  build_sharp_reps.py            the locked recipe, as a two-pass driver
+  build_sharp_reps.py            the locked recipe (one Stage-3 run per colour)
   build_baseline_books.py        reach-pruned books — the truncation baseline
   budget_core.py                 value-vs-budget curves
   build_budget_books.py          budget-constrained books

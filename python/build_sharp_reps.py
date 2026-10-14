@@ -1,5 +1,5 @@
-"""Build the canonical SHARP repertoire pair (White + Black) — two-pass learnability
-build over the eval-blend + relative-eval-gate recipe.
+"""Build the canonical SHARP repertoire pair (White + Black) -- one Stage-3 run per
+colour over the eval-blend + relative-eval-gate recipe.
 
 Recipe (single pooled slice, event='Pooled', elo_band=0):
   - eval/empirical blend:  --eval-weight 0.5 --require-eval   (leaf value blends engine eval
@@ -52,24 +52,24 @@ Recipe (single pooled slice, event='Pooled', elo_band=0):
                            raises a node's value as readily as it lowers one. Moves
                            6.2%/6.3% of White's and 8.5%/10.7% of Black's pass-1/pass-2
                            decisions, ~90% of it decisive rather than re-broken ties)
-  - learnability tiebreak: TWO-PASS build (v3 calibration, LEARN below). Pass 1 builds the
-                           recipe above; plan_consistency_report.py measures the idea-token
-                           plan prior + per-node reach/context/depth from it; pass 2
-                           rebuilds with --plan-prior/--plan-reach so near-equal candidates
-                           (within a δ window of the best selection key) collapse onto the
-                           most habitual idea. δ is loose only at SHALLOW-but-RARE nodes
-                           (offbeat openings), tight on main lines and deep nodes; rare
-                           contexts shrink toward the GLOBAL habits. Costs ~0.6-0.8%
-                           effectiveness for the consistency gains (adopted 2026-07).
+  - no learnability pass:  RETIRED 2026-10-14. The build used to be two-pass: pass 1, then
+                           plan_consistency_report.py measured an idea-token plan prior from
+                           it, then pass 2 re-broke near-ties toward the most habitual idea.
+                           The bootstrap stability run (2026-10-14, Poisson-redrawn pools)
+                           showed pass 2 roughly DOUBLES noise sensitivity -- reach-weighted
+                           flip rate 4.8-6.9% vs 3.0-4.6% for pass 1 -- because its prior is
+                           measured from a noisy pass-1 book, and the owner had not found it
+                           made the book easier to learn. One pass halves build time. Stage
+                           3's --plan-prior/--plan-reach still exist; this driver no longer
+                           passes them. plan_consistency_report.py remains as a report.
 
 Only ONE White (no forced first move) + ONE Black are built — the explorer's candidate
 table (gold/silver/bronze) lets you inspect the e4 / d4 / etc. subtrees without separate
 forced-root reps.
 
-Per color the chain is: pass-1 rep -> _plan/pass1_{tag}.parquet, plan exports ->
-_plan/{tag}_pass1_{prior,reach}.parquet, final rep -> repertoire_pooled_{tag}_sharp.parquet.
-Each step has its own existence skip gate; once a step actually runs, every later step in
-the chain reruns too (its inputs changed). --force reruns the whole chain.
+Per colour: one Stage-3 run -> repertoire_pooled_{tag}_sharp.parquet, skip-gated on the
+output existing with a matching meta (--force rebuilds). A rep left by the retired two-pass
+driver (its meta has a "learnability" block) is refused rather than taken as current.
 
 Prerequisites (defaults, the canonical recipe): position_stats_pooled_ge1800_2013_2026_brc.parquet
 (build_pooled_stats.py --phase merge --no-prune) with its aux sidecar
@@ -77,8 +77,8 @@ position_stats_aux_pooled_ge1800_2013_2026_brc.parquet, and the eval arrays D:/c
 book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-stats
 (--no-aux for the pre-sidecar recipe) / --eval-db to build on a different dataset. A
 <rep>.parquet.meta.json provenance sidecar is written next to each rep recording the
-inputs, the full Stage-3 flag list, a hash of the recipe, the git commit and the
-learnability settings; the skip gate refuses a rep whose recipe differs.
+inputs, the full Stage-3 flag list, a hash of the recipe and the git commit; the skip
+gate refuses a rep whose recipe differs.
 
 Opt-in flags (default off, each an exact no-op when off) for A/B builds that must go
 to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend,
@@ -86,7 +86,7 @@ to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
-    .venv/Scripts/python.exe python/build_sharp_reps.py --force    # rebuild the whole chain
+    .venv/Scripts/python.exe python/build_sharp_reps.py --force    # rebuild both reps
 """
 from __future__ import annotations
 import argparse
@@ -106,7 +106,6 @@ PROJECT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 SD = Path("E:/chess/position-stats")
 REP_DIR = Path("E:/chess/repertoire")
-PLAN_DIR = REP_DIR / "_plan"          # pass-1 reps + plan-prior/reach exports
 LOG_DIR = PROJECT / "logs" / "sharp_reps"
 
 # Canonical inputs default to the combined 2013-2026 mean_elo>=1800 --no-prune pooled
@@ -121,13 +120,6 @@ DEFAULT_EVAL_DB   = DEFAULT_ARRAY_DIR
 # assign the entire missing reply mass the node's own engine eval; 0.0 = the legacy
 # renormalise-over-survivors behaviour. Recorded in .meta.json for provenance.
 REPLY_SHRINK = 1.0
-
-# Learnability tiebreak calibration ("v3", adopted 2026-07): loose δ only at nodes that are
-# both SHALLOW (within our first depth_horizon moves) and RARE (reach below reach_pivot);
-# everything deep/off-walk stays at delta_main. Contexts rarer than ctx_pivot shrink toward
-# the global habits. Recorded in the .meta.json for provenance.
-LEARN = {"delta_main": 0.005, "delta_rare": 0.04, "reach_pivot": 0.02,
-         "ctx_pivot": 0.05, "depth_horizon": 6}
 
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
@@ -196,31 +188,8 @@ def git_commit() -> str:
         return "unknown"
 
 
-def learn_flags(prior: Path, reach: Path) -> list[str]:
-    """Pass-2 learnability flags (v3 calibration, LEARN). Passed explicitly — the blessed
-    flag set lives here, not in stage3's defaults."""
-    return [
-        "--plan-prior", str(prior), "--plan-reach", str(reach),
-        "--learn-delta-main", str(LEARN["delta_main"]),
-        "--learn-delta-rare", str(LEARN["delta_rare"]),
-        "--learn-reach-pivot", str(LEARN["reach_pivot"]),
-        "--learn-ctx-pivot", str(LEARN["ctx_pivot"]),
-        "--learn-depth-horizon", str(LEARN["depth_horizon"]),
-    ]
-
-
 def out_path(tag: str) -> Path:
     return REP_DIR / f"repertoire_pooled_{tag}_sharp.parquet"
-
-
-def pass1_path(tag: str) -> Path:
-    return PLAN_DIR / f"pass1_{tag}.parquet"
-
-
-def plan_paths(tag: str) -> tuple[Path, Path]:
-    prefix = PLAN_DIR / f"{tag}_pass1"
-    return (prefix.with_name(prefix.name + "_prior.parquet"),
-            prefix.with_name(prefix.name + "_reach.parquet"))
 
 
 def meta_path(out: Path) -> Path:
@@ -236,14 +205,12 @@ def write_meta(out: Path, stats: Path, eval_db: Path, tag: str,
     eval DB (a parquet's size/mtime/rows, or an eval-arrays directory's meta and verify
     status) -- a path alone cannot tell two builds of the eval DB apart."""
     from eval_arrays import describe_eval_source
-    prior, reach = plan_paths(tag)
     recipe = {**RECIPE_DEFAULTS, **(recipe or {})}
     meta = {**recipe, "gate_rel_baseline": "own-eval",
             "reply_shrink": 0.0 if aux else REPLY_SHRINK,
             "aux_stats": str(aux) if aux else None,
             "input": str(stats), "eval_db": str(eval_db),
             "eval_source": describe_eval_source(eval_db),
-            "learnability": {**LEARN, "plan_prior": str(prior), "plan_reach": str(reach)},
             "stage3_flags": flags,
             "recipe_hash": recipe_hash(flags) if flags else None,
             "git_commit": git_commit(),
@@ -265,20 +232,14 @@ def run(name: str, cmd: list[str]) -> bool:
 
 def build_color(tag: str, extra: list[str], flags: list[str],
                 stats: Path, eval_db: Path, force: bool,
-                aux: Path | None = None, pass1_only: bool = False,
-                recipe: dict | None = None) -> bool:
-    """Pass-1 -> measure -> pass-2 chain for one color. Returns True on success.
-    `rerun` cascades: once any step actually executes, every later step reruns too
-    (its inputs just changed), regardless of its own output existing."""
-    p1 = pass1_path(tag)
-    prior, reach = plan_paths(tag)
+                aux: Path | None = None, recipe: dict | None = None) -> bool:
+    """One Stage-3 run for one colour. Returns True on success."""
     out = out_path(tag)
     stage3 = str(PROJECT / "python/stage3_backwards_induction.py")
-    rerun = force
 
-    # The skip gates test existence only, so a rep built from OTHER inputs (an older pool,
-    # the retired eval DB) would be "skipped" and look current. Its meta records the
-    # inputs: a mismatch refuses rather than reporting a stale rep as built.
+    # The skip gate tests existence, so a rep built from OTHER inputs (an older pool, the
+    # retired eval DB) or another recipe would be "skipped" and look current. Its meta
+    # records them: a mismatch refuses rather than reporting a stale rep as built.
     if not force and out.exists() and meta_path(out).exists():
         old = json.loads(meta_path(out).read_text(encoding="utf-8"))
         # crush_db stays in the comparison: a rep built with the retired crush term
@@ -290,70 +251,42 @@ def build_color(tag: str, extra: list[str], flags: list[str],
         want = {**RECIPE_DEFAULTS, **(recipe or {})}
         drift += [k for k, v in want.items()
                   if old.get(k, RECIPE_DEFAULTS[k]) != v]
+        # The retired two-pass driver's output: same flags plus a learnability pass.
+        if old.get("learnability"):
+            drift.append("learnability")
         if drift:
-            print(f"  REFUSING {tag}: {out.name} was built from different inputs "
+            print(f"  REFUSING {tag}: {out.name} was built differently "
                   f"({', '.join(f'{k}: {old.get(k)}' for k in drift)}). "
                   f"Rebuild with --force.", flush=True)
             return False
 
-    # Step 1: pass-1 rep (recipe without the plan prior).
-    if rerun or not p1.exists():
-        if not run(f"sharp_{tag}_pass1",
-                   [PY, stage3, "--output", str(p1)] + flags + extra):
+    if force or not out.exists():
+        cmd_flags = flags + extra
+        if not run(f"sharp_{tag}", [PY, stage3, "--output", str(out)] + cmd_flags):
             return False
-        rerun = True
+        write_meta(out, stats, eval_db, tag, aux, recipe, cmd_flags)
     else:
-        print(f"  Skipping {tag} pass-1 (exists: {p1.name}).")
-    if pass1_only:
-        return True
-
-    # Step 2: measure the plan prior + node reach/ctx/depth from the pass-1 rep.
-    if rerun or not (prior.exists() and reach.exists()):
-        if not run(f"plan_{tag}",
-                   [PY, str(PROJECT / "python/plan_consistency_report.py"),
-                    "--repertoire", str(p1), "--perspective", tag,
-                    "--stats", str(stats),
-                    "--export-prefix", str(PLAN_DIR / f"{tag}_pass1")]):
-            return False
-        rerun = True
-    else:
-        print(f"  Skipping {tag} plan export (exists: {prior.name}, {reach.name}).")
-
-    # Step 3: pass-2 rep (recipe + learnability tiebreak) -> canonical output.
-    if rerun or not out.exists():
-        if not run(f"sharp_{tag}",
-                   [PY, stage3, "--output", str(out)]
-                   + flags + extra + learn_flags(prior, reach)):
-            return False
-        write_meta(out, stats, eval_db, tag, aux, recipe,
-                   flags + extra + learn_flags(prior, reach))
-    else:
-        print(f"  Skipping {tag} pass-2 (exists: {out.name}). Use --force to rebuild.")
+        print(f"  Skipping {tag} (exists: {out.name}). Use --force to rebuild.")
         if not meta_path(out).exists():
-            write_meta(out, stats, eval_db, tag, aux, recipe,
-                       flags + extra + learn_flags(prior, reach))
+            write_meta(out, stats, eval_db, tag, aux, recipe, flags + extra)
     return True
 
 
 def main() -> None:
-    global REP_DIR, PLAN_DIR, LOG_DIR
+    global REP_DIR, LOG_DIR
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--force", action="store_true",
-                    help="Rerun the whole pass-1 -> measure -> pass-2 chain even if "
-                         "outputs exist.")
+                    help="Rebuild both reps even if they exist.")
     ap.add_argument("--input", default=str(DEFAULT_STATS),
                     help=f"Pooled position-stats parquet (default: {DEFAULT_STATS.name}).")
     ap.add_argument("--eval-db", default=str(DEFAULT_EVAL_DB),
                     help=f"Stockfish eval source: a (position_hash, eval_cp) parquet or an "
                          f"eval-arrays directory from eval_arrays.py (default: {DEFAULT_EVAL_DB}).")
     ap.add_argument("--out-dir", default=str(REP_DIR),
-                    help=f"Where the reps (and _plan/) go (default: {REP_DIR}, the canonical "
+                    help=f"Where the reps go (default: {REP_DIR}, the canonical "
                          f"pair). A/B builds must point elsewhere; logs then go to "
                          f"logs/sharp_reps/<out-dir name>/.")
-    ap.add_argument("--pass1-only", action="store_true",
-                    help="Stop after each color's pass-1 rep (_plan/pass1_<color>.parquet): the "
-                         "cheap no-op check against the canonical pass-1 reps.")
     ap.add_argument("--aux-stats", default=str(DEFAULT_AUX),
                     help="position_stats_aux_*.parquet sidecar. Adds the mass an "
                          "opponent node's outgoing edges cannot see (terminations, "
@@ -381,7 +314,7 @@ def main() -> None:
     out_dir = Path(args.out_dir)
     if out_dir.resolve() != REP_DIR.resolve():
         LOG_DIR = LOG_DIR / out_dir.name
-    REP_DIR, PLAN_DIR = out_dir, out_dir / "_plan"
+    REP_DIR = out_dir
 
     stats, eval_db = Path(args.input), Path(args.eval_db)
     for p in (stats, eval_db):
@@ -392,7 +325,6 @@ def main() -> None:
                     "  — build it with python/eval_arrays.py")
             sys.exit(f"FATAL: missing prerequisite {p}{hint}")
     REP_DIR.mkdir(parents=True, exist_ok=True)
-    PLAN_DIR.mkdir(parents=True, exist_ok=True)
     aux = None if args.no_aux or not args.aux_stats else Path(args.aux_stats)
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
@@ -412,15 +344,12 @@ def main() -> None:
     failures = []
     for tag, extra in REPS:
         if not build_color(tag, extra, flags, stats, eval_db, args.force, aux,
-                           pass1_only=args.pass1_only, recipe=recipe):
+                           recipe=recipe):
             failures.append(tag)
     print(f"\nDone in {(time.time()-t_all)/60:.1f} min.")
     if failures:
         sys.exit(f"FAILED: {', '.join(failures)}")
-    if args.pass1_only:
-        print("Pass-1 reps: " + ", ".join(str(pass1_path(t)) for t, _ in REPS))
-    else:
-        print(f"Sharp reps in {REP_DIR}: " + ", ".join(out_path(t).name for t, _ in REPS))
+    print(f"Sharp reps in {REP_DIR}: " + ", ".join(out_path(t).name for t, _ in REPS))
 
 
 if __name__ == "__main__":
