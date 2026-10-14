@@ -49,7 +49,7 @@ if hasattr(sys.stdout, "reconfigure"):
 # Per-move metric columns we surface if present in the repertoire parquet.
 METRIC_COLS = ["value", "value_worst", "value_robust",
                "memo_cost", "cover_eff", "decisiveness", "opponent_error", "forcingness",
-               "eval_score"]
+               "eval_score", "margin", "runner_up"]   # last two: since 2026-10-14
 
 
 # ── Data layer ────────────────────────────────────────────────────────────
@@ -550,8 +550,21 @@ function renderOurTurn(data) {
       <th class="num">emp score</th><th class="num">rep value</th><th class="num">vs def</th><th class="num">gate</th><th class="num">eng eval</th>
       <th class="num">memo</th><th class="num">key</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table>
+    ${closeness(data)}
     ${playBtn}
   </div>`;
+}
+// How close the repertoire's choice was (Stage-3 margin / runner_up columns, 2026-10-14).
+// The 2026-10-14 bootstrap run put the median value gap of noise-flipped decisions at
+// 0.004-0.009, so a gap under 0.01 is flagged as a near-tie: the data cannot really
+// tell the two moves apart.
+function closeness(data) {
+  const m = data.metrics || {};
+  if (m.margin === null || m.margin === undefined || !m.runner_up) return "";
+  const near = Math.abs(m.margin) < 0.01;
+  return `<div class="small" style="margin-top:0.4rem;">choice margin over
+    <b>${m.runner_up}</b>: ${Number(m.margin).toFixed(4)}${near
+      ? ' <span class="badge off">near-tie</span>' : ""}</div>`;
 }
 function renderOpponentTurn(data) {
   if (!data.opp_top_moves.length) {
@@ -663,6 +676,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 # ── HTTP server ────────────────────────────────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):
+    # The server is single-threaded on purpose (a second thread could build a second
+    # ~18 GB slice view concurrently). But a browser may open a spare connection and
+    # send nothing on it; with no timeout, handle_request blocks reading that socket
+    # and every later request hangs. Seen 2026-10-14 in the Claude browser pane: the
+    # page loaded, /api/slices never answered. A per-connection timeout drops it.
+    timeout = 5
+
     def do_GET(self):  # noqa: N802
         url = urlparse(self.path)
         path, params = url.path, parse_qs(url.query)

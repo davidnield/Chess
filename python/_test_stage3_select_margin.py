@@ -77,6 +77,16 @@ def main() -> None:
     check(p1 == p2 == "e4",
           f"C: equal counts -> key decides, independent of row order ({p1}, {p2})")
 
+    # E -- the runner_up / margin output columns (last two elements of the result)
+    r0 = run_backwards_induction(ea, "white", **COMMON)
+    r1 = run_backwards_induction(ea, "white", select_margin=0.01, **COMMON)
+    ru0, m0 = r0[-2].get(sh), r0[-1].get(sh)
+    ru1, m1 = r1[-2].get(sh), r1[-1].get(sh)
+    check(ru0 == "e4" and abs(m0 - 0.005) < 1e-9,
+          f"E: runner_up/margin without a band (e4, +0.005; got {ru0}, {m0})")
+    check(ru1 == "a4" and abs(m1 + 0.005) < 1e-9,
+          f"E: band booked the lower key, so margin is negative (a4, -0.005; got {ru1}, {m1})")
+
     try:
         pick(ea, "white", sh, select_margin=-0.01)
         check(False, "D: negative margin refused")

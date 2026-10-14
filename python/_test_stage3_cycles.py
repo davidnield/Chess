@@ -110,7 +110,7 @@ def main() -> None:
     # ── Case 1: the 4-node cycle through the start position ──────────────────
     edges, h = cyclic_fixture()
     (values, best_moves, _bf, _be, _bd, memo_pot, _ce, value_worst,
-     _vr, _pe, _ps, _prior, _aug) = run_backwards_induction(edges, "white", **common)
+     _vr, _pe, _ps, _prior, _aug, _ru, _mg) = run_backwards_induction(edges, "white", **common)
 
     check(len(values) == 4 and all(v == v and abs(v) < 10 for v in values.values()),
           "all 4 cycle positions valued and finite")

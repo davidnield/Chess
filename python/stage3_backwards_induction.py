@@ -824,12 +824,13 @@ def _as_edges_df(edges) -> "pl.DataFrame":
 # Columns that carry None in the old per-row dicts (opponent-turn / no-move nodes,
 # uncovered eval) and so must serialize as null, not NaN. All other float columns are
 # always set for a valued node.
-_NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "eval_score"]
+_NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "eval_score", "margin"]
 
 
 def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_decis,
                  memo_pot, cover_eff, value_worst,
-                 values_robust, position_epd, position_side, best_aug, eval_lookup):
+                 values_robust, position_epd, position_side, best_aug, eval_lookup,
+                 best_runner=None, best_margin=None):
     """Build one slice's output rows straight from the numpy-backed value arrays
     (memory refactor Step 5 — replaces the 13M-row list[dict] + pl.from_dicts). Emits
     the exact legacy schema: NaN sentinels in the nullable diagnostic columns become
@@ -860,8 +861,21 @@ def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_deci
         "value_robust":    values_robust.arr,
         "eval_score":      eval_arr,
         "augmented":       best_aug.arr,
+        # How close the choice was (2026-10-14): the best-keyed candidate other than
+        # the booked move, and booked key minus its key. Negative where a tiebreak
+        # (--select-margin) deliberately booked a lower-key move. Null where nothing
+        # is booked or there was no alternative.
+        "runner_up":       (best_runner.lst if best_runner is not None else [None] * n),
+        "margin":          (best_margin.arr if best_margin is not None
+                            else np.full(n, np.nan)),
     })
     df = df.with_columns([pl.col(c).fill_nan(None) for c in _NULLABLE_OUT])
+    # a node whose move was later withdrawn (cycle sweeps) must not keep a stale runner-up
+    df = df.with_columns(
+        pl.when(pl.col("best_move").is_null()).then(None)
+          .otherwise(pl.col("runner_up")).alias("runner_up"),
+        pl.when(pl.col("best_move").is_null()).then(None)
+          .otherwise(pl.col("margin")).alias("margin"))
     return df.filter(pl.col("value").is_not_nan())
 
 
@@ -1069,6 +1083,8 @@ def run_backwards_induction(
     best_decis    = _ArrMap(sp, np.full(N, np.nan))
     best_aug      = _BoolMap(sp, np.zeros(N, dtype=bool))
     best_moves    = _ObjMap(sp, [None] * N)
+    best_runner   = _ObjMap(sp, [None] * N)          # runner_up column (see _slice_frame)
+    best_margin   = _ArrMap(sp, np.full(N, np.nan))  # margin column
     values_arr = values.arr    # direct handle for the topological drain / cycle phase
 
     # ── Topological sort (Kahn's) over node ids ────────────────────────────────
@@ -1546,7 +1562,10 @@ def run_backwards_induction(
                 if abs_pass:
                     gated = abs_pass
                 else:
-                    return max(base, key=lambda mv: sign * gate_rv(mv))
+                    pick = max(base, key=lambda mv: sign * gate_rv(mv))
+                    best_runner[ph] = None   # least-losing pick: no key comparison
+                    best_margin[ph] = np.nan
+                    return pick
         cands = gated or base
         # Memorization penalty (Lagrangian of a memo budget): forgetting cost of this
         # move (shrunk deviation vs the natural move) + the reach-weighted downstream
@@ -1587,6 +1606,14 @@ def run_backwards_induction(
                                          > learn_freq(ph, best["san"])):
                     learn_override_nodes.add(ph)
                     best = pick
+        others = [mv for mv in cands if mv is not best]
+        if others:
+            ru = max(others, key=keyf)
+            best_runner[ph] = ru["san"]
+            best_margin[ph] = keyf(best) - keyf(ru)
+        else:
+            best_runner[ph] = None
+            best_margin[ph] = np.nan
         return best
 
     def opp_robust(mvs):
@@ -2019,7 +2046,8 @@ def run_backwards_induction(
                          / (1.0 + np.nan_to_num(mem_nodes.arr, nan=0.0)))
     return (values, best_moves, best_forcing, best_error,
             best_decis, memo_pot, cover_effs, value_worst,
-            values_robust, position_epd, position_side, slice_prior, best_aug)
+            values_robust, position_epd, position_side, slice_prior, best_aug,
+            best_runner, best_margin)
 
 
 def print_best_line(
@@ -2617,7 +2645,7 @@ def main():
         t1 = time.time()
         (values, best_moves, best_forcing, best_err, best_decis,
          memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior,
-         bestaug) = run_backwards_induction(
+         bestaug, bestrunner, bestmargin) = run_backwards_induction(
             edges, args.perspective,
             prior_strength=args.prior_strength,
             forcing_weight=args.forcing_weight,
@@ -2694,7 +2722,7 @@ def main():
         frames.append(_slice_frame(
             ev, eb, values, best_moves, best_forcing, best_err, best_decis,
             memopot, covereff, worstvals, vals_robust,
-            pos_epd, pos_side, bestaug, eval_lookup))
+            pos_epd, pos_side, bestaug, eval_lookup, bestrunner, bestmargin))
 
     _memlog(f"pre-output-build ({len(frames)} slice frame(s))")
     result = pl.concat(frames).sort(["event", "elo_band", "position_hash"])
