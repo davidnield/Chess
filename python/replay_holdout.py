@@ -552,6 +552,18 @@ def main() -> int:
 
     months = [int(m) for m in a.months.split(",")] if a.months else None
     books = [Book(Path(p), a.perspective) for p in a.repertoire]
+    # Books built by one driver into different --out-dirs share a file name
+    # (repertoire_pooled_<c>_sharp), so path.stem alone made their report rows
+    # indistinguishable and their .nodes.parquet files overwrite each other.
+    # Prefix the parent directory whenever stems collide.
+    stems = [b.label for b in books]
+    for b in books:
+        if stems.count(b.label) > 1:
+            b.label = f"{b.path.parent.name}__{b.path.stem}"
+    if len({b.label for b in books}) < len(books):
+        print("FATAL: two --repertoire paths resolve to the same label "
+              f"({[b.label for b in books]}); pass distinct files.")
+        return 2
     for b in books:
         print(f"book: {b.label}  {b.n_rows:,} rows -> {len(b.moves):,} our-turn moves")
 

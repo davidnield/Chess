@@ -16,6 +16,8 @@ Cases:
   F  CLI: a book built on a pool covering 2025 is REFUSED (rc 2) for a 2025
      replay before any game is read; --allow-in-sample overrides. Skipped if the
      canonical source tree is absent.
+  G  two books with the same file name in different directories get distinct
+     (directory-prefixed) labels, so their report rows and .nodes files don't collide.
 """
 from __future__ import annotations
 
@@ -129,6 +131,24 @@ def main() -> None:
                                 text=True)
             check(r2.returncode == 0 and "WARNING (--allow-in-sample)" in r2.stdout,
                   f"F: --allow-in-sample proceeds with a warning (rc {r2.returncode})")
+
+            # G: two books with the same file name in different dirs get distinct labels
+            for sub in ("armA", "armB"):
+                (t / sub).mkdir()
+                rp = t / sub / "repertoire_pooled_white_sharp.parquet"
+                pl.DataFrame({"position_hash": [1], "side_to_move": ["white"],
+                              "value": [0.5], "best_move": ["e4"]}).write_parquet(rp)
+                meta(rp, {"input": str(pool_a)})
+            cmd_g = [sys.executable, str(HERE / "replay_holdout.py"), "--perspective",
+                     "white", "--start-year", "2025", "--end-year", "2025", "--months",
+                     "1", "--limit-games", "1", "--allow-in-sample",
+                     "--repertoire", str(t / "armA" / "repertoire_pooled_white_sharp.parquet"),
+                     "--repertoire", str(t / "armB" / "repertoire_pooled_white_sharp.parquet")]
+            r3 = subprocess.run(cmd_g, capture_output=True, text=True)
+            check(r3.returncode == 0
+                  and "book: armA__repertoire_pooled_white_sharp" in r3.stdout
+                  and "book: armB__repertoire_pooled_white_sharp" in r3.stdout,
+                  f"G: same-named books get directory-prefixed labels (rc {r3.returncode})")
 
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print(f"\n{'ALL PASS' if n_fail == 0 else f'{n_fail} FAILURES'} ({len(_checks)} checks)")
