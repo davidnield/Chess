@@ -2,15 +2,19 @@
 colour over the eval-blend + relative-eval-gate recipe.
 
 Recipe (single pooled slice, event='Pooled', elo_band=0):
-  - eval/empirical blend:  --eval-weight 0.5 --require-eval   (leaf value blends engine eval
-                           with the Beta-Binomial-shrunk empirical score; swept 2026-07 —
-                           0.5 Pareto-dominated 1.0/0.75/0.25 and a dynamic n-weighted
-                           variant on empirical pick quality, eval steering, AND ply-16
-                           coverage simultaneously, both colors. The line still truncates
-                           where the eval DB's coverage ends. OPEN (2026-10-08): a
-                           2026-08-31 holdout on the fixed pool put 1.0 ahead of 0.5 on
-                           faithful% and survival in both colours; --eval-weight exists to
-                           settle it out of sample)
+  - eval/empirical blend:  --eval-weight 0.75 --require-eval   (leaf value blends engine
+                           eval with the Beta-Binomial-shrunk empirical score. ADOPTED
+                           2026-10-17 from an OUT-OF-SAMPLE holdout: arms 0.5 / 0.75 / 1.0
+                           built on the 2013..2026-07 pool, replayed against 29.1M
+                           2026-08..09 games per colour, judged as a symmetric A/B (no
+                           status-quo threshold), one value for both colours. Faithful-game
+                           score, the objective, tied 0.5 vs 0.75 (colour average 0.590 vs
+                           0.588, ~0.7 SE) while 1.0 lost ~6 SE for White; 0.75 kept more
+                           games in book in BOTH colours (faithful games +2.2% W / +3.2% B,
+                           ply-16 survival +15% W / +5% B). White's faithful score falls
+                           monotonically with the weight, so 0.75 is the cautious end. The
+                           line still truncates where the eval DB's coverage ends.
+                           Reports: E:/chess/repertoire/_holdout_2026_08_09_<colour>.txt)
   - refutation gate:       --robustness-floor 0.1 --gate-metric eval   (gate on the engine
                            eval of the reached position)
   - relative gate:         --gate-rel-floor 0.1 --gate-rel-baseline own-eval
@@ -80,9 +84,9 @@ book's eval DB D:/chess/eval_full). Override the inputs with --input / --aux-sta
 inputs, the full Stage-3 flag list, a hash of the recipe and the git commit; the skip
 gate refuses a rep whose recipe differs.
 
-Opt-in flags (default off, each an exact no-op when off) for A/B builds that must go
-to their own --out-dir: --eval-weight, --gate-fallback strict, --other-cov-blend,
---select-margin.
+Recipe overrides for A/B builds, which must go to their own --out-dir: --eval-weight,
+--gate-fallback legacy, --no-other-cov-blend (the pre-2026-10-17 behaviours), and
+--select-margin (off; did not reduce noise flips).
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -124,8 +128,16 @@ REPLY_SHRINK = 1.0
 REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "black"])]
 
 
-RECIPE_DEFAULTS = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
+# The canonical recipe (adopted 2026-10-17): eval weight 0.75 from the out-of-sample
+# holdout; the two item-2 correctness fixes on. --select-margin stays off: it did not
+# reduce noise flips (a hard band only moves the coin flip to its edge).
+RECIPE_DEFAULTS = {"eval_weight": 0.75, "gate_fallback": "strict", "other_cov_blend": True,
                    "select_margin": 0.0}
+# What a meta written BEFORE a key existed was built with. The skip gate must read a
+# missing key as these, never as today's RECIPE_DEFAULTS, or an old rep would pass for a
+# current one the day a default changes.
+LEGACY_RECIPE = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
+                 "select_margin": 0.0}
 
 
 def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
@@ -181,6 +193,10 @@ def recipe_hash(flags: list[str]) -> str:
 
 
 def git_commit() -> str:
+    # A pinned copy (D:/chess/bin/<name>/python, no .git) records its commit beside it.
+    pinned = Path(__file__).resolve().parent / "PINNED_COMMIT"
+    if pinned.exists():
+        return pinned.read_text(encoding="utf-8").strip()
     try:
         return subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
                               check=True, cwd=PROJECT).stdout.strip()
@@ -247,10 +263,10 @@ def build_color(tag: str, extra: list[str], flags: list[str],
         now = {"input": stats, "crush_db": None, "eval_db": eval_db, "aux_stats": aux}
         drift = [k for k, v in now.items()
                  if (old.get(k) or None) != (str(v) if v is not None else None)]
-        # Recipe drift: a meta written before these keys existed is a default build.
+        # Recipe drift: a missing key means the rep predates it (LEGACY_RECIPE).
         want = {**RECIPE_DEFAULTS, **(recipe or {})}
         drift += [k for k, v in want.items()
-                  if old.get(k, RECIPE_DEFAULTS[k]) != v]
+                  if old.get(k, LEGACY_RECIPE[k]) != v]
         # The retired two-pass driver's output: same flags plus a learnability pass.
         if old.get("learnability"):
             drift.append("learnability")
@@ -297,16 +313,19 @@ def main() -> None:
                     help="Build without the aux sidecar: the pre-sidecar recipe, "
                          "with --reply-shrink restored.")
     ap.add_argument("--eval-weight", type=float, default=RECIPE_DEFAULTS["eval_weight"],
-                    help="Leaf eval/empirical blend weight (default 0.5, the locked "
-                         "recipe). For out-of-sample A/B arms; recorded in the meta.")
+                    help="Leaf eval/empirical blend weight (default 0.75, adopted "
+                         "2026-10-17 from the 2026-08..09 holdout). Recorded in the meta.")
     ap.add_argument("--gate-fallback", choices=["legacy", "strict"],
                     default=RECIPE_DEFAULTS["gate_fallback"],
-                    help="Stage 3 --gate-fallback (default legacy). strict never books a "
-                         "move that failed the absolute gate when a passing one exists, "
-                         "and books the least-losing move by engine eval otherwise.")
-    ap.add_argument("--other-cov-blend", action="store_true",
+                    help="Stage 3 --gate-fallback (default strict since 2026-10-17). "
+                         "strict never books a move that failed the absolute gate when a "
+                         "passing one exists, and books the least-losing move by engine "
+                         "eval otherwise; legacy is the pre-fix behaviour, for A/B arms.")
+    ap.add_argument("--other-cov-blend", action=argparse.BooleanOptionalAction,
+                    default=RECIPE_DEFAULTS["other_cov_blend"],
                     help="Stage 3 --other-cov-blend: blend the other-moves bucket's eval "
-                         "only over its eval-covered share.")
+                         "only over its eval-covered share (default ON since 2026-10-17; "
+                         "--no-other-cov-blend for the legacy rule).")
     ap.add_argument("--select-margin", type=float, default=RECIPE_DEFAULTS["select_margin"],
                     help="Stage 3 --select-margin: near-ties within this many expected-"
                          "score units go to the most-played move (default 0 = off).")

@@ -3,8 +3,10 @@ provenance hash (2026-10-08).
 
   A  the default Stage-3 argv is EXACTLY the locked recipe below -- a change here
      changes every canonical rep, so it must be deliberate (edit this pin too).
-  B  opt-in flags are appended only when on: the default argv carries none of
-     them (the exact-no-op rule for new flags).
+     Recipe of 2026-10-17: eval weight 0.75, gate fallback strict, other-cov blend.
+  B  a Stage-3 flag is passed only when it differs from Stage 3's own default, so
+     the legacy settings (gate-fallback legacy, no cov blend, margin 0) produce an
+     argv carrying none of the opt-in flags.
   C  recipe_hash ignores input/output paths, but changes with any setting.
   D  without aux, reply-shrink is restored to 1.0 (the pre-sidecar recipe).
   E  single pass: the learnability pass-2 is retired (2026-10-14).
@@ -25,10 +27,11 @@ def check(ok: bool, label: str) -> None:
     print(f"  {'PASS' if ok else 'FAIL'}  {label}")
 
 
-PINNED = ["--eval-weight", "0.5", "--require-eval", "--robustness-floor", "0.1",
+PINNED = ["--eval-weight", "0.75", "--require-eval", "--robustness-floor", "0.1",
           "--gate-metric", "eval", "--gate-rel-floor", "0.1",
           "--gate-rel-baseline", "own-eval", "--gate-rel-own-margin", "0.02",
-          "--min-move-games", "0", "--memo-weight", "0", "--reply-shrink", "0.0"]
+          "--min-move-games", "0", "--memo-weight", "0", "--reply-shrink", "0.0",
+          "--gate-fallback", "strict", "--other-cov-blend"]
 
 
 def main() -> None:
@@ -39,11 +42,17 @@ def main() -> None:
 
     on = b.common_flags(S, E, A, eval_weight=1.0, gate_fallback="strict",
                         other_cov_blend=True)
-    check(not any(x in f for x in ("--gate-fallback", "--other-cov-blend")),
-          "B: default argv carries no opt-in flag")
+    leg = b.common_flags(S, E, A, **b.LEGACY_RECIPE)
+    check(not any(x in leg for x in ("--gate-fallback", "--other-cov-blend",
+                                     "--select-margin")),
+          "B: the legacy settings carry no opt-in flag (Stage 3's own defaults)")
     check(on[-3:] == ["--gate-fallback", "strict", "--other-cov-blend"]
           and "1" in on[on.index("--eval-weight") + 1],
           f"B: opt-ins appended when on ({on[-3:]})")
+    check(b.LEGACY_RECIPE["eval_weight"] == 0.5
+          and b.LEGACY_RECIPE["gate_fallback"] == "legacy"
+          and not b.LEGACY_RECIPE["other_cov_blend"],
+          "F: a meta without recipe keys is read as the pre-2026-10-17 recipe")
 
     h = b.recipe_hash(f)
     check(h == b.recipe_hash(b.common_flags(Path("x"), Path("y"), Path("z"))),
