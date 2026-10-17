@@ -827,10 +827,40 @@ def _as_edges_df(edges) -> "pl.DataFrame":
 _NULLABLE_OUT = ["forcingness", "opponent_error", "decisiveness", "eval_score", "margin"]
 
 
+class IncumbentMoves:
+    """Our-turn best moves of a PREVIOUS book, for --incumbent (rebuild stickiness).
+    Sorted int64 hashes + a parallel SAN list: ~9M rows cost ~70 MB of hashes plus
+    the strings, a fraction of a dict. `.get(h)` returns the SAN or None."""
+
+    def __init__(self, hashes, sans):
+        order = np.argsort(np.asarray(hashes, dtype=np.int64), kind="stable")
+        self.h = np.asarray(hashes, dtype=np.int64)[order]
+        self.san = [sans[i] for i in order.tolist()]
+
+    def get(self, h):
+        i = int(np.searchsorted(self.h, h))
+        if i < len(self.h) and self.h[i] == h:
+            return self.san[i]
+        return None
+
+    def __len__(self):
+        return len(self.h)
+
+
+def load_incumbent(path, perspective: str, event, elo_band) -> "IncumbentMoves":
+    """The incumbent book's our-turn moves for one (event, elo_band) slice."""
+    d = (pl.scan_parquet(path)
+         .filter((pl.col("side_to_move") == perspective)
+                 & pl.col("best_move").is_not_null()
+                 & (pl.col("event") == event) & (pl.col("elo_band") == elo_band))
+         .select("position_hash", "best_move").collect())
+    return IncumbentMoves(d["position_hash"].to_numpy(), d["best_move"].to_list())
+
+
 def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_decis,
                  memo_pot, cover_eff, value_worst,
                  values_robust, position_epd, position_side, best_aug, eval_lookup,
-                 best_runner=None, best_margin=None):
+                 best_runner=None, best_margin=None, best_kept=None):
     """Build one slice's output rows straight from the numpy-backed value arrays
     (memory refactor Step 5 — replaces the 13M-row list[dict] + pl.from_dicts). Emits
     the exact legacy schema: NaN sentinels in the nullable diagnostic columns become
@@ -868,6 +898,10 @@ def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_deci
         "runner_up":       (best_runner.lst if best_runner is not None else [None] * n),
         "margin":          (best_margin.arr if best_margin is not None
                             else np.full(n, np.nan)),
+        # --incumbent (2026-10-17): True where the previous book's move was kept
+        # although another candidate keyed higher (by at most --stick-margin).
+        "kept_incumbent":  (best_kept.arr if best_kept is not None
+                            else np.zeros(n, dtype=bool)),
     })
     df = df.with_columns([pl.col(c).fill_nan(None) for c in _NULLABLE_OUT])
     # a node whose move was later withdrawn (cycle sweeps) must not keep a stale runner-up
@@ -930,6 +964,8 @@ def run_backwards_induction(
     learn_ctx_share:  dict[str, float] | None = None,
     learn_depth:      dict[int, int] | None = None,
     select_margin:    float = 0.0,
+    incumbent:        "IncumbentMoves | dict | None" = None,
+    stick_margin:     float = 0.0,
     learn_delta_main: float = 0.005,
     learn_delta_rare: float = 0.04,
     learn_reach_pivot: float = 0.02,
@@ -1084,6 +1120,7 @@ def run_backwards_induction(
     best_aug      = _BoolMap(sp, np.zeros(N, dtype=bool))
     best_moves    = _ObjMap(sp, [None] * N)
     best_runner   = _ObjMap(sp, [None] * N)          # runner_up column (see _slice_frame)
+    best_kept     = _BoolMap(sp, np.zeros(N, dtype=bool))  # kept_incumbent column
     best_margin   = _ArrMap(sp, np.full(N, np.nan))  # margin column
     values_arr = values.arr    # direct handle for the topological drain / cycle phase
 
@@ -1252,6 +1289,20 @@ def run_backwards_induction(
     if select_margin < 0:
         raise ValueError(f"select_margin must be >= 0, got {select_margin}")
     margin_override_nodes: set[int] = set()
+    # --incumbent / --stick-margin (2026-10-17): rebuild stickiness. Sampling noise
+    # alone flips 3-5% of reach-weighted decisions between rebuilds (bootstrap run
+    # 2026-10-14), and every value-model change reshuffles near-ties; for a book the
+    # user memorises, that churn is the cost. Unlike --select-margin, whose band is
+    # keyed on the same noisy values it is meant to stabilise, the reference here is
+    # FIXED: the previous book's move stays unless the best candidate's key beats it
+    # by more than stick_margin. It is applied after the gates, among `cands`, so a
+    # move the gates now reject is never kept. incumbent None = off (exact no-op).
+    if stick_margin < 0:
+        raise ValueError(f"stick_margin must be >= 0, got {stick_margin}")
+    if stick_margin > 0 and incumbent is None:
+        raise ValueError("stick_margin needs an incumbent book")
+    _sticky = incumbent is not None
+    kept_incumbent_nodes: set[int] = set()
     # --gate-fallback. Counted in BOTH modes so a legacy build reports how many nodes
     # the strict chain would change (see select_our):
     #   fallback_abs_nodes — the relative gate (and the engine rescue) emptied a set
@@ -1606,6 +1657,16 @@ def run_backwards_induction(
                                          > learn_freq(ph, best["san"])):
                     learn_override_nodes.add(ph)
                     best = pick
+        if _sticky:
+            inc = incumbent.get(ph)
+            best_kept[ph] = False
+            if inc is not None and inc.rstrip("+#") != best["san"].rstrip("+#"):
+                inc_n = inc.rstrip("+#")
+                im = next((mv for mv in cands if mv["san"].rstrip("+#") == inc_n), None)
+                if im is not None and keyf(best) - keyf(im) <= stick_margin:
+                    kept_incumbent_nodes.add(ph)
+                    best_kept[ph] = True
+                    best = im
         others = [mv for mv in cands if mv is not best]
         if others:
             ru = max(others, key=keyf)
@@ -2033,6 +2094,10 @@ def run_backwards_induction(
               + ("" if _strict_fallback else
                  " (legacy: both pick among ALL recorded moves by blended value)"),
               flush=True)
+    if _sticky:
+        print(f"  incumbent ({len(incumbent):,} moves, stick margin {stick_margin}): kept "
+              f"the previous book's move over a higher key at "
+              f"{len(kept_incumbent_nodes):,} nodes", flush=True)
     if select_margin > 0.0:
         print(f"  select margin {select_margin}: most-played move chosen over the key's "
               f"best at {len(margin_override_nodes):,} nodes", flush=True)
@@ -2047,7 +2112,7 @@ def run_backwards_induction(
     return (values, best_moves, best_forcing, best_error,
             best_decis, memo_pot, cover_effs, value_worst,
             values_robust, position_epd, position_side, slice_prior, best_aug,
-            best_runner, best_margin)
+            best_runner, best_margin, best_kept)
 
 
 def print_best_line(
@@ -2427,6 +2492,16 @@ def main():
                         help="Companion reach parquet (position_hash, ctx, reach) from the "
                              "same --export-prefix run: per-node dominant context + fraction "
                              "of games reaching the node. Drives the δ scaling below.")
+    parser.add_argument("--incumbent", default=None,
+                        help="A previous repertoire parquet (same perspective and slice) "
+                             "to stick to: its move at a position is kept unless the best "
+                             "candidate's key beats it by more than --stick-margin. Applied "
+                             "after the gates, so a move they now reject is never kept. "
+                             "Default: none (off).")
+    parser.add_argument("--stick-margin", type=float, default=0.0,
+                        help="Key advantage a new move needs to replace the --incumbent "
+                             "book's move (expected-score units). 0 keeps the incumbent "
+                             "only on exact ties. Needs --incumbent.")
     parser.add_argument("--select-margin", type=float, default=0.0,
                         help="Treat our-turn candidates within this many expected-score "
                              "units of the best selection key as tied, and play the "
@@ -2564,6 +2639,12 @@ def main():
         print(f"Gate fallback:     {args.gate_fallback}")
     if args.select_margin > 0:
         print(f"Select margin:     {args.select_margin}  (near-ties go to the most-played move)")
+    if args.stick_margin > 0 and not args.incumbent:
+        sys.exit("FATAL: --stick-margin needs --incumbent")
+    if args.incumbent:
+        if not Path(args.incumbent).exists():
+            sys.exit(f"FATAL: --incumbent not found: {args.incumbent}")
+        print(f"Incumbent:         {args.incumbent}  (stick margin {args.stick_margin})")
 
     # ── Load learnability plan prior (ctx/token game frequencies + node reach) ──
     learn_prior = learn_ctx = learn_reach = learn_ctx_share = learn_depth = None
@@ -2645,7 +2726,7 @@ def main():
         t1 = time.time()
         (values, best_moves, best_forcing, best_err, best_decis,
          memopot, covereff, worstvals, vals_robust, pos_epd, pos_side, slice_prior,
-         bestaug, bestrunner, bestmargin) = run_backwards_induction(
+         bestaug, bestrunner, bestmargin, bestkept) = run_backwards_induction(
             edges, args.perspective,
             prior_strength=args.prior_strength,
             forcing_weight=args.forcing_weight,
@@ -2695,6 +2776,9 @@ def main():
             learn_ctx_share=learn_ctx_share,
             learn_depth=learn_depth,
             select_margin=args.select_margin,
+            incumbent=(load_incumbent(args.incumbent, args.perspective, ev, eb)
+                       if args.incumbent else None),
+            stick_margin=args.stick_margin,
             learn_delta_main=args.learn_delta_main,
             learn_delta_rare=args.learn_delta_rare,
             learn_reach_pivot=args.learn_reach_pivot,
@@ -2722,7 +2806,8 @@ def main():
         frames.append(_slice_frame(
             ev, eb, values, best_moves, best_forcing, best_err, best_decis,
             memopot, covereff, worstvals, vals_robust,
-            pos_epd, pos_side, bestaug, eval_lookup, bestrunner, bestmargin))
+            pos_epd, pos_side, bestaug, eval_lookup, bestrunner, bestmargin,
+            bestkept if args.incumbent else None))
 
     _memlog(f"pre-output-build ({len(frames)} slice frame(s))")
     result = pl.concat(frames).sort(["event", "elo_band", "position_hash"])

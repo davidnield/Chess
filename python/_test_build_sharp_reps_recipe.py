@@ -10,6 +10,7 @@ provenance hash (2026-10-08).
   C  recipe_hash ignores input/output paths, but changes with any setting.
   D  without aux, reply-shrink is restored to 1.0 (the pre-sidecar recipe).
   E  single pass: the learnability pass-2 is retired (2026-10-14).
+  G  rebuild stickiness: --stick-margin is a recipe setting, the incumbent path is not.
 """
 from __future__ import annotations
 
@@ -62,6 +63,13 @@ def main() -> None:
           "C: a learnability setting would be part of the recipe (paths excluded)")
     check(not hasattr(b, "learn_flags") and not hasattr(b, "LEARN"),
           "E: the driver is single-pass (learnability pass retired 2026-10-14)")
+
+    st = b.common_flags(S, E, A, stick_margin=0.01)
+    check(st[-2:] == ["--stick-margin", "0.01"] and "--stick-margin" not in f,
+          "G: --stick-margin is passed only when on")
+    check(b.recipe_hash(st + ["--incumbent", "a.parquet"])
+          == b.recipe_hash(st + ["--incumbent", "b.parquet"]) != h,
+          "G: the incumbent PATH is not part of the recipe hash; the margin is")
 
     nf = b.common_flags(S, E, None)
     check(nf[nf.index("--reply-shrink") + 1] == str(b.REPLY_SHRINK) == "1.0",

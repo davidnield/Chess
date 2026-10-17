@@ -86,7 +86,9 @@ gate refuses a rep whose recipe differs.
 
 Recipe overrides for A/B builds, which must go to their own --out-dir: --eval-weight,
 --gate-fallback legacy, --no-other-cov-blend (the pre-2026-10-17 behaviours), and
---select-margin (off; did not reduce noise flips).
+--select-margin (off; did not reduce noise flips). Rebuild stickiness (item 5,
+2026-10-17): --incumbent-dir <dir of the previous pair> --stick-margin X keeps each
+previous move unless a new one beats it by more than X.
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -132,19 +134,20 @@ REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "blac
 # holdout; the two item-2 correctness fixes on. --select-margin stays off: it did not
 # reduce noise flips (a hard band only moves the coin flip to its edge).
 RECIPE_DEFAULTS = {"eval_weight": 0.75, "gate_fallback": "strict", "other_cov_blend": True,
-                   "select_margin": 0.0}
+                   "select_margin": 0.0, "stick_margin": 0.0}
 # What a meta written BEFORE a key existed was built with. The skip gate must read a
 # missing key as these, never as today's RECIPE_DEFAULTS, or an old rep would pass for a
 # current one the day a default changes.
 LEGACY_RECIPE = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
-                 "select_margin": 0.0}
+                 "select_margin": 0.0, "stick_margin": 0.0}
 
 
 def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
                  eval_weight: float = RECIPE_DEFAULTS["eval_weight"],
                  gate_fallback: str = RECIPE_DEFAULTS["gate_fallback"],
                  other_cov_blend: bool = RECIPE_DEFAULTS["other_cov_blend"],
-                 select_margin: float = RECIPE_DEFAULTS["select_margin"]) -> list[str]:
+                 select_margin: float = RECIPE_DEFAULTS["select_margin"],
+                 stick_margin: float = RECIPE_DEFAULTS["stick_margin"]) -> list[str]:
     """The locked sharp recipe (eval blend + relative gate; no crush since 2026-10-02),
     parameterized by input paths.
 
@@ -169,11 +172,14 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
         *(["--gate-fallback", gate_fallback] if gate_fallback != "legacy" else []),
         *(["--other-cov-blend"] if other_cov_blend else []),
         *(["--select-margin", f"{select_margin:g}"] if select_margin > 0 else []),
+        # stickiness: the per-colour --incumbent path is added by main() (it is a path,
+        # so it stays out of the recipe hash); the margin is part of the recipe.
+        *(["--stick-margin", f"{stick_margin:g}"] if stick_margin > 0 else []),
     ]
 
 
 _PATH_FLAGS = {"--input", "--aux-stats", "--eval-db", "--output",
-               "--plan-prior", "--plan-reach"}
+               "--plan-prior", "--plan-reach", "--incumbent"}
 
 
 def recipe_hash(flags: list[str]) -> str:
@@ -326,6 +332,14 @@ def main() -> None:
                     help="Stage 3 --other-cov-blend: blend the other-moves bucket's eval "
                          "only over its eval-covered share (default ON since 2026-10-17; "
                          "--no-other-cov-blend for the legacy rule).")
+    ap.add_argument("--incumbent-dir", default=None,
+                    help="Rebuild stickiness: a directory holding the PREVIOUS pair "
+                         "(repertoire_pooled_<colour>_sharp.parquet). Each colour keeps the "
+                         "previous book's move unless the best candidate beats it by more "
+                         "than --stick-margin. Default: none (a fresh build).")
+    ap.add_argument("--stick-margin", type=float, default=RECIPE_DEFAULTS["stick_margin"],
+                    help="Key advantage a new move needs to replace the incumbent's "
+                         "(expected-score units). Needs --incumbent-dir. Default 0.")
     ap.add_argument("--select-margin", type=float, default=RECIPE_DEFAULTS["select_margin"],
                     help="Stage 3 --select-margin: near-ties within this many expected-"
                          "score units go to the most-played move (default 0 = off).")
@@ -349,8 +363,18 @@ def main() -> None:
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
     recipe = {"eval_weight": args.eval_weight, "gate_fallback": args.gate_fallback,
               "other_cov_blend": bool(args.other_cov_blend),
-              "select_margin": args.select_margin}
+              "select_margin": args.select_margin,
+              "stick_margin": args.stick_margin}
     flags = common_flags(stats, eval_db, aux, **recipe)
+    inc_dir = Path(args.incumbent_dir) if args.incumbent_dir else None
+    if args.stick_margin > 0 and inc_dir is None:
+        sys.exit("FATAL: --stick-margin needs --incumbent-dir")
+    if inc_dir is not None:
+        for tag, _ in REPS:
+            ip = inc_dir / f"repertoire_pooled_{tag}_sharp.parquet"
+            if not ip.exists():
+                sys.exit(f"FATAL: incumbent not found: {ip}")
+        print(f"Incumbent: {inc_dir}  (stick margin {args.stick_margin})")
     off = {k: v for k, v in recipe.items() if v != RECIPE_DEFAULTS[k]}
     if off:
         print(f"Recipe overrides: {off}")
@@ -362,6 +386,9 @@ def main() -> None:
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
+        if inc_dir is not None:
+            extra = extra + ["--incumbent",
+                             str(inc_dir / f"repertoire_pooled_{tag}_sharp.parquet")]
         if not build_color(tag, extra, flags, stats, eval_db, args.force, aux,
                            recipe=recipe):
             failures.append(tag)

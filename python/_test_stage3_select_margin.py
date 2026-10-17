@@ -77,11 +77,11 @@ def main() -> None:
     check(p1 == p2 == "e4",
           f"C: equal counts -> key decides, independent of row order ({p1}, {p2})")
 
-    # E -- the runner_up / margin output columns (last two elements of the result)
+    # E -- the runner_up / margin output columns (3rd- and 2nd-last elements)
     r0 = run_backwards_induction(ea, "white", **COMMON)
     r1 = run_backwards_induction(ea, "white", select_margin=0.01, **COMMON)
-    ru0, m0 = r0[-2].get(sh), r0[-1].get(sh)
-    ru1, m1 = r1[-2].get(sh), r1[-1].get(sh)
+    ru0, m0 = r0[-3].get(sh), r0[-2].get(sh)   # (..., runner_up, margin, kept_incumbent)
+    ru1, m1 = r1[-3].get(sh), r1[-2].get(sh)
     check(ru0 == "e4" and abs(m0 - 0.005) < 1e-9,
           f"E: runner_up/margin without a band (e4, +0.005; got {ru0}, {m0})")
     check(ru1 == "a4" and abs(m1 + 0.005) < 1e-9,
