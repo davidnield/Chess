@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import heapq
+import json
 import sys
 import time
 from pathlib import Path
@@ -315,7 +316,21 @@ def main() -> int:
 
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(list(rows.values())).write_parquet(out, compression="zstd")
+    # Atomic publish (repo convention): the ladder skip-gates on the output existing.
+    tmp = out.with_name(out.name + ".tmp")
+    pl.DataFrame(list(rows.values())).write_parquet(tmp, compression="zstd")
+    tmp.replace(out)
+    # Provenance (2026-10-17). replay_holdout's in-sample guard follows a book's
+    # meta to its pool's month range and refuses a book it cannot place, so a book
+    # without one could not be scored on any holdout at all.
+    meta = {"producer": "build_baseline_books", "rule": a.rule,
+            "perspective": a.perspective, "budget": budget, "spent": spent,
+            "stats": a.stats, "source_rep": a.book, "min_games": a.min_games,
+            "max_ply": a.max_ply, "built": time.strftime("%Y-%m-%d %H:%M:%S")}
+    mp = out.with_name(out.name + ".meta.json")
+    mtmp = mp.with_name(mp.name + ".tmp")
+    mtmp.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    mtmp.replace(mp)
     print(f"\n{a.rule} / {a.perspective}: {len(rows):,} nodes, "
           f"{spent:,} our-turn decisions -> {out}")
     if a.rule == "from-book":

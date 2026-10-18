@@ -228,9 +228,12 @@ def main() -> int:
                     help="Default: read from --rep's .meta.json.")
     ap.add_argument("--slice-prior", type=float, default=None,
                     help="Default: computed from the stats root edges.")
-    ap.add_argument("--eval-weight", type=float, default=bc.EVAL_WEIGHT,
-                    help="Engine-eval share of every leaf/stop value (default "
-                         "0.5, the blessed recipe). 0 = purely empirical value: "
+    ap.add_argument("--eval-weight", type=float, default=None,
+                    help="Engine-eval share of every leaf/stop value. Default: the "
+                         "SOURCE rep's eval_weight from its .meta.json (0.75 for the "
+                         "2026-10-17 canonical pair), else 0.5. Mirroring matters: a "
+                         "budget book valued at another weight optimises a different "
+                         "objective from the book it is cut from. 0 = purely empirical value: "
                          "every number becomes a smoothed observed score. Note "
                          "the eval is still used for GATING which candidates "
                          "exist — that is a separate mechanism from value.")
@@ -276,6 +279,13 @@ def main() -> int:
     # The other-moves bucket's coverage rule is part of the objective, so it must
     # match the Stage-3 build that produced the source rep (aux_opp_mix, shared).
     other_cov_blend = bool(src_meta.get("other_cov_blend", False))
+    # Same reasoning as other_cov_blend: mirror the source build's eval weight unless
+    # overridden. Before 2026-10-17 this defaulted to a constant 0.5, which matched the
+    # recipe until the canonical pair moved to 0.75 and would then have silently valued
+    # every budget book at a different weight from its source.
+    if a.eval_weight is None:
+        a.eval_weight = float(src_meta.get("eval_weight", bc.EVAL_WEIGHT))
+    log(f"eval weight {a.eval_weight:g} ({'source meta' if 'eval_weight' in src_meta else 'default'})")
     if other_cov_blend:
         log("other-moves bucket: coverage-scaled engine blend (source rep's "
             "--other-cov-blend)")
