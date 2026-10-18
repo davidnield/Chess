@@ -127,7 +127,9 @@ OUTPUTS
 Per book: exit-reason breakdown, in-book survival curve, faithful share and
 score, calibration bins, and optionally a per-node parquet (position_hash,
 n_games, score_sum, n_faithful, score_sum_faithful, value) so a later run can
-re-bin without replaying.
+re-bin without replaying, and <label>.exits.parquet (position_hash, n_games,
+score_sum) for the first out-of-book position each following game reached.
+--our-elo / --opp-min-elo filter on each side's own rating (default off).
 
 Node counters track TWO populations. `all` is every game that reached the node.
 `faithful` is games that never deviated -- only those are evidence about the
@@ -166,6 +168,7 @@ from zobrist import IncrementalZobrist, zobrist_int64
 
 EVENTS = ["Blitz", "Rapid", "Classical"]
 SRC_COLUMNS = ["movetext", "white_score", "mean_elo"]
+SIDE_ELO_COLUMNS = ["white_elo", "black_elo"]
 # Read only where the partition has it; older partitions may not. Absent =>
 # every exit is classed UNKNOWN and the adjusted deltas are suppressed rather
 # than silently computed off a wrong denominator.
@@ -284,6 +287,13 @@ class Book:
                 self.moves[h] = mv
         self.node_n: dict[int, int] = {}
         self.node_s: dict[int, float] = {}
+        # The first position OUTSIDE the book a game reached while still following
+        # it (no row there: the book ended after our move, or the opponent left).
+        # walk_books sets exit_hash per game; written as <label>.exits.parquet so a
+        # policy value can read the games that played the book's LAST move too.
+        self.exit_hash: int | None = None
+        self.exit_n: dict[int, int] = {}
+        self.exit_s: dict[int, float] = {}
         self.node_fn: dict[int, int] = {}
         self.node_fs: dict[int, float] = {}
         self.reasons: Counter = Counter()
@@ -329,6 +339,8 @@ def walk_books(movetext: str, perspective: str, books: list[Book],
     alive = list(range(n))
     h = zobrist_int64(board)
     ply = 0
+    for b in books:
+        b.exit_hash = None
 
     try:
         for san in iter_san_moves(movetext):
@@ -340,6 +352,7 @@ def walk_books(movetext: str, perspective: str, books: list[Book],
                     out[i] = (BOOK_END, ply, b.values.get(h), paths[i])
                     continue
                 if h not in b.values:
+                    b.exit_hash = h
                     out[i] = (_exit_reason(ply, us_to_move), ply, None, paths[i])
                     continue
                 paths[i].append(h)
@@ -384,6 +397,7 @@ def walk_books(movetext: str, perspective: str, books: list[Book],
                 out[i] = (BOOK_END, ply, b.values.get(h), paths[i])
                 continue
             if h not in b.values:
+                b.exit_hash = h
                 out[i] = (_exit_reason(ply, us_now), ply, None, paths[i])
                 continue
             paths[i].append(h)
@@ -539,6 +553,12 @@ def main() -> int:
     ap.add_argument("--months", type=str, default=None)
     ap.add_argument("--events", type=str, default=",".join(EVENTS))
     ap.add_argument("--min-elo", type=int, default=1800)
+    ap.add_argument("--our-elo", default=None, metavar="LO:HI",
+                    help="Keep only games where OUR side's own rating is in [LO, HI) "
+                         "(e.g. 1000:1800). Applied on top of --min-elo (the game "
+                         "mean); pass --min-elo 0 to filter on the sides alone.")
+    ap.add_argument("--opp-min-elo", type=int, default=None,
+                    help="Keep only games where the OPPONENT's own rating is >= this.")
     ap.add_argument("--limit-games", type=int, default=0)
     ap.add_argument("--max-ply", type=int, default=30)
     ap.add_argument("--out-dir", default=None,
@@ -587,8 +607,15 @@ def main() -> int:
               + "in-sample or unverifiable holdout:\n  " + "\n  ".join(bad))
         if not a.allow_in_sample:
             return 2
+    our_lo = our_hi = None
+    if a.our_elo:
+        our_lo, our_hi = (int(x) for x in a.our_elo.split(":"))
+    side_filter = a.our_elo is not None or a.opp_min_elo is not None
     print(f"holdout: {len(files):,} source files, {a.start_year}-{a.end_year}, "
-          f"mean_elo>={a.min_elo}, {len(books)} book(s) in one pass")
+          f"mean_elo>={a.min_elo}"
+          + (f", our elo [{our_lo}, {our_hi})" if a.our_elo else "")
+          + (f", opponent elo >= {a.opp_min_elo}" if a.opp_min_elo is not None else "")
+          + f", {len(books)} book(s) in one pass")
     if not files:
         print("FATAL: no source files matched.")
         return 1
@@ -602,11 +629,18 @@ def main() -> int:
         has_term = TERM_COLUMN in pf.schema_arrow.names
         if not has_term:
             n_no_term += 1
-        cols = SRC_COLUMNS + ([TERM_COLUMN] if has_term else [])
+        cols = (SRC_COLUMNS + ([TERM_COLUMN] if has_term else [])
+                + (SIDE_ELO_COLUMNS if side_filter else []))
+        ours_c, opp_c = (("white_elo", "black_elo") if a.perspective == "white"
+                         else ("black_elo", "white_elo"))
         for batch in pf.iter_batches(batch_size=READ_BATCH_GAMES, columns=cols):
             df = pl.from_arrow(batch).filter(
                 (pl.col("mean_elo") >= a.min_elo)
                 & pl.col("white_score").is_not_null())
+            if our_lo is not None:
+                df = df.filter((pl.col(ours_c) >= our_lo) & (pl.col(ours_c) < our_hi))
+            if a.opp_min_elo is not None:
+                df = df.filter(pl.col(opp_c) >= a.opp_min_elo)
             terms = (df[TERM_COLUMN].to_list() if has_term
                      else [None] * df.height)
             for mt, ws, tm in zip(df["movetext"].to_list(),
@@ -616,6 +650,9 @@ def main() -> int:
                 realized = float(ws) if a.perspective == "white" else 1.0 - float(ws)
                 how = UNKNOWN if not has_term else TERM_MAP.get(tm, OTHER)
                 for b, (reason, ply, _v, path) in zip(books, res):
+                    if b.exit_hash is not None:
+                        b.exit_n[b.exit_hash] = b.exit_n.get(b.exit_hash, 0) + 1
+                        b.exit_s[b.exit_hash] = b.exit_s.get(b.exit_hash, 0.0) + realized
                     b.reasons[reason] += 1
                     b.ply_hist[reason][ply] += 1
                     b.score_sum[reason] += realized
@@ -667,6 +704,12 @@ def main() -> int:
                 "score_sum_faithful": [b.node_fs.get(h, 0.0) for h in hs],
                 "value": [b.values.get(h) for h in hs],
             }).write_parquet(d / f"{b.label}.nodes.parquet", compression="zstd")
+            xs = sorted(b.exit_n)
+            pl.DataFrame({
+                "position_hash": pl.Series(xs, dtype=pl.Int64),
+                "n_games": pl.Series([b.exit_n[h] for h in xs], dtype=pl.Int64),
+                "score_sum": pl.Series([b.exit_s[h] for h in xs], dtype=pl.Float64),
+            }).write_parquet(d / f"{b.label}.exits.parquet", compression="zstd")
         print(f"\nwrote per-node parquet for {len(books)} book(s) -> {d}")
     return 0
 

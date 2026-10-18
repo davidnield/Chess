@@ -387,6 +387,41 @@ def rel_gate_keep(cand_evals_ws: list[float | None], own_eval_ws: float | None,
     return [e is None or e <= best + gate_rel_floor for e in cand_evals_ws]
 
 
+def gate_candidates(h: int, es: list[dict], src: str | None,
+                    eval_ws: dict[int, float], our_white: bool,
+                    slice_prior: float,
+                    robustness_floor: float = ROBUSTNESS_FLOOR,
+                    gate_rel_floor: float = GATE_REL_FLOOR,
+                    gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
+                    require_eval: bool = True, gates: bool = True
+                    ) -> list[tuple[dict, float | None]]:
+    """The recorded moves at our node `h` that may be booked: the source book's
+    move always, then those passing require-eval and both refutation gates. One
+    definition for build_graph (the choice set) and for the subgraph collector's
+    --gated-reach expansion, so the two can never disagree on what is reachable."""
+    cand_es = []
+    for e in es:
+        ch = e.get("child_hash")
+        cev = eval_ws.get(ch) if ch is not None else None
+        if e["move_san"] == src:
+            cand_es.append((e, cev))
+            continue
+        if not gates:
+            cand_es.append((e, cev))
+            continue
+        if require_eval and cev is None:
+            continue
+        if not passes_abs_gate(cev, slice_prior, our_white, robustness_floor):
+            continue
+        cand_es.append((e, cev))
+    if gates and cand_es:
+        keep = rel_gate_keep([cv for _, cv in cand_es], eval_ws.get(h), our_white,
+                             gate_rel_floor, gate_rel_own_margin)
+        cand_es = [(e, cv) for (e, cv), k in zip(cand_es, keep)
+                   if k or e["move_san"] == src]
+    return cand_es
+
+
 # ── graph ───────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -397,6 +432,9 @@ class OurNode:
     # subgraph node (dead end / beyond ply cap).
     cands: list[tuple[str, int | None, bool, float]] = field(
         default_factory=list)
+    # (continuing mass, crack mass) when the aux sidecar folded opponent collapses
+    # into l_node; apply_stop_values re-applies the same blend to a new stop value.
+    crack: tuple[float, float] | None = None
 
 
 @dataclass
@@ -405,6 +443,9 @@ class OppNode:
     # kids: (p, child_hash, in_subgraph, leaf_val)
     kids: list[tuple[float, int | None, bool, float]] = field(
         default_factory=list)
+    # replies under the share floor, already summed into const_base:
+    # (p, child_hash, leaf_val), kept so a stop model can revalue them
+    floor: list[tuple[float, int, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -423,11 +464,17 @@ class Graph:
 
 def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      root_our: bool, eps: float, max_ply: int,
-                     share_floor: float) -> tuple[dict[int, float],
-                                                  dict[int, int]]:
+                     share_floor: float,
+                     admitted: dict[int, set] | None = None
+                     ) -> tuple[dict[int, float], dict[int, int]]:
     """Policy-free reach upper bound: max over paths of the product of opponent
     reply shares; our moves carry probability 1. Max-product Dijkstra (all
-    factors <= 1, so first finalization is maximal); lazy-deletion heap."""
+    factors <= 1, so first finalization is maximal); lazy-deletion heap.
+
+    admitted (--gated-reach): our node -> the child hashes of the moves the gates
+    admit. Reach then flows only through moves the book could actually play; a
+    position reachable only through a refuted move gets no reach. None = every
+    recorded move (the policy-free bound, the default)."""
     import heapq
     reach: dict[int, float] = {}
     ply: dict[int, int] = {}
@@ -453,6 +500,8 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
             if ch is None:
                 continue
             if our_turn:
+                if admitted is not None and ch not in admitted.get(h, ()):
+                    continue
                 cr = r
             else:
                 share = e["total"] / tot if tot else 0.0
@@ -486,7 +535,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 require_eval: bool = True,
                 max_cands: int = 0,
                 gates: bool = True,
-                other_cov_blend: bool = False) -> Graph:
+                other_cov_blend: bool = False,
+                gated_reach: bool = False) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -507,8 +557,19 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     # Whose turn it is at even ply depends on the perspective: for a Black book
     # the root (ply 0, White to move) is an OPPONENT node, so reach must decay
     # by White's reply shares there.
+    admitted = None
+    if gated_reach:
+        # Our-turn parity is unknown until reach assigns plies, but the gate is a
+        # property of the position: admit per parent, and optimistic_reach only
+        # consults it at our-turn nodes.
+        admitted = {}
+        for h, es in edges_by_parent.items():
+            admitted[h] = {e["child_hash"] for e, _ in gate_candidates(
+                h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
+                robustness_floor, gate_rel_floor, gate_rel_own_margin,
+                require_eval, gates) if e.get("child_hash") is not None}
     reach, ply = optimistic_reach(edges_by_parent, root, our_white, eps,
-                                  max_ply, share_floor)
+                                  max_ply, share_floor, admitted)
 
     def is_our(h: int) -> bool:
         return (ply[h] % 2 == 0) == our_white
@@ -549,31 +610,14 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     cont = (sum(e["total"] for e in es) + _ot + _ht)
                     ln = aux_our_blend(ln, cont, crack, 1.0)
             node = OurNode(l_node=ln)
+            if aux_rows and crack:
+                node.crack = (cont, crack)
             # gate the recorded candidates; always admit the source move
             src = rep_moves.get(h)
-            cand_es = []
-            for e in es:
-                ch = e.get("child_hash")
-                cev = eval_ws.get(ch) if ch is not None else None
-                if e["move_san"] == src:
-                    cand_es.append((e, cev))
-                    continue
-                if not gates:
-                    cand_es.append((e, cev))
-                    continue
-                if require_eval and cev is None:
-                    continue
-                if not passes_abs_gate(cev, slice_prior if our_white
-                                       else slice_prior, our_white,
-                                       robustness_floor):
-                    continue
-                cand_es.append((e, cev))
-            if gates and cand_es:
-                keep = rel_gate_keep([cv for _, cv in cand_es],
-                                     eval_ws.get(h), our_white,
-                                     gate_rel_floor, gate_rel_own_margin)
-                cand_es = [(e, cv) for (e, cv), k in zip(cand_es, keep)
-                           if k or e["move_san"] == src]
+            cand_es = gate_candidates(h, es, src, eval_ws, our_white,
+                                      slice_prior, robustness_floor,
+                                      gate_rel_floor, gate_rel_own_margin,
+                                      require_eval, gates)
             # Candidate cap.
             #
             # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py
@@ -686,12 +730,68 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                                      eval_weight_min, eval_weight_k)
                 if share < share_floor or ch is None:
                     node.const_base += p * lv
+                    if ch is not None:
+                        node.floor.append((p, ch, lv))
                     continue
                 in_sub = ch in reach and edges_by_parent.get(ch) is not None \
                     and p_ply + 1 <= max_ply
                 node.kids.append((p, ch, in_sub, lv))
             g.opp[h] = node
     return g
+
+
+def stop_model_positions(g: Graph) -> tuple[set[int], set[int]]:
+    """Where a stop model must value the position: (our-turn x, opponent-turn y).
+
+    x: every our node (its stop value), every opponent reply leading out of the
+       subgraph, every reply under the share floor.
+    y: the child of every candidate move leading out of the subgraph (the book
+       ends right after our move)."""
+    xs, ys = set(g.our), set()
+    for n in g.our.values():
+        for _san, ch, in_sub, _lv in n.cands:
+            if ch is not None and not in_sub:
+                ys.add(ch)
+    for n in g.opp.values():
+        for _p, ch, in_sub, _lv in n.kids:
+            if ch is not None and not in_sub:
+                xs.add(ch)
+        for _p, ch, _lv in n.floor:
+            xs.add(ch)
+    return xs, ys
+
+
+def apply_stop_values(g: Graph, W: dict[int, float], R: dict[int, float]) -> dict:
+    """Revalue every out-of-book position with a stop model (weak_stop.py): W for
+    our-turn positions, R for the opponent-turn position after our book's last move.
+    Positions the model has no value for keep the default. Returns counts."""
+    c = {"our_l": 0, "cand_leaf": 0, "opp_leaf": 0, "opp_floor": 0}
+    for h, n in g.our.items():
+        w = W.get(h)
+        if w is not None:
+            n.l_node = (aux_our_blend(w, n.crack[0], n.crack[1], 1.0)
+                        if n.crack else w)
+            c["our_l"] += 1
+        new = []
+        for san, ch, in_sub, lv in n.cands:
+            if ch is not None and not in_sub and ch in R:
+                lv = R[ch]
+                c["cand_leaf"] += 1
+            new.append((san, ch, in_sub, lv))
+        n.cands = new
+    for n in g.opp.values():
+        new = []
+        for p, ch, in_sub, lv in n.kids:
+            if ch is not None and not in_sub and ch in W:
+                lv = W[ch]
+                c["opp_leaf"] += 1
+            new.append((p, ch, in_sub, lv))
+        n.kids = new
+        for p, ch, lv in n.floor:
+            if ch in W:
+                n.const_base += p * (W[ch] - lv)
+                c["opp_floor"] += 1
+    return c
 
 
 # ── the DP ──────────────────────────────────────────────────────────────────

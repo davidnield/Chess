@@ -74,9 +74,43 @@ def peak_commit_gb() -> float | None:
         return None
 
 
+class GateAdmit:
+    """--gated-reach for the collector: which of an our-node's recorded moves the
+    gates admit (budget_core.gate_candidates, the definition build_graph uses).
+    Evals come from the mmap'd arrays, prefetched a level at a time; the cache is
+    the eval_ws the graph is built from afterwards."""
+
+    def __init__(self, rep_moves, our_white: bool, slice_prior: float,
+                 gates: bool = True):
+        from eval_arrays import MISSING, lookup_evals, open_eval_arrays
+        self._lookup, self._missing = lookup_evals, MISSING
+        self._mm = open_eval_arrays()
+        self.rep_moves, self.our_white = rep_moves, our_white
+        self.slice_prior, self.gates = slice_prior, gates
+        self.eval_ws: dict[int, float] = {}
+        self._seen: set[int] = set()
+
+    def prefetch(self, hashes) -> None:
+        new = np.array([h for h in set(hashes) if h not in self._seen], dtype=np.int64)
+        if not len(new):
+            return
+        self._seen.update(new.tolist())
+        for h, c in zip(new.tolist(), self._lookup(new, *self._mm).tolist()):
+            if c != self._missing:
+                self.eval_ws[h] = cp_to_expected_score(int(c))
+
+    def __call__(self, ph: int, rows: list[dict]) -> set[int]:
+        src = self.rep_moves.get(ph)
+        return {e["child_hash"] for e, _ in bc.gate_candidates(
+            ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
+            require_eval=self.gates, gates=self.gates)
+            if e.get("child_hash") is not None}
+
+
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int) -> pl.DataFrame:
+                           min_games: int, admit: GateAdmit | None = None
+                           ) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -103,6 +137,11 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     strict (`>`), so a cycle whose shares multiply to exactly 1 cannot re-fire.
     Every chess cycle alternates turns, so it contains an opponent node whose
     share is < 1 and the product strictly decays toward the eps cutoff.
+
+    admit (--gated-reach): at our nodes, follow only the moves the gates admit.
+    Every recorded move of the node is still RETURNED (the stop value and the
+    gates read them all); only the expansion is restricted. None = expand every
+    recorded move, the policy-free default.
 
     NOTE: optimistic reach is a MAX over paths, not the total probability of
     arriving — those differ when several opponent move orders converge on one
@@ -135,6 +174,10 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                 frames.append(keep)
         fetched.update(frontier)
         nxt: dict[int, float] = {}
+        if df.height and admit is not None:
+            # parents and children of this level, for the gates' eval lookups
+            admit.prefetch(df["parent_hash"].to_list()
+                           + df["child_hash"].drop_nulls().to_list())
         if df.height:
             for ph, grp in df.group_by("parent_hash"):
                 ph = ph[0] if isinstance(ph, tuple) else ph
@@ -144,11 +187,15 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                     continue
                 tot = int(grp["total"].sum())
                 our_turn = (p_ply % 2 == 0) == our_white
-                for row in grp.iter_rows(named=True):
+                rows = list(grp.iter_rows(named=True))
+                allowed = admit(ph, rows) if (our_turn and admit is not None) else None
+                for row in rows:
                     ch = row["child_hash"]
                     if ch is None:
                         continue
                     if our_turn:
+                        if allowed is not None and ch not in allowed:
+                            continue
                         cr = r
                     else:
                         share = row["total"] / tot if tot else 0.0
@@ -241,6 +288,28 @@ def main() -> int:
                     help="Beta-binomial pseudocount pulling thin empirical "
                          "scores toward the slice prior (default 500). 0 = raw "
                          "observed scores, unsmoothed.")
+    ap.add_argument("--stop-model", choices=["pool", "weak"], default="pool",
+                    help="How a position out of book is valued. 'pool' (default): the "
+                         "pool's own results from there (we play on like the pool). "
+                         "'weak': we play one move like --weak-pool's population, the "
+                         "opponent replies like the pool, then the engine "
+                         "(python/weak_stop.py); applied to every out-of-book position "
+                         "so the DP compares like with like.")
+    ap.add_argument("--weak-pool", default=None,
+                    help="Pool parquet whose move frequencies stand for OUR play out of "
+                         "book under --stop-model weak (e.g. the 1000-1800 pool).")
+    ap.add_argument("--weak-min-games", type=float, default=20.0,
+                    help="Below this many weak-pool games at a position, our move "
+                         "frequencies fall back to the main pool's (default 20).")
+    ap.add_argument("--weak-min-share", type=float, default=0.01,
+                    help="Drop moves/replies under this share and renormalise.")
+    ap.add_argument("--gated-reach", action="store_true",
+                    help="Expand the subgraph (and compute optimistic reach) only "
+                         "through moves the gates admit at our nodes, instead of "
+                         "every recorded move. The gates leave ~2.7 candidates per "
+                         "node out of many more recorded moves, so this is the "
+                         "subgraph-size lever for larger budgets. A position reachable "
+                         "only through a refuted move gets no reach. Default off.")
     ap.add_argument("--no-gates", action="store_true",
                     help="Drop require-eval and both refutation gates, so every "
                          "recorded move is a candidate. Diagnostic only.")
@@ -312,9 +381,20 @@ def main() -> int:
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
         f"method {a.method}{' fixed-policy' if a.fixed_policy else ''}")
 
+    admit = None
+    if a.gated_reach:
+        if a.no_gates:
+            log("FATAL: --gated-reach with --no-gates is a no-op; refusing")
+            return 1
+        from stage3_backwards_induction import load_incumbent
+        _sl0 = (pl.scan_parquet(a.rep).select(["event", "elo_band"]).unique().collect())
+        src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
+                                 _sl0["elo_band"][0])
+        log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
+        admit = GateAdmit(src_all, our_white, slice_prior)
     log("collecting subgraph edges...")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games)
+                                 a.max_ply, a.share_floor, a.min_games, admit)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -376,8 +456,24 @@ def main() -> int:
                        max_cands=a.max_cands, eval_weight=a.eval_weight,
                        prior_strength=a.prior_strength,
                        require_eval=not a.no_gates, gates=not a.no_gates,
-                       other_cov_blend=other_cov_blend)
+                       other_cov_blend=other_cov_blend,
+                       gated_reach=a.gated_reach)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    stop_counts = None
+    if a.stop_model == "weak":
+        if not a.weak_pool or not Path(a.weak_pool).exists():
+            log(f"FATAL: --stop-model weak needs --weak-pool (got {a.weak_pool})")
+            return 1
+        from weak_stop import EvalSource, weak_stop_values
+        xs, ys = bc.stop_model_positions(g)
+        W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
+                                    evals=EvalSource(our_white),
+                                    min_weak=a.weak_min_games,
+                                    min_share=a.weak_min_share, log=log)
+        ac = bc.apply_stop_values(g, W, R)
+        stop_counts = {**dict(wc), **{f"applied_{k}": v for k, v in ac.items()}}
+        log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
+        del W, R
 
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     log("building curves...")
@@ -534,7 +630,11 @@ def main() -> int:
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
-            "max_cands": a.max_cands,
+            "max_cands": a.max_cands, "gated_reach": a.gated_reach,
+            "stop_model": a.stop_model,
+            **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
+                "weak_min_share": a.weak_min_share, "weak_counts": stop_counts}
+               if a.stop_model == "weak" else {}),
             "source_rep": str(a.rep), "source_meta": src_meta,
             "stats": str(a.stats), "aux_stats": aux_path,
             "subgraph_nodes": len(g.our) + len(g.opp),
