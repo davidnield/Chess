@@ -134,12 +134,16 @@ REPS = [("white", ["--perspective", "white"]), ("black", ["--perspective", "blac
 # holdout; the two item-2 correctness fixes on. --select-margin stays off: it did not
 # reduce noise flips (a hard band only moves the coin flip to its edge).
 RECIPE_DEFAULTS = {"eval_weight": 0.75, "gate_fallback": "strict", "other_cov_blend": True,
-                   "select_margin": 0.0, "stick_margin": 0.0}
+                   "select_margin": 0.0, "stick_margin": 0.0, "prior_strength": 500.0,
+                   "force_moves": [], "avoid_moves": []}
 # What a meta written BEFORE a key existed was built with. The skip gate must read a
 # missing key as these, never as today's RECIPE_DEFAULTS, or an old rep would pass for a
 # current one the day a default changes.
 LEGACY_RECIPE = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
-                 "select_margin": 0.0, "stick_margin": 0.0}
+                 "select_margin": 0.0, "stick_margin": 0.0, "prior_strength": 500.0,
+                 "force_moves": [], "avoid_moves": []}
+# Stage 3's own --prior-strength default; the flag is passed only when it differs.
+STAGE3_PRIOR_STRENGTH = 500.0
 
 
 def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
@@ -147,9 +151,15 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
                  gate_fallback: str = RECIPE_DEFAULTS["gate_fallback"],
                  other_cov_blend: bool = RECIPE_DEFAULTS["other_cov_blend"],
                  select_margin: float = RECIPE_DEFAULTS["select_margin"],
-                 stick_margin: float = RECIPE_DEFAULTS["stick_margin"]) -> list[str]:
+                 stick_margin: float = RECIPE_DEFAULTS["stick_margin"],
+                 prior_strength: float = RECIPE_DEFAULTS["prior_strength"],
+                 force_moves=(), avoid_moves=()) -> list[str]:
     """The locked sharp recipe (eval blend + relative gate; no crush since 2026-10-02),
     parameterized by input paths.
+
+    force_moves / avoid_moves are accepted so a whole recipe dict can be splatted in,
+    but they are per-colour: main() routes each into its own colour's argv
+    (constraint_flags), so they never appear here.
 
     `aux` supplies the termination / other-moves / horizon sidecar. When present
     it also forces --reply-shrink to 0: both corrections cover overlapping
@@ -175,7 +185,21 @@ def common_flags(stats: Path, eval_db: Path, aux: Path | None = None,
         # stickiness: the per-colour --incumbent path is added by main() (it is a path,
         # so it stays out of the recipe hash); the margin is part of the recipe.
         *(["--stick-margin", f"{stick_margin:g}"] if stick_margin > 0 else []),
+        *(["--prior-strength", f"{prior_strength:g}"]
+          if prior_strength != STAGE3_PRIOR_STRENGTH else []),
     ]
+
+
+def constraint_flags(recipe: dict, colour: str) -> list[str]:
+    """The --force-move / --avoid-move specs whose position is `colour`'s turn."""
+    from stage3_backwards_induction import parse_move_constraint
+    out = []
+    for key, flag in (("force_moves", "--force-move"), ("avoid_moves", "--avoid-move")):
+        for spec in recipe.get(key) or ():
+            board, _ = parse_move_constraint(spec)
+            if ("white" if board.turn else "black") == colour:
+                out += [flag, spec]
+    return out
 
 
 _PATH_FLAGS = {"--input", "--aux-stats", "--eval-db", "--output",
@@ -340,6 +364,16 @@ def main() -> None:
     ap.add_argument("--stick-margin", type=float, default=RECIPE_DEFAULTS["stick_margin"],
                     help="Key advantage a new move needs to replace the incumbent's "
                          "(expected-score units). Needs --incumbent-dir. Default 0.")
+    ap.add_argument("--prior-strength", type=float, default=RECIPE_DEFAULTS["prior_strength"],
+                    help="Stage 3 --prior-strength: games-equivalent shrinkage of each "
+                         "move's score toward the slice prior (default 500). Recorded in "
+                         "the meta.")
+    ap.add_argument("--force-move", action="append", default=[], metavar="'LINE: SAN'",
+                    help="Price a choice: book SAN at the position after LINE (Stage 3 "
+                         "--force-move); routed to the colour whose turn it is. Repeatable.")
+    ap.add_argument("--avoid-move", action="append", default=[], metavar="'LINE: SAN'",
+                    help="Never book SAN at the position after LINE (Stage 3 --avoid-move). "
+                         "Repeatable.")
     ap.add_argument("--select-margin", type=float, default=RECIPE_DEFAULTS["select_margin"],
                     help="Stage 3 --select-margin: near-ties within this many expected-"
                          "score units go to the most-played move (default 0 = off).")
@@ -364,7 +398,15 @@ def main() -> None:
     recipe = {"eval_weight": args.eval_weight, "gate_fallback": args.gate_fallback,
               "other_cov_blend": bool(args.other_cov_blend),
               "select_margin": args.select_margin,
-              "stick_margin": args.stick_margin}
+              "stick_margin": args.stick_margin,
+              "prior_strength": args.prior_strength,
+              "force_moves": sorted(args.force_move),
+              "avoid_moves": sorted(args.avoid_move)}
+    try:
+        for tag, _ in REPS:
+            constraint_flags(recipe, tag)          # parse every spec before any build
+    except ValueError as e:
+        sys.exit(f"FATAL: {e}")
     flags = common_flags(stats, eval_db, aux, **recipe)
     inc_dir = Path(args.incumbent_dir) if args.incumbent_dir else None
     if args.stick_margin > 0 and inc_dir is None:
@@ -386,6 +428,7 @@ def main() -> None:
     t_all = time.time()
     failures = []
     for tag, extra in REPS:
+        extra = extra + constraint_flags(recipe, tag)
         if inc_dir is not None:
             extra = extra + ["--incumbent",
                              str(inc_dir / f"repertoire_pooled_{tag}_sharp.parquet")]

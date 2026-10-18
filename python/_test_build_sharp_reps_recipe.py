@@ -11,6 +11,9 @@ provenance hash (2026-10-08).
   D  without aux, reply-shrink is restored to 1.0 (the pre-sidecar recipe).
   E  single pass: the learnability pass-2 is retired (2026-10-14).
   G  rebuild stickiness: --stick-margin is a recipe setting, the incumbent path is not.
+  H  --prior-strength is passed only when it differs from Stage 3's 500; a meta without
+     the key reads as 500, so existing reps are not refused.
+  I  --force-move / --avoid-move specs go only to the colour whose turn they are.
 """
 from __future__ import annotations
 
@@ -70,6 +73,19 @@ def main() -> None:
     check(b.recipe_hash(st + ["--incumbent", "a.parquet"])
           == b.recipe_hash(st + ["--incumbent", "b.parquet"]) != h,
           "G: the incumbent PATH is not part of the recipe hash; the margin is")
+
+    ps = b.common_flags(S, E, A, prior_strength=1500)
+    check(ps[-2:] == ["--prior-strength", "1500"] and "--prior-strength" not in f
+          and b.LEGACY_RECIPE["prior_strength"] == 500.0,
+          "H: --prior-strength is passed only when it differs from 500")
+
+    rc = {**b.RECIPE_DEFAULTS, "force_moves": ["1.e4 c5: Nf3"],
+          "avoid_moves": ["1.e4: e5", ": d4"]}
+    check(b.constraint_flags(rc, "white") == ["--force-move", "1.e4 c5: Nf3",
+                                              "--avoid-move", ": d4"]
+          and b.constraint_flags(rc, "black") == ["--avoid-move", "1.e4: e5"]
+          and b.common_flags(S, E, A, **rc) == f,
+          "I: constraints route to their colour and stay out of the shared argv")
 
     nf = b.common_flags(S, E, None)
     check(nf[nf.index("--reply-shrink") + 1] == str(b.REPLY_SHRINK) == "1.0",

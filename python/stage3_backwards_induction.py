@@ -57,7 +57,9 @@ the gate. If every candidate is gated, the gate is dropped for that node (sparse
                   Complements coverage_efficiency (criticality vs volume of lines).
 
 --force-root-move commits OUR first move at the start position (e.g. e4/d4/Nf3),
-letting the rest of the tree choose the continuations.
+letting the rest of the tree choose the continuations. --force-move / --avoid-move
+generalise it to any of our positions ('LINE: SAN'), to price a stylistic choice:
+build with and without the constraint and compare (2026-10-18).
 
 Crush (a bonus for reaching a winning position early, from the crush/winpos
 histograms) was removed on 2026-10-02, along with its flags and output columns.
@@ -857,6 +859,44 @@ def load_incumbent(path, perspective: str, event, elo_band) -> "IncumbentMoves":
     return IncumbentMoves(d["position_hash"].to_numpy(), d["best_move"].to_list())
 
 
+def parse_move_constraint(spec: str) -> tuple[chess.Board, str]:
+    """'LINE: SAN' -> (the position after LINE, SAN as python-chess writes it).
+
+    LINE is the moves from the start position, move numbers optional
+    ("1.e4 c5 2.d4 cxd4 3.Nf3 Nc6" or "e4 c5 d4 cxd4 Nf3 Nc6"); an empty LINE is the
+    start position (": e4"). Raises ValueError on an illegal LINE or SAN."""
+    if ":" not in spec:
+        raise ValueError(f"move constraint {spec!r}: expected 'LINE: SAN'")
+    line, san = spec.rsplit(":", 1)
+    board = chess.Board()
+    for tok in line.replace(".", ". ").split():
+        if tok.endswith(".") or tok.rstrip(".").isdigit():
+            continue                                   # move numbers: "1." "2..."
+        try:
+            board.push_san(tok)
+        except ValueError as e:
+            raise ValueError(f"move constraint {spec!r}: {tok!r} is illegal ({e})") from None
+    try:
+        move = board.parse_san(san.strip())
+    except ValueError as e:
+        raise ValueError(f"move constraint {spec!r}: {san.strip()!r} is illegal ({e})") from None
+    return board, board.san(move)
+
+
+def move_constraints(specs, perspective: str) -> dict[int, list[str]]:
+    """{position_hash: [SAN, ...]} for the specs whose position is OUR turn. A spec at
+    the opponent's turn is a mistake (we do not choose their moves) and is refused."""
+    out: dict[int, list[str]] = {}
+    for spec in specs or ():
+        board, san = parse_move_constraint(spec)
+        side = "white" if board.turn == chess.WHITE else "black"
+        if side != perspective:
+            raise ValueError(f"move constraint {spec!r} is at {side}'s turn; this build "
+                             f"chooses {perspective}'s moves")
+        out.setdefault(zobrist_int64(board), []).append(san)
+    return out
+
+
 def _slice_frame(ev, eb, values, best_moves, best_forcing, best_error, best_decis,
                  memo_pot, cover_eff, value_worst,
                  values_robust, position_epd, position_side, best_aug, eval_lookup,
@@ -966,6 +1006,8 @@ def run_backwards_induction(
     select_margin:    float = 0.0,
     incumbent:        "IncumbentMoves | dict | None" = None,
     stick_margin:     float = 0.0,
+    forced_moves:     dict[int, str] | None = None,
+    avoid_moves:      dict[int, set[str]] | None = None,
     learn_delta_main: float = 0.005,
     learn_delta_rare: float = 0.04,
     learn_reach_pivot: float = 0.02,
@@ -1303,6 +1345,15 @@ def run_backwards_induction(
         raise ValueError("stick_margin needs an incumbent book")
     _sticky = incumbent is not None
     kept_incumbent_nodes: set[int] = set()
+    # Priced constraints (--force-move / --avoid-move): position-keyed, so a
+    # transposition into the position is constrained too. A forced move bypasses the
+    # gates, like --force-root-move (the point is to price a choice the optimiser
+    # would not make); an avoided move is removed before selection, engine rescues
+    # included. None/empty = off (exact no-op).
+    _forced = {h: m.rstrip("+#") for h, m in (forced_moves or {}).items()}
+    _avoid = {h: {m.rstrip("+#") for m in ms} for h, ms in (avoid_moves or {}).items()}
+    forced_hit: set[int] = set()
+    avoid_hit: set[int] = set()
     # --gate-fallback. Counted in BOTH modes so a legacy build reports how many nodes
     # the strict chain would change (see select_our):
     #   fallback_abs_nodes — the relative gate (and the engine rescue) emptied a set
@@ -1576,6 +1627,12 @@ def run_backwards_induction(
         return out
 
     def select_our(ph, mvs):
+        av = _avoid.get(ph) if _avoid else None
+        if av:
+            avoid_hit.add(ph)
+            mvs = [mv for mv in mvs if mv["san"].rstrip("+#") not in av]
+            if not mvs:
+                return None          # every recorded move avoided: leave book here
         base  = [mv for mv in mvs if mv["total"] >= min_move_games] or mvs
         if require_eval:
             # Only consider moves whose resulting position is in the eval DB.
@@ -1592,6 +1649,8 @@ def run_backwards_induction(
             # rescues (legal, possibly unplayed, eval-covered, gate-passing) before
             # falling back to the least-bad recorded move.
             aug = augmented_candidates(ph)
+            if av:
+                aug = [mv for mv in aug if mv["san"].rstrip("+#") not in av]
             if aug:
                 # prefer gate-passing engine moves over gate-failing base; the
                 # relative gate applies among the rescues too (sibling baseline
@@ -1723,6 +1782,14 @@ def run_backwards_induction(
                     raise ValueError(
                         f"--force-root-move {force_root_move!r} is not a legal/known "
                         f"edge at the start position for this slice.")
+                b = forced[0]
+            elif _forced and ph in _forced:
+                want = _forced[ph]
+                forced = [mv for mv in mvs if mv["san"].rstrip("+#") == want]
+                if not forced:
+                    raise ValueError(f"--force-move {want!r} is not a known edge at "
+                                     f"position {ph} for this slice")
+                forced_hit.add(ph)
                 b = forced[0]
             else:
                 b = select_our(ph, mvs)
@@ -2098,6 +2165,9 @@ def run_backwards_induction(
         print(f"  incumbent ({len(incumbent):,} moves, stick margin {stick_margin}): kept "
               f"the previous book's move over a higher key at "
               f"{len(kept_incumbent_nodes):,} nodes", flush=True)
+    if _forced or _avoid:
+        print(f"  move constraints: forced {len(forced_hit)}/{len(_forced)} positions "
+              f"reached, avoid {len(avoid_hit)}/{len(_avoid)} reached", flush=True)
     if select_margin > 0.0:
         print(f"  select margin {select_margin}: most-played move chosen over the key's "
               f"best at {len(margin_override_nodes):,} nodes", flush=True)
@@ -2498,6 +2568,16 @@ def main():
                              "candidate's key beats it by more than --stick-margin. Applied "
                              "after the gates, so a move they now reject is never kept. "
                              "Default: none (off).")
+    parser.add_argument("--force-move", action="append", default=[], metavar="'LINE: SAN'",
+                        help="Price a choice: at the position after LINE (moves from the "
+                             "start, move numbers optional), OUR move must be SAN, gates "
+                             "bypassed, e.g. '1.e4 c5 2.d4 cxd4 3.Nf3 Nc6: Nxd4'. Keyed "
+                             "on the position, so transpositions into it are bound too. "
+                             "Repeatable; must be our turn. Default: none.")
+    parser.add_argument("--avoid-move", action="append", default=[], metavar="'LINE: SAN'",
+                        help="Never book SAN at the position after LINE (engine rescues "
+                             "included); the rest of the selection is unchanged. If every "
+                             "recorded move is avoided the book stops there. Repeatable.")
     parser.add_argument("--stick-margin", type=float, default=0.0,
                         help="Key advantage a new move needs to replace the --incumbent "
                              "book's move (expected-score units). 0 keeps the incumbent "
@@ -2566,6 +2646,18 @@ def main():
     print(f"Input:             {input_path}")
     print(f"Output:            {output_path}")
     print(f"Perspective:       {args.perspective}")
+    forced_moves = move_constraints(args.force_move, args.perspective)
+    for h, ms in forced_moves.items():
+        if len(set(ms)) > 1:
+            sys.exit(f"FATAL: --force-move gives one position two moves: {ms}")
+    forced_moves = {h: ms[0] for h, ms in forced_moves.items()}
+    avoid_moves = {h: set(ms) for h, ms in
+                   move_constraints(args.avoid_move, args.perspective).items()}
+    for h, m in forced_moves.items():
+        if m in avoid_moves.get(h, ()):
+            sys.exit(f"FATAL: {m} is both forced and avoided at one position")
+    if forced_moves or avoid_moves:
+        print(f"Move constraints:  forced {args.force_move}  avoided {args.avoid_move}")
     print(f"Prior strength:    {args.prior_strength}")
     print(f"Min move games:    {args.min_move_games}")
     print(f"Forcing weight:    {args.forcing_weight}")
@@ -2779,6 +2871,8 @@ def main():
             incumbent=(load_incumbent(args.incumbent, args.perspective, ev, eb)
                        if args.incumbent else None),
             stick_margin=args.stick_margin,
+            forced_moves=forced_moves or None,
+            avoid_moves=avoid_moves or None,
             learn_delta_main=args.learn_delta_main,
             learn_delta_rare=args.learn_delta_rare,
             learn_reach_pivot=args.learn_reach_pivot,
