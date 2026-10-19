@@ -303,6 +303,10 @@ def main() -> int:
                          "frequencies fall back to the main pool's (default 20).")
     ap.add_argument("--weak-min-share", type=float, default=0.01,
                     help="Drop moves/replies under this share and renormalise.")
+    ap.add_argument("--leftover", action="store_true",
+                    help="Extraction: give an opponent node's unspendable budget to the "
+                         "closed child with the densest blocking atom instead of "
+                         "dropping it (budget_core.extract_book). Default off.")
     ap.add_argument("--gated-reach", action="store_true",
                     help="Expand the subgraph (and compute optimistic reach) only "
                          "through moves the gates admit at our nodes, instead of "
@@ -544,7 +548,7 @@ def main() -> int:
         prev = None
         for bb in range(lo_s, hi_s + 1):
             cs = curves if bb <= bmax else widest
-            r = bc.extract_book(g, cs, bb, fixed_policy=fixed)
+            r = bc.extract_book(g, cs, bb, fixed_policy=fixed, leftover=a.leftover)
             d = r["spent_distinct"]
             mark = "" if prev is None or d == prev else f"   <- +{d - prev}"
             log(f"  {bb:>9}{d:>10}{r['spent_paths']:>8}"
@@ -576,7 +580,7 @@ def main() -> int:
         elif a.match_distinct:
             res, charged, matched, spent = bc.match_distinct(
                 g, curves, b, curve_bmax, fixed_policy=fixed,
-                probe_curves=probe_curves, plain_bmax=bmax)
+                probe_curves=probe_curves, plain_bmax=bmax, leftover=a.leftover)
             # matched is `spent >= b`; the equal-footprint comparison needs
             # `spent == b`, and the two came apart in the wild (fixdp_white_b20
             # booked 21 for a target of 20 and reported success). Say which.
@@ -588,7 +592,8 @@ def main() -> int:
                    else f"  (OVERSHOT by {spent - b}: the distinct count skips "
                         f"{b}; footprint audits at tol 0 will reject this)"))
         else:
-            res = bc.extract_book(g, curves, b, fixed_policy=fixed)
+            res = bc.extract_book(g, curves, b, fixed_policy=fixed,
+                                  leftover=a.leftover)
             charged, matched = b, res["spent_distinct"] >= b
 
         rows = []
@@ -646,6 +651,7 @@ def main() -> int:
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
+            "leftover": a.leftover,
             "stop_model": a.stop_model,
             **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
                 "weak_min_share": a.weak_min_share, "weak_counts": stop_counts}

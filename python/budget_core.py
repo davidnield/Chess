@@ -1078,7 +1078,8 @@ def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
 def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
                    bmax: int, fixed_policy: dict[int, str] | None = None,
                    probe_curves: dict[int, Curve] | None = None,
-                   scan_cap: int = 64, plain_bmax: int | None = None
+                   scan_cap: int = 64, plain_bmax: int | None = None,
+                   leftover: bool = False
                    ) -> tuple[dict, int, bool, int]:
     """Extract a book holding EXACTLY `target` DISTINCT decisions where one is
     reachable, and at least `target` otherwise.
@@ -1188,7 +1189,8 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     that rung is actually run, and size it from a measured distinct-vs-charged
     curve rather than by guessing which end the exact hit sits at.
     """
-    res = extract_book(g, curves, target, fixed_policy=fixed_policy)
+    lo_kw = {"leftover": True} if leftover else {}   # stubs in tests take no kwarg
+    res = extract_book(g, curves, target, fixed_policy=fixed_policy, **lo_kw)
     if res["spent_distinct"] >= target or target >= bmax:
         return (res, target, res["spent_distinct"] >= target,
                 res["spent_distinct"])
@@ -1222,7 +1224,7 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     def probe_at(b: int) -> dict:
         if b not in seen:
             seen[b] = extract_book(g, curves_at(b), b,
-                                   fixed_policy=fixed_policy)
+                                   fixed_policy=fixed_policy, **lo_kw)
         return seen[b]
 
     lo, best_lo = target, res           # books < target
@@ -1277,7 +1279,8 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
 
 def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                  fixed_policy: dict[int, str] | None = None,
-                 force_booked: set[int] | None = None
+                 force_booked: set[int] | None = None,
+                 leftover: bool = False
                  ) -> dict:
     """Top-down allocation of `budget` over the curves; returns the booked
     tree, per-node allocations, realized bottom-up values, and spend stats.
@@ -1285,6 +1288,16 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
     Our node: book iff the curve strictly beats stopping; move chosen by
     value (mirrors Stage 3). Opponent node: greedy density prefix over child atoms with skip-fit
     (a child whose atom is skipped is closed — atoms are prefixes).
+
+    leftover (2026-10-19): at an opponent node, budget the density pass could not
+    spend -- because the next atom of every remaining child was too big to fit --
+    goes to the closed child whose blocking atom has the highest density. The
+    atom is indivisible in the HULL, but the child's own extraction reads its
+    children's finer curves and can usually spend part of it. Without this, a
+    big subtree whose curve fused into one expensive atom (a long chain, or the
+    grid cap merging its tail) gets nothing once cheaper atoms elsewhere have
+    been bought: the b2000 White books left 1...e5 and 1...c5 (56% of games)
+    unprepared after one move while 2,200 moves of budget went unspent.
 
     force_booked: book these our-nodes unconditionally, skipping both the
     allocation test and the beats-stopping test, and still walk the values
@@ -1367,6 +1380,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
             remaining = b
             child_alloc = dict.fromkeys(range(len(n.kids)), 0)
             closed: set[int] = set()
+            blocked: dict[int, float] = {}     # closed child -> its blocking atom's density
             for dens, idx, _j, cost in entries:
                 if idx in closed:
                     continue
@@ -1375,6 +1389,11 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                     remaining -= cost
                 else:
                     closed.add(idx)            # prefix property: no later atoms
+                    blocked[idx] = dens
+            if leftover and remaining > 0 and blocked:
+                best = max(blocked, key=lambda i: (blocked[i], -i))
+                child_alloc[best] += remaining
+                remaining = 0
             for idx, (p, ch, in_sub, _lv) in enumerate(n.kids):
                 if in_sub and ch is not None and ch in curves:
                     reached.add(ch)
