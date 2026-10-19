@@ -55,7 +55,7 @@ METRIC_COLS = ["value", "value_worst", "value_robust",
 # ── Data layer ────────────────────────────────────────────────────────────
 
 class Explorer:
-    def __init__(self, rep_specs, stats_path, cache_slices=6):
+    def __init__(self, rep_specs, stats_path, cache_slices=6, trim_stats=False):
         # rep_specs: list of (label, perspective, path). label is the dropdown entry.
         self.reps: dict[str, pl.DataFrame] = {}
         self.persp: dict[str, str] = {}
@@ -73,10 +73,22 @@ class Explorer:
             sys.exit("No repertoire loaded.")
 
         scols = ["event", "elo_band", "parent_hash", "move_san", "total", "white_score_avg"]
-        sdf = pl.read_parquet(stats_path)
-        if "child_hash" in sdf.columns:
-            scols.append("child_hash")
-        self.stats = sdf.select(scols)
+        if trim_stats:
+            # Only the books' own positions and one move beyond: a small (budget) book
+            # then needs megabytes of stats instead of the whole pool (~20 GB per view).
+            lz = pl.scan_parquet(stats_path)
+            if "child_hash" in lz.collect_schema().names():
+                scols.append("child_hash")
+            book = pl.concat([r.select("position_hash") for r in self.reps.values()]).unique()
+            near = lz.filter(pl.col("parent_hash").is_in(book["position_hash"].implode()))
+            kids = near.select(pl.col("child_hash").alias("position_hash")).collect().drop_nulls()
+            keep = pl.concat([book, kids]).unique()["position_hash"]
+            self.stats = lz.filter(pl.col("parent_hash").is_in(keep.implode())).select(scols).collect()
+        else:
+            sdf = pl.read_parquet(stats_path)
+            if "child_hash" in sdf.columns:
+                scols.append("child_hash")
+            self.stats = sdf.select(scols)
         print(f"Loaded stats: {self.stats.height:,} rows from {Path(stats_path).name}")
 
         # Guard: every rep's (event, elo_band) slice must exist in the stats file.
@@ -756,6 +768,10 @@ def main():
                          "a many-label comparison session — 14 views would need ~250 GB. "
                          "The cost of capping is a ~76 s rebuild every time you switch to "
                          "an uncached label.")
+    ap.add_argument("--trim-stats", action="store_true",
+                    help="Load only the stats rows at the books' positions and one move "
+                         "beyond (for small budget books: MBs instead of ~20 GB per view). "
+                         "Positions further off book then show no opponent moves.")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
@@ -780,7 +796,8 @@ def main():
     if not Path(args.stats).exists():
         sys.exit(f"Stats not found: {args.stats}")
 
-    explorer = Explorer(specs, args.stats, cache_slices=args.cache_slices or 1)
+    explorer = Explorer(specs, args.stats, cache_slices=args.cache_slices or 1,
+                        trim_stats=args.trim_stats)
 
     # Pre-warm per-slice views. The first access to a slice materialises millions of
     # rows into Python dicts (~76 s on the 2013-2025 pool); doing that lazily on the
