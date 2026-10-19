@@ -73,6 +73,7 @@ importing production logic rather than copying it.
 from __future__ import annotations
 
 import heapq
+import math
 import sys
 from collections import deque
 from dataclasses import dataclass, field
@@ -1437,3 +1438,195 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
         if g.root in curves else None,
         "root_value_realized": realized.get(g.root),
     }
+
+
+# ── price per move (Lagrangian) ─────────────────────────────────────────────
+#
+# THE METHOD (2026-10-19). The curve engine above packs each node's options
+# into concave value-vs-budget curves and buys their atoms by density. That is
+# exact only for diminishing returns, and opening preparation is lumpy: a main
+# line's first moves gain almost nothing over the stop value and the payoff sits
+# deep, so the curves fuse it into one big atom and the density pass can starve
+# it (the b2000 White books left 1...e5 and 1...c5 unprepared). Every patch
+# (grid cap, skip-fit, --leftover, match-inflate) fixes a symptom of that.
+#
+# Price per move replaces the budget with a price `lam` per learned position,
+# in root expected-score units, and maximises  value - lam * positions:
+#
+#   our node u:  V(u) = max( L(u),  max_m V(child_m) - lam / r(u) )
+#   opp node v:  V(v) = const + sum_i p_i V(child_i)
+#
+# r(u) converts the root-unit price into u's local units. On a tree r(u) is the
+# product of reply shares on u's path and the recursion is EXACT: the book it
+# returns is the best book of its own size (if a book S' with |S'| <= |S| scored
+# more, S' would beat S on value - lam * size). Lowering lam grows the book;
+# price_search bisects lam onto a target size. Not every size is reachable
+# (sizes jump where a whole chain flips in at once), and any size B is bounded
+# by  min over the lams tried of  (V_pen(lam) + lam * B),  reported as the gap.
+#
+# Transpositions: price_search first prices with the policy-free max-path reach
+# (g.reach), which charges a shared position once per path, then re-prices
+# with the TOTAL reach the chosen book actually gives each position (summed
+# over the paths it follows), so a position is charged once. Positions the book
+# does not reach keep the max-path reach, so an alternative line is priced as
+# if it were taken. With transpositions this is a self-consistent answer, not a
+# proven optimum; on a tree the two passes coincide.
+
+def price_book(g: Graph, lam: float, order: list[int],
+               reach: dict[int, float] | None = None,
+               fixed_policy: dict[int, str] | None = None) -> dict:
+    """One price-per-move solve at price `lam`. `order` is topo_down(g).
+    Returns extract_book's keys plus root_value_penalized, lam, reach_policy."""
+    reach = g.reach if reach is None else reach
+    V: dict[int, float] = {}     # penalised value (local units)
+    T: dict[int, float] = {}     # true value under the chosen policy
+    choice: dict[int, str] = {}
+
+    def static(h: int) -> float:
+        """A back edge into a cycle: the node's value with nothing booked."""
+        if h in g.our:
+            return g.our[h].l_node
+        n = g.opp[h]
+        return n.const_base + sum(
+            p * (g.our[k].l_node if (in_s and k in g.our) else lv)
+            for p, k, in_s, lv in n.kids)
+
+    for h in reversed(order):
+        if h in g.our:
+            n = g.our[h]
+            cands = n.cands
+            if fixed_policy is not None:
+                want = fixed_policy.get(h)
+                cands = [c for c in cands if c[0] == want]
+            best = None
+            for san, ch, in_sub, lv in cands:
+                if in_sub and ch is not None:
+                    if ch in V:
+                        v, t = V[ch], T[ch]
+                    else:
+                        v = t = static(ch)
+                else:
+                    v = t = lv
+                if best is None or v > best[0]:
+                    best = (v, t, san)
+            r = reach.get(h, 0.0)
+            if best is not None and r > 0 and best[0] - lam / r > n.l_node + 1e-15:
+                V[h] = best[0] - lam / r
+                T[h] = best[1]
+                choice[h] = best[2]
+            else:
+                V[h] = T[h] = n.l_node
+        else:
+            n = g.opp[h]
+            v = t = n.const_base
+            for p, ch, in_sub, lv in n.kids:
+                if in_sub and ch is not None:
+                    if ch in V:
+                        v += p * V[ch]
+                        t += p * T[ch]
+                    else:
+                        s = static(ch)
+                        v += p * s
+                        t += p * s
+                else:
+                    v += p * lv
+                    t += p * lv
+            V[h], T[h] = v, t
+
+    # top-down: what the book reaches, and how often (summed over its paths)
+    R: dict[int, float] = {g.root: 1.0}
+    visited: list[int] = []
+    booked: dict[int, str] = {}
+    for h in order:
+        r = R.get(h, 0.0)
+        if r <= 0:
+            continue
+        visited.append(h)
+        if h in g.our:
+            mv = choice.get(h)
+            if mv is None:
+                continue
+            booked[h] = mv
+            for san, ch, in_sub, _lv in g.our[h].cands:
+                if san == mv:
+                    if in_sub and ch is not None:
+                        R[ch] = R.get(ch, 0.0) + r
+                    break
+        else:
+            for p, ch, in_sub, _lv in g.opp[h].kids:
+                if in_sub and ch is not None:
+                    R[ch] = R.get(ch, 0.0) + r * p
+    return {"booked": booked, "alloc": {}, "visited": visited,
+            "realized": {h: T[h] for h in visited},
+            "spent_paths": len(booked), "spent_distinct": len(booked),
+            "root_value_curve": None, "root_value_realized": T.get(g.root),
+            "root_value_penalized": V.get(g.root), "lam": lam, "reach_policy": R}
+
+
+def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = None,
+                 steps: int = 40, log=print) -> tuple[dict, dict]:
+    """Bisect the price onto `target` booked positions; then re-price with the
+    book's own total reach (transpositions charged once) and bisect again.
+    Returns (result, info): info holds the lam sweep, the chosen lam, the
+    nearest sizes either side of the target, and the duality bound on how much
+    more any book of `target` positions could score."""
+    order = topo_down(g)
+    tried: list[tuple[float, int, float, float, int]] = []  # lam, n, T, Vpen, round
+
+    def solve(lam, reach, rnd):
+        res = price_book(g, lam, order, reach, fixed_policy)
+        tried.append((lam, res["spent_distinct"], res["root_value_realized"],
+                      res["root_value_penalized"], rnd))
+        return res
+
+    def bisect(reach, rnd):
+        lo, hi = math.log(1e-10), math.log(1.0)   # log lam: N(lo) large, N(hi) ~ 0
+        r_hi = solve(math.exp(hi), reach, rnd)
+        if r_hi["spent_distinct"] >= target:
+            return None, r_hi
+        r_lo = solve(math.exp(lo), reach, rnd)
+        if r_lo["spent_distinct"] <= target:
+            return r_lo, None
+        best_under, best_over = r_hi, r_lo
+        for _ in range(steps):
+            mid = (lo + hi) / 2
+            r = solve(math.exp(mid), reach, rnd)
+            n = r["spent_distinct"]
+            if n == target:
+                return r, r
+            if n < target:
+                hi, best_under = mid, r
+            else:
+                lo, best_over = mid, r
+            if hi - lo < 1e-7:
+                break
+        return best_under, best_over
+
+    def closest(under, over):
+        if over is None:
+            return under
+        if under is None:
+            return over
+        if target - under["spent_distinct"] <= over["spent_distinct"] - target:
+            return under
+        return over
+
+    u1, o1 = bisect(g.reach, 1)
+    first = closest(u1, o1)
+    reach2 = dict(g.reach)
+    reach2.update({h: r for h, r in first["reach_policy"].items() if r > 0})
+    u2, o2 = bisect(reach2, 2)
+    res = closest(u2, o2)
+    ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == 2)
+    info = {"lam": res["lam"], "booked": res["spent_distinct"],
+            "under": None if u2 is None else u2["spent_distinct"],
+            "over": None if o2 is None else o2["spent_distinct"],
+            "value": res["root_value_realized"], "upper_bound": ub,
+            "gap": ub - res["root_value_realized"],
+            "sweep": [{"lam": lam, "booked": n, "value": t, "round": rnd}
+                      for lam, n, t, _vp, rnd in sorted(tried)]}
+    log(f"  price search: lam {res['lam']:.3e} -> {res['spent_distinct']:,} positions "
+        f"(target {target:,}; nearest sizes {info['under']} / {info['over']}), "
+        f"value {res['root_value_realized']:.5f}, bound at {target:,}: {ub:.5f} "
+        f"(gap {info['gap']:.5f}), {len(tried)} solves")
+    return res, info

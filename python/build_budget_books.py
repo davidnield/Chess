@@ -235,7 +235,12 @@ def main() -> int:
     ap.add_argument("--out-prefix", required=True,
                     help="Books land at <prefix>_b<N>.parquet (+ .meta.json).")
     ap.add_argument("--budget", type=int, action="append", required=True)
-    ap.add_argument("--method", choices=["greedy", "dp"], default="dp")
+    ap.add_argument("--method", choices=["greedy", "dp", "price"], default="dp",
+                    help="dp: the curve engine. price: price per move "
+                         "(budget_core.price_search) -- exact for its own book size "
+                         "on a tree, no curves, so --grid-cap/--match-*/--leftover do "
+                         "not apply; the book lands on the reachable size nearest "
+                         "--budget and the meta records the bound on the rest.")
     ap.add_argument("--fixed-policy", action="store_true",
                     help="Restrict candidates to the source rep's best_move "
                          "(optimal stopping; the B-prime comparator).")
@@ -495,11 +500,14 @@ def main() -> int:
         del W, R
 
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
-    log("building curves...")
-    curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap,
-                                   fixed_policy=fixed)
-    log(f"  stranded cycle nodes {diag['stranded_cycle_nodes']:,}  "
-        f"({time.time()-t0:,.0f}s)")
+    if a.method == "price":
+        curves, diag = {}, {"stranded_cycle_nodes": None}
+    else:
+        log("building curves...")
+        curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap,
+                                       fixed_policy=fixed)
+        log(f"  stranded cycle nodes {diag['stranded_cycle_nodes']:,}  "
+            f"({time.time()-t0:,.0f}s)")
 
     # SECOND curve set, for --match-distinct probes ONLY.
     #
@@ -521,7 +529,7 @@ def main() -> int:
     # verification asserts -- and reach for the inflated set only when the
     # search genuinely has to probe higher, where the book differs anyway.
     probe_curves = None
-    if a.match_distinct and curve_bmax > bmax:
+    if a.match_distinct and curve_bmax > bmax and a.method != "price":
         log(f"building probe curves (bmax {curve_bmax}) for --match-distinct...")
         probe_curves, _ = bc.build_curves(g, bmax=curve_bmax,
                                           k_atoms=a.grid_cap,
@@ -533,7 +541,8 @@ def main() -> int:
     # report the cap rather than the quantity.
     widest = probe_curves if probe_curves is not None else curves
     cap = widest[g.root].capacity if g.root in widest else 0
-    log(f"  root capacity {cap:,} (path-sum)")
+    if a.method != "price":
+        log(f"  root capacity {cap:,} (path-sum)")
 
     # Diagnostic: the distinct-vs-charged curve itself. --match-distinct's
     # search assumes it can find a charged budget landing exactly on a target,
@@ -562,7 +571,12 @@ def main() -> int:
         if b not in todo:
             log(f"skip b={b} (exists)")
             continue
-        if a.method == "greedy":
+        price_info = None
+        if a.method == "price":
+            res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log)
+            charged, matched = b, res["spent_distinct"] >= b
+            log(f"  ({time.time()-t0:,.0f}s)")
+        elif a.method == "greedy":
             # Myopic one-step greedy picks the booked SET; the masked curves
             # then supply the VALUES only -- force_booked stops the density
             # allocator re-deciding the set. Without it (pre-2026-08-29) greedy
@@ -653,6 +667,7 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "leftover": a.leftover,
             "stop_model": a.stop_model,
+            **({"price": price_info} if price_info is not None else {}),
             **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
                 "weak_min_share": a.weak_min_share, "weak_counts": stop_counts}
                if a.stop_model == "weak" else {}),
@@ -670,7 +685,7 @@ def main() -> int:
             f"{rvr:.4f}" if rvr is not None else
             f"b={b}: booked {res['spent_distinct']:,} distinct (root value n/a)"
             f" -> {out.name}")
-        if rvr is not None:
+        if rvr is not None and rvc is not None:
             log(f"       curve {rvc:.4f} -> {out.name}")
         if res["spent_distinct"] == 0:
             log("       WARNING: nothing booked — stopping beat every "
