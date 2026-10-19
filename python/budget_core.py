@@ -1472,11 +1472,71 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
 # if it were taken. With transpositions this is a self-consistent answer, not a
 # proven optimum; on a tree the two passes coincide.
 
+def topo_up(g: Graph) -> tuple[list[int], set[int]]:
+    """Bottom-up order (children before parents) for valuation, and the nodes
+    placed early to break cycles.
+
+    Strongly connected components come out of Tarjan children-first. A single
+    node goes straight in; inside a real cycle, the members are drained in
+    dependency order and, when every remaining member waits on the cycle, the
+    lowest-reach member is placed early. A node placed early is still valued from
+    every child already computed; only its edges INTO the unresolved cycle read
+    the child's static value (price_book's back-edge rule), so a repetition move
+    (Nf3-g1 back to the start) is cut, not the position and its subtree.
+
+    The cut must fall INSIDE the cycle. Every chess cycle's positions share one
+    reach (our moves do not decay it), so a global "lowest reach first" rule ties
+    and can pick an ancestor merely waiting on the cycle (in the test, the root:
+    nothing was booked). topo_down is not a valuation order at all: it releases
+    the HIGHEST-reach survivor first, so in reverse its parents are valued before
+    it, and the first real-data price books lost whole main-line subtrees that
+    way (0.018 below the curve engine at 400 positions)."""
+    from stage3_backwards_induction import _tarjan_sccs
+    children, _parents = _adjacency(g)
+    all_nodes = set(g.our) | set(g.opp)
+    succ = {h: [c for c in children.get(h, []) if c in all_nodes] for h in all_nodes}
+    order: list[int] = []
+    early: set[int] = set()
+    for scc in _tarjan_sccs(all_nodes, succ):
+        if len(scc) == 1:
+            order.append(scc[0])
+            continue
+        members = set(scc)
+        pending = {h: sum(1 for c in succ[h] if c in members) for h in scc}
+        rev: dict[int, list[int]] = {h: [] for h in scc}
+        for h in scc:
+            for c in succ[h]:
+                if c in members:
+                    rev[c].append(h)
+        done: set[int] = set()
+        q = deque(h for h in scc if pending[h] == 0)
+        by_reach = sorted(scc, key=lambda h: (g.reach.get(h, 0.0), h))
+        k = 0
+        while len(done) < len(scc):
+            if not q:
+                while by_reach[k] in done:
+                    k += 1
+                early.add(by_reach[k])
+                q.append(by_reach[k])
+            h = q.popleft()
+            if h in done:
+                continue
+            done.add(h)
+            order.append(h)
+            for par in rev[h]:
+                if par not in done:
+                    pending[par] -= 1
+                    if pending[par] <= 0:
+                        q.append(par)
+    return order, early
+
+
 def price_book(g: Graph, lam: float, order: list[int],
                reach: dict[int, float] | None = None,
                fixed_policy: dict[int, str] | None = None) -> dict:
-    """One price-per-move solve at price `lam`. `order` is topo_down(g).
-    Returns extract_book's keys plus root_value_penalized, lam, reach_policy."""
+    """One price-per-move solve at price `lam`. `order` = topo_up(g)[0]
+    (children first). Returns extract_book's keys plus root_value_penalized, lam,
+    reach_policy."""
     reach = g.reach if reach is None else reach
     V: dict[int, float] = {}     # penalised value (local units)
     T: dict[int, float] = {}     # true value under the chosen policy
@@ -1491,7 +1551,7 @@ def price_book(g: Graph, lam: float, order: list[int],
             p * (g.our[k].l_node if (in_s and k in g.our) else lv)
             for p, k, in_s, lv in n.kids)
 
-    for h in reversed(order):
+    for h in order:
         if h in g.our:
             n = g.our[h]
             cands = n.cands
@@ -1537,7 +1597,7 @@ def price_book(g: Graph, lam: float, order: list[int],
     R: dict[int, float] = {g.root: 1.0}
     visited: list[int] = []
     booked: dict[int, str] = {}
-    for h in order:
+    for h in reversed(order):           # parents first
         r = R.get(h, 0.0)
         if r <= 0:
             continue
@@ -1570,7 +1630,9 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
     Returns (result, info): info holds the lam sweep, the chosen lam, the
     nearest sizes either side of the target, and the duality bound on how much
     more any book of `target` positions could score."""
-    order = topo_down(g)
+    order, cut = topo_up(g)
+    if cut:
+        log(f"  price search: {len(cut):,} back edges cut in repetition cycles")
     tried: list[tuple[float, int, float, float, int]] = []  # lam, n, T, Vpen, round
 
     def solve(lam, reach, rnd):

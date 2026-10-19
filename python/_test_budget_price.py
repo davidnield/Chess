@@ -30,7 +30,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
 from budget_core import (Graph, OppNode, OurNode, price_book,  # noqa: E402
-                         price_search, topo_down)
+                         price_search, topo_up)
 
 FAIL = 0
 
@@ -121,7 +121,7 @@ def main() -> int:
         g = random_tree(rng, root_ours=(t % 2 == 0))
         size = len(g.our)
         opt = exact(g, size)
-        order = topo_down(g)
+        order, _cut = topo_up(g)
         for lam in np.logspace(-5, 0, 40):
             r = price_book(g, float(lam), order)
             n = r["spent_distinct"]
@@ -161,8 +161,8 @@ def main() -> int:
           abs(opt[6] - 0.775) < 1e-12 and res["spent_distinct"] == 6
           and abs(res["root_value_realized"] - 0.775) < 1e-12,
           f"oracle {opt[6]}, price {res['spent_distinct']} -> {res['root_value_realized']}")
-    r3 = price_book(g, 0.045, topo_down(g))
-    r6 = price_book(g, 0.040, topo_down(g))
+    r3 = price_book(g, 0.045, *topo_up(g)[:1])
+    r6 = price_book(g, 0.040, *topo_up(g)[:1])
     check("C: at 0.045 the items are bought and the chain is not (0.65 = oracle(3))",
           r3["spent_distinct"] == 3 and abs(r3["root_value_realized"] - opt[3]) < 1e-12
           and abs(opt[3] - 0.65) < 1e-12,
@@ -181,7 +181,7 @@ def main() -> int:
     g.our[6] = OurNode(l_node=0.5, cands=[("x", None, False, 0.6)])
     g.ply = {1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 4}
     g.reach = {1: 1, 2: .5, 3: .5, 4: .5, 5: .5, 6: .5}       # max over paths
-    order = topo_down(g)
+    order, _cut = topo_up(g)
     per_path = price_book(g, 0.03, order)
     total = dict(g.reach)
     total[6] = 1.0                                          # both paths taken
@@ -195,11 +195,33 @@ def main() -> int:
     check("D: price_search's second round finds it", res["spent_distinct"] == 3,
           f"{res['booked']}")
 
+    # F: a repetition cycle through a main-line position. A (our node) can play
+    # "back" (to O2, whose only reply returns to A) or "good" (to O3 -> C, where
+    # booking x is worth 0.4 over the stop value). Every node in the cycle has
+    # reach 1, so the cycle is broken at a tie: the book must still find A->good,
+    # C->x however the tie falls.
+    for back_hash in (50, 5):                  # O2 hashed above and below A
+        g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
+        g.our[1] = OurNode(l_node=0.5, cands=[("m", 2, True, 0)])
+        g.opp[2] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
+        g.our[10] = OurNode(l_node=0.5, cands=[("back", back_hash, True, 0),
+                                               ("good", 30, True, 0)])
+        g.opp[back_hash] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
+        g.opp[30] = OppNode(const_base=0.0, kids=[(1.0, 40, True, 0)])
+        g.our[40] = OurNode(l_node=0.5, cands=[("x", None, False, 0.9)])
+        g.ply = {1: 0, 2: 1, 10: 2, back_hash: 3, 30: 3, 40: 4}
+        g.reach = {h: 1.0 for h in g.ply}
+        res, _ = price_search(g, 3, log=lambda m: None)
+        check(f"F: a repetition cycle does not cost the main line (back edge hash {back_hash})",
+              res["booked"] == {1: "m", 10: "good", 40: "x"}
+              and abs(res["root_value_realized"] - 0.9) < 1e-12,
+              f"{res['booked']}, {res['root_value_realized']}")
+
     # E: fixed policy
     g = Graph(root=1, our={1: OurNode(l_node=0.5, cands=[("good", None, False, 0.7),
                                                         ("src", None, False, 0.6)])},
               opp={}, epd={}, ply={1: 0}, reach={1: 1.0})
-    r = price_book(g, 0.01, topo_down(g), fixed_policy={1: "src"})
+    r = price_book(g, 0.01, topo_up(g)[0], fixed_policy={1: "src"})
     check("E: fixed_policy books only the source move", r["booked"] == {1: "src"},
           f"{r['booked']}")
 
