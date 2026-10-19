@@ -444,9 +444,20 @@ def main() -> int:
         aux_rows = bc.load_aux_rows(aux_path, parents)
         log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
 
+    # Only the fields build_graph reads, and the EPD on a parent's first row only:
+    # a full row dict per edge was most of the peak at a few million edges.
     by_parent: dict[int, list[dict]] = {}
-    for r in edf.iter_rows(named=True):
-        by_parent.setdefault(r["parent_hash"], []).append(r)
+    for ph, ms, ch, tot, ws, epd in edf.select(
+            ["parent_hash", "move_san", "child_hash", "total", "white_score_avg",
+             "parent_epd"]).iter_rows():
+        lst = by_parent.get(ph)
+        if lst is None:
+            by_parent[ph] = [{"move_san": ms, "child_hash": ch, "total": tot,
+                              "white_score_avg": ws, "parent_epd": epd}]
+        else:
+            lst.append({"move_san": ms, "child_hash": ch, "total": tot,
+                        "white_score_avg": ws})
+    del edf
 
     log("building graph...")
     g = bc.build_graph(by_parent, root, our_white, rep_moves=rep_moves,
@@ -459,6 +470,10 @@ def main() -> int:
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    # nothing below reads the edge lists, the eval cache or the gate's source moves
+    del by_parent, eval_ws, want, admit
+    import gc
+    gc.collect()
     stop_counts = None
     if a.stop_model == "weak":
         if not a.weak_pool or not Path(a.weak_pool).exists():
