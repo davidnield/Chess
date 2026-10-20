@@ -525,8 +525,12 @@ function renderOurTurn(data) {
   const cls   = r => r === 1 ? "gold" : r === 2 ? "silver" : r === 3 ? "bronze" : "";
   const fx = v => (v === null || v === undefined) ? "&mdash;" : Number(v).toFixed(3);
   const rows = data.our_moves.map(m => {
-    let bk = m.in_book === true ? `<span class="badge">in book</span>`
-           : m.in_book === false ? `<span class="badge off">off</span>` : "";
+    // At our turn only the book's own move is "in book". Another move whose
+    // position the book ALSO reaches (by a different move order) is a
+    // transposition, not a second book move: label it so.
+    let bk = m.in_book !== true ? (m.in_book === false ? `<span class="badge off">off</span>` : "")
+           : m.is_recommended ? `<span class="badge">in book</span>`
+           : `<span class="badge off" title="Not the book's move here, but the book reaches this position by another move order">transposes</span>`;
     const rec = m.is_recommended ? ` <span class="badge rec">rec</span>` : "";
     const eng = m.augmented ? ` <span class="badge aug">engine</span>` : "";
     return `<tr class="clickable ${cls(m.rank)}" data-san="${m.san}">
