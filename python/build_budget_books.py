@@ -286,6 +286,43 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
+def evaluate_books(g, specs: list[str], perspective: str, log, what: str = "") -> None:
+    """In-model value of FOLLOWING each LABEL=PATH book on graph g
+    (budget_core.policy_value), then, for two or more books, where they differ: every
+    shallow position (ply <= 6) some book reaches in >= 1% of games, with each book's
+    reach and value there."""
+    order, _cut = bc.topo_up(g)
+    log(f"evaluating {len(specs)} book(s) on this graph ({what})")
+    evals = {}
+    for spec in specs:
+        label, path = spec.split("=", 1)
+        bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
+        mv = {h: m for h, sd, m in bd.iter_rows() if sd == perspective and m}
+        r = bc.policy_value(g, mv, order, detail=True)
+        evals[label] = r
+        log(f"  {label:<28} {len(mv):>7,} moves  value {r['value']:.5f} (our side)  "
+            f"played {r['played']:,}  not candidates {r['missing']:,}")
+    if len(evals) < 2:
+        return
+    from repertoire_stats import opening_names
+    names = opening_names()
+    labels = list(evals)
+    cand = [h for h in set().union(*(e["W"] for e in evals.values()))
+            if g.ply.get(h, 99) <= 6
+            and max(e["W"].get(h, 0.0) for e in evals.values()) >= 0.01]
+    cand.sort(key=lambda h: -max(e["W"].get(h, 0.0) for e in evals.values()))
+    log("  breakdown (ply <= 6, reach >= 1%): reach / value per book")
+    log("    " + f"{'ply':>3} " + "".join(f"{lb[:17]:>18}" for lb in labels) + "  opening")
+    for h in cand[:40]:
+        cells = ""
+        for lb in labels:
+            w, t = evals[lb]["W"].get(h, 0.0), evals[lb]["T"].get(h)
+            cells += f"{w * 100:7.2f}% {t:.4f} " if (w > 0 and t is not None) \
+                else f"{'':>18}"
+        nm = names.get(h, ("", ""))[1][:48]
+        log(f"    {g.ply.get(h, -1):>3} {cells} {nm or g.epd.get(h, '')[:48]}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -375,6 +412,9 @@ def main() -> int:
     ap.add_argument("--price-seed", choices=["optimistic", "source"], default="optimistic",
                     help="--method price: round 1 prices with the optimistic reach "
                          "(default) or with the source rep's own policy reach.")
+    ap.add_argument("--evaluate-after", action="append", default=[], metavar="LABEL=PATH",
+                    help="After building the books, evaluate them in-model on the same graph "
+                         "next to these books (as --evaluate does, without a second graph build).")
     ap.add_argument("--price-reprice", choices=["replace", "max"], default="replace",
                     help="--method price: after round 1, price a node at its book's reach "
                          "(replace, default) or at max(book reach, optimistic reach).")
@@ -641,17 +681,9 @@ def main() -> int:
                             seed_reach=src_reach if seed == "source" else None,
                             on_round=show, reprice=rp)
     if a.evaluate:
-        order, _cut = bc.topo_up(g)
-        log(f"evaluating {len(a.evaluate)} book(s) on this graph "
-            f"(stop model {a.stop_model}, eps {eps:g}{', gated' if a.gated_reach else ''})")
-        for spec in a.evaluate:
-            label, path = spec.split("=", 1)
-            bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
-            mv = {h: m for h, sd, m in bd.iter_rows() if sd == a.perspective and m}
-            r = bc.policy_value(g, mv, order)
-            v = r["value"]
-            log(f"  {label:<28} {len(mv):>7,} moves  value {v:.5f} (our side)  "
-                f"played {r['played']:,}  not candidates {r['missing']:,}")
+        evaluate_books(g, a.evaluate, a.perspective, log,
+                       f"stop model {a.stop_model}, eps {eps:g}"
+                       f"{', gated' if a.gated_reach else ''}")
     if a.evaluate or a.price_diagnose:
         return 0
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
@@ -865,6 +897,11 @@ def main() -> int:
             log("       WARNING: nothing booked — stopping beat every "
                 "candidate at every node (check L_node vs continuation)")
 
+    if a.evaluate_after:
+        evaluate_books(g, [f"this_b{b}={outs[b]}" for b in budgets if outs[b].exists()]
+                       + a.evaluate_after, a.perspective, log,
+                       f"stop model {a.stop_model}, eps {eps:g}"
+                       f"{', gated' if a.gated_reach else ''}")
     pk = peak_commit_gb()
     log(f"\ndone in {time.time()-t0:,.0f}s"
         + (f"; peak commit {pk:,.1f} GB" if pk is not None else ""))

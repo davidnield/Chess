@@ -1531,7 +1531,8 @@ def topo_up(g: Graph) -> tuple[list[int], set[int]]:
     return order, early
 
 
-def policy_value(g: Graph, moves: dict[int, str], order: list[int]) -> dict:
+def policy_value(g: Graph, moves: dict[int, str], order: list[int],
+                 detail: bool = False) -> dict:
     """In-model value of FOLLOWING a given book on this graph: at our nodes play the
     book's move when it is one of the node's candidates (else stop, value L), at
     opponent nodes the graph's reply mix. One evaluator for every method's books, so
@@ -1589,7 +1590,12 @@ def policy_value(g: Graph, moves: dict[int, str], order: list[int]) -> dict:
                     stack.append(c[1])
         elif h in g.opp:
             stack.extend(ch for _p, ch, in_sub, _lv in g.opp[h].kids if in_sub and ch is not None)
-    return {"value": T.get(g.root), "played": played, "missing": missing}
+    out = {"value": T.get(g.root), "played": played, "missing": missing}
+    if detail:
+        # how often the walk reaches each node (summed over paths), for breakdowns
+        out["T"] = T
+        out["W"] = policy_reach(g, moves, order)
+    return out
 
 
 def price_book(g: Graph, lam: float, order: list[int],
