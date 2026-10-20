@@ -30,6 +30,17 @@ which trades that variance for a bias toward the population's own choice. Defaul
 (raw). SE: sqrt(sum over leaves of w^2 * m~(1-m~)/n) with m~ = (s+1)/(n+2), so a
 one-game leaf is not counted as certain.
 
+Measured 2026-10-20 (Aug vs Sep 2026 split-half, ~830 course books, 1800+ B/R/C): the
+raw value of a course book moves 0.003-0.004 rms between months, K=30 halves that, and
+our own books (which play rarer moves) moved up to 0.03 raw but within ~0.005 at K=30.
+For a weaker side's games (scratch side_explorer.py) raw values are far noisier (rms
+0.010-0.013). K also changes WHAT is measured: with few holdout players on the book's
+deep moves, K=30 values a book as if its first moves were played and the rest left to
+the population -- partial memorisation -- while raw credits the few who followed it.
+Report both. Against replay_holdout's lockstep counts this agreed for Black books and
+read ~0.03 higher for White ones, whose 1.d4 lines transpose heavily (the replay
+scorer splits a transposed child's games by its parents' totals, not by edge counts).
+
 Positions past the explorer's --max-ply have no edges, so every book is cut at the
 same depth: a deeper course gets no credit below it (it counts as `cap`).
 
