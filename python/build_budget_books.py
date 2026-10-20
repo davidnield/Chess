@@ -366,6 +366,19 @@ def main() -> int:
     ap.add_argument("--weak-min-games", type=float, default=20.0,
                     help="Below this many weak-pool games at a position, our move "
                          "frequencies fall back to the main pool's (default 20).")
+    ap.add_argument("--price-rounds", type=int, default=2,
+                    help="--method price: reach re-pricing rounds (default 2).")
+    ap.add_argument("--price-select", choices=["closest", "best"], default="closest",
+                    help="--method price: the last round's book nearest the target "
+                         "(default), or the best realized value of every solve within "
+                         "1%% of the target.")
+    ap.add_argument("--price-seed", choices=["optimistic", "source"], default="optimistic",
+                    help="--method price: round 1 prices with the optimistic reach "
+                         "(default) or with the source rep's own policy reach.")
+    ap.add_argument("--price-diagnose", action="store_true",
+                    help="DIAGNOSTIC: run a fixed set of price-search variants on this "
+                         "graph and log each one's size and in-model value (plus any "
+                         "--evaluate books); writes no books.")
     ap.add_argument("--allowed-moves", default=None, metavar="PATH",
                     help="Mix and match: our book may play only the moves this parquet "
                          "lists for a position (course_books' course_moves.parquet, or "
@@ -604,6 +617,25 @@ def main() -> int:
         log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
         del W, R
 
+    if a.price_diagnose:
+        order, _cut = bc.topo_up(g)
+        src_reach = dict(g.reach)
+        src_reach.update({h: r for h, r in bc.policy_reach(g, rep_moves, order).items()
+                          if r > 0})
+        target = budgets[0]
+        log(f"price diagnose at {target}: after each round, the closest book and the "
+            f"best within 1% of the target so far")
+        for seed in ("optimistic", "source"):
+            t1 = time.time()
+
+            def show(rnd, cl, best, seed=seed, t1=t1):
+                b_ = (f"{best['spent_distinct']:,} at {best['root_value_realized']:.5f}"
+                      if best else "none")
+                log(f"  seed {seed:<10} round {rnd}: closest {cl['spent_distinct']:,} at "
+                    f"{cl['root_value_realized']:.5f}; best {b_}  ({time.time() - t1:,.0f}s)")
+            bc.price_search(g, target, log=lambda *_: None, rounds=4, select="best",
+                            seed_reach=src_reach if seed == "source" else None,
+                            on_round=show)
     if a.evaluate:
         order, _cut = bc.topo_up(g)
         log(f"evaluating {len(a.evaluate)} book(s) on this graph "
@@ -616,6 +648,7 @@ def main() -> int:
             v = r["value"]
             log(f"  {label:<28} {len(mv):>7,} moves  value {v:.5f} (our side)  "
                 f"played {r['played']:,}  not candidates {r['missing']:,}")
+    if a.evaluate or a.price_diagnose:
         return 0
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     if a.method == "price":
@@ -691,7 +724,14 @@ def main() -> int:
             continue
         price_info = None
         if a.method == "price":
-            res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log)
+            seed = None
+            if a.price_seed == "source":
+                seed = dict(g.reach)
+                seed.update({h: r for h, r in bc.policy_reach(
+                    g, rep_moves, bc.topo_up(g)[0]).items() if r > 0})
+            res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
+                                              rounds=a.price_rounds,
+                                              select=a.price_select, seed_reach=seed)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.method == "greedy":
@@ -785,6 +825,8 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "leftover": a.leftover,
             "stop_model": a.stop_model,
+            **({"price_rounds": a.price_rounds, "price_select": a.price_select,
+                "price_seed": a.price_seed} if a.method == "price" else {}),
             **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
                 "allowed_courses": a.allowed_courses,
                 "allowed_book_only": a.allowed_book_only, "allowed_counts": allowed_counts}

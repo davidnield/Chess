@@ -1684,22 +1684,67 @@ def price_book(g: Graph, lam: float, order: list[int],
             "root_value_penalized": V.get(g.root), "lam": lam, "reach_policy": R}
 
 
+def policy_reach(g: Graph, moves: dict[int, str], order: list[int]) -> dict[int, float]:
+    """Total reach of every node (summed over paths) when our side always plays
+    `moves` where it is an in-subgraph candidate, and stops elsewhere. `order` =
+    topo_up(g)[0]; a cut back edge carries no reach."""
+    R: dict[int, float] = {g.root: 1.0}
+    for h in reversed(order):           # parents first
+        r = R.get(h, 0.0)
+        if r <= 0:
+            continue
+        if h in g.our:
+            want = moves.get(h)
+            if want is None:
+                continue
+            for san, ch, in_sub, _lv in g.our[h].cands:
+                if san == want:
+                    if in_sub and ch is not None:
+                        R[ch] = R.get(ch, 0.0) + r
+                    break
+        else:
+            for p, ch, in_sub, _lv in g.opp[h].kids:
+                if in_sub and ch is not None:
+                    R[ch] = R.get(ch, 0.0) + r * p
+    return R
+
+
 def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = None,
-                 steps: int = 40, log=print) -> tuple[dict, dict]:
+                 steps: int = 40, log=print, *, rounds: int = 2,
+                 seed_reach: dict[int, float] | None = None, select: str = "closest",
+                 select_tol: float = 0.01, on_round=None) -> tuple[dict, dict]:
     """Bisect the price onto `target` booked positions; then re-price with the
     book's own total reach (transpositions charged once) and bisect again.
     Returns (result, info): info holds the lam sweep, the chosen lam, the
     nearest sizes either side of the target, and the duality bound on how much
-    more any book of `target` positions could score."""
+    more any book of `target` positions could score.
+
+    The re-pricing is exact only on a tree. On a DAG a position's true reach
+    depends on the whole book, and round 2 can do WORSE than round 1: a
+    transposition the round-1 book reaches only by a minor path is re-priced
+    at that small reach and dropped (Black b2000, 2026-10-20: round 1 0.5941 at
+    1,917 positions, round 2 0.5869 at 1,994; a curve-engine book of 2,001
+    scored 0.6067 on the same graph). Off-default knobs:
+      rounds      re-pricing rounds (each prices with the previous round's book
+                  reach, the optimistic reach where that book does not go)
+      seed_reach  round 1's reach instead of the optimistic g.reach (e.g. the
+                  source book's policy_reach)
+      select      'closest' = the last round's book nearest the target (default);
+                  'best' = the highest realized value of every solve, any round,
+                  whose size is within select_tol of the target
+      on_round    called as on_round(round, closest_book, best_book_so_far)"""
     order, cut = topo_up(g)
     if cut:
         log(f"  price search: {len(cut):,} back edges cut in repetition cycles")
     tried: list[tuple[float, int, float, float, int]] = []  # lam, n, T, Vpen, round
+    near: list[dict] = []               # solves within select_tol of the target
 
     def solve(lam, reach, rnd):
         res = price_book(g, lam, order, reach, fixed_policy)
         tried.append((lam, res["spent_distinct"], res["root_value_realized"],
                       res["root_value_penalized"], rnd))
+        if abs(res["spent_distinct"] - target) <= select_tol * target:
+            near.append(res)
         return res
 
     def bisect(reach, rnd):
@@ -1734,16 +1779,22 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
             return under
         return over
 
-    u1, o1 = bisect(g.reach, 1)
-    first = closest(u1, o1)
-    reach2 = dict(g.reach)
-    reach2.update({h: r for h, r in first["reach_policy"].items() if r > 0})
-    u2, o2 = bisect(reach2, 2)
-    res = closest(u2, o2)
-    ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == 2)
+    reach = g.reach if seed_reach is None else seed_reach
+    for rnd in range(1, rounds + 1):
+        u, o = bisect(reach, rnd)
+        res = closest(u, o)
+        if on_round is not None:
+            on_round(rnd, res, max(near, key=lambda r: r["root_value_realized"])
+                     if near else None)
+        if rnd < rounds:
+            reach = dict(g.reach)
+            reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})
+    if select == "best" and near:
+        res = max(near, key=lambda r: r["root_value_realized"])
+    ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == rounds)
     info = {"lam": res["lam"], "booked": res["spent_distinct"],
-            "under": None if u2 is None else u2["spent_distinct"],
-            "over": None if o2 is None else o2["spent_distinct"],
+            "under": None if u is None else u["spent_distinct"],
+            "over": None if o is None else o["spent_distinct"],
             "value": res["root_value_realized"], "upper_bound": ub,
             "gap": ub - res["root_value_realized"],
             "sweep": [{"lam": lam, "booked": n, "value": t, "round": rnd}

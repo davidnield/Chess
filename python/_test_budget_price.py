@@ -21,6 +21,10 @@ hulls, atoms or density ordering, so it is the true optimum.
   E  fixed_policy restricts every node to the source move.
   F  a repetition cycle through a main-line position does not cost the line.
   H  policy_value (the shared book evaluator) reproduces each price book's value.
+  I  policy_reach sums a book's paths (D's X: 1.0 through both, 0.5 through one); a
+     price search seeded with it finds D's book in ONE round; on random trees the
+     off-default rounds=4 / select='best' books stay optimal for their size, and
+     'best' never scores below 'closest' when the closest book is within 1%.
 """
 from __future__ import annotations
 
@@ -31,8 +35,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from budget_core import (Graph, OppNode, OurNode, policy_value,  # noqa: E402
-                         price_book, price_search, topo_up)
+from budget_core import (Graph, OppNode, OurNode, policy_reach,  # noqa: E402
+                         policy_value, price_book, price_search, topo_up)
 
 FAIL = 0
 
@@ -209,6 +213,37 @@ def main() -> int:
     res, _ = price_search(g, 3, log=lambda m: None)
     check("D: price_search's second round finds it", res["spent_distinct"] == 3,
           f"{res['booked']}")
+
+    # I: policy_reach and the off-default search knobs
+    both = policy_reach(g, {2: "a", 3: "b", 6: "x"}, order)
+    one = policy_reach(g, {2: "a", 6: "x"}, order)
+    check("I: policy_reach sums the book's paths",
+          abs(both[6] - 1.0) < 1e-12 and abs(one[6] - 0.5) < 1e-12 and 5 not in one,
+          f"{both} / {one}")
+    seed = dict(g.reach)
+    seed.update({h: r for h, r in both.items() if r > 0})
+    r1, _ = price_search(g, 3, log=lambda m: None, rounds=1, seed_reach=seed)
+    check("I: seeded with the book's reach, round 1 finds D's book", r1["spent_distinct"] == 3,
+          f"{r1['booked']}")
+    rng3 = random.Random(11)
+    bad_i = worse = 0
+    for t in range(20):
+        gt = random_tree(rng3, root_ours=(t % 2 == 0))
+        size = len(gt.our)
+        opt = exact(gt, size)
+        for target in sorted({max(1, size // 3), max(1, size // 2)}):
+            cl, _ = price_search(gt, target, log=lambda m: None)
+            bs, _ = price_search(gt, target, log=lambda m: None, rounds=4, select="best")
+            for r in (cl, bs):
+                if abs(r["root_value_realized"] - opt[r["spent_distinct"]]) > 1e-9:
+                    bad_i += 1
+            if (abs(cl["spent_distinct"] - target) <= 0.01 * target
+                    and bs["root_value_realized"] < cl["root_value_realized"] - 1e-12):
+                worse += 1
+    check("I: rounds=4 / select='best' books are optimal for their size on trees",
+          bad_i == 0, f"{bad_i} off")
+    check("I: 'best' never scores below 'closest' within the tolerance", worse == 0,
+          f"{worse} worse")
 
     # F: a repetition cycle through a main-line position. A (our node) can play
     # "back" (to O2, whose only reply returns to A) or "good" (to O3 -> C, where
