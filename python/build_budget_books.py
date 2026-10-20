@@ -107,10 +107,70 @@ class GateAdmit:
             if e.get("child_hash") is not None}
 
 
+def load_allowed_moves(path: str, perspective: str, min_score: float = 0.0,
+                       courses: list[str] | None = None,
+                       book_only: bool = False) -> dict[int, set[str]]:
+    """--allowed-moves: position -> the SANs (check marks stripped) our book may
+    play there. A course_books course_moves.parquet (parent_hash, move_san, score,
+    course_id, rep_side) keeps the repertoire side's moves scoring above
+    `min_score` (0 = any recommendation; a move the course marks ? scores 0),
+    optionally from some courses only, and with `book_only` only each course
+    book's own choice there (in_book) rather than every move its analysis
+    recommends. Any other parquet needs position_hash or parent_hash, and move_san."""
+    d = pl.read_parquet(path)
+    if "parent_hash" not in d.columns:
+        d = d.rename({"position_hash": "parent_hash"})
+    if "rep_side" in d.columns:
+        d = d.filter(pl.col("rep_side") == perspective)
+    if "score" in d.columns:
+        d = d.filter(pl.col("score") > min_score)
+    if courses:
+        d = d.filter(pl.col("course_id").is_in(courses))
+    if book_only and "in_book" in d.columns:
+        d = d.filter(pl.col("in_book"))
+    out: dict[int, set[str]] = {}
+    for h, m in d.select("parent_hash", "move_san").unique().iter_rows():
+        out.setdefault(h, set()).add(m.rstrip("+#"))
+    return out
+
+
+class AllowedAdmit:
+    """--allowed-moves for the collector: at our nodes expand only the allowed
+    moves (and, under --gated-reach, only those the gates also admit)."""
+
+    def __init__(self, allowed: dict[int, set[str]], inner: GateAdmit | None = None):
+        self.allowed, self.inner = allowed, inner
+
+    def prefetch(self, hashes) -> None:
+        if self.inner is not None:
+            self.inner.prefetch(hashes)
+
+    def __call__(self, ph: int, rows: list[dict]) -> set[int]:
+        ok = self.allowed.get(ph)
+        if not ok:
+            return set()
+        kids = {r["child_hash"] for r in rows if r.get("child_hash") is not None
+                and r["move_san"].rstrip("+#") in ok}
+        return kids & self.inner(ph, rows) if (kids and self.inner is not None) else kids
+
+
+def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
+    """Drop every our-node candidate --allowed-moves does not list. A node left with
+    none can only stop (its stop value), so the book ends there."""
+    dropped = emptied = 0
+    for h, n in g.our.items():
+        ok = allowed.get(h, ())
+        keep = [c for c in n.cands if c[0].rstrip("+#") in ok]
+        dropped += len(n.cands) - len(keep)
+        if n.cands and not keep:
+            emptied += 1
+        n.cands = keep
+    return {"cands_dropped": dropped, "nodes_emptied": emptied}
+
+
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit: GateAdmit | None = None
-                           ) -> pl.DataFrame:
+                           min_games: int, admit=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -306,8 +366,35 @@ def main() -> int:
     ap.add_argument("--weak-min-games", type=float, default=20.0,
                     help="Below this many weak-pool games at a position, our move "
                          "frequencies fall back to the main pool's (default 20).")
+    ap.add_argument("--allowed-moves", default=None, metavar="PATH",
+                    help="Mix and match: our book may play only the moves this parquet "
+                         "lists for a position (course_books' course_moves.parquet, or "
+                         "any position_hash/parent_hash + move_san table). Elsewhere the "
+                         "book can only stop. Default off.")
+    ap.add_argument("--allowed-min-score", type=float, default=0.0,
+                    help="course_moves only: keep moves scoring above this "
+                         "(default 0: any recommendation, never a '?' move).")
+    ap.add_argument("--allowed-book-only", action="store_true",
+                    help="course_moves only: keep each course book's own choice at a "
+                         "position (in_book), not every move its analysis recommends.")
+    ap.add_argument("--allowed-courses", default=None,
+                    help="course_moves only: comma-separated course_ids to draw from "
+                         "(default: every course of the book's side).")
+    ap.add_argument("--weak-eval-curve", default=None, metavar="PATH",
+                    help="Under --stop-model weak, turn evals into expected scores with "
+                         "the curves fit_eval_curve.py fitted per rating pairing "
+                         "(eval_curves_pooled.parquet) instead of the uniform Lichess "
+                         "curve. Default off.")
+    ap.add_argument("--weak-curve-cells",
+                    default="stm1000-1799_vs_opp1800+,stm1800+_vs_opp1000-1799",
+                    help="US_CELL,THEM_CELL of --weak-eval-curve: the curve where we are "
+                         "to move, and where they are.")
     ap.add_argument("--weak-min-share", type=float, default=0.01,
                     help="Drop moves/replies under this share and renormalise.")
+    ap.add_argument("--evaluate", action="append", default=[], metavar="LABEL=PATH",
+                    help="DIAGNOSTIC: build the graph exactly as for a book, then print the "
+                         "in-model value of FOLLOWING each given book on it "
+                         "(budget_core.policy_value) and exit without writing books.")
     ap.add_argument("--leftover", action="store_true",
                     help="Extraction: give an opponent node's unspendable budget to the "
                          "closed child with the densest blocking atom instead of "
@@ -401,6 +488,15 @@ def main() -> int:
                                  _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
         admit = GateAdmit(src_all, our_white, slice_prior)
+    allowed = None
+    if a.allowed_moves:
+        allowed = load_allowed_moves(
+            a.allowed_moves, a.perspective, a.allowed_min_score,
+            a.allowed_courses.split(",") if a.allowed_courses else None,
+            a.allowed_book_only)
+        log(f"allowed moves: {sum(map(len, allowed.values())):,} moves at "
+            f"{len(allowed):,} positions from {a.allowed_moves}")
+        admit = AllowedAdmit(allowed, admit)
     log("collecting subgraph edges...")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit)
@@ -479,6 +575,11 @@ def main() -> int:
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    allowed_counts = None
+    if allowed is not None:
+        allowed_counts = restrict_candidates(g, allowed)
+        log(f"  allowed moves: {allowed_counts}")
+        del allowed
     # nothing below reads the edge lists, the eval cache or the gate's source moves
     del by_parent, eval_ws, want, admit
     import gc
@@ -488,10 +589,14 @@ def main() -> int:
         if not a.weak_pool or not Path(a.weak_pool).exists():
             log(f"FATAL: --stop-model weak needs --weak-pool (got {a.weak_pool})")
             return 1
-        from weak_stop import EvalSource, weak_stop_values
+        from weak_stop import EvalSource, load_curves, weak_stop_values
+        curves = None
+        if a.weak_eval_curve:
+            curves = load_curves(a.weak_eval_curve, *a.weak_curve_cells.split(","))
+            log(f"  weak stop model: fitted eval curves {curves}")
         xs, ys = bc.stop_model_positions(g)
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white),
+                                    evals=EvalSource(our_white, curves=curves),
                                     min_weak=a.weak_min_games,
                                     min_share=a.weak_min_share, log=log)
         ac = bc.apply_stop_values(g, W, R)
@@ -499,6 +604,19 @@ def main() -> int:
         log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
         del W, R
 
+    if a.evaluate:
+        order, _cut = bc.topo_up(g)
+        log(f"evaluating {len(a.evaluate)} book(s) on this graph "
+            f"(stop model {a.stop_model}, eps {eps:g}{', gated' if a.gated_reach else ''})")
+        for spec in a.evaluate:
+            label, path = spec.split("=", 1)
+            bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
+            mv = {h: m for h, sd, m in bd.iter_rows() if sd == a.perspective and m}
+            r = bc.policy_value(g, mv, order)
+            v = r["value"]
+            log(f"  {label:<28} {len(mv):>7,} moves  value {v:.5f} (our side)  "
+                f"played {r['played']:,}  not candidates {r['missing']:,}")
+        return 0
     fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     if a.method == "price":
         curves, diag = {}, {"stranded_cycle_nodes": None}
@@ -667,9 +785,17 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "leftover": a.leftover,
             "stop_model": a.stop_model,
+            **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
+                "allowed_courses": a.allowed_courses,
+                "allowed_book_only": a.allowed_book_only, "allowed_counts": allowed_counts}
+               if a.allowed_moves else {}),
             **({"price": price_info} if price_info is not None else {}),
             **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
-                "weak_min_share": a.weak_min_share, "weak_counts": stop_counts}
+                "weak_min_share": a.weak_min_share, "weak_counts": stop_counts,
+                **({"weak_eval_curve": a.weak_eval_curve,
+                    "weak_curve_cells": a.weak_curve_cells,
+                    "weak_curves": curves}
+                   if a.weak_eval_curve else {})}
                if a.stop_model == "weak" else {}),
             "source_rep": str(a.rep), "source_meta": src_meta,
             "stats": str(a.stats), "aux_stats": aux_path,

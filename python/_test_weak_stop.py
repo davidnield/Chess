@@ -18,6 +18,10 @@ FIXTURE (white book; evals white-perspective, stubbed):
   F  apply_stop_values rewrites the stop value, the leaf after our last move, a
      reply leaving the subgraph and a sub-floor reply's share of const_base, and
      re-applies the aux crack blend; positions with no value keep the default.
+  G  fitted curves (--weak-eval-curve): the uniform curve passed as `curves`
+     reproduces the default values; an asymmetric pair reads 'us' at our turn and
+     'them' at theirs, from the side to move's view, both colours, cp clipped to
+     +-EVAL_CLIP and MISSING still NaN; W and R use the right one at every step.
 """
 from __future__ import annotations
 
@@ -31,7 +35,8 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).parent))
 import budget_core as bc  # noqa: E402
 from stage3_backwards_induction import aux_our_blend  # noqa: E402
-from weak_stop import MISSING, EvalSource, weak_stop_values  # noqa: E402
+from stage3_backwards_induction import LICHESS_CP_SCALE  # noqa: E402
+from weak_stop import EVAL_CLIP, MISSING, EvalSource, weak_stop_values  # noqa: E402
 
 FAIL = 0
 
@@ -83,6 +88,16 @@ def main() -> int:
         Wb, Rb, _ = weak_stop_values(con, [X0], [Y0], pool=mp.as_posix(),
                                      weak_pool=wp.as_posix(),
                                      evals=EvalSource(False, lookup), log=lambda m: None)
+        uni = {"us": (0.0, LICHESS_CP_SCALE), "them": (0.0, LICHESS_CP_SCALE)}
+        Wu, Ru, _ = weak_stop_values(con, [X0, X1, X2, X3], [Y0], pool=mp.as_posix(),
+                                     weak_pool=wp.as_posix(),
+                                     evals=EvalSource(True, lookup, curves=uni),
+                                     log=lambda m: None)
+        cur = {"us": (-0.3, 0.002), "them": (0.2, 0.003)}
+        Wc, Rc, _ = weak_stop_values(con, [X0, X2], [Y0], pool=mp.as_posix(),
+                                     weak_pool=wp.as_posix(),
+                                     evals=EvalSource(True, lookup, curves=cur),
+                                     log=lambda m: None)
         con.close()
     finally:
         wp.unlink(missing_ok=True)
@@ -96,6 +111,38 @@ def main() -> int:
           near(W.get(X2), 0.7) and X3 not in W, f"{W.get(X2)}, x3 {X3 in W}")
     check("D: R(y0) = W(x0)", near(R.get(Y0), W.get(X0) or -1), f"{R.get(Y0)}")
     check("E: black flips: W(x0) = 1 - 0.56", near(Wb.get(X0), 0.44), f"{Wb.get(X0)}")
+
+    # G: fitted curves
+    check("G: the uniform curve as `curves` reproduces the default W and R",
+          all(abs(Wu[h] - W[h]) < 1e-12 for h in W) and set(Wu) == set(W)
+          and abs(Ru[Y0] - R[Y0]) < 1e-12, f"{Wu} vs {W}")
+
+    def sig(z):
+        return 1.0 / (1.0 + np.exp(-z))
+
+    def us(h):          # our turn, white book: we are to move, cp from our view
+        return sig(-0.3 + 0.002 * cp_of(WHITE_ES[h]))
+    want_x0 = 0.8 * (us(A1) + us(A2)) / 2 + 0.2 * us(B1)
+    check("G: W reads 'us' at the positions after their reply (our turn)",
+          abs(Wc[X0] - want_x0) < 1e-12 and abs(Rc[Y0] - Wc[X0]) < 1e-12
+          and abs(Wc[X2] - us(X2)) < 1e-12, f"{Wc[X0]} vs {want_x0}")
+    big, miss = 7, 8
+    cps = {A1: 150, big: 5000, miss: MISSING}
+
+    def lk(keys):
+        return np.array([cps[k] for k in np.asarray(keys).tolist()], dtype=np.int64)
+    ew, eb = EvalSource(True, lk, curves=cur), EvalSource(False, lk, curves=cur)
+    k3 = np.array([A1, big, miss])
+    got = [ew(k3, our_turn=True), ew(k3, our_turn=False),
+           eb(k3, our_turn=True), eb(k3, our_turn=False)]
+    want = [[sig(-0.3 + 0.002 * 150), sig(-0.3 + 0.002 * EVAL_CLIP)],
+            [1 - sig(0.2 - 0.003 * 150), 1 - sig(0.2 - 0.003 * EVAL_CLIP)],
+            [sig(-0.3 - 0.002 * 150), sig(-0.3 - 0.002 * EVAL_CLIP)],
+            [1 - sig(0.2 + 0.003 * 150), 1 - sig(0.2 + 0.003 * EVAL_CLIP)]]
+    ok = all(abs(g[0] - w_[0]) < 1e-12 and abs(g[1] - w_[1]) < 1e-12 and np.isnan(g[2])
+             for g, w_ in zip(got, want))
+    check("G: EvalSource curves: side to move's view, both colours, clip, MISSING", ok,
+          f"{[list(np.round(g, 6)) for g in got]}")
 
     # F: a hand-built graph
     g = bc.Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})

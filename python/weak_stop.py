@@ -10,7 +10,10 @@ pool's games went. Here, from an our-turn position x that is out of book:
 
 q_weak comes from a weaker pool (e.g. Blitz/Rapid/Classical games with mean Elo
 1000-1799, pool_from_book bands 1000..1600), p_pool from the main pool, and E is the
-engine eval through the uniform Lichess curve, our perspective. One full move of
+engine eval through the uniform Lichess curve, our perspective -- or, with `curves`
+(build_budget_books --weak-eval-curve), through curves fitted on real games for the
+rating pairing at hand (fit_eval_curve.py): one where we (the weaker side) are to
+move, one where they are. One full move of
 play-out (our weak move, their reply), then the engine: the depth that keeps the
 per-position cost to a pair of joins, since a book can leave millions of positions.
 
@@ -41,6 +44,7 @@ import pyarrow as pa
 from stage3_backwards_induction import LICHESS_CP_SCALE
 
 MISSING = -32768
+EVAL_CLIP = 1000          # fit_eval_curve.CLIP: the fitted curves' cp domain
 
 
 def _edges(con, path: str, keys: np.ndarray, name: str) -> pl.DataFrame:
@@ -69,20 +73,43 @@ def _shares(df: pl.DataFrame, min_share: float) -> pl.DataFrame:
 
 
 class EvalSource:
-    """hash array -> our-perspective expected score (NaN where unevaluated)."""
+    """hash array -> our-perspective expected score (NaN where unevaluated).
 
-    def __init__(self, our_white: bool, lookup=None):
+    curves=None: the uniform Lichess curve. It is symmetric, so whose turn it is does
+    not matter. Otherwise {'us': (a, k), 'them': (a, k)}: the SIDE TO MOVE scores
+    sigmoid(a + k * cp), cp from its view clipped to +-EVAL_CLIP (fit_eval_curve.py),
+    with 'us' where we are to move and 'them' where they are."""
+
+    def __init__(self, our_white: bool, lookup=None, curves: dict | None = None):
         if lookup is None:
             from eval_arrays import lookup_evals, open_eval_arrays
             mm = open_eval_arrays()
             lookup = lambda keys: lookup_evals(keys, *mm)  # noqa: E731
-        self._lookup, self.our_white = lookup, our_white
+        self._lookup, self.our_white, self.curves = lookup, our_white, curves
 
-    def __call__(self, keys: np.ndarray) -> np.ndarray:
+    def __call__(self, keys: np.ndarray, our_turn: bool = True) -> np.ndarray:
         cp = np.asarray(self._lookup(np.asarray(keys, dtype=np.int64)))
-        es = 1.0 / (1.0 + np.exp(-LICHESS_CP_SCALE * cp.astype(np.float64)))
-        es = np.where(cp == MISSING, np.nan, es)
-        return es if self.our_white else np.where(np.isnan(es), np.nan, 1.0 - es)
+        if self.curves is None:
+            es = 1.0 / (1.0 + np.exp(-LICHESS_CP_SCALE * cp.astype(np.float64)))
+            es = np.where(cp == MISSING, np.nan, es)
+            return es if self.our_white else np.where(np.isnan(es), np.nan, 1.0 - es)
+        cp_us = cp.astype(np.float64) if self.our_white else -cp.astype(np.float64)
+        a, k = self.curves["us" if our_turn else "them"]
+        stm = np.clip(cp_us if our_turn else -cp_us, -EVAL_CLIP, EVAL_CLIP)
+        p = 1.0 / (1.0 + np.exp(-(a + k * stm)))
+        return np.where(cp == MISSING, np.nan, p if our_turn else 1.0 - p)
+
+
+def load_curves(path: str, us_cell: str, them_cell: str) -> dict:
+    """{'us': (a, k), 'them': (a, k)} from fit_eval_curve's eval_curves_pooled.parquet."""
+    d = pl.read_parquet(path)
+    out = {}
+    for side, cell in (("us", us_cell), ("them", them_cell)):
+        r = d.filter(pl.col("cell") == cell)
+        if r.height != 1:
+            raise ValueError(f"{path}: no single row for cell {cell!r}")
+        out[side] = (float(r["a"][0]), float(r["k"][0]))
+    return out
 
 
 def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
@@ -116,13 +143,13 @@ def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
     m = q["child"].unique().to_numpy() if q.height else np.empty(0, np.int64)
     pr = _shares(_edges(con, pool, m, "_km"), min_share)
     if pr.height:
-        pr = pr.with_columns(pl.Series("e", evals(pr["child"].to_numpy())))
+        pr = pr.with_columns(pl.Series("e", evals(pr["child"].to_numpy(), our_turn=True)))
         r1 = (pr.filter(pl.col("e").is_not_nan())
               .group_by("parent").agg(((pl.col("p") * pl.col("e")).sum()
                                        / pl.col("p").sum()).alias("r1")))
     else:
         r1 = pl.DataFrame(schema={"parent": pl.Int64, "r1": pl.Float64})
-    em = pl.DataFrame({"child": m, "e_m": evals(m)})
+    em = pl.DataFrame({"child": m, "e_m": evals(m, our_turn=False)})
     q = (q.join(r1.rename({"parent": "child"}), on="child", how="left")
           .join(em, on="child", how="left")
           .with_columns(pl.when(pl.col("r1").is_not_null()).then(pl.col("r1"))
@@ -136,7 +163,7 @@ def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
     counts["x_walked"] = len(W)
     rest = np.array([h for h in x.tolist() if h not in W], dtype=np.int64)
     if len(rest):
-        for h, e in zip(rest.tolist(), evals(rest).tolist()):
+        for h, e in zip(rest.tolist(), evals(rest, our_turn=True).tolist()):
             if not math.isnan(e):
                 W[h] = e
                 counts["x_engine_only"] += 1
@@ -156,7 +183,7 @@ def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
     counts["y_walked"] = len(R)
     rest = np.array([h for h in y.tolist() if h not in R], dtype=np.int64)
     if len(rest):
-        for h, e in zip(rest.tolist(), evals(rest).tolist()):
+        for h, e in zip(rest.tolist(), evals(rest, our_turn=False).tolist()):
             if not math.isnan(e):
                 R[h] = e
                 counts["y_engine_only"] += 1

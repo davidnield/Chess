@@ -19,6 +19,8 @@ hulls, atoms or density ordering, so it is the true optimum.
   D  Transpositions: a position reached by two paths is charged once when priced
      with the book's total reach (price_search's second round), not once per path.
   E  fixed_policy restricts every node to the source move.
+  F  a repetition cycle through a main-line position does not cost the line.
+  H  policy_value (the shared book evaluator) reproduces each price book's value.
 """
 from __future__ import annotations
 
@@ -29,8 +31,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from budget_core import (Graph, OppNode, OurNode, price_book,  # noqa: E402
-                         price_search, topo_up)
+from budget_core import (Graph, OppNode, OurNode, policy_value,  # noqa: E402
+                         price_book, price_search, topo_up)
 
 FAIL = 0
 
@@ -141,6 +143,19 @@ def main() -> int:
     check("A: penalised value = max_b (oracle(b) - lam*b)", bad_pen == 0, f"{bad_pen} off")
     check("B: price_search is optimal for its size and its bound holds", bad_b == 0,
           f"{bad_b} failures")
+
+    # policy_value (the shared evaluator) reproduces each price book's own value
+    rng2 = random.Random(7)
+    bad_pv = 0
+    for t in range(20):
+        g = random_tree(rng2, root_ours=(t % 2 == 0))
+        order, _cut = topo_up(g)
+        for lam in (1e-4, 1e-3, 1e-2):
+            r = price_book(g, lam, order)
+            pv = policy_value(g, r["booked"], order)
+            if abs(pv["value"] - r["root_value_realized"]) > 1e-12 or pv["played"] != r["spent_distinct"]:
+                bad_pv += 1
+    check("H: policy_value reproduces price_book's value and size", bad_pv == 0, f"{bad_pv} off")
 
     # C: three items worth 0.05 each against one 3-move chain worth 0.125
     g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})

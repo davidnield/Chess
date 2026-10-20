@@ -1531,6 +1531,67 @@ def topo_up(g: Graph) -> tuple[list[int], set[int]]:
     return order, early
 
 
+def policy_value(g: Graph, moves: dict[int, str], order: list[int]) -> dict:
+    """In-model value of FOLLOWING a given book on this graph: at our nodes play the
+    book's move when it is one of the node's candidates (else stop, value L), at
+    opponent nodes the graph's reply mix. One evaluator for every method's books, so
+    their values compare on identical terms (the curve engine's own realized values
+    read its curves and overstate its books by 0.01-0.045, measured 2026-10-19).
+    `order` = topo_up(g)[0]. Returns {'value', 'played', 'missing'}: the root value,
+    how many book positions the walk plays, and book moves that are not candidates
+    at their node (gated out, or the position is not a node of this graph)."""
+    T: dict[int, float] = {}
+    missing = 0
+
+    def static(h: int) -> float:
+        if h in g.our:
+            return g.our[h].l_node
+        n = g.opp[h]
+        return n.const_base + sum(
+            p * (g.our[k].l_node if (in_s and k in g.our) else lv)
+            for p, k, in_s, lv in n.kids)
+
+    for h in order:
+        if h in g.our:
+            n = g.our[h]
+            want = moves.get(h)
+            t = n.l_node
+            if want is not None:
+                c = next((c for c in n.cands if c[0] == want), None)
+                if c is None:
+                    missing += 1
+                else:
+                    _san, ch, in_sub, lv = c
+                    t = (T[ch] if ch in T else static(ch)) if (in_sub and ch is not None) else lv
+            T[h] = t
+        else:
+            n = g.opp[h]
+            t = n.const_base
+            for p, ch, in_sub, lv in n.kids:
+                if in_sub and ch is not None:
+                    t += p * (T[ch] if ch in T else static(ch))
+                else:
+                    t += p * lv
+            T[h] = t
+    # positions the walk actually plays
+    played, stack, seen = 0, [g.root], set()
+    while stack:
+        h = stack.pop()
+        if h in seen:
+            continue
+        seen.add(h)
+        if h in g.our:
+            want = moves.get(h)
+            c = next((c for c in g.our[h].cands if c[0] == want), None) if want else None
+            if c is not None:
+                played += 1
+                if c[2] and c[1] is not None:
+                    stack.append(c[1])
+        elif h in g.opp:
+            stack.extend(ch for _p, ch, in_sub, _lv in g.opp[h].kids if in_sub and ch is not None)
+    return {"value": T.get(g.root), "played": played, "missing": missing}
+
+
 def price_book(g: Graph, lam: float, order: list[int],
                reach: dict[int, float] | None = None,
                fixed_policy: dict[int, str] | None = None) -> dict:
