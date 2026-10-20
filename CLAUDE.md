@@ -53,6 +53,7 @@ them after changing the Python side of the contract, never hand-edit them.
 | `E:/chess/position-stats/` | Aggregated stats: `position_stats_*.parquet` (per-edge win/draw/loss counts), `position_stats_aux_*.parquet` (the per-position sidecar of unseen mass). The crush histograms (`crush_hist_*`, and the `_monthly/*.winpos*` partials) were deleted 2026-10-02 when crush left the recipe. `_pooled_partials_*/` are resumable working dirs; their `_monthly/` subdir is the **only** artifact carrying a year, so year-scoped pools depend on it surviving. |
 | `D:/chess/eval_arrays_full/` | **The eval source every consumer reads** (Stage 3 via `build_sharp_reps.py`, the extract's `child_eval`, the budget/baseline books, annotations): `D:/chess/eval_full` materialised as sorted `.npy` (`eval_hash`, `eval_cp` int16; 6.0B entries, ~60 GB), plus the book's checkmates at ±2000, minus the hashes a hash-only lookup must not answer (`excluded.parquet`). Consumers mmap ONE shared resident copy. **Derived** — `eval_arrays.meta.json` fingerprints the DB and its book and readers verify, because a stale copy answers every query with the previous DB's evaluations and nothing downstream would notice. Rebuild: `python/eval_arrays.py [--force]` (~2 h). |
 | `E:/chess/repertoire/` | Stage-3 outputs, with `.meta.json` provenance sidecars recording the exact inputs/flags that built each one. |
+| `E:/chess/courses/` | **Derived** from the opening-course PGNs in `G:/My Drive/Chess/Books and Courses/1 Openings` (read-only source; never write there). Holds the `courses`, `items`, `edges` and `comments` tables keyed by `zobrist_int64`; course books in our repertoire format (`books/`); and stats. Course text is copyrighted: keep it local. |
 | `D:/chess/eval_full/` | **Canonical eval DB**, of the banded explorer book (`explorer-extract evals`, branch `eval-db`; blog repo `docs/eval-db-spec.md`): one eval per book parent (hash, EPD) and child-only hash, Lichess cloud first, else the fishnet newest-tier lower median. 5.9B rows in `bkt<iii>.parquet`; its `README.md` is the read contract; `_DONE` last. Too big to load — read it through its arrays. Keep it: the arrays verify against it. Checked by `python/verify_evals.py`. Its few bogus values on checkmated positions are overridden in the arrays. |
 | `E:/chess/_archive/eval_db_2026-07/` | **Archive** (2026-10-02) of the retired eval DB: `unified_eval_db.parquet` (the old 400M-row cloud+fishnet union), `lichess_eval_db.parquet`, `fishnet_eval_agg.parquet`, their arrays `eval_arrays/` and the fishnet aggregation work dir (builders in `scratch/python/`). Not a pipeline input. Until a pool rebuild, the pool's aux `other_eval` still comes from it (mixed provenance). |
 
@@ -82,6 +83,12 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 # Score a repertoire / browse it
 .venv\Scripts\python.exe python\score_repertoire.py --repertoire <path> --stats <path>
 .venv\Scripts\python.exe python\repertoire_explorer.py
+
+# Opening-course benchmarks: PGNs -> position-keyed tables -> course books -> stats / comments
+.venv\Scripts\python.exe python\course_ingest.py --phase all        # [--phase reclassify]
+.venv\Scripts\python.exe python\course_books.py
+.venv\Scripts\python.exe python\course_report.py --ours LABEL=COLOUR=PATH
+.venv\Scripts\python.exe python\course_comments.py --book <path> --colour white
 
 # Did I break anything
 .venv\Scripts\python.exe python\run_tests.py
