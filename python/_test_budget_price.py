@@ -24,7 +24,8 @@ hulls, atoms or density ordering, so it is the true optimum.
   I  policy_reach sums a book's paths (D's X: 1.0 through both, 0.5 through one); a
      price search seeded with it finds D's book in ONE round; on random trees the
      off-default rounds=4 / select='best' books stay optimal for their size, and
-     'best' never scores below 'closest' when the closest book is within 1%.
+     'best' never scores below 'closest' when the closest book is within 1%; reprice='max'
+     still charges D's transposition once and stays optimal on trees.
 """
 from __future__ import annotations
 
@@ -225,6 +226,9 @@ def main() -> int:
     r1, _ = price_search(g, 3, log=lambda m: None, rounds=1, seed_reach=seed)
     check("I: seeded with the book's reach, round 1 finds D's book", r1["spent_distinct"] == 3,
           f"{r1['booked']}")
+    rm, _ = price_search(g, 3, log=lambda m: None, reprice="max")
+    check("I: reprice='max' still finds D's book in round 2", rm["spent_distinct"] == 3,
+          f"{rm['booked']}")
     rng3 = random.Random(11)
     bad_i = worse = 0
     for t in range(20):
@@ -234,7 +238,8 @@ def main() -> int:
         for target in sorted({max(1, size // 3), max(1, size // 2)}):
             cl, _ = price_search(gt, target, log=lambda m: None)
             bs, _ = price_search(gt, target, log=lambda m: None, rounds=4, select="best")
-            for r in (cl, bs):
+            mx, _ = price_search(gt, target, log=lambda m: None, rounds=3, reprice="max")
+            for r in (cl, bs, mx):
                 if abs(r["root_value_realized"] - opt[r["spent_distinct"]]) > 1e-9:
                     bad_i += 1
             if (abs(cl["spent_distinct"] - target) <= 0.01 * target

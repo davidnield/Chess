@@ -1712,7 +1712,8 @@ def policy_reach(g: Graph, moves: dict[int, str], order: list[int]) -> dict[int,
 def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = None,
                  steps: int = 40, log=print, *, rounds: int = 2,
                  seed_reach: dict[int, float] | None = None, select: str = "closest",
-                 select_tol: float = 0.01, on_round=None) -> tuple[dict, dict]:
+                 select_tol: float = 0.01, on_round=None,
+                 reprice: str = "replace") -> tuple[dict, dict]:
     """Bisect the price onto `target` booked positions; then re-price with the
     book's own total reach (transpositions charged once) and bisect again.
     Returns (result, info): info holds the lam sweep, the chosen lam, the
@@ -1732,7 +1733,11 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
       select      'closest' = the last round's book nearest the target (default);
                   'best' = the highest realized value of every solve, any round,
                   whose size is within select_tol of the target
-      on_round    called as on_round(round, closest_book, best_book_so_far)"""
+      on_round    called as on_round(round, closest_book, best_book_so_far)
+      reprice     'replace' (default): a node the previous book reaches is priced at that
+                  book's reach, even below its optimistic reach; 'max': at the larger of
+                  the two, so a transposition is still charged once but a node reached only
+                  by a minor path is never made dearer than round 1 priced it"""
     order, cut = topo_up(g)
     if cut:
         log(f"  price search: {len(cut):,} back edges cut in repetition cycles")
@@ -1788,7 +1793,11 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                      if near else None)
         if rnd < rounds:
             reach = dict(g.reach)
-            reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})
+            if reprice == "max":
+                reach.update({h: max(r, g.reach.get(h, 0.0))
+                              for h, r in res["reach_policy"].items() if r > 0})
+            else:
+                reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})
     if select == "best" and near:
         res = max(near, key=lambda r: r["root_value_realized"])
     ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == rounds)

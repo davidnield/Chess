@@ -375,6 +375,9 @@ def main() -> int:
     ap.add_argument("--price-seed", choices=["optimistic", "source"], default="optimistic",
                     help="--method price: round 1 prices with the optimistic reach "
                          "(default) or with the source rep's own policy reach.")
+    ap.add_argument("--price-reprice", choices=["replace", "max"], default="replace",
+                    help="--method price: after round 1, price a node at its book's reach "
+                         "(replace, default) or at max(book reach, optimistic reach).")
     ap.add_argument("--price-diagnose", action="store_true",
                     help="DIAGNOSTIC: run a fixed set of price-search variants on this "
                          "graph and log each one's size and in-model value (plus any "
@@ -625,17 +628,18 @@ def main() -> int:
         target = budgets[0]
         log(f"price diagnose at {target}: after each round, the closest book and the "
             f"best within 1% of the target so far")
-        for seed in ("optimistic", "source"):
+        for seed, rp in (("optimistic", "replace"), ("source", "replace"),
+                         ("optimistic", "max")):
             t1 = time.time()
 
-            def show(rnd, cl, best, seed=seed, t1=t1):
+            def show(rnd, cl, best, seed=f"{seed}/{rp}", t1=t1):
                 b_ = (f"{best['spent_distinct']:,} at {best['root_value_realized']:.5f}"
                       if best else "none")
-                log(f"  seed {seed:<10} round {rnd}: closest {cl['spent_distinct']:,} at "
+                log(f"  seed {seed:<18} round {rnd}: closest {cl['spent_distinct']:,} at "
                     f"{cl['root_value_realized']:.5f}; best {b_}  ({time.time() - t1:,.0f}s)")
             bc.price_search(g, target, log=lambda *_: None, rounds=4, select="best",
                             seed_reach=src_reach if seed == "source" else None,
-                            on_round=show)
+                            on_round=show, reprice=rp)
     if a.evaluate:
         order, _cut = bc.topo_up(g)
         log(f"evaluating {len(a.evaluate)} book(s) on this graph "
@@ -731,7 +735,8 @@ def main() -> int:
                     g, rep_moves, bc.topo_up(g)[0]).items() if r > 0})
             res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
                                               rounds=a.price_rounds,
-                                              select=a.price_select, seed_reach=seed)
+                                              select=a.price_select, seed_reach=seed,
+                                              reprice=a.price_reprice)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.method == "greedy":
@@ -826,7 +831,8 @@ def main() -> int:
             "leftover": a.leftover,
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,
-                "price_seed": a.price_seed} if a.method == "price" else {}),
+                "price_seed": a.price_seed, "price_reprice": a.price_reprice}
+               if a.method == "price" else {}),
             **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
                 "allowed_courses": a.allowed_courses,
                 "allowed_book_only": a.allowed_book_only, "allowed_counts": allowed_counts}
