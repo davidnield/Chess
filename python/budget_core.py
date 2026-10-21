@@ -1734,8 +1734,11 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
     scored 0.6067 on the same graph). Off-default knobs:
       rounds      re-pricing rounds (each prices with the previous round's book
                   reach, the optimistic reach where that book does not go)
-      seed_reach  round 1's reach instead of the optimistic g.reach (e.g. the
-                  source book's policy_reach)
+      seed_reach  the base reach for EVERY round instead of the optimistic g.reach:
+                  round 1 prices with it, later rounds re-price the previous book's
+                  positions over it (e.g. max(optimistic, the source book's
+                  policy_reach), so a transposition the book does not take yet is
+                  still priced at the reach a full book would give it)
       select      'closest' = the last round's book nearest the target (default);
                   'best' = the highest realized value of every solve, any round,
                   whose size is within select_tol of the target
@@ -1790,7 +1793,8 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
             return under
         return over
 
-    reach = g.reach if seed_reach is None else seed_reach
+    base = g.reach if seed_reach is None else seed_reach
+    reach = base
     for rnd in range(1, rounds + 1):
         u, o = bisect(reach, rnd)
         res = closest(u, o)
@@ -1798,9 +1802,9 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
             on_round(rnd, res, max(near, key=lambda r: r["root_value_realized"])
                      if near else None)
         if rnd < rounds:
-            reach = dict(g.reach)
+            reach = dict(base)
             if reprice == "max":
-                reach.update({h: max(r, g.reach.get(h, 0.0))
+                reach.update({h: max(r, base.get(h, 0.0))
                               for h, r in res["reach_policy"].items() if r > 0})
             else:
                 reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})

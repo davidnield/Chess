@@ -410,8 +410,8 @@ def main() -> int:
                          "(default), or the best realized value of every solve within "
                          "1%% of the target.")
     ap.add_argument("--price-seed", choices=["optimistic", "source"], default="optimistic",
-                    help="--method price: round 1 prices with the optimistic reach "
-                         "(default) or with the source rep's own policy reach.")
+                    help="--method price: price with the optimistic reach (default) or, "
+                         "in every round, with max(optimistic, the source rep's policy reach).")
     ap.add_argument("--evaluate-after", action="append", default=[], metavar="LABEL=PATH",
                     help="After building the books, evaluate them in-model on the same graph "
                          "next to these books (as --evaluate does, without a second graph build).")
@@ -663,8 +663,8 @@ def main() -> int:
     if a.price_diagnose:
         order, _cut = bc.topo_up(g)
         src_reach = dict(g.reach)
-        src_reach.update({h: r for h, r in bc.policy_reach(g, rep_moves, order).items()
-                          if r > 0})
+        src_reach.update({h: max(r, src_reach.get(h, 0.0))
+                          for h, r in bc.policy_reach(g, rep_moves, order).items() if r > 0})
         target = budgets[0]
         log(f"price diagnose at {target}: after each round, the closest book and the "
             f"best within 1% of the target so far")
@@ -762,8 +762,10 @@ def main() -> int:
         if a.method == "price":
             seed = None
             if a.price_seed == "source":
+                # never dearer than the optimistic reach; the source book's policy reach
+                # (summed over its paths) where that is larger
                 seed = dict(g.reach)
-                seed.update({h: r for h, r in bc.policy_reach(
+                seed.update({h: max(r, seed.get(h, 0.0)) for h, r in bc.policy_reach(
                     g, rep_moves, bc.topo_up(g)[0]).items() if r > 0})
             res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
                                               rounds=a.price_rounds,
