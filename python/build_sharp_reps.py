@@ -88,7 +88,10 @@ Recipe overrides for A/B builds, which must go to their own --out-dir: --eval-we
 --gate-fallback legacy, --no-other-cov-blend (the pre-2026-10-17 behaviours), and
 --select-margin (off; did not reduce noise flips). Rebuild stickiness (item 5,
 2026-10-17): --incumbent-dir <dir of the previous pair> --stick-margin X keeps each
-previous move unless a new one beats it by more than X.
+previous move unless a new one beats it by more than X. Since 2026-10-22 a rebuild of
+the canonical pair is sticky by default: the incumbent is the pair already in
+E:/chess/repertoire and the margin STICK_MARGIN_CANONICAL (0.01; no holdout cost in
+the same-recipe test). --no-incumbent gives a fresh build.
 
 Usage:
     .venv/Scripts/python.exe python/build_sharp_reps.py            # skip-gated, new pooled inputs
@@ -142,6 +145,11 @@ RECIPE_DEFAULTS = {"eval_weight": 0.75, "gate_fallback": "strict", "other_cov_bl
 LEGACY_RECIPE = {"eval_weight": 0.5, "gate_fallback": "legacy", "other_cov_blend": False,
                  "select_margin": 0.0, "stick_margin": 0.0, "prior_strength": 500.0,
                  "force_moves": [], "avoid_moves": []}
+# Stickiness of a canonical rebuild against the pair it replaces (adopted 2026-10-22,
+# checkpoint 7): same-recipe sticky rebuilds at 0.01 and 0.02 cost nothing on the
+# 2026-08..09 holdout and cut noise churn from ~3% to ~0.8% of reach-weighted decisions.
+# RECIPE_DEFAULTS keeps 0.0: that is the margin of a build with no incumbent.
+STICK_MARGIN_CANONICAL = 0.01
 # Stage 3's own --prior-strength default; the flag is passed only when it differs.
 STAGE3_PRIOR_STRENGTH = 500.0
 
@@ -295,8 +303,10 @@ def build_color(tag: str, extra: list[str], flags: list[str],
                  if (old.get(k) or None) != (str(v) if v is not None else None)]
         # Recipe drift: a missing key means the rep predates it (LEGACY_RECIPE).
         want = {**RECIPE_DEFAULTS, **(recipe or {})}
+        # stick_margin is exempt: it only settles near-ties against whatever pair was
+        # being replaced, so a rep built fresh is as current as a sticky one.
         drift += [k for k, v in want.items()
-                  if old.get(k, LEGACY_RECIPE[k]) != v]
+                  if k != "stick_margin" and old.get(k, LEGACY_RECIPE[k]) != v]
         # The retired two-pass driver's output: same flags plus a learnability pass.
         if old.get("learnability"):
             drift.append("learnability")
@@ -316,6 +326,25 @@ def build_color(tag: str, extra: list[str], flags: list[str],
         if not meta_path(out).exists():
             write_meta(out, stats, eval_db, tag, aux, recipe, flags + extra)
     return True
+
+
+def resolve_incumbent(out_dir: Path, incumbent_dir: str | None, no_incumbent: bool,
+                      stick_margin: float | None,
+                      canonical_dir: Path = Path("E:/chess/repertoire")
+                      ) -> tuple[Path | None, float]:
+    """(incumbent dir, stick margin). An explicit --incumbent-dir wins; otherwise a
+    rebuild of the canonical pair sticks to the pair already there (when both colours
+    exist and --no-incumbent is not given). The margin defaults to
+    STICK_MARGIN_CANONICAL with an incumbent and 0 without one."""
+    inc = Path(incumbent_dir) if incumbent_dir else None
+    if (inc is None and not no_incumbent
+            and out_dir.resolve() == canonical_dir.resolve()
+            and all((out_dir / f"repertoire_pooled_{t}_sharp.parquet").exists()
+                    for t, _ in REPS)):
+        inc = out_dir
+    if stick_margin is None:
+        stick_margin = STICK_MARGIN_CANONICAL if inc is not None else 0.0
+    return inc, stick_margin
 
 
 def main() -> None:
@@ -360,10 +389,14 @@ def main() -> None:
                     help="Rebuild stickiness: a directory holding the PREVIOUS pair "
                          "(repertoire_pooled_<colour>_sharp.parquet). Each colour keeps the "
                          "previous book's move unless the best candidate beats it by more "
-                         "than --stick-margin. Default: none (a fresh build).")
-    ap.add_argument("--stick-margin", type=float, default=RECIPE_DEFAULTS["stick_margin"],
+                         "than --stick-margin. Default: the canonical pair itself when "
+                         "rebuilding it (the default --out-dir), else none.")
+    ap.add_argument("--no-incumbent", action="store_true",
+                    help="A fresh build: no incumbent, even when rebuilding the canonical pair.")
+    ap.add_argument("--stick-margin", type=float, default=None,
                     help="Key advantage a new move needs to replace the incumbent's "
-                         "(expected-score units). Needs --incumbent-dir. Default 0.")
+                         "(expected-score units). Default "
+                         f"{STICK_MARGIN_CANONICAL} with an incumbent, else 0.")
     ap.add_argument("--prior-strength", type=float, default=RECIPE_DEFAULTS["prior_strength"],
                     help="Stage 3 --prior-strength: games-equivalent shrinkage of each "
                          "move's score toward the slice prior (default 500). Recorded in "
@@ -395,10 +428,14 @@ def main() -> None:
     aux = None if args.no_aux or not args.aux_stats else Path(args.aux_stats)
     if aux and not aux.exists():
         sys.exit(f"FATAL: --aux-stats not found: {aux}")
+    if args.no_incumbent and args.incumbent_dir:
+        sys.exit("FATAL: --no-incumbent with --incumbent-dir")
+    inc_dir, stick = resolve_incumbent(out_dir, args.incumbent_dir, args.no_incumbent,
+                                       args.stick_margin)
     recipe = {"eval_weight": args.eval_weight, "gate_fallback": args.gate_fallback,
               "other_cov_blend": bool(args.other_cov_blend),
               "select_margin": args.select_margin,
-              "stick_margin": args.stick_margin,
+              "stick_margin": stick,
               "prior_strength": args.prior_strength,
               "force_moves": sorted(args.force_move),
               "avoid_moves": sorted(args.avoid_move)}
@@ -408,16 +445,18 @@ def main() -> None:
     except ValueError as e:
         sys.exit(f"FATAL: {e}")
     flags = common_flags(stats, eval_db, aux, **recipe)
-    inc_dir = Path(args.incumbent_dir) if args.incumbent_dir else None
-    if args.stick_margin > 0 and inc_dir is None:
+    if stick > 0 and inc_dir is None:
         sys.exit("FATAL: --stick-margin needs --incumbent-dir")
     if inc_dir is not None:
         for tag, _ in REPS:
             ip = inc_dir / f"repertoire_pooled_{tag}_sharp.parquet"
             if not ip.exists():
                 sys.exit(f"FATAL: incumbent not found: {ip}")
-        print(f"Incumbent: {inc_dir}  (stick margin {args.stick_margin})")
-    off = {k: v for k, v in recipe.items() if v != RECIPE_DEFAULTS[k]}
+        print(f"Incumbent: {inc_dir}  (stick margin {stick})")
+    # stickiness is not a recipe override: it only chooses among near-ties, against
+    # whichever pair is being replaced (a fresh canonical build is allowed)
+    off = {k: v for k, v in recipe.items()
+           if v != RECIPE_DEFAULTS[k] and k != "stick_margin"}
     if off:
         print(f"Recipe overrides: {off}")
         if out_dir.resolve() == Path("E:/chess/repertoire").resolve():

@@ -86,6 +86,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from stage3_backwards_induction import (  # noqa: E402  (path insert above)
     aux_opp_mix,
     aux_our_blend,
+    LICHESS_CP_SCALE,
     aux_term_reasons,
     check_aux_term_flags,
     cp_to_expected_score,
@@ -388,18 +389,47 @@ def rel_gate_keep(cand_evals_ws: list[float | None], own_eval_ws: float | None,
     return [e is None or e <= best + gate_rel_floor for e in cand_evals_ws]
 
 
+def ws_to_cp(ws: float, our_white: bool) -> float:
+    """Inverse of cp_to_expected_score, from our side's view (centipawns)."""
+    ws = min(max(ws, 1e-9), 1.0 - 1e-9)
+    cp = math.log(ws / (1.0 - ws)) / LICHESS_CP_SCALE
+    return cp if our_white else -cp
+
+
+def eval_loss_keep(cand_es: list[tuple[dict, float | None]], own_eval_ws: float | None,
+                   our_white: bool, max_loss_cp: float
+                   ) -> list[tuple[dict, float | None]]:
+    """--max-eval-loss (2026-10-22): keep only candidates whose engine eval is within
+    `max_loss_cp` centipawns of the best play there -- the best evaluated candidate,
+    or the position's own eval if that is higher. Applies to the source book's move
+    too (the Stage-3 gates admit a gambit worth ~-0.6 at the root). Candidates
+    without an eval are dropped once any has one; if none is close enough, the
+    single best-evaluated candidate stays, so the node never loses its choice set."""
+    scored = [(pair, ws_to_cp(pair[1], our_white)) for pair in cand_es if pair[1] is not None]
+    if not scored:
+        return cand_es
+    best = max(c for _, c in scored)
+    if own_eval_ws is not None:
+        best = max(best, ws_to_cp(own_eval_ws, our_white))
+    keep = [pair for pair, c in scored if c >= best - max_loss_cp]
+    return keep or [max(scored, key=lambda t: t[1])[0]]
+
+
 def gate_candidates(h: int, es: list[dict], src: str | None,
                     eval_ws: dict[int, float], our_white: bool,
                     slice_prior: float,
                     robustness_floor: float = ROBUSTNESS_FLOOR,
                     gate_rel_floor: float = GATE_REL_FLOOR,
                     gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
-                    require_eval: bool = True, gates: bool = True
+                    require_eval: bool = True, gates: bool = True,
+                    max_eval_loss: float | None = None
                     ) -> list[tuple[dict, float | None]]:
     """The recorded moves at our node `h` that may be booked: the source book's
     move always, then those passing require-eval and both refutation gates. One
     definition for build_graph (the choice set) and for the subgraph collector's
-    --gated-reach expansion, so the two can never disagree on what is reachable."""
+    --gated-reach expansion, so the two can never disagree on what is reachable.
+    max_eval_loss (cp, default None = off) then filters all of them, the source
+    move included: see eval_loss_keep."""
     cand_es = []
     for e in es:
         ch = e.get("child_hash")
@@ -420,6 +450,8 @@ def gate_candidates(h: int, es: list[dict], src: str | None,
                              gate_rel_floor, gate_rel_own_margin)
         cand_es = [(e, cv) for (e, cv), k in zip(cand_es, keep)
                    if k or e["move_san"] == src]
+    if max_eval_loss is not None and cand_es:
+        cand_es = eval_loss_keep(cand_es, eval_ws.get(h), our_white, max_eval_loss)
     return cand_es
 
 
@@ -537,7 +569,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 max_cands: int = 0,
                 gates: bool = True,
                 other_cov_blend: bool = False,
-                gated_reach: bool = False) -> Graph:
+                gated_reach: bool = False,
+                max_eval_loss: float | None = None) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -568,7 +601,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             admitted[h] = {e["child_hash"] for e, _ in gate_candidates(
                 h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                 robustness_floor, gate_rel_floor, gate_rel_own_margin,
-                require_eval, gates) if e.get("child_hash") is not None}
+                require_eval, gates, max_eval_loss) if e.get("child_hash") is not None}
     reach, ply = optimistic_reach(edges_by_parent, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
@@ -618,7 +651,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             cand_es = gate_candidates(h, es, src, eval_ws, our_white,
                                       slice_prior, robustness_floor,
                                       gate_rel_floor, gate_rel_own_margin,
-                                      require_eval, gates)
+                                      require_eval, gates, max_eval_loss)
             # Candidate cap.
             #
             # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py

@@ -81,12 +81,13 @@ class GateAdmit:
     the eval_ws the graph is built from afterwards."""
 
     def __init__(self, rep_moves, our_white: bool, slice_prior: float,
-                 gates: bool = True):
+                 gates: bool = True, max_eval_loss: float | None = None):
         from eval_arrays import MISSING, lookup_evals, open_eval_arrays
         self._lookup, self._missing = lookup_evals, MISSING
         self._mm = open_eval_arrays()
         self.rep_moves, self.our_white = rep_moves, our_white
         self.slice_prior, self.gates = slice_prior, gates
+        self.max_eval_loss = max_eval_loss
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
 
@@ -103,7 +104,7 @@ class GateAdmit:
         src = self.rep_moves.get(ph)
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
-            require_eval=self.gates, gates=self.gates)
+            require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss)
             if e.get("child_hash") is not None}
 
 
@@ -462,6 +463,13 @@ def main() -> int:
                          "node out of many more recorded moves, so this is the "
                          "subgraph-size lever for larger budgets. A position reachable "
                          "only through a refuted move gets no reach. Default off.")
+    ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
+                    help="Soundness gate: at our nodes book only moves whose engine eval "
+                         "is within CP centipawns of the best play there (the best "
+                         "evaluated candidate, or the position's own eval if higher), "
+                         "the source book's move included (budget_core.eval_loss_keep). "
+                         "The Stage-3 gates work in expected score and admit e.g. the "
+                         "Blackmar-Diemer (-0.64) at the root. Default off.")
     ap.add_argument("--no-gates", action="store_true",
                     help="Drop require-eval and both refutation gates, so every "
                          "recorded move is a candidate. Diagnostic only.")
@@ -543,7 +551,7 @@ def main() -> int:
         src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
                                  _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
-        admit = GateAdmit(src_all, our_white, slice_prior)
+        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss)
     allowed = None
     if a.allowed_moves:
         allowed = load_allowed_moves(
@@ -629,7 +637,8 @@ def main() -> int:
                        prior_strength=a.prior_strength,
                        require_eval=not a.no_gates, gates=not a.no_gates,
                        other_cov_blend=other_cov_blend,
-                       gated_reach=a.gated_reach)
+                       gated_reach=a.gated_reach,
+                       max_eval_loss=a.max_eval_loss)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
     allowed_counts = None
     if allowed is not None:
@@ -862,6 +871,7 @@ def main() -> int:
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
+            "max_eval_loss": a.max_eval_loss,
             "leftover": a.leftover,
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,

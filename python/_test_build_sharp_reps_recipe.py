@@ -11,6 +11,7 @@ provenance hash (2026-10-08).
   D  without aux, reply-shrink is restored to 1.0 (the pre-sidecar recipe).
   E  single pass: the learnability pass-2 is retired (2026-10-14).
   G  rebuild stickiness: --stick-margin is a recipe setting, the incumbent path is not.
+  J  a canonical rebuild is sticky (0.01) against the pair it replaces by default.
   H  --prior-strength is passed only when it differs from Stage 3's 500; a meta without
      the key reads as 500, so existing reps are not refused.
   I  --force-move / --avoid-move specs go only to the colour whose turn they are.
@@ -86,6 +87,24 @@ def main() -> None:
           and b.constraint_flags(rc, "black") == ["--avoid-move", "1.e4: e5"]
           and b.common_flags(S, E, A, **rc) == f,
           "I: constraints route to their colour and stay out of the shared argv")
+
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        can, other = Path(td) / "can", Path(td) / "other"
+        can.mkdir()
+        other.mkdir()
+        ri = lambda d, inc=None, no=False, m=None: b.resolve_incumbent(d, inc, no, m, can)
+        check(ri(can) == (None, 0.0), "J: no pair in the canonical dir -> fresh build")
+        for t in ("white", "black"):
+            (can / f"repertoire_pooled_{t}_sharp.parquet").touch()
+        check(ri(can) == (can, b.STICK_MARGIN_CANONICAL) and b.STICK_MARGIN_CANONICAL == 0.01,
+              "J: a canonical rebuild sticks to the pair there at 0.01 by default")
+        check(ri(can, no=True) == (None, 0.0), "J: --no-incumbent gives a fresh build")
+        check(ri(other) == (None, 0.0), "J: an A/B out-dir is fresh by default")
+        check(ri(other, inc=str(can)) == (can, 0.01) and ri(can, m=0.02) == (can, 0.02),
+              "J: an explicit incumbent / margin wins")
+    check(b.RECIPE_DEFAULTS["stick_margin"] == 0.0,
+          "J: RECIPE_DEFAULTS keeps 0 (the margin of a build without an incumbent)")
 
     nf = b.common_flags(S, E, None)
     check(nf[nf.index("--reply-shrink") + 1] == str(b.REPLY_SHRINK) == "1.0",
