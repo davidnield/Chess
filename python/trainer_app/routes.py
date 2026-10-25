@@ -21,12 +21,18 @@ from .explorer_backend import ExplorerService, render_explorer_html
 from .annotations import Annotations
 from .lichess_import import ImportService
 from .pack import TrainingPack
+from .security import Access
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app(data_dir: Path) -> FastAPI:
-    app = FastAPI(title="Opening Trainer", version=__version__)
+def create_app(data_dir: Path, remote: bool = False, port: int = 8321) -> FastAPI:
+    # docs/openapi off: nothing a phone needs, and no endpoint catalogue for the network
+    app = FastAPI(title="Opening Trainer", version=__version__,
+                  docs_url=None, redoc_url=None, openapi_url=None)
+    access = Access(data_dir, remote)
+    access.port = port
+    access.install(app)
     con: sqlite3.Connection = db.connect(data_dir)
     app.state.data_dir = data_dir
     app.state.con = con
@@ -59,14 +65,27 @@ def create_app(data_dir: Path) -> FastAPI:
     def index():
         return FileResponse(STATIC_DIR / "index.html")
 
+    def public_settings(s: dict) -> dict:
+        # the Lichess token is write-only: report whether one is saved, never its value
+        out = dict(s)
+        out["lichess_token_set"] = bool(str(out.get("lichess_token") or "").strip())
+        out["lichess_token"] = ""
+        return out
+
     @app.get("/api/settings")
     def get_settings():
-        return config.get_settings(con)
+        return public_settings(config.get_settings(con))
 
     @app.put("/api/settings")
     def put_settings(updates: dict):
+        # blank token = keep the saved one (the form never holds it); "-" clears it
+        tok = updates.get("lichess_token")
+        if tok is not None and not str(tok).strip():
+            updates = {k: v for k, v in updates.items() if k != "lichess_token"}
+        elif tok is not None and str(tok).strip() == "-":
+            updates = {**updates, "lichess_token": ""}
         try:
-            return config.put_settings(con, updates)
+            return public_settings(config.put_settings(con, updates))
         except KeyError as e:
             raise HTTPException(400, str(e))
 

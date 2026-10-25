@@ -55,10 +55,13 @@ if hasattr(sys.stdout, "reconfigure"):
 def load_rep(path: Path) -> tuple[dict[int, str | None], dict[int, float]]:
     """position_hash -> best_move (our-turn rows keyed by having one) and
     position_hash -> memo_cost."""
-    df = pl.read_parquet(path, columns=["position_hash", "best_move", "memo_cost"])
+    # memo_cost is a Stage-3 column; budget books (2026-10 lifetime books) have none
+    cols = pl.read_parquet_schema(path)
+    df = pl.read_parquet(path, columns=["position_hash", "best_move"]
+                         + (["memo_cost"] if "memo_cost" in cols else []))
     best = {h: b for h, b in zip(df["position_hash"], df["best_move"])}
-    memo = {h: m for h, m in zip(df["position_hash"], df["memo_cost"])
-            if m is not None}
+    memo = ({h: m for h, m in zip(df["position_hash"], df["memo_cost"]) if m is not None}
+            if "memo_cost" in df.columns else {})
     return best, memo
 
 
@@ -257,6 +260,16 @@ def main() -> None:
     ap.add_argument("--white-rep", default=DEFAULTS["white_rep"])
     ap.add_argument("--black-rep", default=DEFAULTS["black_rep"])
     ap.add_argument("--stats", default=DEFAULTS["stats"])
+    ap.add_argument("--white-stats", default=None,
+                    help="opponent replies for the White book (default --stats); a book built on "
+                         "another pool should walk that pool")
+    ap.add_argument("--black-stats", default=None, help="likewise for Black (default --stats)")
+    ap.add_argument("--dev-white-rep", default=None,
+                    help="book for the deviation scanner (default --white-rep): e.g. the full book "
+                         "while training a smaller stage of it")
+    ap.add_argument("--dev-black-rep", default=None, help="likewise for Black")
+    ap.add_argument("--no-forced-moves", action="store_true",
+                    help="ignore trainer_data/forced_moves.json (overrides made for another book)")
     ap.add_argument("--min-reach", type=float, default=0.0002)
     ap.add_argument("--max-branches", type=int, default=12)
     ap.add_argument("--max-ply", type=int, default=40)
@@ -265,17 +278,26 @@ def main() -> None:
     data_dir = resolve_data_dir(args.data)
     pack_dir = data_dir / "pack"
     t0 = time.time()
-    print(f"Loading stats: {args.stats}", flush=True)
-    edges = load_edges(Path(args.stats))
-    print(f"  {len(edges):,} positions with edges ({time.time()-t0:.0f}s)", flush=True)
+    edge_cache: dict[str, dict] = {}
 
-    overrides = load_overrides(data_dir)
+    def edges_for(path: str) -> dict:
+        if path not in edge_cache:
+            print(f"Loading stats: {path}", flush=True)
+            edge_cache[path] = load_edges(Path(path))
+            print(f"  {len(edge_cache[path]):,} positions with edges ({time.time()-t0:.0f}s)", flush=True)
+        return edge_cache[path]
+
+    # --no-forced-moves: train the books exactly as built (forced_moves.json stays on disk)
+    overrides = {} if args.no_forced_moves else load_overrides(data_dir)
     n_ov = sum(len(v) for v in overrides.values())
     if n_ov:
         print(f"Loaded {n_ov} forced move(s) from forced_moves.json", flush=True)
 
     meta: dict = {"built": time.strftime("%Y-%m-%d %H:%M:%S"),
-                  "stats": str(args.stats), "min_reach": args.min_reach,
+                  "stats": str(args.stats),
+                  "white_stats": str(args.white_stats or args.stats),
+                  "black_stats": str(args.black_stats or args.stats),
+                  "min_reach": args.min_reach,
                   "max_branches": args.max_branches, "max_ply": args.max_ply,
                   "forced_moves": [], "colors": {}}
     for color, rep_path in (("white", Path(args.white_rep)), ("black", Path(args.black_rep))):
@@ -292,6 +314,8 @@ def main() -> None:
             print(f"  FORCED: {line} -> {mv} (repertoire had {prev})"
                   + (f"  [{note}]" if note else ""))
 
+        edges = edges_for(str((args.white_stats if color == "white" else args.black_stats)
+                              or args.stats))
         tree_rows = build_tree(best, edges, color, args.min_reach,
                                args.max_branches, args.max_ply)
         for h, (mv, line, note) in ov.items():
@@ -307,7 +331,9 @@ def main() -> None:
         # Full-book deviation lookup: every our-turn position with a booked move.
         # Forced overrides apply here too, so a game where you played the OLD
         # move at a forced node now counts as a deviation from the forced line.
-        dev = (pl.read_parquet(rep_path, columns=["position_hash", "side_to_move",
+        dev_path = Path((args.dev_white_rep if color == "white" else args.dev_black_rep)
+                        or rep_path)
+        dev = (pl.read_parquet(dev_path, columns=["position_hash", "side_to_move",
                                                   "best_move"])
                  .filter((pl.col("side_to_move") == color) &
                          pl.col("best_move").is_not_null())

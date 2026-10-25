@@ -209,7 +209,7 @@ from fastapi.testclient import TestClient
 from trainer_app.routes import create_app
 
 app = create_app(tmp)                      # same tmp data dir (pack + DB)
-client = TestClient(app)
+client = TestClient(app, base_url="http://127.0.0.1:8321", client=("127.0.0.1", 50000))  # this PC (trainer_app.security)
 r = client.get("/api/trainer/stats?rep=white")
 check("stats 200", r.status_code == 200, str(r.status_code))
 s = r.json()

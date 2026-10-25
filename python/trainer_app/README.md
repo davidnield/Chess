@@ -11,6 +11,31 @@ at it — right-click the .bat → Send to → Desktop). It starts the server on
 http://127.0.0.1:8321 and opens the browser. All assets are vendored — no
 internet needed except the Lichess import.
 
+## Phone / laptop access (home network)
+
+`run_trainer_remote.bat` starts the server on the home network as well (`--remote`; plain
+`run_trainer.bat` stays this-PC-only). It prints the address(es) to open on the phone or laptop
+and the **access key** (also on the PC's Settings page, under Remote access). Enter the key once
+per device; a cookie keeps the device signed in. Protections (`trainer_app/security.py`):
+
+- not reachable from the internet (the router does not forward to it; never add a port forward —
+  use a VPN such as Tailscale for access away from home);
+- every request not from this PC needs the session cookie; 10 wrong keys lock an address out
+  for 10 minutes; rotate the key (and sign every device out) by deleting
+  `trainer_data/access_key.txt` and `trainer_data/session_secret.bin`;
+- settings, file paths and explorer loading can only be changed on this PC;
+- the Lichess token is write-only (blank keeps it, `-` clears it);
+- Host-header (DNS rebinding) and cross-origin checks, also for this-PC use.
+
+Windows Firewall: allow the port on private (home) networks only, from your home subnet — once,
+in an administrator PowerShell:
+
+```powershell
+New-NetFirewallRule -DisplayName "Opening Trainer (home network)" -Direction Inbound -Protocol TCP -LocalPort 8321 -Action Allow -Profile Private -RemoteAddress LocalSubnet
+```
+
+Your home Wi-Fi must be set to **Private** in Windows (Settings → Network → your network).
+
 ## Data layout
 
 ```

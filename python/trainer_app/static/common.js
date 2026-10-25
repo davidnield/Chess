@@ -38,7 +38,7 @@ document.getElementById("explorerLoadBtn").addEventListener("click", async () =>
 // ---- settings ----
 const SETTING_LABELS = {
   lichess_username: "Lichess username",
-  lichess_token: "Lichess API token (optional)",
+  lichess_token: "Lichess API token (optional; write-only: blank keeps it, - clears it)",
   import_since: "Import games since (YYYY-MM-DD)",
   priority_mode: "Priority mode",
   reach_exp_a: "Reach exponent (a)",
@@ -74,6 +74,12 @@ async function loadSettings() {
       input = document.createElement("input");
       input.type = "checkbox";
       input.checked = v;
+    } else if (key === "lichess_token") {
+      input = document.createElement("input");
+      input.type = "password";
+      input.value = "";
+      input.placeholder = s.lichess_token_set ? "saved (hidden)" : "not set";
+      input.autocomplete = "off";
     } else {
       input = document.createElement("input");
       input.type = "text";
@@ -117,5 +123,47 @@ async function loadPackInfo() {
   }
 }
 
-loadSettings();
+async function loadAccess() {
+  let box = document.getElementById("remoteAccess");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "remoteAccess";
+    box.style.marginTop = "1rem";
+    document.getElementById("settingsMsg").after(box);
+  }
+  const r = await fetch("/api/access");
+  if (r.ok) {
+    const a = await r.json();
+    box.innerHTML = "";
+    const h = document.createElement("h3");
+    h.textContent = "Remote access";
+    box.appendChild(h);
+    const p = document.createElement("p");
+    p.textContent = a.remote
+      ? "On for this home network. On a phone or laptop, open one of these and enter the key:"
+      : "Off (this PC only). Start the trainer with run_trainer_remote.bat to use it from a phone or laptop.";
+    box.appendChild(p);
+    if (a.remote) {
+      for (const u of a.urls) {
+        const d = document.createElement("div");
+        d.textContent = u;
+        d.style.fontFamily = "monospace";
+        box.appendChild(d);
+      }
+      const k = document.createElement("p");
+      k.textContent = "Access key: " + a.key;
+      k.style.fontFamily = "monospace";
+      box.appendChild(k);
+    }
+  } else if (r.status === 403) {
+    // another device: settings, file paths and explorer loading stay on the PC
+    box.textContent = "Settings can only be changed on the PC running the trainer.";
+    document.getElementById("saveSettings").disabled = true;
+    document.querySelectorAll("#settingsForm [data-key]").forEach(el => el.disabled = true);
+    const lb = document.getElementById("explorerLoadBtn");
+    if (lb) lb.disabled = true;
+  }
+}
+
+loadSettings().then(loadAccess);
 loadPackInfo();
