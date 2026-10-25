@@ -108,6 +108,31 @@ class GateAdmit:
             if e.get("child_hash") is not None}
 
 
+def load_incumbent_moves(path: str, perspective: str) -> dict[int, str]:
+    """--incumbent: position -> the previous book's move at our turn (check marks stripped)."""
+    d = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
+    return {h: m.rstrip("+#") for h, s, m in d.iter_rows() if s == perspective and m}
+
+
+def incumbent_churn(booked: dict[int, str], incumbent: dict[int, str],
+                    reach: dict[int, float]) -> dict:
+    """How far the new book moved from the incumbent: decisions kept, changed (same position,
+    different move), dropped (the incumbent books it, the new book does not) and added, by
+    count and by optimistic reach."""
+    new = {h: m.rstrip("+#") for h, m in booked.items()}
+    both = new.keys() & incumbent.keys()
+    changed = [h for h in both if new[h] != incumbent[h]]
+    dropped = incumbent.keys() - new.keys()
+    added = new.keys() - incumbent.keys()
+
+    def r(hs):
+        return float(sum(reach.get(h, 0.0) for h in hs))
+    return {"kept": len(both) - len(changed), "changed": len(changed),
+            "dropped": len(dropped), "added": len(added),
+            "reach_kept": r(set(both) - set(changed)), "reach_changed": r(changed),
+            "reach_dropped": r(dropped), "reach_added": r(added)}
+
+
 def load_allowed_moves(path: str, perspective: str, min_score: float = 0.0,
                        courses: list[str] | None = None,
                        book_only: bool = False) -> dict[int, set[str]]:
@@ -463,6 +488,14 @@ def main() -> int:
                          "node out of many more recorded moves, so this is the "
                          "subgraph-size lever for larger budgets. A position reachable "
                          "only through a refuted move gets no reach. Default off.")
+    ap.add_argument("--incumbent", default=None, metavar="BOOK",
+                    help="Rebuild stickiness: a PREVIOUS book of this colour (e.g. the one being "
+                         "learned). At each position its move is kept unless another candidate is "
+                         "better by more than --stick-margin (budget_core.incumbent_move); the meta "
+                         "records the churn against it. Default off.")
+    ap.add_argument("--stick-margin", type=float, default=None,
+                    help="Expected-score advantage a new move needs to replace the incumbent's "
+                         "(default 0.01 with --incumbent; 0 = no stickiness, churn report only).")
     ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
                     help="Soundness gate: at our nodes book only moves whose engine eval "
                          "is within CP centipawns of the best play there (the best "
@@ -485,6 +518,10 @@ def main() -> int:
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
+    if a.stick_margin is not None and not a.incumbent:
+        ap.error("--stick-margin needs --incumbent")
+    if a.incumbent and a.stick_margin is None:
+        a.stick_margin = 0.01
 
     t0 = time.time()
     our_white = a.perspective == "white"
@@ -640,6 +677,13 @@ def main() -> int:
                        gated_reach=a.gated_reach,
                        max_eval_loss=a.max_eval_loss)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    incumbent = None
+    if a.incumbent:
+        incumbent = load_incumbent_moves(a.incumbent, a.perspective)
+        g.meta["stick"] = (incumbent, a.stick_margin)
+        on_graph = sum(1 for h in incumbent if h in g.our)
+        log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
+            f"stick margin {a.stick_margin}")
     allowed_counts = None
     if allowed is not None:
         allowed_counts = restrict_candidates(g, allowed)
@@ -872,6 +916,9 @@ def main() -> int:
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss,
+            **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
+                "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
+               if incumbent is not None else {}),
             "leftover": a.leftover,
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,

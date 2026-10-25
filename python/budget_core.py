@@ -495,6 +495,25 @@ class Graph:
         return "our" if h in self.our else "opp"
 
 
+def incumbent_move(g: "Graph", h: int) -> tuple[str | None, float]:
+    """Rebuild stickiness (--incumbent, 2026-10-24): g.meta["stick"] = (moves, margin), where
+    moves maps an our-node to the PREVIOUS book's move there (check marks stripped). Every
+    move-choosing step adds `margin` to that move's selection key, so it is kept unless
+    another candidate is better by more than the margin -- the same rule as Stage 3's
+    --stick-margin. Only the choice is biased: values propagate unbiased, so whether to book
+    a position at all (vs stopping) is decided on true values. Absent -> (None, 0.0), and
+    every key equals its value: an exact no-op."""
+    st = g.meta.get("stick") if g.meta else None
+    if not st:
+        return None, 0.0
+    moves, margin = st
+    return moves.get(h), margin
+
+
+def _bonus(san: str, im: str | None, margin: float) -> float:
+    return margin if im is not None and san.rstrip("+#") == im else 0.0
+
+
 def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      root_our: bool, eps: float, max_ply: int,
                      share_floor: float,
@@ -1009,7 +1028,10 @@ def _node_curve(g: Graph, h: int, curves: dict[int, Curve], bmax: int,
             want = fixed_policy.get(h)
             cands = [c for c in cands if c[0] == want]
         pts: dict[int, float] = {0: n.l_node}
-        for _san, ch, in_sub, leaf_val in cands:
+        keys: dict[int, float] = {0: n.l_node}     # selection keys (== pts unless sticky)
+        im, margin = incumbent_move(g, h)
+        for san, ch, in_sub, leaf_val in cands:
+            bonus = _bonus(san, im, margin)
             if in_sub and ch is not None and ch in curves:
                 c = curves[ch]
                 vs = [(1, c.base)] + [
@@ -1020,7 +1042,9 @@ def _node_curve(g: Graph, h: int, curves: dict[int, Curve], bmax: int,
             for b, v in vs:
                 if b > bmax:
                     break
-                if b not in pts or v > pts[b]:
+                k = v + bonus
+                if b not in keys or k > keys[b]:
+                    keys[b] = k
                     pts[b] = v
         return cap_curve(curve_from_points(sorted(pts.items())), bmax, k_atoms)
     n = g.opp[h]
@@ -1381,12 +1405,13 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                 want = fixed_policy.get(h)
                 cands = [c for c in cands if c[0] == want]
             best = None
+            im, margin = incumbent_move(g, h)
             for san, ch, in_sub, leaf_val in cands:
                 if in_sub and ch is not None and ch in curves:
                     v = curves[ch].eval(max(b - 1, 0))
                 else:
                     v = leaf_val
-                key = v
+                key = v + _bonus(san, im, margin)
                 if best is None or key > best[0]:
                     best = (key, v, san, ch, in_sub)
             if best is None:
@@ -1659,6 +1684,7 @@ def price_book(g: Graph, lam: float, order: list[int],
                 want = fixed_policy.get(h)
                 cands = [c for c in cands if c[0] == want]
             best = None
+            im, margin = incumbent_move(g, h)
             for san, ch, in_sub, lv in cands:
                 if in_sub and ch is not None:
                     if ch in V:
@@ -1667,13 +1693,14 @@ def price_book(g: Graph, lam: float, order: list[int],
                         v = t = static(ch)
                 else:
                     v = t = lv
-                if best is None or v > best[0]:
-                    best = (v, t, san)
+                key = v + _bonus(san, im, margin)
+                if best is None or key > best[0]:
+                    best = (key, v, t, san)
             r = reach.get(h, 0.0)
-            if best is not None and r > 0 and best[0] - lam / r > n.l_node + 1e-15:
-                V[h] = best[0] - lam / r
-                T[h] = best[1]
-                choice[h] = best[2]
+            if best is not None and r > 0 and best[1] - lam / r > n.l_node + 1e-15:
+                V[h] = best[1] - lam / r
+                T[h] = best[2]
+                choice[h] = best[3]
             else:
                 V[h] = T[h] = n.l_node
         else:
