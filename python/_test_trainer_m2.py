@@ -203,6 +203,32 @@ d7 = dm.build_drill("white", sid, loose_settings)
 check("extend_past_cap=True keeps the full line", len(d7["steps"]) == 3,
       str(d7 and d7["steps"]))
 
+# ── regression: a due card reviewed today must not loop ────────────────────
+# 2026-10-25: after a line with misses, the whole line was in session_positions,
+# so the drill for a due card high in the line started at the LAST position:
+# the due move was auto-played in the lead-in, and once-per-day left the card
+# ungraded anyway, so it stayed due and the same drill came back forever.
+print("\nno re-drill loop:")
+with con:
+    con.execute("UPDATE cards SET due=? WHERE rep='white'",
+                ((now + timedelta(days=1)).isoformat(),))
+    con.execute("UPDATE cards SET due=? WHERE rep='white' AND position_hash=?",
+                ((now - timedelta(minutes=1)).isoformat(), h()))
+    for ph in (h(), h("e4", "e5"), h("e4", "c5")):
+        con.execute("INSERT OR IGNORE INTO session_positions(session_id, position_hash, "
+                    "first_seen) VALUES(?,?,?)", (sid, ph, sched.utcnow_iso()))
+root_row = sched.get_card_row(con, "white", h())
+check("root card already reviewed today", sched.reviewed_today(con, root_row["card_id"]))
+d8 = dm.build_drill("white", sid, loose_settings)
+check("due root card is the target", d8 is not None and d8["kind"] == "due")
+check("start never past the target (start_index=0)", d8["start_index"] == 0,
+      f"start_index={d8['start_index']}")
+res8 = dm.answer(d8["drill_id"], 0, "e4", fsrs)
+check("due-again card graded despite once-per-day", res8["graded"] is True)
+check("graded card leaves the due queue",
+      not any(c["position_hash"] == h()
+              for c in sched.due_queue(con, pack, "white", settings)))
+
 # ── M3: stats endpoint vs hand-computed ────────────────────────────────────
 print("\nstats endpoint:")
 from fastapi.testclient import TestClient
@@ -233,7 +259,10 @@ n_due7 = con2.execute(
 check("forecast total matches hand SQL",
       sum(d["count"] for d in s["due_forecast"]) == n_due7)
 
-# suspend removes from due queue
+# suspend removes from due queue (forge the root card due first)
+with con2:
+    con2.execute("UPDATE cards SET due=? WHERE rep='white' AND position_hash=?",
+                 ((now - timedelta(hours=1)).isoformat(), h()))
 card_row = sched.get_card_row(con2, "white", h())
 client.post(f"/api/trainer/card/{card_row['card_id']}/suspend")
 dq2 = sched.due_queue(con2, pack, "white", settings)

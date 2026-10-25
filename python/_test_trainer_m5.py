@@ -107,9 +107,9 @@ print(f"re-entry node book move: {exp_reentry}")
 dev_re = "d3" if exp_reentry != "d3" else "a3"
 add_game("g3", "white", f"e4 e5 Bc4 Nc6 Nf3 Bc5 {dev_re} d6")
 # g4: castling SAN handled — full book line through O-O (from the M2 live drill
-# line), deviating right after with a quiet move if possible; at minimum the
+# line; book of 2026-10-24: 5.Ng5 ... 8.O-O), deviating right after with a quiet move if possible; at minimum the
 # scan must not crash on O-O/O-O-O and must replay through it.
-add_game("g4", "white", "e4 e5 Nf3 Nc6 Bc4 Nf6 d4 exd4 O-O d6 c3 dxc3 Nxc3")
+add_game("g4", "white", "e4 e5 Nf3 Nc6 Bc4 Nf6 d4 exd4 Ng5 d5 exd5 Ne5 Qe2 Qe7 O-O h6 Nf3 Nxf3+ Qxf3")
 
 print("\nscan:")
 n = scan_games(con, pack, settings)

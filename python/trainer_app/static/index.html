@@ -30,6 +30,11 @@
           <button id="startSession">Start session</button>
           <button id="endSession" disabled>End session</button>
         </div>
+        <div id="replaySpeed">
+          <label for="replayDelay">Replay delay</label>
+          <input type="range" id="replayDelay" min="100" max="2000" step="50">
+          <span id="replayDelayVal" class="muted"></span>
+        </div>
         <p id="trainerStatus" class="muted">loading…</p>
         <div id="drillInfo"></div>
         <div id="feedback"></div>

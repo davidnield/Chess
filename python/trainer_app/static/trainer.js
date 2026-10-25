@@ -17,7 +17,26 @@
   let retrying = false;      // wrong answer given; waiting for the correct move
   let moveStart = 0;         // perf.now() when the prompt appeared
 
-  const OPP_DELAY = 450, LEADIN_DELAY = 250;
+  // Replay pace: the lead-in delay per ply is user-set (slider, remembered in
+  // this browser's localStorage); opponent replies keep their old 450:250 ratio.
+  const DELAY_KEY = "trainer.replayDelayMs", DEFAULT_DELAY = 500, OPP_RATIO = 1.8;
+  let leadinDelay = DEFAULT_DELAY;
+  try {
+    const saved = Number(localStorage.getItem(DELAY_KEY));
+    if (saved >= 100 && saved <= 2000) leadinDelay = saved;
+  } catch (e) { /* storage blocked: use the default */ }
+  const oppDelay = () => Math.round(leadinDelay * OPP_RATIO);
+
+  function showDelay() {
+    $("replayDelay").value = leadinDelay;
+    $("replayDelayVal").textContent = `${(leadinDelay / 1000).toFixed(2)} s/move`;
+  }
+  $("replayDelay").addEventListener("input", (e) => {
+    leadinDelay = Number(e.target.value);
+    showDelay();
+    try { localStorage.setItem(DELAY_KEY, String(leadinDelay)); } catch (err) { /* not remembered */ }
+  });
+  showDelay();
 
   function ensureBoard() {
     if (board) return;
@@ -117,7 +136,7 @@
         board.position(game.fen());
         stepIdx++;
         advance();
-      }, leadIn ? LEADIN_DELAY : OPP_DELAY);
+      }, leadIn ? leadinDelay : oppDelay());
     } else {
       awaiting = true;
       moveStart = performance.now();

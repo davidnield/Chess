@@ -97,6 +97,11 @@ def reviewed_today(con: sqlite3.Connection, card_id: int) -> bool:
         (card_id,)).fetchone() is not None
 
 
+def is_due(card_row) -> bool:
+    """True if the card has a schedule and it is due now (same test as due_queue)."""
+    return card_row["due"] is not None and card_row["due"] <= utcnow_iso()
+
+
 # ── priority + queues ───────────────────────────────────────────────────────
 
 def priority(reach: float, memo_cost: float | None, max_reach: float,

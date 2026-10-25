@@ -3,8 +3,9 @@
 A drill is one root-to-leaf line through the pack tree:
   target   = highest-priority due card (else next new card under the daily cap)
   path     = parent-pointer walk root -> target's canonical node
-  start    = deepest path node whose position was already shown this session
-             (session_positions), else the root — so later drills skip
+  start    = deepest path node, at or above the target, whose position was
+             already shown this session (session_positions), else the root —
+             the target's own move is always asked; later drills skip
              already-rehearsed prefixes but never drop the user into an
              unseen middlegame position.
   extension: below the target, our nodes follow their single child; opponent
@@ -87,6 +88,7 @@ class DrillManager:
         if target is None:
             return None
         path = self.pack.path_to_root(rep, target["canonical_node_id"])
+        target_idx = len(path) - 1
         rng = random.Random(f"{session_id}:{target['position_hash']}")
         cap_left = (sched.new_introduced_today(self.con, rep)
                     < int(settings["new_per_day"]))
@@ -96,9 +98,11 @@ class DrillManager:
         seen = self._session_seen(session_id)
         cols = self.pack.tree[rep]
         start_idx = 0
-        for i, nid in enumerate(path):
+        for i, nid in enumerate(path[:target_idx + 1]):
             if cols["position_hash"][nid] in seen:
-                start_idx = i                    # deepest seen node on the path
+                start_idx = i                    # deepest seen node up to the target
+        # never past the target: a lead-in that auto-plays the target's move
+        # leaves the due card ungraded, so the same drill comes back forever
 
         steps = []
         for i, nid in enumerate(path[1:], start=1):
@@ -134,7 +138,7 @@ class DrillManager:
                fsrs_scheduler, duration_ms: int | None = None) -> dict:
         """Grade the user's move at steps[ply_index]. Only the FIRST answer per
         ply is graded; a card is graded at most once per drill and (setting) at
-        most once per local day."""
+        most once per local day unless it has come due again."""
         st = self.active.get(drill_id)
         if st is None:
             return {"error": "unknown or expired drill"}
@@ -156,8 +160,12 @@ class DrillManager:
                     (st["session_id"], step["ph"], sched.utcnow_iso()))
             card = sched.get_or_create_card(self.con, st["rep"], step["ph"],
                                             step["epd"], step["san"])
+            # once-per-day stops incidental same-day re-encounters inflating a
+            # card, but a card that is DUE again (a learning step after a miss)
+            # must be graded, or it stays due and keeps being drilled
             once_per_day = bool(st["settings"]["review_once_per_day"])
-            if not (once_per_day and sched.reviewed_today(self.con, card["card_id"])):
+            if not (once_per_day and sched.reviewed_today(self.con, card["card_id"])
+                    and not sched.is_due(card)):
                 sched.record_review(
                     self.con, fsrs_scheduler, card,
                     Rating.Good if correct else Rating.Again,
