@@ -57,7 +57,12 @@ CHAPTER_COLS = ["color", "chunk_id", "chapter_line", "prompt_version", "model", 
                 "flagged", "flag_reason", "created_at"]
 
 USAGE_LIMIT_MARKERS = ("usage limit", "rate limit", "quota", "exceeded your",
-                       "please try again later")
+                       "please try again later",
+                       # subscription wording (2026-10): "You've hit your session limit · resets 2:30pm"
+                       "session limit", "weekly limit", "hit your limit", "hit your session")
+# a failed login fails every chunk the same way: stop instead of skipping them all
+AUTH_FAILURE_MARKERS = ("failed to authenticate", "oauth session expired", "please run /login",
+                        "invalid api key")
 
 
 class UsageLimit(Exception):
@@ -85,10 +90,16 @@ def run_claude(prompt: str, model: str, timeout: int = 900) -> str:
         raise ClaudeUnavailable("`claude` CLI not found on PATH")
     out = (proc.stdout or "") + (proc.stderr or "")
     low = out.lower()
+    try:                          # the reason sits in the JSON envelope's result, at its end
+        reason = str(json.loads(proc.stdout).get("result") or "")[:300]
+    except (json.JSONDecodeError, AttributeError):
+        reason = out[:300]
+    if any(m in low for m in AUTH_FAILURE_MARKERS):
+        raise ClaudeUnavailable(f"claude CLI is not signed in ({reason}); run `claude`, then /login")
     if proc.returncode != 0 and any(m in low for m in USAGE_LIMIT_MARKERS):
-        raise UsageLimit(out[:300])
+        raise UsageLimit(reason)
     if proc.returncode != 0:
-        raise RuntimeError(f"claude exit {proc.returncode}: {out[:300]}")
+        raise RuntimeError(f"claude exit {proc.returncode}: {reason}")
     try:
         env = json.loads(proc.stdout)
     except json.JSONDecodeError:

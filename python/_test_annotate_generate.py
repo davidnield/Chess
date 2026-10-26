@@ -81,6 +81,20 @@ def main() -> None:
     kind, _ = outcome(returncode=0, stdout="not json at all")
     check("exit0 unparseable envelope -> RuntimeError", kind == "RuntimeError")
 
+    # 6b. The subscription's session-limit envelope (exit 1, reason in "result")
+    #     -> UsageLimit, carrying the reason (2026-10-26: 57 chunks were skipped
+    #     as transient errors instead of stopping).
+    env = json.dumps({"is_error": True, "terminal_reason": "api_error",
+                      "result": "You've hit your session limit · resets 2:30pm (America/Los_Angeles)"})
+    kind, payload = outcome(returncode=1, stdout=env)
+    check("session-limit envelope -> UsageLimit", kind == "UsageLimit")
+
+    # 6c. An expired login fails every chunk the same way -> ClaudeUnavailable (stop).
+    env = json.dumps({"is_error": True,
+                      "result": "Failed to authenticate: OAuth session expired and could not be refreshed"})
+    kind, _ = outcome(returncode=1, stdout=env)
+    check("expired login -> ClaudeUnavailable", kind == "ClaudeUnavailable")
+
     # 7. ClaudeUnavailable must be distinct from RuntimeError so the caller's
     #    except-order (abort vs skip) actually separates them.
     check("ClaudeUnavailable is not a RuntimeError",
