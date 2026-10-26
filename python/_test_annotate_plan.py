@@ -106,5 +106,30 @@ check("chapter intro: grounded text passes",
 check("chapter intro: an invented move is flagged",
       validate_chapter("The plan is Qh5 and Bxf7.", [facts]) != [])
 
+print("\nboard facts (the QGA position after 12...e6, the 2026-10-26 'piece up' note):")
+from annotate.facts import board_facts  # noqa: E402
+
+qga = board(*"d4 d5 c4 dxc4 e4 Nf6 e5 Nd5 Bxc4 Bf5 Nc3 Nb4 Qa4+ N8c6 d5 a6 dxc6 Nc2+ Kf1 b5 "
+               "Bxf7+ Kxf7 Qb3+ e6".split())
+bf = board_facts(qga, chess.BLACK)
+check("material: Black is a pawn down", bf["material"]["balance_for_us"] == -1
+      and bf["material"]["summary"] == "we are a pawn down", str(bf["material"]))
+check("the forked rook on a1 is their loose piece",
+      any(s.startswith("rook on a1 (attacked by knight on c2, undefended") for s in bf["their_loose_pieces"]),
+      str(bf["their_loose_pieces"]))
+check("both kings stranded", not bf["our_king"]["castled"] and not bf["our_king"]["can_still_castle"]
+      and bf["their_king"]["square"] == "f1")
+tk = board(*"e4 e5 Nf3 Nc6 Bc4 Nf6 d4 exd4 Ng5 d5 exd5 Na5 Qe2+ Be7 d6 Nxc4 Qxc4 Qxd6 Qxf7+".split())
+check("a piece guarded against the king is not loose (Qxf7+ with Ng5)",
+      not any("f7" in s for s in board_facts(tk, chess.WHITE)["our_loose_pieces"]))
+
+pos_facts = dict(facts, position_after_our_move=bf)
+check("material claim contradicting the board is flagged",
+      any("material claim" in e for e in validate("We are a piece up and winning.", None, [], pos_facts)))
+check("a claim matching the board passes",
+      validate("We are a pawn down, but the rook on a1 is hanging.", None, [], pos_facts) == [])
+check("'they are a pawn up' is read from their side",
+      validate("They are a pawn up, but their king is stuck.", None, [], pos_facts) == [])
+
 print(f"\n{'ALL PASS' if FAILS == 0 else f'{FAILS} FAILURES'}")
 sys.exit(1 if FAILS else 0)

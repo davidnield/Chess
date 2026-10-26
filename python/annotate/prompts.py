@@ -16,7 +16,7 @@ it is stored per annotation and forces regeneration of stale-version rows.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "v2"
+PROMPT_VERSION = "v3"
 
 SYSTEM = """\
 You are writing study notes for a personal chess opening repertoire. The reader \
@@ -38,6 +38,11 @@ a list of moves.
 (only from the listed branches where the plan changes).
 4. Only if the engine's first choice differs from ours: one clause on why ours \
 is the practical choice, using the given practical scores.
+5. Where a position is marked "THE BOOK ENDS HERE", the note must finish with \
+how to play on: what we do next (the moves that recur in the engine lines, and \
+what players actually played), whether to finish development or castle, and \
+what to attack. This is the last thing the reader learns about the line, so \
+give them a plan, not just a verdict.
 Also write ONE memory rule when a crisp one exists, in the form "If they <X>, we \
 <Y>", else null.
 
@@ -56,6 +61,10 @@ they also appear elsewhere in the fact sheet.
 - Only cite percentages that appear in the fact sheet, rounded as given.
 - Describe evaluations in words ("slightly better", "winning"); NEVER give \
 centipawns or decimal evaluations.
+- Material: say who is up or down ONLY as the "Board after our move" line \
+states it. When we are winning despite being level or behind on material, \
+explain why from the facts (a loose or forked piece, a threat, the king) \
+instead of inventing a material edge.
 - Use move numbers as given in the fact sheet's lines (e.g. "6.exd5", "6...Na5").
 - Be concrete; avoid empty phrases like "this is a good move" or "clearly best".
 
@@ -105,6 +114,26 @@ def render_position(pid: str, f: dict) -> str:
              + f". Idea token: {om['idea_token']}.")
     if f.get("transpositions"):
         L.append(f"- Also reached via: {'; '.join(f['transpositions'])}.")
+
+    pos = f.get("position_after_our_move")
+    if pos:
+        m = pos["material"]
+        parts = [f"material: we have {m['ours']}; they have {m['theirs']}; {m['summary']}"]
+        ch = pos.get("material_change_by_our_move") or 0
+        if ch:
+            parts.append(f"our move {'wins' if ch > 0 else 'gives up'} {abs(ch)} point(s) of material")
+        for who, k in (("our", pos["our_king"]), ("their", pos["their_king"])):
+            st = ("castled" if k["castled"] else
+                  f"uncastled, can still castle {' and '.join(k['can_still_castle'])}"
+                  if k["can_still_castle"] else "uncastled and can no longer castle")
+            parts.append(f"{who} king on {k['square']}, {st}")
+        if pos.get("our_undeveloped"):
+            parts.append("our undeveloped minor pieces: " + ", ".join(pos["our_undeveloped"]))
+        if pos.get("their_loose_pieces"):
+            parts.append("their loose pieces: " + "; ".join(pos["their_loose_pieces"]))
+        if pos.get("our_loose_pieces"):
+            parts.append("our loose pieces: " + "; ".join(pos["our_loose_pieces"]))
+        L.append("- Board after our move: " + ". ".join(parts) + ".")
 
     eng = f.get("engine") or {}
     th = eng.get("their_threat_if_we_pass")
@@ -165,6 +194,23 @@ def render_position(pid: str, f: dict) -> str:
                 piece += f", a slip that leaves us {_assess_phrase(r['assessment'])}"
             rp.append(piece)
         L.append("- Their replies to our move (by frequency): " + "; ".join(rp) + ".")
+
+    be = f.get("book_end")
+    if be:
+        L.append("- THE BOOK ENDS HERE: the note must finish with how to play on.")
+        for ln in be["engine_lines"][:3]:
+            if ln["pv"]:
+                L.append(f"  - Engine line ({_assess_phrase(ln['assessment'])} for us): "
+                         f"{numbered(ln['pv'], ply0 + 1)}")
+        if be["our_moves_in_engine_lines"]:
+            L.append("  - Our moves that recur in those lines: "
+                     + ", ".join(f"{s} ({n} of {len(be['engine_lines'])})"
+                                 for s, n in be["our_moves_in_engine_lines"]) + ".")
+        for fu in be["what_players_did_next"]:
+            if fu["our_moves"]:
+                L.append(f"  - In games, after {numbered([fu['reply']], ply0 + 1)} "
+                         f"({fu['reply_share_pct']}%), players continued "
+                         + ", ".join(f"{x['san']} ({x['share_pct']}%)" for x in fu["our_moves"]) + ".")
 
     for n in f.get("course_notes") or []:
         L.append(f"- Course commentary on {om['san']} (from a course that follows our line "

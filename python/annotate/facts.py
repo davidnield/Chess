@@ -47,6 +47,81 @@ def _r(x, nd=3):
     return None if x is None else round(float(x), nd)
 
 
+PIECE_VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5,
+               chess.QUEEN: 9, chess.KING: 0}
+_PLURAL = {"pawn": "pawns", "knight": "knights", "bishop": "bishops", "rook": "rooks",
+           "queen": "queen"}
+
+
+def _material_words(diff: int) -> str:
+    if diff == 0:
+        return "material is level"
+    n = abs(diff)
+    amount = "a pawn" if n == 1 else f"{n} pawns' worth"
+    return f"we are {amount} {'up' if diff > 0 else 'down'}"
+
+
+def board_facts(b: chess.Board, us: chess.Color) -> dict:
+    """What a note may say about the position on the board: material (counts and
+    the balance in pawn units), each king (square, castled, castling rights), our
+    pieces still undeveloped, and loose pieces of either side -- attacked and
+    either undefended or attacked by a cheaper piece (forks show up as one attacker
+    on two targets)."""
+    def counts(c):
+        return {chess.piece_name(p): len(b.pieces(p, c))
+                for p in (chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT, chess.PAWN)}
+
+    def total(c):
+        return sum(PIECE_VALUE[p] * len(b.pieces(p, c)) for p in PIECE_VALUE)
+
+    def describe(c):
+        return ", ".join(f"{n} {_PLURAL[k] if n > 1 else k}" for k, n in counts(c).items() if n)
+
+    diff = total(us) - total(not us)
+
+    def king(c):
+        sq = b.king(c)
+        home = 0 if c == chess.WHITE else 7
+        castled = sq in (chess.square(6, home), chess.square(2, home), chess.square(1, home)) \
+            and not b.has_castling_rights(c)
+        rights = [n for n, ok in (("kingside", b.has_kingside_castling_rights(c)),
+                                  ("queenside", b.has_queenside_castling_rights(c))) if ok]
+        return {"square": chess.square_name(sq), "castled": castled,
+                "can_still_castle": rights,
+                "in_check": b.is_check() and b.turn == c}
+
+    home = 0 if us == chess.WHITE else 7
+    undeveloped = [f"{chess.piece_name(b.piece_at(sq).piece_type)} on {chess.square_name(sq)}"
+                   for sq in (chess.square(f, home) for f in (1, 2, 5, 6))
+                   if b.piece_at(sq) and b.piece_at(sq).color == us
+                   and b.piece_at(sq).piece_type in (chess.KNIGHT, chess.BISHOP)]
+
+    def loose(c):
+        out = []
+        for sq, pc in b.piece_map().items():
+            if pc.color != c or pc.piece_type in (chess.KING, chess.PAWN):
+                continue
+            defended = bool(b.attackers(c, sq))
+            attackers = [a for a in b.attackers(not c, sq)        # a king can't take a
+                         if not (defended and b.piece_at(a).piece_type == chess.KING)]  # guarded piece
+            if not attackers:
+                continue
+            cheapest = min(PIECE_VALUE[b.piece_at(a).piece_type] for a in attackers)
+            if defended and cheapest >= PIECE_VALUE[pc.piece_type]:
+                continue
+            by = ", ".join(f"{chess.piece_name(b.piece_at(a).piece_type)} on {chess.square_name(a)}"
+                           for a in attackers)
+            out.append(f"{chess.piece_name(pc.piece_type)} on {chess.square_name(sq)} "
+                       f"(attacked by {by}{'' if defended else ', undefended'})")
+        return out
+
+    return {"material": {"ours": describe(us), "theirs": describe(not us),
+                         "balance_for_us": diff, "summary": _material_words(diff)},
+            "our_king": king(us), "their_king": king(not us),
+            "our_undeveloped": undeveloped,
+            "our_loose_pieces": loose(us), "their_loose_pieces": loose(not us)}
+
+
 class EvalDB:
     """Sorted-array eval lookup: an eval-arrays directory (eval_arrays.py; verified,
     then memory-mapped -- the default, 6B entries, cannot be loaded) or a legacy
@@ -116,6 +191,21 @@ class FactsBuilder:
             self.edges[r["parent_hash"]].append(r)
         for v in self.edges.values():
             v.sort(key=lambda e: -e["total"])
+        # one level deeper for where the book ends: our follow-ups after their
+        # three most common replies (what players actually did next)
+        deeper = {e["child_hash"] for h in after_hashes for e in self.edges.get(h, [])[:3]
+                  if e["child_hash"] is not None} - set(want)
+        if deeper:
+            st2 = (pl.scan_parquet(stats_path)
+                     .filter(pl.col("parent_hash").is_in(list(deeper)))
+                     .select(["parent_hash", "move_san", "total", "white_score_avg",
+                              "child_hash"])
+                     .collect())
+            for r in st2.iter_rows(named=True):
+                self.edges[r["parent_hash"]].append(r)
+            for h in deeper:
+                if h in self.edges:
+                    self.edges[h].sort(key=lambda e: -e["total"])
 
         # theme prior: ctx -> token -> game_freq
         self.prior: dict[str, dict[str, float]] = defaultdict(dict)
@@ -155,6 +245,12 @@ class FactsBuilder:
             con.close()
 
     # ── helpers ─────────────────────────────────────────────────────────────
+
+    def our_cp(self, cp: int | None) -> int:
+        """White-POV engine centipawns -> ours (0 when unknown)."""
+        if cp is None:
+            return 0
+        return int(cp) if self.color == "white" else -int(cp)
 
     def our_es(self, cp: int | None) -> float | None:
         if cp is None:
@@ -199,9 +295,10 @@ class FactsBuilder:
             rows = self.engine.get((e, mode), [])
             return [{"rank": r["rank"], "es": _r(self.our_es(r["cp"])),
                      "assessment": es_bucket(self.our_es(r["cp"])),
+                     "our_cp": self.our_cp(r["cp"]),
                      "pv": self._pv_to_sans(e, r["pv_uci"], lim)} for r in rows]
         here = mp(epd, "here", 8)
-        after = mp(epd_after, "after", 8)
+        after = mp(epd_after, "after", 12)       # long enough to show how to go on
         threat = self._null_threat(epd_after, "threat", after, ours=True)
         their = self._null_threat(epd, "pass", here, ours=False)
         if not here and not after and threat is None and their is None:
@@ -214,7 +311,10 @@ class FactsBuilder:
         analyses): mode 'threat' after our move = OUR threat; mode 'pass' at the
         card = what the opponent threatens, i.e. what our move has to deal with.
         es_change_for_us = our expected score with the free move played minus with
-        best play (positive for our threat, negative for theirs)."""
+        best play (positive for our threat, negative for theirs). A threat is real
+        when it wins a piece (minor or more), mates, swings the engine by 1.5 pawns,
+        or moves the expected score by 0.08 -- the score alone saturates in won
+        positions, where winning a whole rook barely moves it."""
         rows = self.engine.get((epd, mode), [])
         if not rows or not real or real[0]["es"] is None:
             return None
@@ -227,20 +327,25 @@ class FactsBuilder:
             return None
         first = chess.Move.from_uci(r["pv_uci"].split()[0])
         tags = []
+        cap_value = 0
         if b.is_capture(first):
             cap = b.piece_at(first.to_square)
+            cap_value = PIECE_VALUE[cap.piece_type] if cap else 1
             tags.append(f"captures the {chess.piece_name(cap.piece_type) if cap else 'pawn'} on "
                         f"{chess.square_name(first.to_square)}")
         b.push(first)
-        if b.is_checkmate():
+        mate = b.is_checkmate()
+        if mate:
             tags.append("mate")
         elif b.is_check():
             tags.append("check")
         change = es - real[0]["es"]
+        cp_change = self.our_cp(r["cp"]) - real[0]["our_cp"]
+        gain = (change, cp_change) if ours else (-change, -cp_change)
         return {"move": pv[0], "pv": pv, "what": tags,
                 "assessment_if_free_move": es_bucket(es),
                 "es_change_for_us": _r(change),
-                "real": (change if ours else -change) >= 0.08}
+                "real": gain[0] >= 0.08 or gain[1] >= 150 or cap_value >= 3 or mate}
 
     # ── per-card fact sheet ─────────────────────────────────────────────────
 
@@ -349,6 +454,36 @@ class FactsBuilder:
         engine = self._engine_block(epd, epd_after)
         plan = self.plan_tree.plan(h) if self.plan_tree else None
 
+        # the board after our move: material, kings, development, loose pieces
+        us = chess.WHITE if self.color == "white" else chess.BLACK
+        b_after = board.copy(stack=False)
+        b_after.push_san(best)
+        position = board_facts(b_after, us)
+        position["material_change_by_our_move"] = (
+            position["material"]["balance_for_us"] - board_facts(board, us)["material"]["balance_for_us"])
+
+        # where the book ends: how play goes on (engine lines, our recurring moves
+        # in them, what players did next) -- the note must leave a plan from here
+        book_end = None
+        if plan is not None and len(plan.get("continuation", [])) <= 1:
+            lines = (engine or {}).get("after_move_multipv") or []
+            ours: dict[str, int] = defaultdict(int)
+            for ln in lines:
+                for s in ln["pv"][1::2]:               # PVs start with their reply
+                    ours[s] += 1
+            followups = []
+            for e in edges_after[:3]:
+                nxt = self.edges.get(e["child_hash"], []) if e["child_hash"] is not None else []
+                tot = sum(x["total"] for x in nxt) or 1
+                followups.append({
+                    "reply": e["move_san"], "reply_share_pct": _r(e["total"] / total_after * 100, 1),
+                    "our_moves": [{"san": x["move_san"], "share_pct": _r(x["total"] / tot * 100, 1),
+                                   "games": int(x["total"])} for x in nxt[:3]]})
+            book_end = {"engine_lines": [{"assessment": ln["assessment"], "pv": ln["pv"]}
+                                         for ln in lines],
+                        "our_moves_in_engine_lines": sorted(ours.items(), key=lambda kv: -kv[1])[:6],
+                        "what_players_did_next": followups}
+
         # engine's first choice when it is not our move (our move is a practical choice)
         engine_top = None
         if engine and engine["here_multipv"] and engine["here_multipv"][0]["pv"]:
@@ -382,6 +517,8 @@ class FactsBuilder:
             "engine": engine,
             "engine_top": engine_top,
             "plan": plan,
+            "position_after_our_move": position,
+            "book_end": book_end,
             "course_notes": self.course_notes.get(hash_after) if self.course_notes else [],
             "themes": themes,
             "past_mistakes": self.deviations.get(h, [])[:3],

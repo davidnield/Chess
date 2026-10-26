@@ -36,6 +36,8 @@ def _known_sans(f: dict) -> set[str]:
             out.add(s.rstrip("+#"))
 
     add(f["our_move"]["san"])
+    for tok in (f.get("line") or "").split():             # the moves already played
+        add(re.sub(r"^\d+\.+", "", tok))
     for c in f.get("candidates", []):
         add(c["san"])
     for r in f.get("replies", []):
@@ -58,6 +60,14 @@ def _known_sans(f: dict) -> set[str]:
         add(b.get("reply")); add(b.get("our_answer")); add(b.get("main_line_answer"))
     for r in plan.get("recurring_ideas", []):
         add(r["token"])
+    be = f.get("book_end") or {}
+    for ln in be.get("engine_lines", []):
+        for s in ln.get("pv", []):
+            add(s)
+    for fu in be.get("what_players_did_next", []):
+        add(fu["reply"])
+        for x in fu["our_moves"]:
+            add(x["san"])
     return out
 
 
@@ -84,6 +94,9 @@ def _known_pcts(f: dict) -> list[float]:
     plan = f.get("plan") or {}
     out += [float(b["share_pct"]) for b in plan.get("branches", []) if b.get("share_pct") is not None]
     out += [float(r["reach_pct"]) for r in plan.get("recurring_ideas", [])]
+    for fu in (f.get("book_end") or {}).get("what_players_did_next", []):
+        out.append(float(fu["reply_share_pct"]))
+        out += [float(x["share_pct"]) for x in fu["our_moves"]]
     # practical scores rendered as whole percentages (prompts._pct)
     for d in [f.get("our_move") or {}, f.get("engine_top") or {}, *f.get("candidates", [])]:
         if d.get("emp_score") is not None:
@@ -154,6 +167,46 @@ def _is_piece_on_square(anchors: list[chess.Board], token: str) -> bool:
     return any((pc := anc.piece_at(sq)) and pc.piece_type == ptype for anc in anchors)
 
 
+# "we are a piece up", "a pawn down", "up the exchange", "an extra pawn", "material is level"
+_UNITS = {"pawn": 1, "piece": 3, "exchange": 2, "rook": 5, "queen": 9}
+MATERIAL_RE = re.compile(
+    r"\b(?:(?:a|an|one|two|three|\d+)\s+)?(pawn|piece|exchange|rook|queen)s?\s+(up|down|ahead|behind)\b"
+    r"|\b(up|down)\s+(?:a|an|one|two|the)\s+(pawn|piece|exchange|rook|queen)\b"
+    r"|\b(extra)\s+(pawn|piece|rook|queen)\b"
+    r"|\b(material is (?:level|equal|even))\b", re.I)
+
+
+def _material_errors(text: str, f: dict) -> list[str]:
+    """A note may only claim the material balance the board facts state (the
+    position after our move). Claims about OUR side only: 'we are a piece up'.
+    A claim about a capture to come ('wins a piece') is not a balance claim."""
+    pos = f.get("position_after_our_move")
+    if not pos:
+        return []
+    bal = pos["material"]["balance_for_us"]
+    errs = []
+    for m in MATERIAL_RE.finditer(text):
+        g = m.groups()
+        if g[6]:                                          # material is level
+            ok = bal == 0
+        else:
+            unit = (g[0] or g[3] or g[5]).lower()
+            sign = (g[1] or g[2] or "up").lower()
+            if g[4]:                                      # "an extra pawn" = up
+                sign = "up"
+            want_up = sign in ("up", "ahead")
+            # the balance must point the same way, and be at least about that size
+            ok = (bal > 0) == want_up and bal != 0 and abs(bal) >= _UNITS[unit] - 1
+            # "they are a pawn up" style claims flip the sign
+            pre = text[max(0, m.start() - 25):m.start()].lower()
+            if any(w in pre for w in ("they are", "they're", "white is", "black is", "opponent is")):
+                ok = (bal < 0) == want_up and bal != 0 and abs(bal) >= _UNITS[unit] - 1
+        if not ok:
+            errs.append(f"material claim '{m.group(0)}' contradicts the board "
+                        f"({pos['material']['summary']})")
+    return errs
+
+
 def validate(annotation: str, memory_rule: str | None, themes: list[str],
              f: dict) -> list[str]:
     errors: list[str] = []
@@ -205,6 +258,8 @@ def validate(annotation: str, memory_rule: str | None, themes: list[str],
         v = float(m.group(1))
         if not any(abs(v - kp) <= 2.0 for kp in known_pcts):
             errors.append(f"percentage {v}% not supported by fact sheet")
+
+    errors += _material_errors(text, f)
 
     idea = {f["our_move"]["idea_token"], f.get("themes", {}).get("token")}
     idea.discard(None)
