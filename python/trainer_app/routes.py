@@ -176,6 +176,10 @@ def create_app(data_dir: Path, remote: bool = False, port: int = 8321) -> FastAP
         drill = dm.build_drill(rep, session_id, config.get_settings(con))
         if drill is None:
             raise HTTPException(404, "queue empty — no due or new cards")
+        # learn mode shows each new move's note before it is quizzed
+        for step, inner in zip(drill["steps"], dm.active[drill["drill_id"]]["steps"]):
+            step["note"] = (app.state.annotations.get(rep, inner["ph"])
+                            if step["new"] else None)
         return drill
 
     @app.get("/api/trainer/stats")

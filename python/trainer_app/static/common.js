@@ -46,7 +46,6 @@ const SETTING_LABELS = {
   new_per_day: "New cards per day",
   desired_retention: "Desired retention",
   review_once_per_day: "Grade each card at most once per day",
-  extend_past_cap: "Introduce mid-line new cards past the daily cap",
   white_rep: "White repertoire parquet",
   black_rep: "Black repertoire parquet",
   stats: "Position stats parquet",

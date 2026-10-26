@@ -1,13 +1,19 @@
 // Trainer tab: session flow, drill playback, board-input grading.
 //
 // Drill contract (GET /api/trainer/drill): { drill_id, rep, kind, start_index,
-// steps: [{san, our}], target_ply }. steps[:start_index] = lead-in (animated,
-// not graded); from start_index on, opponent moves auto-play and our moves
-// await board input, graded server-side via POST /api/trainer/answer.
+// steps: [{san, our, new, note}], target_ply }. steps[:start_index] = lead-in
+// (animated, not graded); from start_index on, opponent moves auto-play and our
+// moves await board input, graded server-side via POST /api/trainer/answer.
+//
+// Learn mode: a drill with new moves (`new` = never reviewed) runs twice.
+//   show   — each new move is drawn as an arrow with its note; the user plays
+//            it (not graded). Known moves on the way are quizzed as usual.
+//   recall — the line restarts at start_index; known moves auto-play and the
+//            new ones are quizzed from memory: these answers grade the cards.
 
 (() => {
   const $ = (id) => document.getElementById(id);
-  let board = null;          // chessboard.js instance (created lazily)
+  let board = null;          // chessboard.js instance
   let game = null;           // chess.js state
   let sessionId = null;
   let rep = "white";
@@ -15,6 +21,8 @@
   let stepIdx = 0;           // next step to execute
   let awaiting = false;      // waiting for user's move at stepIdx
   let retrying = false;      // wrong answer given; waiting for the correct move
+  let teaching = false;      // learn mode: waiting for the user to play the shown move
+  let phase = "drill";       // drill | show | recall (learn mode)
   let moveStart = 0;         // perf.now() when the prompt appeared
 
   // Replay pace: the lead-in delay per ply is user-set (slider, remembered in
@@ -44,10 +52,37 @@
       position: "start",
       draggable: true,
       pieceTheme: PIECE_THEME,
-      onDragStart: () => awaiting || retrying,
+      onDragStart: () => drill !== null && (awaiting || retrying || teaching),
       onDrop: onDrop,
       onSnapEnd: () => board.position(game.fen()),
     });
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.id = "boardArrow";
+    $("trainerBoard").appendChild(svg);
+  }
+
+  // Draw our move to play as an arrow over the board (learn mode).
+  function drawArrow(san) {
+    const svg = $("boardArrow");
+    const mv = new Chess(game.fen()).move(san, { sloppy: true });
+    if (!svg || !mv) return;
+    const box = $("trainerBoard").getBoundingClientRect();
+    const centre = (sq) => {
+      const r = document.querySelector(`#trainerBoard [data-square="${sq}"]`).getBoundingClientRect();
+      return [r.left - box.left + r.width / 2, r.top - box.top + r.height / 2, r.width];
+    };
+    const [x1, y1, w] = centre(mv.from), [x2, y2] = centre(mv.to);
+    const len = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+    const head = w * 0.42, shaft = w * 0.16;
+    const bx = x2 - ux * head, by = y2 - uy * head, px = -uy, py = ux;
+    svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+    svg.innerHTML =
+      `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke-width="${shaft}" stroke-linecap="round"/>` +
+      `<polygon points="${x2},${y2} ${bx + px * head * 0.6},${by + py * head * 0.6} ${bx - px * head * 0.6},${by - py * head * 0.6}"/>`;
+  }
+  function clearArrow() {
+    const svg = $("boardArrow");
+    if (svg) svg.innerHTML = "";
   }
 
   async function refreshStatus() {
@@ -131,15 +166,33 @@
     }
     drill = d;
     stepIdx = 0;
-    awaiting = retrying = false;
+    awaiting = retrying = teaching = false;
+    clearArrow();
+    showAnnotation(null);
+    const nNew = drill.steps.filter((s, i) => s.new && i >= drill.start_index).length;
+    phase = nNew ? "show" : "drill";
     game = new Chess();
     board.orientation(drill.rep);
     board.position("start", false);
     $("drillInfo").textContent =
-      `${drill.kind === "new" ? "NEW line" : "review"} · ${drill.steps.length} plies` +
+      (nNew ? `NEW line · ${nNew} new move${nNew > 1 ? "s" : ""} to learn` : "review") +
+      ` · ${drill.steps.length} plies` +
       (drill.start_index > 0 ? ` · starting mid-line (ply ${drill.start_index + 1})` : "");
     renderLine();
     advance();
+  }
+
+  // Learn mode, after the show pass: replay the line from start_index.
+  function startRecall() {
+    phase = "recall";
+    game = new Chess();
+    for (let i = 0; i < drill.start_index; i++) game.move(drill.steps[i].san, { sloppy: true });
+    stepIdx = drill.start_index;
+    board.position(game.fen());
+    showAnnotation(null);
+    $("feedback").innerHTML = "<b>Now play it from memory</b>";
+    renderLine();
+    setTimeout(advance, oppDelay());
   }
 
   function renderLine() {
@@ -155,7 +208,10 @@
   function advance() {
     renderLine();
     if (!drill || stepIdx >= drill.steps.length) {
-      if (drill) {
+      if (drill && phase === "show") {
+        $("feedback").innerHTML = "<b>That's the line.</b> Now from memory…";
+        setTimeout(startRecall, 1500);
+      } else if (drill) {
         $("feedback").innerHTML = "<b>Line complete ✓</b>";
         drill = null;
         setTimeout(nextDrill, 900);
@@ -164,13 +220,20 @@
     }
     const step = drill.steps[stepIdx];
     const leadIn = stepIdx < drill.start_index;
-    if (leadIn || !step.our) {
+    // recall pass: moves already handled in the show pass replay by themselves
+    const replayed = phase === "recall" && step.our && !step.new;
+    if (leadIn || !step.our || replayed) {
       setTimeout(() => {
         game.move(step.san, { sloppy: true });
         board.position(game.fen());
         stepIdx++;
         advance();
-      }, leadIn ? leadinDelay : oppDelay());
+      }, leadIn || replayed ? leadinDelay : oppDelay());
+    } else if (phase === "show" && step.new) {
+      teaching = true;
+      drawArrow(step.san);
+      $("feedback").innerHTML = `<b>New move:</b> play <b>${step.san}</b>`;
+      showAnnotation(step.note);
     } else {
       awaiting = true;
       moveStart = performance.now();
@@ -180,10 +243,24 @@
   }
 
   function onDrop(source, target) {
-    if (!awaiting && !retrying) return "snapback";
+    if (!awaiting && !retrying && !teaching) return "snapback";
     const mv = game.move({ from: source, to: target, promotion: "q" });
     if (mv === null) return "snapback";
     const step = drill.steps[stepIdx];
+
+    if (teaching) {
+      // learn mode: only the shown move continues; nothing is graded yet
+      if (mv.san !== step.san) {
+        game.undo();
+        return "snapback";
+      }
+      teaching = false;
+      clearArrow();
+      stepIdx++;
+      $("feedback").textContent = "";
+      setTimeout(advance, 150);
+      return;
+    }
 
     if (retrying) {
       // Grading already happened (wrong first answer); require the book move.
@@ -250,6 +327,9 @@
     }
     sessionId = null;
     drill = null;
+    teaching = false;
+    clearArrow();
+    showAnnotation(null);
     $("startSession").textContent = "Start session";
     $("endSession").disabled = true;
     $("drillInfo").textContent = "";

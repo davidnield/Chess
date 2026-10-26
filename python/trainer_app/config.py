@@ -28,7 +28,6 @@ DEFAULTS: dict[str, object] = {
     "new_per_day": 10,
     "desired_retention": 0.9,
     "review_once_per_day": True,
-    "extend_past_cap": True,
     # Explorer source parquets (canonical pipeline outputs; may be absent on
     # a satellite PC — the Explorer tab degrades gracefully, see plan).
     "white_rep": "E:/chess/repertoire/repertoire_pooled_white_sharp.parquet",

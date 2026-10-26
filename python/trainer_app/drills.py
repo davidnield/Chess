@@ -1,16 +1,27 @@
 """Drill construction: turn the next scheduled card into a full playable line.
 
 A drill is one root-to-leaf line through the pack tree:
-  target   = highest-priority due card (else next new card under the daily cap)
+  target   = highest-priority due card, else the next new card under the daily
+             cap (see _pick_new: a card is offered only once every earlier
+             our-position on its line is learned, and new material stays in one
+             variation chunk until that chunk is done)
   path     = parent-pointer walk root -> target's canonical node
   start    = deepest path node, at or above the target, whose position was
              already shown this session (session_positions), else the root —
              the target's own move is always asked; later drills skip
              already-rehearsed prefixes but never drop the user into an
              unseen middlegame position.
-  extension: below the target, our nodes follow their single child; opponent
-             nodes sample a child weighted by reply_share (seeded RNG) until a
-             leaf. Mid-line our-positions become gradable encounters too.
+  extension: below the target, our nodes follow their single child. A REVIEW
+             (due) drill samples opponent replies by reply_share (seeded RNG)
+             and stops before any our-position not learned yet: reviews never
+             quiz unseen moves. A NEW drill follows the most common reply and
+             may introduce new our-positions up to the daily cap; the client
+             teaches those (learn mode) before quizzing them.
+
+Each payload step carries `new`: an our-move whose card has never been
+reviewed. The client shows those moves first and grades them on a replay from
+memory; answer() therefore treats a drill as done only once every our-step
+from the start is graded, not when the last one is.
 
 The server keeps active drills in memory (single-user app): grading must be
 server-authoritative and the payload's expected moves are not trusted from the
@@ -25,6 +36,8 @@ import uuid
 
 from fsrs import Rating
 
+from annotate.chunks import build_chunks
+
 from . import scheduler as sched
 from .pack import TrainingPack
 
@@ -34,6 +47,7 @@ class DrillManager:
         self.pack = pack
         self.con = con
         self.active: dict[str, dict] = {}      # drill_id -> state
+        self._chunk_ix: dict[str, dict[int, int]] = {}   # rep -> card hash -> chunk
 
     # ── construction ────────────────────────────────────────────────────────
 
@@ -43,10 +57,51 @@ class DrillManager:
             return due[0], "due"
         cap = int(settings["new_per_day"])
         if sched.new_introduced_today(self.con, rep) < cap:
-            new = sched.new_queue(self.con, self.pack, rep, settings)
+            new = self._pick_new(rep, settings)
             if new:
-                return new[0], "new"
+                return new, "new"
         return None, "empty"
+
+    def _started(self, rep: str) -> set[int]:
+        """Positions whose card has been reviewed at least once (learned)."""
+        return {r[0] for r in self.con.execute(
+            "SELECT position_hash FROM cards WHERE rep=? AND state IS NOT NULL", (rep,))}
+
+    def _chunk_of(self, rep: str) -> dict[int, int]:
+        if rep not in self._chunk_ix:
+            self._chunk_ix[rep] = {h: i for i, ch in enumerate(build_chunks(self.pack, rep))
+                                   for h in ch.card_hashes}
+        return self._chunk_ix[rep]
+
+    def _pick_new(self, rep: str, settings: dict) -> dict | None:
+        """Next new card: only one whose earlier our-positions are all learned
+        (or suspended), preferring the variation chunk of the most recently
+        introduced card, so a variation is learned through before the next."""
+        new = sched.new_queue(self.con, self.pack, rep, settings)   # priority order
+        if not new:
+            return None
+        done = self._started(rep) | {r[0] for r in self.con.execute(
+            "SELECT position_hash FROM cards WHERE rep=? AND suspended=1", (rep,))}
+        cols = self.pack.tree[rep]
+
+        def ready(card: dict) -> bool:
+            path = self.pack.path_to_root(rep, card["canonical_node_id"])[:-1]
+            return all(cols["position_hash"][n] in done
+                       for n in path if cols["is_our_turn"][n])
+
+        ready_cards = [c for c in new if ready(c)]
+        if not ready_cards:
+            return new[0]
+        chunk = self._chunk_of(rep)
+        last = self.con.execute(
+            "SELECT c.position_hash FROM review_log rl JOIN cards c ON c.card_id=rl.card_id "
+            "WHERE c.rep=? AND rl.source='train' GROUP BY rl.card_id "
+            "ORDER BY MIN(rl.review_datetime) DESC LIMIT 1", (rep,)).fetchone()
+        if last is not None and last[0] in chunk:
+            same = [c for c in ready_cards if chunk.get(c["position_hash"]) == chunk[last[0]]]
+            if same:
+                return same[0]
+        return ready_cards[0]
 
     def _session_seen(self, session_id: int) -> set[int]:
         return {r[0] for r in self.con.execute(
@@ -54,12 +109,11 @@ class DrillManager:
             (session_id,))}
 
     def _extend_below(self, rep: str, node_id: int, rng: random.Random,
-                      allow_new: bool) -> list[int]:
+                      started: set[int], max_new: int, main_line: bool) -> list[int]:
         """Continue past the target node to a leaf; returns extra node ids.
-        With allow_new=False (daily new-card cap exhausted and extend_past_cap
-        off), the line is truncated before the first our-position that has no
-        card yet — the drill still plays out known territory but stops rather
-        than introducing more new material."""
+        Stops before an our-position not learned yet once max_new of them are
+        in the line (max_new=0: reviews never reach unseen moves). main_line:
+        opponent nodes take their most common reply instead of a sampled one."""
         kids = self.pack.children[rep]
         cols = self.pack.tree[rep]
         out = []
@@ -72,15 +126,16 @@ class DrillManager:
                 nid = ch[0]                      # single best_move edge
             else:
                 weights = [cols["reply_share"][c] or 0.0 for c in ch]
-                tot = sum(weights)
-                if tot <= 0:
+                if sum(weights) <= 0:
                     nid = ch[0]
+                elif main_line:
+                    nid = ch[max(range(len(ch)), key=lambda i: weights[i])]
                 else:
                     nid = rng.choices(ch, weights=weights, k=1)[0]
-            if (not allow_new and cols["is_our_turn"][nid]
-                    and sched.get_card_row(self.con, rep,
-                                           cols["position_hash"][nid]) is None):
-                return out                       # would introduce a new card
+            if cols["is_our_turn"][nid] and cols["position_hash"][nid] not in started:
+                if max_new <= 0:
+                    return out                   # would quiz a move never taught
+                max_new -= 1
             out.append(nid)
 
     def build_drill(self, rep: str, session_id: int, settings: dict) -> dict | None:
@@ -90,10 +145,13 @@ class DrillManager:
         path = self.pack.path_to_root(rep, target["canonical_node_id"])
         target_idx = len(path) - 1
         rng = random.Random(f"{session_id}:{target['position_hash']}")
-        cap_left = (sched.new_introduced_today(self.con, rep)
-                    < int(settings["new_per_day"]))
-        allow_new = bool(settings["extend_past_cap"]) or cap_left
-        path = path + self._extend_below(rep, path[-1], rng, allow_new)
+        started = self._started(rep)
+        if kind == "new":                        # the target itself is the first new card
+            cap_left = int(settings["new_per_day"]) - sched.new_introduced_today(self.con, rep)
+            ext = self._extend_below(rep, path[-1], rng, started, max(cap_left - 1, 0), True)
+        else:
+            ext = self._extend_below(rep, path[-1], rng, started, 0, False)
+        path = path + ext
 
         seen = self._session_seen(session_id)
         cols = self.pack.tree[rep]
@@ -112,13 +170,15 @@ class DrillManager:
                 "our": bool(cols["is_our_turn"][parent]),
                 "ph": cols["position_hash"][parent],   # position the move is played FROM
                 "epd": cols["epd"][parent],
+                "new": bool(cols["is_our_turn"][parent])
+                       and cols["position_hash"][parent] not in started,
             })
         while steps and not steps[-1]["our"]:
             steps.pop()                          # trailing opponent moves train nothing
         drill_id = uuid.uuid4().hex[:12]
         self.active[drill_id] = {
             "rep": rep, "session_id": session_id, "steps": steps,
-            "graded_plies": set(), "settings": settings,
+            "graded_plies": set(), "settings": settings, "start_index": start_idx,
             "target_hash": target["position_hash"], "kind": kind,
         }
         # prune finished/abandoned drills so the dict can't grow unbounded
@@ -128,7 +188,7 @@ class DrillManager:
         return {
             "drill_id": drill_id, "rep": rep, "kind": kind,
             "start_index": start_idx,            # steps[:start_index] = lead-in
-            "steps": [{"san": s["san"], "our": s["our"]} for s in steps],
+            "steps": [{"san": s["san"], "our": s["our"], "new": s["new"]} for s in steps],
             "target_ply": len(self.pack.path_to_root(rep, target["canonical_node_id"])) - 1,
         }
 
@@ -178,8 +238,11 @@ class DrillManager:
                     "n_correct=n_correct+? WHERE session_id=?",
                     (1 if correct else 0, st["session_id"]))
 
-        remaining_our = [i for i in range(ply_index + 1, len(steps)) if steps[i]["our"]]
-        done = correct and not remaining_our
+        # done once every our-step from the start is graded: in learn mode new
+        # moves are shown first and graded on the replay, out of line order
+        ungraded = [i for i in range(st["start_index"], len(steps))
+                    if steps[i]["our"] and i not in st["graded_plies"]]
+        done = correct and not ungraded
         if done:
             self.active.pop(drill_id, None)
         return {"correct": correct, "expected_san": step["san"],

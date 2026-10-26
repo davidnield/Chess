@@ -50,3 +50,7 @@ pre#packInfo { background: #fff; border: 1px solid #e2e2e2; padding: 0.75rem;
 #devNav { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.5rem; }
 #staleBanner { background: #fff4d6; border: 1px solid #e5c76b; padding: 0.5rem 1rem;
                margin-bottom: 1rem; border-radius: 4px; }
+#trainerBoard { position: relative; }
+#boardArrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+#boardArrow line { stroke: rgba(220, 120, 20, 0.8); }
+#boardArrow polygon { fill: rgba(220, 120, 20, 0.8); }

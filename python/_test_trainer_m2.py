@@ -183,8 +183,8 @@ check("starts at the seen ancestor (start_index=2)", d5["start_index"] == 2,
 check("line = e4, e5, Nf3", [s["san"] for s in d5["steps"]] == ["e4", "e5", "Nf3"],
       str(d5["steps"]))
 
-# ── M3: extend_past_cap truncation ─────────────────────────────────────────
-print("\nextend_past_cap:")
+# ── reviews never reach unseen moves; new lines are taught ─────────────────
+print("\nreviews vs new lines:")
 with con:
     con.execute("DELETE FROM review_log WHERE card_id IN "
                 "(SELECT card_id FROM cards WHERE rep='white' AND position_hash != ?)",
@@ -193,15 +193,35 @@ with con:
     con.execute("UPDATE cards SET due=? WHERE rep='white'",
                 ((now - timedelta(hours=1)).isoformat(),))
     con.execute("DELETE FROM session_positions")
-trunc_settings = dict(settings, new_per_day=0, extend_past_cap=False)
-d6 = dm.build_drill("white", sid, trunc_settings)
-check("truncated drill built", d6 is not None)
-check("line stops before un-carded our-node (only e4 graded)",
-      [s["san"] for s in d6["steps"]] == ["e4"], str(d6 and d6["steps"]))
-loose_settings = dict(settings, new_per_day=0, extend_past_cap=True)
-d7 = dm.build_drill("white", sid, loose_settings)
-check("extend_past_cap=True keeps the full line", len(d7["steps"]) == 3,
-      str(d7 and d7["steps"]))
+for cap in (0, 10):                          # the daily new cap never extends a review
+    d6 = dm.build_drill("white", sid, dict(settings, new_per_day=cap))
+    check(f"review drill built (cap {cap})", d6 is not None and d6["kind"] == "due")
+    check(f"review stops before the unlearned our-move (cap {cap})",
+          [s["san"] for s in d6["steps"]] == ["e4"], str(d6 and d6["steps"]))
+    check(f"review carries no new moves (cap {cap})", not any(s["new"] for s in d6["steps"]))
+
+# prerequisite: with reach ignored (a=0) the c5-node card outranks the root on
+# memo cost, but it is not offered until the root's move is learned
+with con:
+    con.execute("DELETE FROM review_log WHERE card_id IN "
+                "(SELECT card_id FROM cards WHERE rep='white')")
+    con.execute("DELETE FROM cards WHERE rep='white'")
+memo_first = dict(settings, reach_exp_a=0.0, new_per_day=10)
+top = sched.new_queue(con, pack, "white", memo_first)[0]
+check("memo-first priority puts the c5-node card on top",
+      top["position_hash"] == h("e4", "c5"), str(top["position_hash"]))
+dn = dm.build_drill("white", sid, memo_first)
+check("new drill starts with the root move, not the deeper card",
+      dn["kind"] == "new" and dn["steps"][0]["san"] == "e4" and dn["steps"][0]["new"],
+      str(dn["steps"]))
+check("new line follows the main reply and teaches both moves",
+      [(s["san"], s["new"]) for s in dn["steps"]] ==
+      [("e4", True), ("e5", False), ("Nf3", True)], str(dn["steps"]))
+r_a = dm.answer(dn["drill_id"], 2, "Nf3", fsrs)    # learn mode: graded out of line order
+check("not done while an our-move is ungraded", r_a["graded"] and not r_a["done"])
+r_b = dm.answer(dn["drill_id"], 0, "e4", fsrs)
+check("done once every our-move is graded", r_b["graded"] and r_b["done"])
+loose_settings = dict(settings, new_per_day=0)
 
 # ── regression: a due card reviewed today must not loop ────────────────────
 # 2026-10-25: after a line with misses, the whole line was in session_positions,
