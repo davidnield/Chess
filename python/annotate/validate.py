@@ -45,9 +45,19 @@ def _known_sans(f: dict) -> set[str]:
         for line in eng.get(key) or []:
             for s in line.get("pv", []):
                 add(s)
-    if eng.get("threat"):
-        for s in eng["threat"].get("pv", []):
+    for key in ("threat", "their_threat_if_we_pass"):
+        for s in (eng.get(key) or {}).get("pv", []):
             add(s)
+    add((f.get("engine_top") or {}).get("san"))
+    plan = f.get("plan") or {}
+    for s in plan.get("continuation", []):
+        add(s)
+    for b in plan.get("branches", []):
+        for s in b.get("after", []):
+            add(s)
+        add(b.get("reply")); add(b.get("our_answer")); add(b.get("main_line_answer"))
+    for r in plan.get("recurring_ideas", []):
+        add(r["token"])
     return out
 
 
@@ -71,6 +81,13 @@ def _known_pcts(f: dict) -> list[float]:
     for k in ("freq_in_ctx", "freq_global"):
         if th.get(k) is not None:
             out.append(round(float(th[k]) * 100, 1))
+    plan = f.get("plan") or {}
+    out += [float(b["share_pct"]) for b in plan.get("branches", []) if b.get("share_pct") is not None]
+    out += [float(r["reach_pct"]) for r in plan.get("recurring_ideas", [])]
+    # practical scores rendered as whole percentages (prompts._pct)
+    for d in [f.get("our_move") or {}, f.get("engine_top") or {}, *f.get("candidates", [])]:
+        if d.get("emp_score") is not None:
+            out.append(float(round(d["emp_score"] * 100)))
     return out
 
 
@@ -195,6 +212,45 @@ def validate(annotation: str, memory_rule: str | None, themes: list[str],
         if t not in idea:
             errors.append(f"theme '{t}' not among this position's idea tokens")
 
+    return errors
+
+
+def validate_chapter(text: str, facts_list: list[dict]) -> list[str]:
+    """A chapter intro may use any move grounded in any of its chunk's fact sheets
+    (or legal from one of their positions) and any of their percentages."""
+    known: set[str] = set()
+    pcts: list[float] = []
+    anchors: list[chess.Board] = []
+    for f in facts_list:
+        known |= _known_sans(f)
+        pcts += _known_pcts(f)
+        try:
+            b = _board_from_line(f["line"])
+            anchors.append(b.copy())
+            b.push_san(f["our_move"]["san"])
+            anchors.append(b)
+        except ValueError:
+            pass
+    cited = _cited_sans(text)
+    errors = []
+    for m in MOVE_RE.finditer(text):
+        s = m.group(0)
+        bare = s.rstrip("+#")
+        if bare in known or bare in cited or _is_piece_on_square(anchors, s):
+            continue
+        ok = False
+        for anc in anchors:
+            try:
+                anc.copy().push_san(s)
+                ok = True
+                break
+            except ValueError:
+                continue
+        if not ok:
+            errors.append(f"chapter: move '{s}' not in the fact sheets")
+    for m in PCT_RE.finditer(text):
+        if not any(abs(float(m.group(1)) - kp) <= 2.0 for kp in pcts):
+            errors.append(f"chapter: percentage {m.group(1)}% not supported")
     return errors
 
 

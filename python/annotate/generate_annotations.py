@@ -11,7 +11,8 @@ Resumable + skip-gated: a chunk is (re)generated only if any member's
 fact_hash changed, a member is new, the stored prompt_version differs, or
 --force. Interrupt any time (Ctrl-C or a usage limit) and rerun to continue.
 
-Writes trainer_data/annotations/annotations.parquet and raw responses under
+Writes trainer_data/annotations/annotations.parquet (one note per card),
+chapters.parquet (one intro per chunk, prompt v2+) and raw responses under
 trainer_data/annotations/runs/.
 
 Usage:
@@ -19,6 +20,9 @@ Usage:
     .venv\\Scripts\\python.exe -m annotate.generate_annotations
         [--data DIR] [--color white|black] [--model sonnet|opus]
         [--limit N]  (first N chunks — pilot) [--force] [--chunk CHUNK_ID]
+        [--prompt-out DIR]   write each eligible chunk's prompt to DIR/<chunk_id>.txt, no model
+        [--response-in FILE] (with --chunk) ingest a saved model response instead of calling
+                             claude: same validation and store; no retry round
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ import polars as pl
 
 from annotate.chunks import build_chunks
 from annotate.prompts import PROMPT_VERSION, build_chunk_prompt
-from annotate.validate import validate
+from annotate.validate import validate, validate_chapter
 from trainer_app.config import resolve_data_dir
 from trainer_app.pack import TrainingPack
 
@@ -47,6 +51,9 @@ if hasattr(sys.stdout, "reconfigure"):
 ANN_COLS = ["color", "position_hash", "chunk_id", "fact_hash", "prompt_version",
             "model", "annotation", "memory_rule", "themes", "flagged",
             "flag_reason", "created_at"]
+
+CHAPTER_COLS = ["color", "chunk_id", "chapter_line", "prompt_version", "model", "intro",
+                "flagged", "flag_reason", "created_at"]
 
 USAGE_LIMIT_MARKERS = ("usage limit", "rate limit", "quota", "exceeded your",
                        "please try again later")
@@ -132,6 +139,20 @@ def save_store(store: dict[int, dict], path: Path) -> None:
     tmp.replace(path)
 
 
+def load_chapters(path: Path) -> dict[str, dict]:
+    if not path.exists():
+        return {}
+    return {r["chunk_id"]: r for r in pl.read_parquet(path).iter_rows(named=True)}
+
+
+def save_chapters(chapters: dict[str, dict], path: Path) -> None:
+    df = pl.DataFrame(list(chapters.values()),
+                      schema={c: pl.Boolean if c == "flagged" else pl.Utf8 for c in CHAPTER_COLS})
+    tmp = path.with_suffix(".parquet.tmp")
+    df.write_parquet(tmp)
+    tmp.replace(path)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -144,7 +165,11 @@ def main() -> None:
     ap.add_argument("--timeout", type=int, default=900, help="per-chunk claude timeout (s)")
     ap.add_argument("--smallest", action="store_true",
                     help="pilot: process eligible chunks smallest-first")
+    ap.add_argument("--prompt-out", default=None, help="write prompts here instead of generating")
+    ap.add_argument("--response-in", default=None, help="ingest this response file (needs --chunk)")
     args = ap.parse_args()
+    if args.response_in and not args.chunk:
+        ap.error("--response-in needs --chunk")
 
     data_dir = resolve_data_dir(args.data)
     ann_dir = data_dir / "annotations"
@@ -152,6 +177,8 @@ def main() -> None:
     runs_dir.mkdir(parents=True, exist_ok=True)
     store_path = ann_dir / "annotations.parquet"
     store = load_store(store_path)
+    chapters_path = ann_dir / "chapters.parquet"
+    chapters = load_chapters(chapters_path)
     pack = TrainingPack(data_dir / "pack")
 
     colors = [args.color] if args.color else ["white", "black"]
@@ -171,7 +198,8 @@ def main() -> None:
         for ch in chunks:
             if args.chunk and ch.chunk_id != args.chunk:
                 continue
-            need = args.force
+            c_row = chapters.get(ch.chunk_id)
+            need = args.force or c_row is None or c_row["prompt_version"] != PROMPT_VERSION
             for h in ch.card_hashes:
                 s = store.get(h)
                 if (s is None or s["fact_hash"] != facts[h]["fact_hash"]
@@ -195,9 +223,15 @@ def main() -> None:
                 for j, s in enumerate(ch.chapter_sans))
             prompt = build_chunk_prompt(color, chapter, positions)
 
+            if args.prompt_out:
+                Path(args.prompt_out).mkdir(parents=True, exist_ok=True)
+                (Path(args.prompt_out) / f"{ch.chunk_id}.txt").write_text(prompt, encoding="utf-8")
+                print(f"  prompt -> {Path(args.prompt_out) / (ch.chunk_id + '.txt')}", flush=True)
+                continue
             try:
                 t0 = time.time()
-                text = run_claude(prompt, args.model, args.timeout)
+                text = (Path(args.response_in).read_text(encoding="utf-8") if args.response_in
+                        else run_claude(prompt, args.model, args.timeout))
             except UsageLimit as e:
                 print(f"  usage limit hit ({e}); saving and stopping — rerun to resume",
                       flush=True)
@@ -240,7 +274,12 @@ def main() -> None:
                 if errs:
                     retry_notes.append(f"{pid}: " + "; ".join(errs[:3]))
 
-            if retry_notes:
+            chapter_text = (parsed.get("chapter") or "").strip()
+            chapter_errs = (validate_chapter(chapter_text, [f for _, f in positions])
+                            if chapter_text else ["no chapter intro produced"])
+            retry_notes += chapter_errs
+
+            if retry_notes and not args.response_in:
                 fix = (prompt + "\n\nYour previous answer had these problems — "
                        "return the full corrected JSON for ALL ids, fixing:\n- "
                        + "\n- ".join(retry_notes[:20]))
@@ -248,6 +287,9 @@ def main() -> None:
                     text2 = run_claude(fix, args.model, args.timeout)
                     p2 = extract_json(text2)
                     if p2 and "annotations" in p2:
+                        if (p2.get("chapter") or "").strip():
+                            chapter_text = p2["chapter"].strip()
+                            chapter_errs = validate_chapter(chapter_text, [f for _, f in positions])
                         by_id = {a.get("id"): a for a in p2["annotations"]}
                         results = {}
                         for pid, f in positions:
@@ -275,8 +317,16 @@ def main() -> None:
                     "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 n_flagged += bool(errs)
+            chapters[ch.chunk_id] = {
+                "color": color, "chunk_id": ch.chunk_id, "chapter_line": chapter,
+                "prompt_version": PROMPT_VERSION, "model": args.model, "intro": chapter_text,
+                "flagged": bool(chapter_errs),
+                "flag_reason": "; ".join(chapter_errs[:3]) if chapter_errs else None,
+                "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            }
             total_gen += len(positions)
             save_store(store, store_path)
+            save_chapters(chapters, chapters_path)
             print(f"  [{ci}/{len(eligible)}] {ch.chunk_id}: {len(positions)} positions, "
                   f"{n_flagged} flagged ({time.time()-t0:.0f}s)", flush=True)
 

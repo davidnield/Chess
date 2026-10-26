@@ -10,6 +10,9 @@ concrete variations annotations quote, for exactly the annotation targets:
   mode "threat" — after our best_move, push a NULL move and analyse depth-Dt:
                   the concrete threat if the opponent does nothing. Skipped when
                   the after-position is in check (null move illegal).
+  mode "pass"   — the same null-move analysis at the card position: what the
+                  opponent would do if WE did nothing, i.e. what our move has to
+                  deal with. Skipped when we are in check.
 
 Targets are the union over both colors' fact sheets (deduped by EPD). Resumable:
 cache is keyed (epd, mode); skip anything already present at >= requested depth.
@@ -69,6 +72,8 @@ def collect_targets(data_dir: Path) -> list[tuple[str, str]]:
             if board is None:
                 continue
             here = board.epd()
+            if not board.is_check() and (here, "pass") not in seen:
+                seen.add((here, "pass")); targets.append((here, "pass"))
             board.push_san(f["our_move"]["san"])
             after = board.epd()
             for epd, mode in ((here, "here"), (after, "after")):
@@ -119,7 +124,7 @@ def save_cache(rows: list[dict], path: Path) -> None:
 def _analyse_one(engine, epd, mode, depth, threat_depth, multipv) -> list[dict]:
     board = chess.Board(epd)
     now = datetime.datetime.now().isoformat(timespec="seconds")
-    if mode == "threat":
+    if mode in ("threat", "pass"):
         board.push(chess.Move.null())
         info = engine.analyse(board, chess.engine.Limit(depth=threat_depth))
         pv = info.get("pv", [])
@@ -181,12 +186,12 @@ def main() -> None:
     targets = collect_targets(data_dir)
     cache = load_cache(cache_path)
     todo = [(e, m) for (e, m) in targets
-            if not any(r.get("depth", 0) >= (args.threat_depth if m == "threat" else args.depth)
+            if not any(r.get("depth", 0) >= (args.threat_depth if m in ("threat", "pass") else args.depth)
                        for r in cache.get((e, m), []))]
     if args.limit:
         todo = todo[:args.limit]
 
-    n_by_mode = {m: sum(1 for _, mm in targets if mm == m) for m in ("here", "after", "threat")}
+    n_by_mode = {m: sum(1 for _, mm in targets if mm == m) for m in ("here", "after", "threat", "pass")}
     print(f"Targets: {len(targets):,} ({n_by_mode}); cached: {len(targets)-len([t for t in targets if t in {(e,m) for e,m in todo}]):,}; "
           f"to analyse: {len(todo):,}", flush=True)
     if not todo:

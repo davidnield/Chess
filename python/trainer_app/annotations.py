@@ -16,9 +16,26 @@ import polars as pl
 class Annotations:
     def __init__(self, data_dir: Path):
         self.path = Path(data_dir) / "annotations" / "annotations.parquet"
+        self.chapters_path = self.path.with_name("chapters.parquet")
         self._mtime = None
         self._map: dict[tuple[str, int], dict] = {}
+        self._ch_mtime = None
+        self._chapters: dict[tuple[str, str], str] = {}
         self.reload()
+
+    def chapter(self, rep: str, chunk_id: str | None) -> str | None:
+        """The variation intro for a chunk (generate_annotations, prompt v2+);
+        flagged intros are withheld."""
+        p = self.chapters_path
+        if not p.exists():
+            return None
+        mt = p.stat().st_mtime
+        if mt != self._ch_mtime:
+            self._ch_mtime = mt
+            self._chapters = {(r["color"], r["chunk_id"]): r["intro"]
+                              for r in pl.read_parquet(p).iter_rows(named=True)
+                              if r["intro"] and not r["flagged"]}
+        return self._chapters.get((rep, chunk_id))
 
     def reload(self) -> None:
         if not self.path.exists():

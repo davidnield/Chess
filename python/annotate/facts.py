@@ -74,11 +74,14 @@ class EvalDB:
 class FactsBuilder:
     def __init__(self, pack: TrainingPack, color: str, *, evaldb: EvalDB,
                  rep_path: str, stats_path: str, prior_path: str | None,
-                 engine_cache_path: str | None, trainer_db_path: str | None):
+                 engine_cache_path: str | None, trainer_db_path: str | None,
+                 plan_tree=None, course_notes=None):
         self.pack = pack
         self.color = color
         self.evaldb = evaldb
         self.sign = 1.0 if color == "white" else 0.0   # our ES = es if white else 1-es
+        self.plan_tree = plan_tree              # annotate.plan.PlanTree over the full book
+        self.course_notes = course_notes        # annotate.course_notes.CourseNotes
 
         cards = pack.cards[color]
         card_hashes = set(cards["position_hash"].to_list())
@@ -91,11 +94,13 @@ class FactsBuilder:
             self._after[row["position_hash"]] = (b.epd(), zobrist_int64(b))
         after_hashes = {h for _, h in self._after.values()}
 
-        # rep metrics for card positions (semi-filtered scan of the 13M-row rep)
+        # rep metrics for card positions (semi-filtered scan of the 13M-row rep);
+        # budget books (the 2026-10 lifetime books) lack the Stage-3-only columns
+        have = set(pl.read_parquet_schema(rep_path))
         rep = (pl.scan_parquet(rep_path)
                  .filter(pl.col("position_hash").is_in(list(card_hashes)))
-                 .select(["position_hash", "value", "value_worst",
-                          "opponent_error", "forcingness", "cover_eff", "eval_score"])
+                 .select([c for c in ("position_hash", "value", "value_worst", "opponent_error",
+                                      "forcingness", "cover_eff", "eval_score") if c in have])
                  .collect())
         self.rep = {r["position_hash"]: r for r in rep.iter_rows(named=True)}
 
@@ -197,17 +202,45 @@ class FactsBuilder:
                      "pv": self._pv_to_sans(e, r["pv_uci"], lim)} for r in rows]
         here = mp(epd, "here", 8)
         after = mp(epd_after, "after", 8)
-        threat_rows = self.engine.get((epd_after, "threat"), [])
-        threat = None
-        if threat_rows:
-            r = threat_rows[0]
-            b = chess.Board(epd_after + " 0 1")
-            b.push(chess.Move.null())
-            threat = {"es": _r(self.our_es(r["cp"])),
-                      "pv": self._pv_to_sans(b.epd(), r["pv_uci"], 8)}
-        if not here and not after and threat is None:
+        threat = self._null_threat(epd_after, "threat", after, ours=True)
+        their = self._null_threat(epd, "pass", here, ours=False)
+        if not here and not after and threat is None and their is None:
             return None
-        return {"here_multipv": here, "after_move_multipv": after, "threat": threat}
+        return {"here_multipv": here, "after_move_multipv": after, "threat": threat,
+                "their_threat_if_we_pass": their}
+
+    def _null_threat(self, epd: str, mode: str, real: list[dict], ours: bool) -> dict | None:
+        """What the side NOT to move would do with a free move (Stage B's null-move
+        analyses): mode 'threat' after our move = OUR threat; mode 'pass' at the
+        card = what the opponent threatens, i.e. what our move has to deal with.
+        es_change_for_us = our expected score with the free move played minus with
+        best play (positive for our threat, negative for theirs)."""
+        rows = self.engine.get((epd, mode), [])
+        if not rows or not real or real[0]["es"] is None:
+            return None
+        r = rows[0]
+        b = chess.Board(epd + " 0 1")
+        b.push(chess.Move.null())
+        pv = self._pv_to_sans(b.epd(), r["pv_uci"], 8)
+        es = self.our_es(r["cp"])
+        if not pv or es is None:
+            return None
+        first = chess.Move.from_uci(r["pv_uci"].split()[0])
+        tags = []
+        if b.is_capture(first):
+            cap = b.piece_at(first.to_square)
+            tags.append(f"captures the {chess.piece_name(cap.piece_type) if cap else 'pawn'} on "
+                        f"{chess.square_name(first.to_square)}")
+        b.push(first)
+        if b.is_checkmate():
+            tags.append("mate")
+        elif b.is_check():
+            tags.append("check")
+        change = es - real[0]["es"]
+        return {"move": pv[0], "pv": pv, "what": tags,
+                "assessment_if_free_move": es_bucket(es),
+                "es_change_for_us": _r(change),
+                "real": (change if ours else -change) >= 0.08}
 
     # ── per-card fact sheet ─────────────────────────────────────────────────
 
@@ -314,6 +347,17 @@ class FactsBuilder:
 
         m = self.rep.get(h, {})
         engine = self._engine_block(epd, epd_after)
+        plan = self.plan_tree.plan(h) if self.plan_tree else None
+
+        # engine's first choice when it is not our move (our move is a practical choice)
+        engine_top = None
+        if engine and engine["here_multipv"] and engine["here_multipv"][0]["pv"]:
+            top = engine["here_multipv"][0]
+            if top["pv"][0].rstrip("+#") != best.rstrip("+#"):
+                trow = next((c for c in cand if c["san"].rstrip("+#") == top["pv"][0].rstrip("+#")), None)
+                engine_top = {"san": top["pv"][0], "assessment": top["assessment"],
+                              "games": trow["games"] if trow else 0,
+                              "emp_score": trow["emp_score"] if trow else None}
         facts = {
             "color": self.color,
             "line": self._line_str(sans),
@@ -336,6 +380,9 @@ class FactsBuilder:
                 "cover_eff": _r(m.get("cover_eff")),
             },
             "engine": engine,
+            "engine_top": engine_top,
+            "plan": plan,
+            "course_notes": self.course_notes.get(hash_after) if self.course_notes else [],
             "themes": themes,
             "past_mistakes": self.deviations.get(h, [])[:3],
         }

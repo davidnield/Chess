@@ -94,12 +94,44 @@ cards enter as new.
 - Only the repertoire's `best_move` is accepted; wrong answer = FSRS **Again**
   (shown the book move, play it to continue), first-try correct = **Good**.
 - Drills are full lines from move 1 — except when the line passes through a
-  position already shown **this session**, the drill starts there instead.
+  position already shown **this session**, the drill starts there instead (never
+  past the move being tested).
+- **New moves are taught before they are quizzed (learn mode).** A new line is
+  played twice: first each new move is shown as an arrow with its note and you
+  play it (not graded), then the line restarts and you play the new moves from
+  memory — those answers grade the cards. New cards come one variation at a
+  time: a card is offered only once the earlier moves on its line are learned,
+  and new material stays in the variation you are learning until it is done.
+  Review drills stop before any move you have not learned yet.
+- A card that is due again (a learning step after a miss) is always graded; the
+  once-per-day rule only stops incidental same-day repeats from counting.
 - Scheduling priority = `reach^a × (1+memo_cost)^b` — presets in Settings
   (frequency / value / balanced), plus new-cards-per-day cap, desired
   retention, and the once-per-day grading rule.
 - `review_log` is append-only and holds exact timestamps/ratings — a future
   FSRS-optimizer pass can retrain the scheduler parameters from it.
+
+## Plan notes (annotations)
+
+Notes and variation intros come from `python/annotate/` (each module's docstring
+has its CLI), run after every pack rebuild:
+
+```powershell
+$env:PYTHONPATH = "$PWD\python"
+.venv\Scripts\python.exe -m annotate.build_annotation_facts   # A: fact sheets (plans, branches, course notes)
+.venv\Scripts\python.exe -m annotate.engine_pass              # B: Stockfish (~20 min, resumable cache)
+.venv\Scripts\python.exe -m annotate.build_annotation_facts   # A again, now with the engine facts
+.venv\Scripts\python.exe -m annotate.generate_annotations     # C: notes via `claude -p` (resumable)
+```
+
+Facts are computed, not written: the plan is what the full lifetime book plays
+next along the most common replies (`annotate.plan`), the branches where a reply
+changes our answer, Stockfish's null-move threats (what our move deals with, what
+it threatens), and course comments from courses that keep following our line
+(`annotate.course_notes`). The model only phrases them, and `annotate.validate`
+flags a note that cites a move or percentage the facts don't contain (flagged
+notes and intros are not shown). Notes land in `annotations/annotations.parquet`,
+intros in `annotations/chapters.parquet`; the app hot-reloads both.
 
 ## Lichess deviations
 

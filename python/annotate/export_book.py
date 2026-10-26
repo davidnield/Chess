@@ -112,6 +112,11 @@ def build(data_dir: Path, color: str, include_flagged: bool) -> tuple[list, dict
              for r in pl.read_parquet(ann_dir / f"facts_{color}.parquet").iter_rows(named=True)}
     pack = TrainingPack(data_dir / "pack")
     chunks = build_chunks(pack, color)
+    intros = {}
+    if (ann_dir / "chapters.parquet").exists():      # variation intros (prompt v2+)
+        intros = {r["chunk_id"]: r["intro"]
+                  for r in pl.read_parquet(ann_dir / "chapters.parquet").iter_rows(named=True)
+                  if r["color"] == color and r["intro"] and (include_flagged or not r["flagged"])}
 
     def chapter_reach(ch):
         return facts.get(ch.card_hashes[0], {}).get("reach_pct", 0.0)
@@ -139,7 +144,7 @@ def build(data_dir: Path, color: str, include_flagged: bool) -> tuple[list, dict
             continue
         title = " ".join((f"{j//2+1}.{s}" if j % 2 == 0 else s)
                          for j, s in enumerate(ch.chapter_sans)) or "Starting position"
-        chapters.append({"title": title, "cards": cards})
+        chapters.append({"title": title, "intro": intros.get(ch.chunk_id), "cards": cards})
     return chapters, {"chapters": len(chapters), "cards": n_cards, "flagged": n_flagged}
 
 
@@ -401,6 +406,7 @@ CHAPTERS.forEach((chap,ci)=>{
   h2.className="chapter";
   h2.innerHTML=`<span class="cnum">Chapter ${ci+1} of ${CHAPTERS.length}</span>${chap.title}`;
   host.appendChild(h2);
+  if(chap.intro){const p=document.createElement("p");p.className="prose intro";p.textContent=chap.intro;host.appendChild(p);}
   chap.cards.forEach((d,i)=>{
     const el=document.createElement("section");
     el.className="card";
