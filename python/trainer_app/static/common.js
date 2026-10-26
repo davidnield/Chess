@@ -44,6 +44,7 @@ const SETTING_LABELS = {
   reach_exp_a: "Reach exponent (a)",
   memo_exp_b: "Memo-cost exponent (b)",
   new_per_day: "New cards per day",
+  drills_per_family: "Drills per opening family before moving on",
   desired_retention: "Desired retention",
   review_once_per_day: "Grade each card at most once per day",
   white_rep: "White repertoire parquet",

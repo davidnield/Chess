@@ -1,10 +1,12 @@
 """Drill construction: turn the next scheduled card into a full playable line.
 
 A drill is one root-to-leaf line through the pack tree:
-  target   = highest-priority due card, else the next new card under the daily
-             cap (see _pick_new: a card is offered only once every earlier
-             our-position on its line is learned, and new material stays in one
-             variation chunk until that chunk is done)
+  target   = drills come in BLOCKS by opening family (trainer_app.families): up to
+             `drills_per_family` drills from one family -- its due cards first,
+             then its new cards -- before moving to the family of the most urgent
+             card elsewhere. Within a family the highest-priority card goes first.
+             A new card is offered only once every earlier our-position on its
+             line is learned (_ready_new).
   path     = parent-pointer walk root -> target's canonical node
   start    = deepest path node, at or above the target, whose position was
              already shown this session (session_positions), else the root —
@@ -15,8 +17,11 @@ A drill is one root-to-leaf line through the pack tree:
              (due) drill samples opponent replies by reply_share (seeded RNG)
              and stops before any our-position not learned yet: reviews never
              quiz unseen moves. A NEW drill follows the most common reply and
-             may introduce new our-positions up to the daily cap; the client
-             teaches those (learn mode) before quizzing them.
+             teaches further new our-positions of the same family, up to the
+             daily cap, only while each is at least as important (priority) as
+             the family's best other unlearned card: breadth before depth, so a
+             common 4th-move alternative is learned before ply 20 of the main
+             line. The client teaches new moves (learn mode) before quizzing.
 
 Each payload step carries `new`: an our-move whose card has never been
 reviewed. The client shows those moves first and grades them on a replay from
@@ -39,6 +44,7 @@ from fsrs import Rating
 from annotate.chunks import build_chunks
 
 from . import scheduler as sched
+from .families import MIN_REACH, SPLIT_REACH, build_families
 from .pack import TrainingPack
 
 
@@ -47,19 +53,35 @@ class DrillManager:
         self.pack = pack
         self.con = con
         self.active: dict[str, dict] = {}      # drill_id -> state
-        self._chunk_ix: dict[str, dict[int, int]] = {}   # rep -> card hash -> chunk
+        self._chunk_ix: dict[str, dict[int, str]] = {}   # rep -> card hash -> chunk_id
+        self._family_ix: dict[str, dict[int, tuple[str, str]]] = {}  # hash -> (id, label)
+        self.split_reach, self.min_reach = SPLIT_REACH, MIN_REACH
+        self._block: dict[int, dict] = {}       # session_id -> {rep, family, n}
 
     # ── construction ────────────────────────────────────────────────────────
 
-    def _pick_target(self, rep: str, settings: dict) -> tuple[dict | None, str]:
-        due = sched.due_queue(self.con, self.pack, rep, settings)
-        if due:
-            return due[0], "due"
-        cap = int(settings["new_per_day"])
-        if sched.new_introduced_today(self.con, rep) < cap:
-            new = self._pick_new(rep, settings)
-            if new:
-                return new, "new"
+    def _pick_target(self, rep: str, settings: dict,
+                     session_id: int) -> tuple[dict | None, str]:
+        due = sched.due_queue(self.con, self.pack, rep, settings)          # priority order
+        cap_left = int(settings["new_per_day"]) - sched.new_introduced_today(self.con, rep)
+        new = self._ready_new(rep, settings) if cap_left > 0 else []
+        fam = self.family_of(rep)
+
+        def f(c):
+            return fam.get(c["position_hash"], ("", ""))[0]
+
+        blk = self._block.get(session_id)
+        cur = blk["family"] if blk and blk["rep"] == rep else None
+        if cur is not None and blk["n"] < int(settings["drills_per_family"]):
+            for pool, kind in ((due, "due"), (new, "new")):
+                c = next((c for c in pool if f(c) == cur), None)
+                if c is not None:
+                    return c, kind
+        # next block: the family of the most urgent card, another family if possible
+        for pool, kind in ((due, "due"), (new, "new")):
+            c = next((c for c in pool if f(c) != cur), pool[0] if pool else None)
+            if c is not None:
+                return c, kind
         return None, "empty"
 
     def _started(self, rep: str) -> set[int]:
@@ -67,19 +89,30 @@ class DrillManager:
         return {r[0] for r in self.con.execute(
             "SELECT position_hash FROM cards WHERE rep=? AND state IS NOT NULL", (rep,))}
 
-    def _chunk_of(self, rep: str) -> dict[int, int]:
+    def chunk_of(self, rep: str) -> dict[int, str]:
         if rep not in self._chunk_ix:
-            self._chunk_ix[rep] = {h: i for i, ch in enumerate(build_chunks(self.pack, rep))
+            self._chunk_ix[rep] = {h: ch.chunk_id for ch in build_chunks(self.pack, rep)
                                    for h in ch.card_hashes}
         return self._chunk_ix[rep]
 
-    def _pick_new(self, rep: str, settings: dict) -> dict | None:
-        """Next new card: only one whose earlier our-positions are all learned
-        (or suspended), preferring the variation chunk of the most recently
-        introduced card, so a variation is learned through before the next."""
-        new = sched.new_queue(self.con, self.pack, rep, settings)   # priority order
+    def family_of(self, rep: str) -> dict[int, tuple[str, str]]:
+        """Card hash -> (family_id, label), by the card's canonical node."""
+        if rep not in self._family_ix:
+            node_fam = {n: (f.family_id, f.label)
+                        for f in build_families(self.pack, rep, self.split_reach, self.min_reach)
+                        for n in f.nodes}
+            self._family_ix[rep] = {
+                r["position_hash"]: node_fam[r["canonical_node_id"]]
+                for r in self.pack.cards[rep].iter_rows(named=True)
+                if r["canonical_node_id"] in node_fam}
+        return self._family_ix[rep]
+
+    def _ready_new(self, rep: str, settings: dict) -> list[dict]:
+        """New cards, priority order, whose earlier our-positions on the line are
+        all learned (or suspended): never a move whose lead-up was never taught."""
+        new = sched.new_queue(self.con, self.pack, rep, settings)
         if not new:
-            return None
+            return []
         done = self._started(rep) | {r[0] for r in self.con.execute(
             "SELECT position_hash FROM cards WHERE rep=? AND suspended=1", (rep,))}
         cols = self.pack.tree[rep]
@@ -89,19 +122,7 @@ class DrillManager:
             return all(cols["position_hash"][n] in done
                        for n in path if cols["is_our_turn"][n])
 
-        ready_cards = [c for c in new if ready(c)]
-        if not ready_cards:
-            return new[0]
-        chunk = self._chunk_of(rep)
-        last = self.con.execute(
-            "SELECT c.position_hash FROM review_log rl JOIN cards c ON c.card_id=rl.card_id "
-            "WHERE c.rep=? AND rl.source='train' GROUP BY rl.card_id "
-            "ORDER BY MIN(rl.review_datetime) DESC LIMIT 1", (rep,)).fetchone()
-        if last is not None and last[0] in chunk:
-            same = [c for c in ready_cards if chunk.get(c["position_hash"]) == chunk[last[0]]]
-            if same:
-                return same[0]
-        return ready_cards[0]
+        return [c for c in new if ready(c)]
 
     def _session_seen(self, session_id: int) -> set[int]:
         return {r[0] for r in self.con.execute(
@@ -109,10 +130,10 @@ class DrillManager:
             (session_id,))}
 
     def _extend_below(self, rep: str, node_id: int, rng: random.Random,
-                      started: set[int], max_new: int, main_line: bool) -> list[int]:
+                      started: set[int], new_ok, main_line: bool) -> list[int]:
         """Continue past the target node to a leaf; returns extra node ids.
-        Stops before an our-position not learned yet once max_new of them are
-        in the line (max_new=0: reviews never reach unseen moves). main_line:
+        Stops before an our-position not learned yet unless new_ok(hash) admits
+        it (reviews admit none: they never reach unseen moves). main_line:
         opponent nodes take their most common reply instead of a sampled one."""
         kids = self.pack.children[rep]
         cols = self.pack.tree[rep]
@@ -133,24 +154,58 @@ class DrillManager:
                 else:
                     nid = rng.choices(ch, weights=weights, k=1)[0]
             if cols["is_our_turn"][nid] and cols["position_hash"][nid] not in started:
-                if max_new <= 0:
+                if not new_ok(cols["position_hash"][nid]):
                     return out                   # would quiz a move never taught
-                max_new -= 1
             out.append(nid)
 
     def build_drill(self, rep: str, session_id: int, settings: dict) -> dict | None:
-        target, kind = self._pick_target(rep, settings)
+        target, kind = self._pick_target(rep, settings, session_id)
         if target is None:
             return None
+        fam = self.family_of(rep)
+        fam_id, fam_label = fam.get(target["position_hash"], ("", ""))
+        blk = self._block.get(session_id)
+        if not blk or blk["rep"] != rep or blk["family"] != fam_id:
+            blk = self._block[session_id] = {"rep": rep, "family": fam_id, "n": 0}
+        blk["n"] += 1
         path = self.pack.path_to_root(rep, target["canonical_node_id"])
         target_idx = len(path) - 1
         rng = random.Random(f"{session_id}:{target['position_hash']}")
         started = self._started(rep)
-        if kind == "new":                        # the target itself is the first new card
-            cap_left = int(settings["new_per_day"]) - sched.new_introduced_today(self.con, rep)
-            ext = self._extend_below(rep, path[-1], rng, started, max(cap_left - 1, 0), True)
+        if kind == "new":
+            # breadth before depth: go on teaching down this line only while the
+            # next new move matters as much as the family's best other unlearned card
+            # (competitors = the family's other unlearned cards whose lead-up is
+            # learned or taught by this very line, so 2...d6 competes with the
+            # 3.Bc4 line once 2.Nf3 is in it)
+            fam_new = [c for c in sched.new_queue(self.con, self.pack, rep, settings)
+                       if fam.get(c["position_hash"], ("",))[0] == fam_id]
+            prio = {c["position_hash"]: c["priority"] for c in fam_new}
+            cols0 = self.pack.tree[rep]
+            taught = started | {target["position_hash"]} | {r[0] for r in self.con.execute(
+                "SELECT position_hash FROM cards WHERE rep=? AND suspended=1", (rep,))}
+            budget = [int(settings["new_per_day"])
+                      - sched.new_introduced_today(self.con, rep) - 1]   # target counts
+
+            def unlocked(c: dict) -> bool:
+                path = self.pack.path_to_root(rep, c["canonical_node_id"])[:-1]
+                return all(cols0["position_hash"][n] in taught
+                           for n in path if cols0["is_our_turn"][n])
+
+            def new_ok(h: int) -> bool:
+                if budget[0] <= 0 or h not in prio:          # cap reached / other family
+                    return False
+                bar = max((c["priority"] for c in fam_new
+                           if c["position_hash"] not in taught and c["position_hash"] != h
+                           and unlocked(c)), default=0.0)
+                if prio[h] < bar:
+                    return False
+                budget[0] -= 1
+                taught.add(h)
+                return True
+            ext = self._extend_below(rep, path[-1], rng, started, new_ok, True)
         else:
-            ext = self._extend_below(rep, path[-1], rng, started, 0, False)
+            ext = self._extend_below(rep, path[-1], rng, started, lambda h: False, False)
         path = path + ext
 
         seen = self._session_seen(session_id)
@@ -190,6 +245,8 @@ class DrillManager:
             "start_index": start_idx,            # steps[:start_index] = lead-in
             "steps": [{"san": s["san"], "our": s["our"], "new": s["new"]} for s in steps],
             "target_ply": len(self.pack.path_to_root(rep, target["canonical_node_id"])) - 1,
+            "family": fam_label, "family_drill": blk["n"],
+            "drills_per_family": int(settings["drills_per_family"]),
         }
 
     # ── answering ───────────────────────────────────────────────────────────

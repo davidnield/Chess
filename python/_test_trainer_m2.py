@@ -77,6 +77,7 @@ con = db.connect(tmp)
 settings = config.get_settings(con)
 fsrs = sched.make_scheduler(settings)
 dm = DrillManager(pack, con)
+dm.split_reach = 1.01    # one family: these checks are about lines; blocks: _test_trainer_families
 with con:
     cur = con.execute("INSERT INTO sessions(rep, started_at) VALUES('white', ?)",
                       (sched.utcnow_iso(),))
@@ -214,6 +215,9 @@ dn = dm.build_drill("white", sid, memo_first)
 check("new drill starts with the root move, not the deeper card",
       dn["kind"] == "new" and dn["steps"][0]["san"] == "e4" and dn["steps"][0]["new"],
       str(dn["steps"]))
+check("breadth first: Nf3 is not taught while the c5-node card outranks it",
+      [(s["san"], s["new"]) for s in dn["steps"]] == [("e4", True)], str(dn["steps"]))
+dn = dm.build_drill("white", sid, dict(settings, new_per_day=10))   # reach-weighted: Nf3 first
 check("new line follows the main reply and teaches both moves",
       [(s["san"], s["new"]) for s in dn["steps"]] ==
       [("e4", True), ("e5", False), ("Nf3", True)], str(dn["steps"]))

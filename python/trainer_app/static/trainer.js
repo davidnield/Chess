@@ -171,10 +171,13 @@
     showAnnotation(null);
     const nNew = drill.steps.filter((s, i) => s.new && i >= drill.start_index).length;
     phase = nNew ? "show" : "drill";
+    $("chapterText").textContent = drill.chapter || "";
+    $("chapterBox").hidden = !drill.chapter;
     game = new Chess();
     board.orientation(drill.rep);
     board.position("start", false);
     $("drillInfo").textContent =
+      (drill.family ? `${drill.family} · drill ${drill.family_drill} of ${drill.drills_per_family}\n` : "") +
       (nNew ? `NEW line · ${nNew} new move${nNew > 1 ? "s" : ""} to learn` : "review") +
       ` · ${drill.steps.length} plies` +
       (drill.start_index > 0 ? ` · starting mid-line (ply ${drill.start_index + 1})` : "");
@@ -330,6 +333,7 @@
     teaching = false;
     clearArrow();
     showAnnotation(null);
+    $("chapterBox").hidden = true;
     $("startSession").textContent = "Start session";
     $("endSession").disabled = true;
     $("drillInfo").textContent = "";

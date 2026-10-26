@@ -26,6 +26,7 @@ DEFAULTS: dict[str, object] = {
     "reach_exp_a": 1.0,
     "memo_exp_b": 1.0,
     "new_per_day": 10,
+    "drills_per_family": 3,         # drills from one opening family before the next
     "desired_retention": 0.9,
     "review_once_per_day": True,
     # Explorer source parquets (canonical pipeline outputs; may be absent on
