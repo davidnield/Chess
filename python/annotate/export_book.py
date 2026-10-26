@@ -100,7 +100,8 @@ def _card(facts: dict) -> dict | None:
     return {"line": line, "move": our_san, **geo,
             "verdict": verdict or "playable", "win": win,
             "reach_pct": facts.get("reach_pct", 0.0),  # already a percentage (0-100)
-            "candidates": cand_rows, "replies": reply_rows}
+            "candidates": cand_rows, "replies": reply_rows,
+            "unseen": facts.get("replies_unseen")}
 
 
 def build(data_dir: Path, color: str, include_flagged: bool) -> tuple[list, dict]:
@@ -382,6 +383,13 @@ function candTable(cands){
     <th class="l">move</th><th>ES</th><th class="l"></th><th>Δ vs ours</th>
     <th>games</th><th class="l">verdict</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+function unseenLine(u){
+  if(!u) return "";
+  const parts=[];
+  if(u.other_pct) parts.push(`${u.other_pct.toFixed(1)}% spread over ${u.other_moves} rarer move${u.other_moves>1?"s":""}, each below the pool's game floor`);
+  if(u.ended_pct) parts.push(`${u.ended_pct.toFixed(1)}% of games ended here`);
+  return parts.length?`<div style="color:var(--muted);margin-top:.3rem">Shares are of all ${u.games_total.toLocaleString()} games: plus ${parts.join("; ")}.</div>`:"";
+}
 function replyTable(reps){
   if(!reps.length) return `<div class="g-h">Opponent replies</div>
     <div style="color:var(--muted)">Terminal line — no further opponent branch in book.</div>`;
@@ -430,7 +438,7 @@ CHAPTERS.forEach((chap,ci)=>{
         <div class="g-body">
           <div class="g-h">Candidate moves (what the model could choose from)</div>
           ${candTable(d.candidates)}
-          ${replyTable(d.replies)}
+          ${replyTable(d.replies)}${unseenLine(d.unseen)}
         </div>
       </details>`;
     host.appendChild(el);

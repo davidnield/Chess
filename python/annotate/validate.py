@@ -94,6 +94,8 @@ def _known_pcts(f: dict) -> list[float]:
     plan = f.get("plan") or {}
     out += [float(b["share_pct"]) for b in plan.get("branches", []) if b.get("share_pct") is not None]
     out += [float(r["reach_pct"]) for r in plan.get("recurring_ideas", [])]
+    ru = f.get("replies_unseen") or {}
+    out += [float(ru[k]) for k in ("other_pct", "ended_pct") if ru.get(k)]
     for fu in (f.get("book_end") or {}).get("what_players_did_next", []):
         out.append(float(fu["reply_share_pct"]))
         out += [float(x["share_pct"]) for x in fu["our_moves"]]
@@ -187,6 +189,11 @@ def _material_errors(text: str, f: dict) -> list[str]:
     errs = []
     for m in MATERIAL_RE.finditer(text):
         g = m.groups()
+        # "giving up the queen", "picks up a pawn": a phrasal verb, not a balance
+        if re.search(r"\b(?:giv(?:e|es|ing)|gave|given|pick(?:s|ing|ed)?|offer(?:s|ing|ed)?|"
+                     r"snap(?:s|ping|ped)?|cough(?:s|ing|ed)?|hand(?:s|ing|ed)?|"
+                     r"set(?:s|ting)?)\s*$", text[:m.start()], re.I):
+            continue
         if g[6]:                                          # material is level
             ok = bal == 0
         else:
@@ -205,6 +212,25 @@ def _material_errors(text: str, f: dict) -> list[str]:
             errs.append(f"material claim '{m.group(0)}' contradicts the board "
                         f"({pos['material']['summary']})")
     return errs
+
+
+ONLY_RE = re.compile(
+    r"\b(?:only (?:practical |real |serious |sensible |active )?(?:try|reply|option|move|defen[cs]e)"
+    r"|(?:always|invariably) (?:played|plays|answers|replies|chosen))\b", re.I)
+
+
+def _only_errors(text: str, f: dict) -> list[str]:
+    """'White's only practical try' needs the facts to show no alternative: no other
+    listed reply, no rarer replies pooled below the floor, and at most one engine
+    reply. (Our own book move being the only one we play is not such a claim, so
+    the check only fires when the facts do show alternatives.)"""
+    alternatives = (len(f.get("replies") or []) > 1
+                    or bool((f.get("replies_unseen") or {}).get("other_pct"))
+                    or len(((f.get("engine") or {}).get("after_move_multipv")) or []) > 1)
+    if not alternatives:
+        return []
+    return [f"claims '{m.group(0)}' but the facts show other replies"
+            for m in ONLY_RE.finditer(text)]
 
 
 def validate(annotation: str, memory_rule: str | None, themes: list[str],
@@ -260,6 +286,7 @@ def validate(annotation: str, memory_rule: str | None, themes: list[str],
             errors.append(f"percentage {v}% not supported by fact sheet")
 
     errors += _material_errors(text, f)
+    errors += _only_errors(text, f)
 
     idea = {f["our_move"]["idea_token"], f.get("themes", {}).get("token")}
     idea.discard(None)

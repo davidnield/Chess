@@ -22,6 +22,7 @@ import chess
 import numpy as np
 import polars as pl
 
+from annotate.aux_mass import load_aux_mass, unseen_games
 from stage3_backwards_induction import LICHESS_CP_SCALE, idea_token
 from trainer_app.pack import TrainingPack
 from zobrist import zobrist_int64
@@ -53,12 +54,45 @@ _PLURAL = {"pawn": "pawns", "knight": "knights", "bishop": "bishops", "rook": "r
            "queen": "queen"}
 
 
-def _material_words(diff: int) -> str:
-    if diff == 0:
+_NUM = {1: "a", 2: "two", 3: "three", 4: "four"}
+
+
+def _units(n: int, unit: str) -> str:
+    word = _NUM.get(n, str(n))
+    return f"{word} {unit}" if n == 1 else f"{word} {unit}s"
+
+
+def material_words(b: chess.Board, us: chess.Color) -> str:
+    """The imbalance as a player says it: 'we are a pawn down', 'we are a piece up
+    for a pawn', 'we are the exchange and a pawn down', 'we have two pieces for a
+    rook and a pawn', 'material is level'. Minor pieces count as one kind."""
+    def n(pt, c):
+        return len(b.pieces(pt, c))
+    d = {"queen": n(chess.QUEEN, us) - n(chess.QUEEN, not us),
+         "rook": n(chess.ROOK, us) - n(chess.ROOK, not us),
+         "piece": (n(chess.KNIGHT, us) + n(chess.BISHOP, us)
+                   - n(chess.KNIGHT, not us) - n(chess.BISHOP, not us)),
+         "pawn": n(chess.PAWN, us) - n(chess.PAWN, not us)}
+    exchange = None
+    if d["rook"] == 1 and d["piece"] == -1:
+        exchange, d["rook"], d["piece"] = "up", 0, 0
+    elif d["rook"] == -1 and d["piece"] == 1:
+        exchange, d["rook"], d["piece"] = "down", 0, 0
+    ours = [_units(v, k) for k, v in d.items() if v > 0]
+    theirs = [_units(-v, k) for k, v in d.items() if v < 0]
+    if exchange == "up":
+        ours.insert(0, "the exchange")
+    elif exchange == "down":
+        theirs.insert(0, "the exchange")
+    if not ours and not theirs:
         return "material is level"
-    n = abs(diff)
-    amount = "a pawn" if n == 1 else f"{n} pawns' worth"
-    return f"we are {amount} {'up' if diff > 0 else 'down'}"
+    if ours and not theirs:
+        return f"we are {' and '.join(ours)} up"
+    if theirs and not ours:
+        return f"we are {' and '.join(theirs)} down"
+    if len(ours) == 1 and ours[0] in ("a piece", "a rook", "a queen", "the exchange"):
+        return f"we are {ours[0]} up for {' and '.join(theirs)}"
+    return f"we have {' and '.join(ours)} for {' and '.join(theirs)}"
 
 
 def board_facts(b: chess.Board, us: chess.Color) -> dict:
@@ -116,7 +150,7 @@ def board_facts(b: chess.Board, us: chess.Color) -> dict:
         return out
 
     return {"material": {"ours": describe(us), "theirs": describe(not us),
-                         "balance_for_us": diff, "summary": _material_words(diff)},
+                         "balance_for_us": diff, "summary": material_words(b, us)},
             "our_king": king(us), "their_king": king(not us),
             "our_undeveloped": undeveloped,
             "our_loose_pieces": loose(us), "their_loose_pieces": loose(not us)}
@@ -206,6 +240,9 @@ class FactsBuilder:
             for h in deeper:
                 if h in self.edges:
                     self.edges[h].sort(key=lambda e: -e["total"])
+        # games the surviving edges don't show (below the floor / ended / cut):
+        # shares are taken over every game that reached the position
+        self.aux = load_aux_mass(stats_path, set(want) | deeper)
 
         # theme prior: ctx -> token -> game_freq
         self.prior: dict[str, dict[str, float]] = defaultdict(dict)
@@ -406,7 +443,8 @@ class FactsBuilder:
         # opponent replies after our move: share, quality, our booked answer
         replies = []
         edges_after = self.edges.get(hash_after, [])
-        total_after = sum(e["total"] for e in edges_after) or 1
+        aux_after = self.aux.get(hash_after)
+        total_after = (sum(e["total"] for e in edges_after) + unseen_games(aux_after)) or 1
         reply_es = []
         for e in edges_after:
             cp = self.evaldb.get_cp(e["child_hash"]) if e["child_hash"] is not None else None
@@ -474,7 +512,8 @@ class FactsBuilder:
             followups = []
             for e in edges_after[:3]:
                 nxt = self.edges.get(e["child_hash"], []) if e["child_hash"] is not None else []
-                tot = sum(x["total"] for x in nxt) or 1
+                tot = (sum(x["total"] for x in nxt)
+                       + unseen_games(self.aux.get(e["child_hash"]))) or 1
                 followups.append({
                     "reply": e["move_san"], "reply_share_pct": _r(e["total"] / total_after * 100, 1),
                     "our_moves": [{"san": x["move_san"], "share_pct": _r(x["total"] / tot * 100, 1),
@@ -509,6 +548,13 @@ class FactsBuilder:
             },
             "candidates": candidates,
             "replies": replies,
+            # the rest of the games after our move: replies each below the pool's
+            # floor (pooled, so no single move is named) and games that ended
+            "replies_unseen": ({"other_moves": aux_after["other_moves"],
+                                "other_pct": _r(aux_after["other"] / total_after * 100, 1),
+                                "ended_pct": _r(aux_after["ended"] / total_after * 100, 1),
+                                "games_total": int(total_after)}
+                               if aux_after and unseen_games(aux_after) else None),
             "node_metrics": {
                 "opponent_error": _r(m.get("opponent_error")),
                 "forcingness": _r(m.get("forcingness")),

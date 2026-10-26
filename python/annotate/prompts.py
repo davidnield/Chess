@@ -16,7 +16,7 @@ it is stored per annotation and forces regeneration of stale-version rows.
 
 from __future__ import annotations
 
-PROMPT_VERSION = "v3"
+PROMPT_VERSION = "v4"
 
 SYSTEM = """\
 You are writing study notes for a personal chess opening repertoire. The reader \
@@ -62,9 +62,13 @@ they also appear elsewhere in the fact sheet.
 - Describe evaluations in words ("slightly better", "winning"); NEVER give \
 centipawns or decimal evaluations.
 - Material: say who is up or down ONLY as the "Board after our move" line \
-states it. When we are winning despite being level or behind on material, \
-explain why from the facts (a loose or forked piece, a threat, the king) \
-instead of inventing a material edge.
+states it, in its own words ("a piece up for a pawn", "the exchange down"). \
+When we are winning despite being level or behind on material, explain why \
+from the facts (a loose or forked piece, a threat, the king) instead of \
+inventing a material edge.
+- Never call a reply the only one, or say it is always played, unless the facts \
+list no other replies, no rarer moves and no engine alternatives: a reply's \
+share is of ALL games that reached the position.
 - Use move numbers as given in the fact sheet's lines (e.g. "6.exd5", "6...Na5").
 - Be concrete; avoid empty phrases like "this is a good move" or "clearly best".
 
@@ -193,7 +197,21 @@ def render_position(pid: str, f: dict) -> str:
             if conc is not None and conc >= 3.0:
                 piece += f", a slip that leaves us {_assess_phrase(r['assessment'])}"
             rp.append(piece)
-        L.append("- Their replies to our move (by frequency): " + "; ".join(rp) + ".")
+        L.append("- Their replies to our move (share of all games): " + "; ".join(rp) + ".")
+    ru = f.get("replies_unseen")
+    if ru:
+        rest = []
+        if ru["other_pct"]:
+            rest.append(f"{ru['other_pct']}% spread over {ru['other_moves']} other moves, "
+                        f"each too rare to list")
+        if ru["ended_pct"]:
+            rest.append(f"{ru['ended_pct']}% of games ended here")
+        if rest:
+            L.append(f"- The rest of the {ru['games_total']:,} games: " + "; ".join(rest) + ".")
+    best_replies = [ln for ln in (eng.get("after_move_multipv") or []) if ln.get("pv")]
+    if best_replies:
+        L.append("- Their best replies by the engine: " + ", ".join(
+            f"{ln['pv'][0]} ({_assess_phrase(ln['assessment'])} for us)" for ln in best_replies) + ".")
 
     be = f.get("book_end")
     if be:

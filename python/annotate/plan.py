@@ -25,6 +25,7 @@ from collections import defaultdict
 import chess
 import polars as pl
 
+from annotate.aux_mass import load_aux_mass, unseen_games
 from stage3_backwards_induction import idea_token
 from trainer_app.build_training_pack import build_tree
 from zobrist import zobrist_int64
@@ -61,6 +62,14 @@ class PlanTree:
             edges[p].append((m, c, t))
         for v in edges.values():
             v.sort(key=lambda e: -e[2])
+        # a reply's share is over every game at the position, including replies
+        # below the pool's floor and games that ended there (annotate.aux_mass);
+        # the tree's reply_share only sees the surviving edges
+        aux = load_aux_mass(stats_path, opp)
+        self.share_scale = {}
+        for h, v in edges.items():
+            seen = sum(t for _, _, t in v)
+            self.share_scale[h] = seen / (seen + unseen_games(aux.get(h))) if seen else 1.0
         rows = build_tree(best, edges, color, min_reach=0.0,
                           max_branches=max_branches, max_ply=max_ply)
         self.rows = rows
@@ -109,13 +118,15 @@ class PlanTree:
             main = self._main_reply(on)
             main_next = self._our_next(main) if main is not None else None
             for c in sorted(self.kids.get(on, []), key=lambda c: -(rows[c]["reply_share"] or 0)):
-                if c == main or (rows[c]["reply_share"] or 0) < min_share:
+                if c == main or ((rows[c]["reply_share"] or 0)
+                                 * self.share_scale.get(rows[on]["position_hash"], 1.0)) < min_share:
                     continue
                 ans = self._our_next(c)
                 branches.append({
                     "after": cont[:2 * k + 1],            # our move ... up to this reply
                     "reply": rows[c]["move_san"],
-                    "share_pct": _r((rows[c]["reply_share"] or 0) * 100, 1),
+                    "share_pct": _r((rows[c]["reply_share"] or 0) * 100
+                                    * self.share_scale.get(rows[on]["position_hash"], 1.0), 1),
                     "our_answer": ans,
                     "main_line_answer": main_next,
                     "plan_changes": (ans or "").rstrip("+#") != (main_next or "").rstrip("+#"),

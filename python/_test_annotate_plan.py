@@ -77,6 +77,16 @@ check("recurring ideas are reach-weighted",
       ideas == {"Nf3": 70.0, "Bc4": 56.0, "Nc3": 30.0}, str(ideas))
 check("an opponent-turn position has no plan", PlanTree("white", wb, ws).plan(h("e4")) is None)
 
+print("\nshares count the games below the floor (aux sidecar):")
+pool = tmp / "position_stats_t.parquet"
+pl.read_parquet(ws).write_parquet(pool)
+zero = {c: [0] for c in ("term_normal_total", "term_flag_total", "term_other_total", "horizon_total")}
+pl.DataFrame({"position_hash": [h("e4")], "other_total": [25], "other_edges": [4], **zero}) \
+  .write_parquet(tmp / "position_stats_aux_t.parquet")      # 100 surviving + 25 below the floor
+pa = PlanTree("white", wb, str(pool)).plan(h())
+c5 = next(b for b in pa["branches"] if b["reply"] == "c5")
+check("1...c5 is 30 of 125 games, not 30 of 100", c5["share_pct"] == 24.0, str(c5))
+
 print("\nblack: the start position is the opponent's turn:")
 bb, bs = write_inputs(tmp, "black", {("e4",): "e5", ("d4",): "d5"},
                       [((), "e4", 60), ((), "d4", 40)])
@@ -128,6 +138,8 @@ check("material claim contradicting the board is flagged",
       any("material claim" in e for e in validate("We are a piece up and winning.", None, [], pos_facts)))
 check("a claim matching the board passes",
       validate("We are a pawn down, but the rook on a1 is hanging.", None, [], pos_facts) == [])
+check("'giving up the queen' is not a material claim",
+      validate("The engine's reply is giving up the queen to stop the fork.", None, [], pos_facts) == [])
 check("'they are a pawn up' is read from their side",
       validate("They are a pawn up, but their king is stuck.", None, [], pos_facts) == [])
 
