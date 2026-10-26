@@ -61,6 +61,18 @@ def create_app(data_dir: Path, remote: bool = False, port: int = 8321) -> FastAP
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+    @app.middleware("http")
+    async def revalidate_static(request, call_next):
+        # Without a Cache-Control header browsers cache the page's scripts
+        # heuristically (for days), so after an update a refresh could pair the
+        # new index.html with an old trainer.js. no-cache = revalidate each load
+        # (a 304 when unchanged).
+        resp = await call_next(request)
+        p = request.url.path
+        if p == "/" or p.startswith("/static/"):
+            resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
     @app.get("/")
     def index():
         return FileResponse(STATIC_DIR / "index.html")

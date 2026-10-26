@@ -236,6 +236,9 @@ from trainer_app.routes import create_app
 
 app = create_app(tmp)                      # same tmp data dir (pack + DB)
 client = TestClient(app, base_url="http://127.0.0.1:8321", client=("127.0.0.1", 50000))  # this PC (trainer_app.security)
+for path in ("/", "/static/trainer.js"):
+    cc = client.get(path).headers.get("cache-control")
+    check(f"{path} revalidated on every load (no stale cached scripts)", cc == "no-cache", str(cc))
 r = client.get("/api/trainer/stats?rep=white")
 check("stats 200", r.status_code == 200, str(r.status_code))
 s = r.json()

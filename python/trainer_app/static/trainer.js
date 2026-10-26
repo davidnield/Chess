@@ -292,6 +292,7 @@
   }
   $("statsBox").addEventListener("toggle", (e) => { if (e.target.open) loadStats(); });
 
+  ensureBoard();                         // show the board before the first drill
   refreshStatus();
   window._trainerRefresh = refreshStatus;
 })();
