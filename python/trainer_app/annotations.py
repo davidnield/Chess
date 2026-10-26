@@ -55,7 +55,7 @@ class Annotations:
                 "flagged": bool(r["flagged"]),
             }
             for r in df.iter_rows(named=True)
-            if r["annotation"]           # skip empty/failed rows
+            if r["annotation"] and not r["flagged"]   # flagged = the validator found an error
         }
 
     def get(self, rep: str, position_hash: int) -> dict | None:

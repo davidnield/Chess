@@ -23,6 +23,7 @@ Usage:
         [--prompt-out DIR]   write each eligible chunk's prompt to DIR/<chunk_id>.txt, no model
         [--response-in FILE] (with --chunk) ingest a saved model response instead of calling
                              claude: same validation and store; no retry round
+        [--retry-flagged]    also regenerate chunks holding a flagged note or intro
 """
 
 from __future__ import annotations
@@ -167,6 +168,8 @@ def main() -> None:
                     help="pilot: process eligible chunks smallest-first")
     ap.add_argument("--prompt-out", default=None, help="write prompts here instead of generating")
     ap.add_argument("--response-in", default=None, help="ingest this response file (needs --chunk)")
+    ap.add_argument("--retry-flagged", action="store_true",
+                    help="also regenerate chunks that hold a flagged note or intro")
     args = ap.parse_args()
     if args.response_in and not args.chunk:
         ap.error("--response-in needs --chunk")
@@ -200,6 +203,9 @@ def main() -> None:
                 continue
             c_row = chapters.get(ch.chunk_id)
             need = args.force or c_row is None or c_row["prompt_version"] != PROMPT_VERSION
+            if args.retry_flagged and (c_row is not None and c_row["flagged"] or any(
+                    (store.get(h) or {}).get("flagged") for h in ch.card_hashes)):
+                need = True
             for h in ch.card_hashes:
                 s = store.get(h)
                 if (s is None or s["fact_hash"] != facts[h]["fact_hash"]

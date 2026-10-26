@@ -119,8 +119,12 @@ def render_position(pid: str, f: dict) -> str:
     if f.get("transpositions"):
         L.append(f"- Also reached via: {'; '.join(f['transpositions'])}.")
 
+    if f.get("our_move_mates"):
+        L.append(f"- {om['san']} IS CHECKMATE: say so and show how the mating net was "
+                 f"built in this line; nothing comes after it, so no plan and no "
+                 f"later moves.")
     pos = f.get("position_after_our_move")
-    if pos:
+    if pos and not f.get("our_move_mates"):
         m = pos["material"]
         parts = [f"material: we have {m['ours']}; they have {m['theirs']}; {m['summary']}"]
         ch = pos.get("material_change_by_our_move") or 0

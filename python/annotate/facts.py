@@ -499,11 +499,16 @@ class FactsBuilder:
         position = board_facts(b_after, us)
         position["material_change_by_our_move"] = (
             position["material"]["balance_for_us"] - board_facts(board, us)["material"]["balance_for_us"])
+        game_over = b_after.is_game_over()
+        if game_over and engine:
+            # nothing follows mate: a null-move "threat" or a plan here only misleads
+            engine = dict(engine, threat=None, their_threat_if_we_pass=None,
+                          after_move_multipv=[])
 
         # where the book ends: how play goes on (engine lines, our recurring moves
         # in them, what players did next) -- the note must leave a plan from here
         book_end = None
-        if plan is not None and len(plan.get("continuation", [])) <= 1:
+        if plan is not None and len(plan.get("continuation", [])) <= 1 and not game_over:
             lines = (engine or {}).get("after_move_multipv") or []
             ours: dict[str, int] = defaultdict(int)
             for ln in lines:
@@ -569,6 +574,8 @@ class FactsBuilder:
             "themes": themes,
             "past_mistakes": self.deviations.get(h, [])[:3],
         }
+        if b_after.is_checkmate():
+            facts["our_move_mates"] = True       # only when true: other fact hashes stay put
         return facts, engine is not None
 
 
