@@ -75,10 +75,13 @@
   async function startOrNext() {
     ensureBoard();
     if (sessionId === null) {
-      const r = await fetch("/api/trainer/session/start", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rep }),
-      }).then((x) => x.json());
+      let r;
+      try {
+        r = await api("/api/trainer/session/start", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rep }),
+        });
+      } catch (e) { showError(e.message); return; }
       sessionId = r.session_id;
       $("endSession").disabled = false;
       $("startSession").textContent = "Next drill";
@@ -86,16 +89,47 @@
     await nextDrill();
   }
 
+  // fetch + JSON with readable failures: a stopped server or an error reply
+  // must say so on screen, never leave the page silently waiting.
+  async function api(url, opts) {
+    let r;
+    try {
+      r = await fetch(url, opts);
+    } catch (e) {
+      throw Object.assign(new Error("Can't reach the trainer server — is it still running?"), { status: 0 });
+    }
+    let body = null;
+    try { body = await r.json(); } catch (e) { /* not JSON */ }
+    if (!r.ok) {
+      throw Object.assign(new Error((body && body.detail) || `trainer server error ${r.status}`),
+                          { status: r.status });
+    }
+    return body;
+  }
+
+  function showError(msg) {
+    const span = document.createElement("span");
+    span.className = "bad";
+    span.textContent = msg;
+    $("feedback").replaceChildren(span);
+  }
+
   async function nextDrill() {
     $("feedback").textContent = "";
-    const r = await fetch(`/api/trainer/drill?rep=${rep}&session_id=${sessionId}`);
-    if (r.status === 404) {
-      $("drillInfo").innerHTML = "<b>Queue empty 🎉</b> — no due or new cards right now.";
-      drill = null;
-      await refreshStatus();
+    let d;
+    try {
+      d = await api(`/api/trainer/drill?rep=${rep}&session_id=${sessionId}`);
+    } catch (e) {
+      if (e.status === 404) {
+        $("drillInfo").innerHTML = "<b>Queue empty 🎉</b> — no due or new cards right now.";
+        drill = null;
+        await refreshStatus();
+      } else {
+        showError(e.message);
+      }
       return;
     }
-    drill = await r.json();
+    drill = d;
     stepIdx = 0;
     awaiting = retrying = false;
     game = new Chess();
@@ -167,11 +201,27 @@
 
     awaiting = false;
     const duration = Math.round(performance.now() - moveStart);
-    fetch("/api/trainer/answer", {
+    const answered = drill;
+    api("/api/trainer/answer", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ drill_id: drill.drill_id, ply: stepIdx,
                              san: mv.san, duration_ms: duration }),
-    }).then((r) => r.json()).then((res) => {
+    }).catch((e) => {
+      // not graded: take the move back so it can be played again
+      if (drill !== answered) return null;
+      game.undo();
+      board.position(game.fen());
+      if (e.status === 400 && /unknown or expired drill/.test(e.message)) {
+        drill = null;                    // the server restarted and forgot this drill
+        showError("This drill was lost when the trainer restarted — click Next drill.");
+      } else {
+        awaiting = true;
+        moveStart = performance.now();
+        showError(`${e.message} Your move was not recorded; play it again.`);
+      }
+      return null;
+    }).then((res) => {
+      if (res === null || drill !== answered) return;
       if (res.correct) {
         $("feedback").innerHTML = "<span class='good'>✓</span>";
         stepIdx++;
