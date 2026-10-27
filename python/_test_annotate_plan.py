@@ -144,11 +144,21 @@ for ok_text in ("Qb3 lines the queen up behind the bishop on f7.",
                 "11.Bxf7+ leaves us the exchange and a pawn up.",
                 "After 11.Qxb4 we go a piece up.",
                 "They have kept the extra pawn on d3, so we are a pawn down."):
-    mat = [e for e in validate(ok_text, None, [], pos_facts) if "material claim" in e]
+    mat = [e for e in validate(ok_text, None, [], pos_facts) if "contradicts the board" in e]
     check(f"not a false material claim: {ok_text!r}", mat == [],
           str(mat))
 check("'we're still a piece up' contradicting the board is flagged",
       any("material claim" in e for e in validate("We're still a piece up here.", None, [], pos_facts)))
+scand = {"line": "1.e4 d5", "our_move": {"san": "exd5", "idea_token": "exd5"},
+         "candidates": [], "replies": [], "engine": None, "themes": {},
+         "plan": {"continuation": ["exd5", "Qxd5", "Nc3", "Qa5"], "branches": [],
+                  "recurring_ideas": []}}
+check("a later-material claim matching the line passes",
+      validate("2.exd5 leaves us a pawn up until 2...Qxd5.", None, [], scand) == [],
+      str(validate("2.exd5 leaves us a pawn up until 2...Qxd5.", None, [], scand)))
+check("an exaggerated later-material claim is flagged",
+      any("matches no position" in e for e in
+          validate("2.exd5 leaves us a piece up.", None, [], scand)))
 check("'giving up the queen' is not a material claim",
       validate("The engine's reply is giving up the queen to stop the fork.", None, [], pos_facts) == [])
 check("'they are a pawn up' is read from their side",

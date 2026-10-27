@@ -234,6 +234,98 @@ def _only_errors(text: str, f: dict) -> list[str]:
             for m in ONLY_RE.finditer(text)]
 
 
+# Material claims about a later position: "11.Bxf7+ leaves us the exchange and a pawn
+# up", "after 11.Qxb4 we go a piece up", "we end up a rook ahead". Checked against
+# the material along the lines the fact sheet holds, replayed on a board.
+_RESULT = (r"(?:leav(?:es|ing|e)|left)\s+(?:us|them)\s+(?:with\s+)?"
+           r"|(?:go|goes|going|went|end|ends|ending|come|comes|coming|finish|finishes)"
+           r"\s+(?:out\s+|up\s+)?")
+FUTURE_RE = re.compile(
+    r"(" + _RESULT + r")" + _AMT + r"(pawn|piece|exchange|rook|queen)s?(?:\s+and\s+" + _AMT
+    + r"(?:pawn|piece|exchange|rook|queen)s?)?\s+(up|down|ahead|behind)\b"
+    r"|(" + _RESULT + r")(?:an?\s+|two\s+)?(extra)\s+(pawn|piece|rook|queen)\b", re.I)
+_VAL = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
+
+
+def _balance(b: chess.Board, us: chess.Color) -> int:
+    return sum(v * (len(b.pieces(p, us)) - len(b.pieces(p, not us))) for p, v in _VAL.items())
+
+
+def _line_balances(f: dict) -> list[tuple[str, int]]:
+    """(SAN just played, our material balance after it) along every line in the
+    fact sheet: the plan continuation and its branches, the engine lines here and
+    after our move, both null-move threat lines and the book-end lines."""
+    try:
+        base = _board_from_line(f["line"])
+    except ValueError:
+        return []
+    us = base.turn
+    after = base.copy()
+    try:
+        after.push_san(f["our_move"]["san"])
+    except ValueError:
+        return []
+    eng = f.get("engine") or {}
+    plan = f.get("plan") or {}
+    starts: list[tuple[chess.Board, list[str]]] = [(base, plan.get("continuation", []))]
+    for br in plan.get("branches", []):
+        starts.append((base, br.get("after", []) + [br["reply"]]
+                       + ([br["our_answer"]] if br.get("our_answer") else [])))
+    starts += [(base, ln.get("pv", [])) for ln in eng.get("here_multipv") or []]
+    starts += [(after, ln.get("pv", [])) for ln in eng.get("after_move_multipv") or []]
+    starts += [(after, ln.get("pv", [])) for ln in (f.get("book_end") or {}).get("engine_lines", [])]
+    for key, b0 in (("threat", after), ("their_threat_if_we_pass", base)):
+        t = eng.get(key)
+        if t and t.get("pv"):
+            nb = b0.copy()
+            nb.push(chess.Move.null())
+            starts.append((nb, t["pv"]))
+    out = [(f["our_move"]["san"].rstrip("+#"), _balance(after, us))]
+    for b0, sans in starts:
+        b = b0.copy()
+        for s in sans:
+            try:
+                b.push_san(s)
+            except ValueError:
+                break
+            out.append((s.rstrip("+#"), _balance(b, us)))
+    return out
+
+
+def _future_material_errors(text: str, f: dict) -> list[str]:
+    """A claim about the material a line leads to must match the board somewhere on
+    a line the facts hold: at (or the move after) the last move named before the
+    claim in its sentence, or anywhere on the lines when no move is named."""
+    if not FUTURE_RE.search(text):
+        return []
+    seq = _line_balances(f)
+    if not seq:
+        return []
+    errs = []
+    for m in FUTURE_RE.finditer(text):
+        g = m.groups()
+        lead, unit, sign = (g[0], g[1], g[2]) if g[1] else (g[3], g[5], "up")
+        want_up = sign.lower() in ("up", "ahead")
+        ours = "them" not in lead.lower()
+        need = _UNITS[unit.lower()] - 1
+
+        def fits(bal: int) -> bool:
+            return bal != 0 and ((bal > 0) == want_up) == ours and abs(bal) >= need
+
+        start = max(text.rfind(". ", 0, m.start()), text.rfind("; ", 0, m.start()), 0)
+        named = [x.group(0).rstrip("+#") for x in MOVE_RE.finditer(text[start:m.start()])]
+        if named:
+            idx = [i for i, (s, _) in enumerate(seq) if s == named[-1]]
+            # seq[0] = right after our move, the note's usual subject ("it leaves us ...")
+            cands = [seq[0][1]] + [seq[j][1] for i in idx for j in (i, i + 1) if j < len(seq)]
+        else:
+            cands = [bal for _, bal in seq]
+        if not any(fits(b) for b in cands):
+            errs.append(f"material claim '{m.group(0).strip()}' matches no position on the lines "
+                        f"in the facts" + (f" after {named[-1]}" if named else ""))
+    return errs
+
+
 def validate(annotation: str, memory_rule: str | None, themes: list[str],
              f: dict) -> list[str]:
     errors: list[str] = []
@@ -288,6 +380,7 @@ def validate(annotation: str, memory_rule: str | None, themes: list[str],
 
     errors += _material_errors(text, f)
     errors += _only_errors(text, f)
+    errors += _future_material_errors(text, f)
 
     # themes may name this move's idea or the plan's: the recurring ideas below and
     # the idea tokens of our moves in the continuation
