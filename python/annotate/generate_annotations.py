@@ -165,6 +165,16 @@ def save_chapters(chapters: dict[str, dict], path: Path) -> None:
     tmp.replace(path)
 
 
+def refresh_book(data_dir: Path) -> None:
+    """Re-export the consolidated book (annotations/book.html) so it holds every note so
+    far. Best-effort: a failed export never stops generation."""
+    try:
+        from annotate.export_book import export_consolidated
+        export_consolidated(data_dir)
+    except Exception as e:                       # noqa: BLE001
+        print(f"  (book export failed: {e})", flush=True)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -344,6 +354,7 @@ def main() -> None:
             total_gen += len(positions)
             save_store(store, store_path)
             save_chapters(chapters, chapters_path)
+            refresh_book(data_dir)
             print(f"  [{ci}/{len(eligible)}] {ch.chunk_id}: {len(positions)} positions, "
                   f"{n_flagged} flagged ({time.time()-t0:.0f}s)", flush=True)
 

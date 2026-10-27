@@ -8,6 +8,8 @@ header h1 { font-size: 1.1rem; margin: 0; }
 #tabs button { border: none; background: none; padding: 0.6rem 1rem; cursor: pointer;
                font-size: 0.95rem; color: var(--muted); border-bottom: 2px solid transparent; }
 #tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+#tabs a.tablink { padding: 0.6rem 1rem; color: var(--muted); text-decoration: none; font-size: 0.95rem; }
+#tabs a.tablink:hover { color: var(--fg); }
 main { padding: 1.25rem; }
 .tab { display: none; }
 .tab.active { display: block; }

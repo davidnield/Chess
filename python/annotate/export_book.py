@@ -19,12 +19,21 @@ Usage:
     set PYTHONPATH=<repo>\\python
     .venv\\Scripts\\python.exe -m annotate.export_book
         [--data DIR] [--color white|black] [--out PATH] [--include-flagged]
+    .venv\\Scripts\\python.exe -m annotate.export_book --all      # the consolidated book
+
+--all writes trainer_data/annotations/book.html: both colours in one file, grouped by colour,
+then opening family (trainer_app.families, the trainer's drill blocks; each named from the
+Lichess chess-openings table next to its moves), then chapter, with a table of contents.
+generate_annotations re-exports it after every chunk, so it always holds every note so far;
+the trainer serves it at /book.
 """
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
+from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -34,12 +43,41 @@ import polars as pl
 
 from annotate.chunks import build_chunks
 from trainer_app.config import resolve_data_dir
+from trainer_app.families import build_families
 from trainer_app.pack import TrainingPack
+from zobrist import zobrist_int64
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 START_FEN = chess.STARTING_FEN.split()[0]
+OPENING_NAMES_TSV = Path("C:/Users/David/Documents/Chess Opening Dashboard/data/vendor/chess-openings")
+_NAMES: dict[int, str] | None = None
+
+
+def opening_name(sans: list[str]) -> str | None:
+    """The most specific Lichess opening name met along a move sequence (by position,
+    so transpositions are named), or None without the chess-openings table. Shown next
+    to the moves themselves, since a name can stop at a shallower position than the line."""
+    global _NAMES
+    if _NAMES is None:
+        _NAMES = {}
+        best: dict[int, int] = {}
+        for f in sorted(OPENING_NAMES_TSV.glob("*.tsv")) if OPENING_NAMES_TSV.exists() else []:
+            with open(f, encoding="utf-8") as fh:
+                for row in csv.DictReader(fh, delimiter="\t"):
+                    b = chess.Board()
+                    for tok in row["pgn"].split():
+                        if not tok.endswith("."):
+                            b.push_san(tok)
+                    h = zobrist_int64(b)
+                    if len(b.move_stack) >= best.get(h, -1):
+                        best[h], _NAMES[h] = len(b.move_stack), row["name"]
+    b, name = chess.Board(), None
+    for san in sans:
+        b.push_san(san)
+        name = _NAMES.get(zobrist_int64(b), name)
+    return name
 
 
 def _sans(line: str) -> list[str]:
@@ -113,6 +151,13 @@ def build(data_dir: Path, color: str, include_flagged: bool) -> tuple[list, dict
              for r in pl.read_parquet(ann_dir / f"facts_{color}.parquet").iter_rows(named=True)}
     pack = TrainingPack(data_dir / "pack")
     chunks = build_chunks(pack, color)
+    # opening families (the trainer's drill blocks): chapter -> family by its cards' majority
+    fams = build_families(pack, color)
+    node_fam = {n: f.label for f in fams for n in f.nodes}
+    fam_root = {f.label: f.root for f in fams}
+    fam_reach: dict[str, float] = defaultdict(float)
+    for r in pack.cards[color].iter_rows(named=True):
+        fam_reach[node_fam.get(r["canonical_node_id"], "")] += r["reach"]
     intros = {}
     if (ann_dir / "chapters.parquet").exists():      # variation intros (prompt v2+)
         intros = {r["chunk_id"]: r["intro"]
@@ -145,7 +190,12 @@ def build(data_dir: Path, color: str, include_flagged: bool) -> tuple[list, dict
             continue
         title = " ".join((f"{j//2+1}.{s}" if j % 2 == 0 else s)
                          for j, s in enumerate(ch.chapter_sans)) or "Starting position"
-        chapters.append({"title": title, "intro": intros.get(ch.chunk_id), "cards": cards})
+        fam = Counter(node_fam.get(n, "") for n in ch.card_nodes).most_common(1)[0][0]
+        root_sans = pack.line_sans(color, pack.path_to_root(color, fam_root[fam])) if fam in fam_root else []
+        chapters.append({"title": title, "intro": intros.get(ch.chunk_id), "cards": cards,
+                         "chunk_id": ch.chunk_id, "colour": color, "family": fam,
+                         "family_name": opening_name(root_sans) if root_sans else None,
+                         "family_reach": fam_reach.get(fam, 0.0)})
     return chapters, {"chapters": len(chapters), "cards": n_cards, "flagged": n_flagged}
 
 
@@ -222,6 +272,19 @@ CSS = r"""
 
   .rule{border:none;border-top:1px solid var(--line);margin:2.4rem 0;}
 
+  .colour-head{font-size:1.9rem;margin:4.5rem 0 .2rem;padding-top:1rem;border-top:3px double var(--line);}
+  .family-head{margin:3rem 0 0;font-family:var(--sans);font-size:1rem;color:var(--accent);
+    display:flex;flex-direction:column;gap:.15rem;}
+  .family-head .fname{font-family:var(--serif);font-size:1.25rem;color:var(--ink);}
+  .family-head .fline{font-family:var(--mono);font-size:.82rem;color:var(--muted);font-weight:400;}
+  .toc{margin:1.5rem 0;font-size:.92rem;}
+  .toc h2{font-size:1.15rem;margin:1.2rem 0 .4rem;}
+  .toc ul{margin:.2rem 0 .6rem 1.1rem;padding:0;}
+  .toc li{margin:.15rem 0;}
+  .toc .tf{font-weight:600;}
+  .toc .tl{font-family:var(--mono);font-size:.78rem;color:var(--muted);}
+  .toc a{color:var(--accent);text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
   .chapter{font-size:1.35rem;font-weight:600;margin:3.2rem 0 0;letter-spacing:-.01em;
     padding-top:1.6rem;border-top:2px solid var(--line);text-wrap:balance;}
   .chapter .cnum{font-family:var(--sans);font-size:.72rem;font-weight:700;
@@ -409,10 +472,25 @@ function replyTable(reps){
     <th>gives us</th><th class="l">we play</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 const host=document.getElementById("chapters");
+let lastColour=null, lastFamily=null;
 CHAPTERS.forEach((chap,ci)=>{
+  if(BOOK && chap.colour!==lastColour){
+    const hc=document.createElement("h2"); hc.className="colour-head"; hc.id="col-"+chap.colour;
+    hc.textContent=(chap.colour==="white"?"White":"Black")+" repertoire";
+    host.appendChild(hc); lastColour=chap.colour; lastFamily=null;
+  }
+  if(BOOK && chap.family!==lastFamily){
+    const hf=document.createElement("h3"); hf.className="family-head"; hf.id="fam-"+chap.colour+"-"+chap.fidx;
+    hf.innerHTML=(chap.family_name?`<span class="fname">${chap.family_name}</span>`:"")+
+      `<span class="fline">${chap.family}</span>`;
+    host.appendChild(hf); lastFamily=chap.family;
+  }
+  FLIP = chap.colour ? chap.colour==="black" : FLIP;
   const h2=document.createElement("h2");
   h2.className="chapter";
-  h2.innerHTML=`<span class="cnum">Chapter ${ci+1} of ${CHAPTERS.length}</span>${chap.title}`;
+  if(chap.chunk_id) h2.id="ch-"+chap.chunk_id;
+  const num=chap.num||ci+1, tot=chap.total||CHAPTERS.length;
+  h2.innerHTML=`<span class="cnum">Chapter ${num} of ${tot}</span>${chap.title}`;
   host.appendChild(h2);
   if(chap.intro){const p=document.createElement("p");p.className="prose intro";p.textContent=chap.intro;host.appendChild(p);}
   chap.cards.forEach((d,i)=>{
@@ -487,11 +565,96 @@ def render(color: str, chapters: list, stats: dict, engine_ready: bool) -> str:
   <footer>{FOOTER}</footer>
 </div>
 <script>
-const FLIP = {json.dumps(color == "black")};
+let FLIP = {json.dumps(color == "black")};
+const BOOK = false;
 const CHAPTERS = {json.dumps(chapters, ensure_ascii=False)};
 {JS_FUNCS}
 </script>
 """
+
+
+def build_book(data_dir: Path, include_flagged: bool = False) -> tuple[list, dict]:
+    """Both colours' chapters, ordered colour -> family (by reach) -> chapter (by reach),
+    numbered per colour, with a family index for anchors."""
+    out, stats = [], {"chapters": 0, "cards": 0, "flagged": 0}
+    for color in ("white", "black"):
+        if not (data_dir / "annotations" / f"facts_{color}.parquet").exists():
+            continue
+        chapters, st = build(data_dir, color, include_flagged)
+        for k in stats:
+            stats[k] += st[k]
+        order = sorted({c["family"] for c in chapters},
+                       key=lambda f: -max(c["family_reach"] for c in chapters if c["family"] == f))
+        fidx = {f: i for i, f in enumerate(order)}
+        chapters.sort(key=lambda c: fidx[c["family"]])          # stable: reach order within
+        for i, c in enumerate(chapters, 1):
+            c.update(num=i, total=len(chapters), fidx=fidx[c["family"]])
+        out += chapters
+    return out, stats
+
+
+def render_book(chapters: list, stats: dict) -> str:
+    toc = []
+    for color in ("white", "black"):
+        chs = [c for c in chapters if c["colour"] == color]
+        if not chs:
+            continue
+        toc.append(f'<h2><a href="#col-{color}">{color.capitalize()} repertoire</a></h2><ul>')
+        fam = None
+        for c in chs:
+            if c["family"] != fam:
+                if fam is not None:
+                    toc.append("</ul></li>")
+                fam = c["family"]
+                name = f'{c["family_name"]} · ' if c.get("family_name") else ""
+                toc.append(f'<li><a class="tf" href="#fam-{color}-{c["fidx"]}">{name}</a>'
+                           f'<span class="tl">{fam}</span><ul>')
+            toc.append(f'<li><a href="#ch-{c["chunk_id"]}">{c["title"]}</a> '
+                       f'<span class="tl">({len(c["cards"])})</span></li>')
+        toc.append("</ul></li></ul>")
+    meta = (f'<span><b>{stats["chapters"]}</b> chapters</span>'
+            f'<span><b>{stats["cards"]}</b> positions</span>'
+            f'<span>notes so far: this book grows as the generator runs</span>')
+    title = "Opening Repertoire — Plan Notes"
+    return f"""<title>{title}</title>
+<style>{CSS}</style>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">White and Black · grouped by opening family</div>
+    <h1>{title}</h1>
+    <p class="lede">Every position of the repertoire you are learning that has a note so far:
+      the move to play, the plan behind it, and a memory rule where one applies. Each
+      variation opens with an intro; families follow the trainer's drill blocks, most common
+      first.</p>
+    <div class="meta-row">{meta}</div>
+    <div class="legend">
+      <span><span class="sw last"></span> opponent's last move (how we got here)</span>
+      <span><span class="sw hl"></span> the move to play</span>
+      <span><span class="sw arw"></span> our move, from piece to square</span>
+    </div>
+  </header>
+  <nav class="toc">{"".join(toc)}</nav>
+  <hr class="rule">
+  <div id="chapters"></div>
+  <footer>{FOOTER}</footer>
+</div>
+<script>
+let FLIP = false;
+const BOOK = true;
+const CHAPTERS = {json.dumps(chapters, ensure_ascii=False)};
+{JS_FUNCS}
+</script>
+"""
+
+
+def export_consolidated(data_dir: Path, include_flagged: bool = False) -> tuple[Path, dict]:
+    """Write <data>/annotations/book.html atomically; returns (path, stats)."""
+    chapters, stats = build_book(data_dir, include_flagged)
+    out = data_dir / "annotations" / "book.html"
+    tmp = out.with_suffix(".html.tmp")
+    tmp.write_text(render_book(chapters, stats), encoding="utf-8")
+    tmp.replace(out)
+    return out, stats
 
 
 def main() -> None:
@@ -501,9 +664,15 @@ def main() -> None:
     ap.add_argument("--color", choices=["white", "black"], default="white")
     ap.add_argument("--out", default=None)
     ap.add_argument("--include-flagged", action="store_true")
+    ap.add_argument("--all", action="store_true",
+                    help="the consolidated book: both colours, grouped by opening family")
     args = ap.parse_args()
 
     data_dir = resolve_data_dir(args.data)
+    if args.all:
+        out, stats = export_consolidated(data_dir, args.include_flagged)
+        print(f"book: {stats['chapters']} chapters, {stats['cards']} positions -> {out}")
+        return
     chapters, stats = build(data_dir, args.color, args.include_flagged)
     # engine facts present iff any fact sheet has a non-null engine block
     facts = pl.read_parquet(data_dir / "annotations" / f"facts_{args.color}.parquet")

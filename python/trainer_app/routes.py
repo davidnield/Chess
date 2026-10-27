@@ -77,6 +77,14 @@ def create_app(data_dir: Path, remote: bool = False, port: int = 8321) -> FastAP
     def index():
         return FileResponse(STATIC_DIR / "index.html")
 
+    @app.get("/book")
+    def book():
+        # the consolidated notes book (annotate.export_book --all), refreshed by the generator
+        path = data_dir / "annotations" / "book.html"
+        if not path.exists():
+            raise HTTPException(404, "no book yet: run annotate.export_book --all")
+        return FileResponse(path, media_type="text/html", headers={"Cache-Control": "no-cache"})
+
     def public_settings(s: dict) -> dict:
         # the Lichess token is write-only: report whether one is saved, never its value
         out = dict(s)
