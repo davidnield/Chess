@@ -138,6 +138,17 @@ check("material claim contradicting the board is flagged",
       any("material claim" in e for e in validate("We are a piece up and winning.", None, [], pos_facts)))
 check("a claim matching the board passes",
       validate("We are a pawn down, but the rook on a1 is hanging.", None, [], pos_facts) == [])
+for ok_text in ("Qb3 lines the queen up behind the bishop on f7.",
+                "Be3 props the pawn up on d4.",
+                "Castling puts the rook behind the f-pawn.",
+                "11.Bxf7+ leaves us the exchange and a pawn up.",
+                "After 11.Qxb4 we go a piece up.",
+                "They have kept the extra pawn on d3, so we are a pawn down."):
+    mat = [e for e in validate(ok_text, None, [], pos_facts) if "material claim" in e]
+    check(f"not a false material claim: {ok_text!r}", mat == [],
+          str(mat))
+check("'we're still a piece up' contradicting the board is flagged",
+      any("material claim" in e for e in validate("We're still a piece up here.", None, [], pos_facts)))
 check("'giving up the queen' is not a material claim",
       validate("The engine's reply is giving up the queen to stop the fork.", None, [], pos_facts) == [])
 check("'they are a pawn up' is read from their side",

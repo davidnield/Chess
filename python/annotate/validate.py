@@ -20,6 +20,8 @@ import re
 
 import chess
 
+from stage3_backwards_induction import idea_token as _idea_token
+
 # Piece moves, pawn captures, castling — validated strictly (these unambiguously
 # denote a move, never a square reference).
 MOVE_RE = re.compile(
@@ -169,19 +171,26 @@ def _is_piece_on_square(anchors: list[chess.Board], token: str) -> bool:
     return any((pc := anc.piece_at(sq)) and pc.piece_type == ptype for anc in anchors)
 
 
-# "we are a piece up", "a pawn down", "up the exchange", "an extra pawn", "material is level"
+# Present-tense balance statements only: "we are a piece up", "we're still a pawn
+# down", "we are up the exchange", "we have an extra pawn", "they are a pawn up",
+# "material is level". Phrasal verbs ("lines the queen up"), positions ("the rook
+# behind the f-pawn") and results to come ("leaves us a piece up", "go a piece up")
+# are not claims about the board after our move, and flagging them was noise
+# (2026-10-26: 10 of 11 material flags in the first full run).
 _UNITS = {"pawn": 1, "piece": 3, "exchange": 2, "rook": 5, "queen": 9}
+_SUBJ = r"(we are|we're|we remain|we stay|we have|they are|they're|they have)\s+(?:now\s+|still\s+|already\s+|just\s+)?"
+_AMT = r"(?:(?:a|an|one|two|three|\d+)\s+)?(?:the\s+)?"
 MATERIAL_RE = re.compile(
-    r"\b(?:(?:a|an|one|two|three|\d+)\s+)?(pawn|piece|exchange|rook|queen)s?\s+(up|down|ahead|behind)\b"
-    r"|\b(up|down)\s+(?:a|an|one|two|the)\s+(pawn|piece|exchange|rook|queen)\b"
-    r"|\b(extra)\s+(pawn|piece|rook|queen)\b"
+    _SUBJ + _AMT + r"(pawn|piece|exchange|rook|queen)s?(?:\s+and\s+" + _AMT
+    + r"(?:pawn|piece|exchange|rook|queen)s?)?\s+(up|down|ahead|behind)\b"
+    r"|" + _SUBJ + r"(up|down)\s+(?:a|an|one|two|the)\s+(pawn|piece|exchange|rook|queen)\b"
+    r"|" + _SUBJ + r"(?:an?\s+|two\s+)?(extra)\s+(pawn|piece|rook|queen)\b"
     r"|\b(material is (?:level|equal|even))\b", re.I)
 
 
 def _material_errors(text: str, f: dict) -> list[str]:
     """A note may only claim the material balance the board facts state (the
-    position after our move). Claims about OUR side only: 'we are a piece up'.
-    A claim about a capture to come ('wins a piece') is not a balance claim."""
+    position after our move), when it states it as the present balance."""
     pos = f.get("position_after_our_move")
     if not pos:
         return []
@@ -189,25 +198,17 @@ def _material_errors(text: str, f: dict) -> list[str]:
     errs = []
     for m in MATERIAL_RE.finditer(text):
         g = m.groups()
-        # "giving up the queen", "picks up a pawn": a phrasal verb, not a balance
-        if re.search(r"\b(?:giv(?:e|es|ing)|gave|given|pick(?:s|ing|ed)?|offer(?:s|ing|ed)?|"
-                     r"snap(?:s|ping|ped)?|cough(?:s|ing|ed)?|hand(?:s|ing|ed)?|"
-                     r"set(?:s|ting)?)\s*$", text[:m.start()], re.I):
-            continue
-        if g[6]:                                          # material is level
+        if g[9]:                                          # material is level
             ok = bal == 0
         else:
-            unit = (g[0] or g[3] or g[5]).lower()
-            sign = (g[1] or g[2] or "up").lower()
-            if g[4]:                                      # "an extra pawn" = up
-                sign = "up"
+            subj = (g[0] or g[3] or g[6]).lower()
+            unit = (g[1] or g[5] or g[8]).lower()
+            sign = "up" if g[7] else (g[2] or g[4]).lower()
             want_up = sign in ("up", "ahead")
+            ours = subj.startswith("we")
             # the balance must point the same way, and be at least about that size
-            ok = (bal > 0) == want_up and bal != 0 and abs(bal) >= _UNITS[unit] - 1
-            # "they are a pawn up" style claims flip the sign
-            pre = text[max(0, m.start() - 25):m.start()].lower()
-            if any(w in pre for w in ("they are", "they're", "white is", "black is", "opponent is")):
-                ok = (bal < 0) == want_up and bal != 0 and abs(bal) >= _UNITS[unit] - 1
+            ok = (bal != 0 and ((bal > 0) == want_up) == ours
+                  and abs(bal) >= _UNITS[unit] - 1)
         if not ok:
             errs.append(f"material claim '{m.group(0)}' contradicts the board "
                         f"({pos['material']['summary']})")
@@ -288,7 +289,12 @@ def validate(annotation: str, memory_rule: str | None, themes: list[str],
     errors += _material_errors(text, f)
     errors += _only_errors(text, f)
 
+    # themes may name this move's idea or the plan's: the recurring ideas below and
+    # the idea tokens of our moves in the continuation
+    plan = f.get("plan") or {}
     idea = {f["our_move"]["idea_token"], f.get("themes", {}).get("token")}
+    idea |= {r["token"] for r in plan.get("recurring_ideas", [])}
+    idea |= {_idea_token(s) for s in plan.get("continuation", [])[::2] if s}
     idea.discard(None)
     for t in themes or []:
         if t not in idea:
