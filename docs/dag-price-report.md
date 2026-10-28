@@ -189,14 +189,16 @@ re-solves: 3–6× at 100k and 9.8× at 1M, so it is flagged as too slow.
 `python run_tests.py` here: **68/68 pass** (the data-dependent tests skip without local
 data), including every `_test_budget_*.py` and the new `_test_budget_dag.py` (about 25 s).
 
-One thing about the environment: a fresh `pip install -r requirements.txt` now resolves
-**DuckDB 2.0.0**, which removed `DuckDBPyConnection.pl()`. Under it, eight test files
-fail: `_test_budget_allowed`, `_test_budget_frontier` and `_test_budget_gated_reach`
-(all on `.pl()`), `_test_weak_stop`, `_test_course_dedup`,
+One thing about the environment: without an upper bound, a fresh `pip install -r
+requirements.txt` resolves **DuckDB 2.0.0**, which removed `DuckDBPyConnection.pl()`.
+Under it, eight test files fail: `_test_budget_allowed`, `_test_budget_frontier` and
+`_test_budget_gated_reach` (all on `.pl()`), `_test_weak_stop`, `_test_course_dedup`,
 `_test_explorer_policy_value`, `_test_bucket_month` and `_test_backfill_epd`.
-`_test_budget_allowed` fails the same way on the base branch, which is the one I
-re-ran there. With `duckdb>=1.5,<2` (1.5.6) all eight pass. This branch does not
-change `requirements.txt`, but pinning `<2` is probably wanted.
+`_test_budget_allowed` fails the same way on the base branch. With DuckDB 1.5.6 all
+eight pass, so this branch pins `duckdb>=1.5,<2` in `requirements.txt` (the "Pin
+duckdb<2" commit, cherry-picked from `claude/gracious-shannon-tn281z`). Lifting the pin
+means porting the eight `.pl()` call sites, and `explorer_policy_value` and the budget
+books are on the value path, so that port goes through the validation ladder.
 
 ## For step 3
 
