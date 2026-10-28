@@ -416,13 +416,19 @@ def main() -> int:
                     help="Beta-binomial pseudocount pulling thin empirical "
                          "scores toward the slice prior (default 500). 0 = raw "
                          "observed scores, unsmoothed.")
-    ap.add_argument("--stop-model", choices=["pool", "weak"], default="pool",
+    ap.add_argument("--stop-model", choices=["pool", "weak", "empirical"], default="pool",
                     help="How a position out of book is valued. 'pool' (default): the "
                          "pool's own results from there (we play on like the pool). "
                          "'weak': we play one move like --weak-pool's population, the "
                          "opponent replies like the pool, then the engine "
                          "(python/weak_stop.py); applied to every out-of-book position "
-                         "so the DP compares like with like.")
+                         "so the DP compares like with like. 'empirical': as 'weak', then "
+                         "every position --stop-table holds takes its value played out to "
+                         "the pool's ply cap with real moves (python/empirical_stop.py); "
+                         "positions the table lacks keep the weak value.")
+    ap.add_argument("--stop-table", default=None,
+                    help="empirical_stop.py output for this pool and colour "
+                         "(--stop-model empirical).")
     ap.add_argument("--weak-pool", default=None,
                     help="Pool parquet whose move frequencies stand for OUR play out of "
                          "book under --stop-model weak (e.g. the 1000-1800 pool).")
@@ -694,7 +700,10 @@ def main() -> int:
     import gc
     gc.collect()
     stop_counts = None
-    if a.stop_model == "weak":
+    if a.stop_model in ("weak", "empirical"):
+        if a.stop_model == "empirical" and not (a.stop_table and Path(a.stop_table).exists()):
+            log(f"FATAL: --stop-model empirical needs --stop-table (got {a.stop_table})")
+            return 1
         if not a.weak_pool or not Path(a.weak_pool).exists():
             log(f"FATAL: --stop-model weak needs --weak-pool (got {a.weak_pool})")
             return 1
@@ -708,6 +717,13 @@ def main() -> int:
                                     evals=EvalSource(our_white, curves=curves),
                                     min_weak=a.weak_min_games,
                                     min_share=a.weak_min_share, log=log)
+        if a.stop_model == "empirical":
+            from empirical_stop import stop_overrides
+            We, Re, ec = stop_overrides(a.stop_table, xs, ys, colour=a.perspective, pool=stats)
+            W.update(We)
+            R.update(Re)
+            wc = {**dict(wc), **{f"empirical_{k}": v for k, v in ec.items()}}
+            log(f"  empirical stop values: {ec}")
         ac = bc.apply_stop_values(g, W, R)
         stop_counts = {**dict(wc), **{f"applied_{k}": v for k, v in ac.items()}}
         log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
@@ -935,7 +951,8 @@ def main() -> int:
                     "weak_curve_cells": a.weak_curve_cells,
                     "weak_curves": curves}
                    if a.weak_eval_curve else {})}
-               if a.stop_model == "weak" else {}),
+               if a.stop_model in ("weak", "empirical") else {}),
+            **({"stop_table": a.stop_table} if a.stop_model == "empirical" else {}),
             "source_rep": str(a.rep), "source_meta": src_meta,
             "stats": str(a.stats), "aux_stats": aux_path,
             "subgraph_nodes": len(g.our) + len(g.opp),

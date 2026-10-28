@@ -162,6 +162,24 @@ def build(pool: str, aux_path: str | None, weak_pool: str, colour: str, *,
                          "v": V, "n_moves_used": used, "source": src})
 
 
+def stop_overrides(path: str, xs, ys, *, colour: str, pool: str) -> tuple[dict, dict, dict]:
+    """The table's values for the optimiser's stop positions (budget_core.stop_model_positions):
+    W for our-turn positions, R for opponent-turn ones. Refuses a table built for another colour
+    or pool: it would value the wrong side's moves from the wrong population."""
+    meta = json.loads(Path(path).with_suffix(".parquet.meta.json").read_text())
+    if meta["colour"] != colour or Path(meta["pool"]).name != Path(pool).name:
+        raise ValueError(f"{path} was built for {meta['colour']} on {meta['pool']}, "
+                         f"not {colour} on {pool}")
+    want = pl.DataFrame({"position_hash": np.fromiter(set(xs) | set(ys), dtype=np.int64)})
+    t = (pl.scan_parquet(path).select("position_hash", "our_turn", "v")
+           .join(want.lazy(), on="position_hash", how="semi").collect())
+    xs, ys = set(xs), set(ys)
+    W = {h: v for h, ot, v in t.iter_rows() if ot and h in xs and v == v}
+    R = {h: v for h, ot, v in t.iter_rows() if not ot and h in ys and v == v}
+    return W, R, {"table_x": len(W), "table_y": len(R),
+                  "missing_x": len(xs) - len(W), "missing_y": len(ys) - len(R)}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--colour", choices=["white", "black"], required=True)
