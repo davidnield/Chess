@@ -13,7 +13,10 @@
 chess>=1.11,<2          # position replay, SAN parsing, polyglot Zobrist hashing
 polars>=1.40            # dataframe layer for stats/repertoire parquets
 pyarrow>=24             # parquet read/write, batched scanning
-duckdb>=1.5             # out-of-core GROUP BYs over the multi-billion-row merges
+duckdb>=1.5,<2          # out-of-core GROUP BYs over the multi-billion-row merges
+                        # <2: duckdb 2.0 removed DuckDBPyConnection.pl(), which the
+                        # budget books, weak_stop, course_dedup and explorer_policy_value
+                        # call; 2.0 failed eight test files on a fresh install (2026-10-28).
 numpy>=2.4              # CSR graph + value arrays in the backwards induction
 psutil>=7               # memory profiling / worker priority on long runs
 requests>=2.31          # Lichess API (eval DB fetch, game import)
