@@ -1529,6 +1529,11 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
 # does not reach keep the max-path reach, so an alternative line is priced as
 # if it were taken. With transpositions this is a self-consistent answer, not a
 # proven optimum; on a tree the two passes coincide.
+#
+# price_search(dag_mode=...) (plan item 11, off by default) adds the DAG candidates
+# measured against an exact oracle in _test_budget_dag.py: a reach fixed point per
+# solve, and polish_book, a coordinate ascent on the reached region after the search
+# (see the "DAG polish" section at the end of this module).
 
 def topo_up(g: Graph) -> tuple[list[int], set[int]]:
     """Bottom-up order (children before parents) for valuation, and the nodes
@@ -1779,7 +1784,8 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                  steps: int = 40, log=print, *, rounds: int = 2,
                  seed_reach: dict[int, float] | None = None, select: str = "closest",
                  select_tol: float = 0.01, on_round=None,
-                 reprice: str = "replace") -> tuple[dict, dict]:
+                 reprice: str = "replace", dag_mode: str | None = None,
+                 line_k: int = 8, fixpoint_iters: int = 8) -> tuple[dict, dict]:
     """Bisect the price onto `target` booked positions; then re-price with the
     book's own total reach (transpositions charged once) and bisect again.
     Returns (result, info): info holds the lam sweep, the chosen lam, the
@@ -1806,7 +1812,23 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
       reprice     'replace' (default): a node the previous book reaches is priced at that
                   book's reach, even below its optimistic reach; 'max': at the larger of
                   the two, so a transposition is still charged once but a node reached only
-                  by a minor path is never made dearer than round 1 priced it"""
+                  by a minor path is never made dearer than round 1 priced it
+      dag_mode    None (default): all of the above, unchanged. Otherwise the DAG candidates
+                  of plan item 11 (measured against an exact oracle in _test_budget_dag):
+                  'fixpoint'  every solve re-prices with its own book's total reach until
+                              the booked set repeats (at most fixpoint_iters times), keeping
+                              the iterate with the best value - lam * size; the result is the
+                              best-valued book of any solve that fits the target.
+                  'polish'    the search as configured, then polish_book from the selected
+                              book, the best-valued book that fits and the smallest one over
+                              the target; the best polished book is returned (it never
+                              exceeds the target).
+                  'fixpoint+polish'  both.
+                  line_k bounds polish_book's line moves."""
+    if dag_mode not in (None, "fixpoint", "polish", "fixpoint+polish"):
+        raise ValueError(f"dag_mode {dag_mode!r}")
+    fixpoint = dag_mode in ("fixpoint", "fixpoint+polish")
+    pool: list[tuple[int, float, dict]] = []   # (size, value, booked) of every solve, dag_mode only
     order, cut = topo_up(g)
     if cut:
         log(f"  price search: {len(cut):,} back edges cut in repetition cycles")
@@ -1815,11 +1837,34 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
 
     def solve(lam, reach, rnd):
         res = price_book(g, lam, order, reach, fixed_policy)
+        if dag_mode is not None:
+            pool.append((res["spent_distinct"], res["root_value_realized"], res["booked"]))
+        if fixpoint:
+            res = _fixpoint(res, lam, reach)
         tried.append((lam, res["spent_distinct"], res["root_value_realized"],
                       res["root_value_penalized"], rnd))
         if abs(res["spent_distinct"] - target) <= select_tol * target:
             near.append(res)
         return res
+
+    def _fixpoint(res, lam, reach):
+        """Candidate (a): price each position the book reaches at the book's own total
+        reach, re-solve, repeat until the booked set repeats (cycling is possible, so keep
+        the iterate with the best true Lagrangian value - lam * size)."""
+        best, seen = res, {frozenset(res["booked"].items())}
+        for _ in range(fixpoint_iters):
+            rr = dict(reach)
+            rr.update({h: w for h, w in res["reach_policy"].items() if w > 0})
+            res = price_book(g, lam, order, rr, fixed_policy)
+            pool.append((res["spent_distinct"], res["root_value_realized"], res["booked"]))
+            if (res["root_value_realized"] - lam * res["spent_distinct"]
+                    > best["root_value_realized"] - lam * best["spent_distinct"] + 1e-15):
+                best = res
+            key = frozenset(res["booked"].items())
+            if key in seen:
+                break
+            seen.add(key)
+        return best
 
     def bisect(reach, rnd):
         lo, hi = math.log(1e-10), math.log(1.0)   # log lam: N(lo) large, N(hi) ~ 0
@@ -1870,6 +1915,35 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                 reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})
     if select == "best" and near:
         res = max(near, key=lambda r: r["root_value_realized"])
+    polish_info = None
+    if dag_mode is not None:
+        fits = [e for e in pool if e[0] <= target]
+        best_fit = max(fits, key=lambda e: e[1]) if fits else None
+        if fixpoint and best_fit is not None and (
+                res["spent_distinct"] > target
+                or best_fit[1] > res["root_value_realized"] + 1e-15):
+            res = book_result(g, best_fit[2], order, fixed_policy, lam=res["lam"])
+        if dag_mode in ("polish", "fixpoint+polish"):
+            over = [e for e in pool if e[0] > target]
+            starts = [res["booked"]]
+            if best_fit is not None:
+                starts.append(best_fit[2])
+            if over:
+                starts.append(min(over, key=lambda e: (e[0], -e[1]))[2])
+            seen_s: set = set()
+            best_p = None
+            polish_info = []
+            for st in starts:
+                key = frozenset(st.items())
+                if key in seen_s:
+                    continue
+                seen_s.add(key)
+                moves, pst = polish_book(g, st, target, order, fixed_policy=fixed_policy,
+                                         line_k=line_k)
+                polish_info.append(pst)
+                if best_p is None or pst["value"] > best_p[1]["value"] + 1e-15:
+                    best_p = (moves, pst)
+            res = book_result(g, best_p[0], order, fixed_policy, lam=res["lam"])
     ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == rounds)
     info = {"lam": res["lam"], "booked": res["spent_distinct"],
             "under": None if u is None else u["spent_distinct"],
@@ -1882,4 +1956,450 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
         f"(target {target:,}; nearest sizes {info['under']} / {info['over']}), "
         f"value {res['root_value_realized']:.5f}, bound at {target:,}: {ub:.5f} "
         f"(gap {info['gap']:.5f}), {len(tried)} solves")
+    if dag_mode is not None:
+        info["dag_mode"] = dag_mode
+        info["polish"] = polish_info
+        if polish_info:
+            log("  dag polish: " + "; ".join(
+                f"{p['start_size']:,} -> {p['size']:,} positions, {p['start_value']:.5f} -> "
+                f"{p['value']:.5f} ({p['accepted']} moves, {p['seconds']:.1f}s)"
+                for p in polish_info))
     return res, info
+
+
+# ── DAG polish (plan item 11) ───────────────────────────────────────────────
+#
+# On a DAG the price recursion misprices transpositions, and on any graph it only
+# reaches the sizes on its Lagrangian hull (a chain that flips in whole skips the sizes
+# in between). Measured against the exhaustive oracle in _test_budget_dag.py, a local
+# search after the price search closes nearly all of both gaps, where re-pricing to a
+# reach fixed point alone does not. It works on the REACHED REGION only -- the
+# positions the book reaches and its frontier -- so a step costs O(book x branching),
+# not O(graph): a book of 2,000 positions on a 5M-node graph evaluates in milliseconds.
+#
+# Every step's effect is measured exactly (the region evaluator is policy_value
+# restricted to what the book reaches, same order, same sums), so the value never goes
+# down and the size never exceeds the target; the proposals that pick which steps to
+# try are estimates.
+
+def _static_value(g: Graph, h: int) -> float:
+    """A node's value with nothing booked below it (price_book's back-edge rule)."""
+    if h in g.our:
+        return g.our[h].l_node
+    n = g.opp[h]
+    return n.const_base + sum(
+        p * (g.our[k].l_node if (in_s and k in g.our) else lv)
+        for p, k, in_s, lv in n.kids)
+
+
+def _cands(g: Graph, h: int, fixed_policy: dict[int, str] | None):
+    cands = g.our[h].cands
+    if fixed_policy is not None:
+        want = fixed_policy.get(h)
+        cands = [c for c in cands if c[0] == want]
+    return cands
+
+
+@dataclass
+class _Region:
+    """A book on the reached region: W = total reach (policy_reach), T = value
+    (policy_value), both only on reached nodes; booked = the reached book moves."""
+    W: dict[int, float]
+    T: dict[int, float]
+    booked: dict[int, str]
+    child: dict[int, int | None]       # booked node -> the in-subgraph child its move enters
+    value: float
+
+    @property
+    def size(self) -> int:
+        return len(self.booked)
+
+
+def _book_region(g: Graph, moves: dict[int, str], pos: dict[int, int],
+                 fixed_policy: dict[int, str] | None = None) -> _Region:
+    """policy_reach and policy_value of `moves`, computed on the reached nodes only and
+    in the same order (pos = index in topo_up's order), so the floats are identical. A
+    book move that is not an (allowed) candidate is dropped, as are moves at positions
+    the book does not reach: what remains is exactly what the book costs."""
+    root = g.root
+    W: dict[int, float] = {root: 1.0}
+    heap = [(-pos[root], root)]
+    booked: dict[int, str] = {}
+    child: dict[int, int | None] = {}
+    seen = {root}
+    while heap:                       # parents first: descending order position
+        _np, h = heapq.heappop(heap)
+        r = W[h]
+        if h in g.our:
+            want = moves.get(h)
+            if want is None:
+                continue
+            c = next((c for c in _cands(g, h, fixed_policy) if c[0] == want), None)
+            if c is None:
+                continue
+            booked[h] = want
+            _san, ch, in_sub, _lv = c
+            child[h] = ch if (in_sub and ch is not None) else None
+            edges = [(1.0, ch)] if child[h] is not None else []
+        else:
+            edges = [(p, ch) for p, ch, in_sub, _lv in g.opp[h].kids
+                     if in_sub and ch is not None]
+        ph = pos[h]
+        for p, ch in edges:
+            pc = pos.get(ch)
+            if pc is None or pc > ph:      # a cut back edge carries no reach
+                continue
+            W[ch] = W.get(ch, 0.0) + r * p
+            if ch not in seen:
+                seen.add(ch)
+                heapq.heappush(heap, (-pc, ch))
+    T: dict[int, float] = {}
+    for h in sorted(W, key=pos.__getitem__):     # children first
+        if h in g.our:
+            if h in booked:
+                ch = child[h]
+                if ch is None:
+                    lv = next(c[3] for c in g.our[h].cands if c[0] == booked[h])
+                    T[h] = lv
+                else:
+                    T[h] = T[ch] if ch in T and pos[ch] < pos[h] else _static_value(g, ch)
+            else:
+                T[h] = g.our[h].l_node
+        else:
+            n = g.opp[h]
+            t = n.const_base
+            for p, ch, in_sub, lv in n.kids:
+                if in_sub and ch is not None:
+                    t += p * (T[ch] if ch in T and pos[ch] < pos[h] else _static_value(g, ch))
+                else:
+                    t += p * lv
+            T[h] = t
+    return _Region(W=W, T=T, booked=booked, child=child, value=T[root])
+
+
+def book_result(g: Graph, moves: dict[int, str], order: list[int],
+                fixed_policy: dict[int, str] | None = None, lam: float | None = None,
+                pos: dict[int, int] | None = None) -> dict:
+    """price_book's result dict for an arbitrary book (what the DAG modes return)."""
+    pos = {h: i for i, h in enumerate(order)} if pos is None else pos
+    reg = _book_region(g, moves, pos, fixed_policy)
+    visited = sorted(reg.W, key=lambda h: -pos[h])
+    return {"booked": reg.booked, "alloc": {}, "visited": visited,
+            "realized": {h: reg.T[h] for h in visited},
+            "spent_paths": reg.size, "spent_distinct": reg.size,
+            "root_value_curve": None, "root_value_realized": reg.value,
+            "root_value_penalized": None, "lam": lam, "reach_policy": reg.W}
+
+
+def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], *,
+                fixed_policy: dict[int, str] | None = None, line_k: int = 8,
+                max_verify: int = 24, max_steps: int = 100_000,
+                fill_width: int = 256, max_exchange: int = 16,
+                verify_after_hit: int = 4) -> tuple[dict, dict]:
+    """Candidate (c) of plan item 11: coordinate ascent on a book under a hard size.
+
+    1. TRIM. While the book is over `target`, drop the leaf (a booked position with no
+       booked position directly below it) whose drop loses least.
+    2. ASCEND. Propose, estimate, then verify the best proposals exactly (at most
+       max_verify, and verify_after_hit more once one improves); take the best verified
+       improvement within the target; stop when none improves.
+         line    at a reached unbooked position, book a LINE of 1..k moves (a move, then
+                 at most one continuation per reply) -- a lumpy chain pays only when
+                 complete, so single moves cannot find it;
+         rebook  at a leaf, replace its move by a line (a switch, or a longer chain);
+         switch  at any booked position, another candidate (its old subtree is freed);
+         fill    the best combination of lines at distinct reached positions (max-plus
+                 over their line tables, the fill_width most promising), up to slack
+                 moves -- or slack + d after dropping the d cheapest leaves;
+         swap    drop the d cheapest leaves and book a line of up to slack + d moves;
+         exchange  drop one of the max_exchange cheapest NON-leaf positions with what it
+                 alone reaches, and fill the budget that frees.
+    Proposals read a line table built from the current book's values (gains are exact
+    for a single move on a DAG: W(u) * (new local value - old)); verification re-runs
+    the region evaluator. Returns (moves, stats).
+
+    Stickiness (g.meta["stick"], --incumbent) is NOT applied: every step compares true
+    values, so a polished book may churn moves the price search kept for the margin
+    (build_budget_books refuses the combination)."""
+    import time as _time
+    t0 = _time.time()
+    pos = {h: i for i, h in enumerate(order)}
+    eps = 1e-12
+    reg = _book_region(g, moves, pos, fixed_policy)
+    start_size, start_value = reg.size, reg.value
+    trims = 0
+    accepted: dict[str, int] = {}
+
+    def leaves(rg: _Region) -> list[int]:
+        out = []
+        for u, ch in rg.child.items():
+            if ch is None or ch in g.our:
+                out.append(u)
+                continue
+            if not any(in_s and k in rg.booked for _p, k, in_s, _lv in g.opp[ch].kids):
+                out.append(u)
+        return out
+
+    def _freed(rg: _Region, u: int) -> int:
+        """booked positions reached only through u (u included): walk u's cone carrying
+        the reach that enters through u; a node is freed when that is all of its reach"""
+        through = {u: rg.W[u]}
+        heap = [(-pos[u], u)]
+        n = 0
+        while heap:
+            _np, h = heapq.heappop(heap)
+            r = through[h]
+            if h in g.our:
+                if h not in rg.booked:
+                    continue
+                if r >= rg.W[h] * (1 - 1e-9):
+                    n += 1
+                edges = [(1.0, rg.child[h])] if rg.child[h] is not None else []
+            else:
+                edges = [(p, ch) for p, ch, in_s, _lv in g.opp[h].kids if in_s and ch is not None]
+            for p, ch in edges:
+                if ch in rg.W and pos[ch] < pos[h]:
+                    if ch not in through:
+                        heapq.heappush(heap, (-pos[ch], ch))
+                    through[ch] = through.get(ch, 0.0) + r * p
+        return n
+
+    def _cheapest(drops: list, adds: tuple, need: int) -> list | None:
+        """the `need` cheapest leaves not among the positions `adds` books"""
+        added = {h for h, _m in adds}
+        out = []
+        for lo, d in drops:
+            if d not in added:
+                out.append((lo, d))
+                if len(out) == need:
+                    return out
+        return None
+
+    def loss(rg: _Region, u: int) -> float:
+        return rg.W[u] * (rg.T[u] - g.our[u].l_node)
+
+    while reg.size > target:
+        lv = leaves(reg)
+        if not lv:                    # only in a cycle of booked positions
+            lv = list(reg.booked)
+        u = min(lv, key=lambda x: (loss(reg, x), pos[x]))
+        m = dict(reg.booked)
+        del m[u]
+        reg = _book_region(g, m, pos, fixed_policy)
+        trims += 1
+
+    def val(rg: _Region, h: int) -> float:
+        """the value of entering h under book rg (estimate on a cut back edge)"""
+        if h in rg.T:
+            return rg.T[h]
+        if h in g.our:
+            return g.our[h].l_node
+        n = g.opp[h]
+        t = n.const_base
+        for p, k, in_s, lv in n.kids:
+            if in_s and k is not None:
+                t += p * (rg.T[k] if k in rg.T else _static_value(g, k))
+            else:
+                t += p * lv
+        return t
+
+    # Line tables. Only the TOP level reads the current book (the move's own child and
+    # which replies are already booked); below that, values are book-free (stop values,
+    # _static_value) so one memo serves every step of the run -- rebuilding the whole
+    # depth-k cone each step was O(graph) per step on big graphs. A reply whose
+    # optimistic reach is under `floor` (half the cheapest booked leaf's worth) is not
+    # explored: a move there cannot pay for the position it costs.
+    floor = 0.0
+    if reg.booked:
+        lv0 = [loss(reg, u) for u in leaves(reg)]
+        floor = 0.5 * min((x for x in lv0 if x > 0), default=0.0)
+    free_memo: dict[int, tuple[int, list]] = {}
+
+    def _extend(k: int, K: int, depth: int, base_of, skip, sub_of) -> list:
+        """best[j] = (local value, moves) with at most j new moves starting at our node
+        k (treated as unbooked); best[0] is stopping. Max-plus at opponent nodes over
+        the cone unfolded as a tree (a transposition inside it is charged per path --
+        an estimate; verification is exact)."""
+        best: list = [(g.our[k].l_node, ())] + [None] * K
+        for san, ch, in_sub, lv in _cands(g, k, fixed_policy):
+            if not (in_sub and ch is not None):
+                acc = [None, (lv, ((k, san),))]
+            elif ch in g.our:
+                acc = [None, (base_of(ch), ((k, san),))]
+            else:
+                acc = [None, (base_of(ch), ((k, san),))] + [None] * (K - 1)
+                if K > 1 and depth < 2 * line_k:
+                    share: dict[int, float] = {}
+                    for p, kk, in_s, _lv in g.opp[ch].kids:
+                        if (in_s and kk in g.our and kk != k and not skip(kk)
+                                and g.reach.get(kk, 0.0) >= floor):
+                            share[kk] = share.get(kk, 0.0) + p
+                    for kk, sh in share.items():
+                        sub = sub_of(kk, K - 1, depth + 1)
+                        stop = g.our[kk].l_node
+                        gains = [(j, sh * (sub[j][0] - stop), sub[j][1])
+                                 for j in range(1, K) if sub[j] is not None
+                                 and sub[j][0] > stop + eps and sub[j] is not sub[j - 1]]
+                        if not gains:
+                            continue
+                        nxt = list(acc)
+                        for j1 in range(1, K + 1):
+                            if acc[j1] is None:
+                                continue
+                            for j2, gn, mv in gains:
+                                j = j1 + j2
+                                if j <= K and (nxt[j] is None
+                                               or acc[j1][0] + gn > nxt[j][0]):
+                                    nxt[j] = (acc[j1][0] + gn, acc[j1][1] + mv)
+                        acc = nxt
+            for j in range(1, min(len(acc), K + 1)):
+                if acc[j] is not None and (best[j] is None or acc[j][0] > best[j][0]):
+                    best[j] = acc[j]
+        for j in range(1, K + 1):             # at most j moves
+            if best[j] is None or (best[j - 1] is not None and best[j - 1][0] > best[j][0]):
+                best[j] = best[j - 1]
+        return best
+
+    def line_free(k: int, K: int, depth: int) -> list:
+        got = free_memo.get(k)
+        if got is not None and got[0] >= K:
+            return got[1]
+        best = _extend(k, K, depth, lambda h: _static_value(g, h), lambda h: False, line_free)
+        free_memo[k] = (K, best)
+        return best
+
+    def line_table(rg: _Region):
+        memo: dict[int, tuple[int, list]] = {}
+
+        def line(k: int, K: int, depth: int) -> list:
+            got = memo.get(k)
+            if got is not None and got[0] >= K:
+                return got[1]
+            best = _extend(k, K, depth, lambda h: val(rg, h), rg.booked.__contains__,
+                           line_free)
+            memo[k] = (K, best)
+            return best
+        return line
+
+    steps = 0
+    while steps < max_steps:
+        steps += 1
+        slack = target - reg.size
+        line = line_table(reg)
+        # (estimated gain, kind, moves to add, positions to drop); built only if verified
+        props: list[tuple[float, str, tuple, tuple]] = []
+        kmax = line_k
+        lvs = leaves(reg)
+        leafset = set(lvs)
+        drops = sorted(((loss(reg, u), u) for u in lvs), key=lambda t: (t[0], pos[t[1]]))
+        # lines at the frontier
+        lines: list[tuple[float, int, tuple]] = []      # (gain, length, moves)
+        ftab: dict[int, list] = {}                       # frontier -> [(length, gain, moves)]
+        for u, w in reg.W.items():
+            if u not in g.our or u in reg.booked or w <= 0:
+                continue
+            best = line(u, kmax, 0)
+            stop = g.our[u].l_node
+            prev = None
+            for j in range(1, kmax + 1):
+                b = best[j]
+                if b is None or not b[1] or b is prev:
+                    continue
+                prev = b
+                gain = w * (b[0] - stop)
+                if gain > eps:
+                    lines.append((gain, len(b[1]), b[1]))
+                    ftab.setdefault(u, []).append((len(b[1]), gain, b[1]))
+        fill_from = sorted(ftab, key=lambda u: -max(t[1] for t in ftab[u]))[:fill_width]
+        lines.sort(key=lambda t: -t[0])
+        # fill: the best COMBINATION of lines at distinct frontier positions (max-plus
+        # over the frontier's tables) -- two independent single moves can beat one
+        # two-move line, which best-first over single proposals never sees
+        comb: list = [(0.0, ())] + [None] * kmax
+        for u in fill_from:
+            tab = ftab[u]
+            nxt = list(comb)
+            for j1 in range(kmax):
+                if comb[j1] is None:
+                    continue
+                for j2, gn, mv in tab:
+                    j = j1 + j2
+                    if j <= kmax and (nxt[j] is None or comb[j1][0] + gn > nxt[j][0]):
+                        nxt[j] = (comb[j1][0] + gn, comb[j1][1] + mv)
+            comb = nxt
+        for j in range(1, kmax + 1):
+            c = comb[j]
+            if c is None or c[0] <= eps or (comb[j - 1] is not None and c is comb[j - 1]):
+                continue
+            n_new = len(dict(c[1]))
+            if n_new <= slack:
+                props.append((c[0], "fill", c[1], ()))
+            else:
+                avail = _cheapest(drops, c[1], n_new - slack)
+                if avail is not None and c[0] - sum(lo for lo, _d in avail) > eps:
+                    props.append((c[0] - sum(lo for lo, _d in avail), "fill", c[1],
+                                  tuple(d for _lo, d in avail)))
+        # exchange: drop a NON-leaf (its exclusively reached subtree goes with it) and
+        # fill the freed budget; moves below it stay in the dict, so whatever the fill
+        # re-reaches keeps them (the evaluator prunes the rest and counts the true size)
+        nonleaf = sorted((loss(reg, u), u) for u in reg.booked if u not in leafset)
+        for lo, u in nonleaf[:max_exchange]:
+            freed = _freed(reg, u)
+            for j in range(1, min(kmax, slack + freed) + 1):
+                c = comb[j]
+                if c is None or (comb[j - 1] is not None and c is comb[j - 1]):
+                    continue
+                props.append((c[0] - lo, "exchange", c[1], (u,)))
+        for gain, n_new, mv in lines:
+            if n_new <= slack:
+                props.append((gain, "line", mv, ()))
+            else:                                          # swap: free n_new - slack leaves
+                avail = _cheapest(drops, mv, n_new - slack)
+                if avail is not None:
+                    lost = sum(lo for lo, _d in avail)
+                    if gain - lost > eps:
+                        props.append((gain - lost, "swap", mv, tuple(d for _lo, d in avail)))
+        # rebook a leaf with a line (including a plain switch of its move)
+        for lo, u in drops:
+            best = line(u, min(line_k, slack + 1), 0)
+            for j in range(1, len(best)):
+                b = best[j]
+                if b is None or not b[1]:
+                    continue
+                gain = reg.W[u] * (b[0] - reg.T[u])
+                if gain > eps and len(b[1]) <= slack + 1:
+                    props.append((gain, "rebook", b[1], ()))
+        # switch a non-leaf (frees its subtree, books one move)
+        for u, w in reg.booked.items():
+            if u in leafset:
+                continue
+            for san, ch, in_sub, lv in _cands(g, u, fixed_policy):
+                if san == w:
+                    continue
+                nv = val(reg, ch) if (in_sub and ch is not None) else lv
+                gain = reg.W[u] * (nv - reg.T[u])
+                if gain > eps:
+                    props.append((gain, "switch", ((u, san),), ()))
+        props.sort(key=lambda t: -t[0])
+        took = None
+        left = max_verify
+        for _gain, kind, adds, dels in props:
+            if left <= 0:
+                break
+            left -= 1
+            m = {**reg.booked, **dict(adds)}
+            for d in dels:
+                m.pop(d, None)
+            new = _book_region(g, m, pos, fixed_policy)
+            if new.size <= target and new.value > (took[0].value if took else reg.value) + eps:
+                if took is None:
+                    left = min(left, verify_after_hit)
+                took = (new, kind)
+        if took is None:
+            break
+        reg = took[0]
+        accepted[took[1]] = accepted.get(took[1], 0) + 1
+    stats = {"start_size": start_size, "start_value": start_value, "size": reg.size,
+             "value": reg.value, "trims": trims, "accepted": sum(accepted.values()),
+             "by_kind": accepted, "steps": steps, "seconds": _time.time() - t0}
+    return dict(reg.booked), stats

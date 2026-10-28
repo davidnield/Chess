@@ -450,6 +450,12 @@ def main() -> int:
     ap.add_argument("--price-reprice", choices=["replace", "max"], default="replace",
                     help="--method price: after round 1, price a node at its book's reach "
                          "(replace, default) or at max(book reach, optimistic reach).")
+    ap.add_argument("--price-dag-mode", choices=["fixpoint", "polish", "fixpoint+polish"],
+                    default=None,
+                    help="--method price: a DAG candidate of plan item 11 "
+                         "(budget_core.price_search dag_mode; measured against an exact "
+                         "oracle in _test_budget_dag.py). polish: coordinate ascent after the "
+                         "search, never over the budget. Default off.")
     ap.add_argument("--price-diagnose", action="store_true",
                     help="DIAGNOSTIC: run a fixed set of price-search variants on this "
                          "graph and log each one's size and in-model value (plus any "
@@ -526,6 +532,9 @@ def main() -> int:
     a = ap.parse_args()
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
+    if a.price_dag_mode and "polish" in a.price_dag_mode and a.incumbent:
+        ap.error("--price-dag-mode polish compares true values only; it does not apply "
+                 "--incumbent stickiness (not implemented)")
     if a.incumbent and a.stick_margin is None:
         a.stick_margin = 0.01
 
@@ -839,7 +848,8 @@ def main() -> int:
             res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
                                               rounds=a.price_rounds,
                                               select=a.price_select, seed_reach=seed,
-                                              reprice=a.price_reprice)
+                                              reprice=a.price_reprice,
+                                              dag_mode=a.price_dag_mode)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.method == "greedy":
@@ -938,7 +948,8 @@ def main() -> int:
             "leftover": a.leftover,
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,
-                "price_seed": a.price_seed, "price_reprice": a.price_reprice}
+                "price_seed": a.price_seed, "price_reprice": a.price_reprice,
+                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {})}
                if a.method == "price" else {}),
             **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
                 "allowed_courses": a.allowed_courses,
