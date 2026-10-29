@@ -120,49 +120,37 @@ def random_tree(rng: random.Random, root_ours: bool, depth: int = 5) -> Graph:
     return g
 
 
-def main() -> int:
-    rng = random.Random(20261019)
-    bad_a = bad_pen = bad_b = 0
-    n_books = 0
-    for t in range(40):
-        g = random_tree(rng, root_ours=(t % 2 == 0))
-        size = len(g.our)
-        opt = exact(g, size)
-        order, _cut = topo_up(g)
-        for lam in np.logspace(-5, 0, 40):
-            r = price_book(g, float(lam), order)
-            n = r["spent_distinct"]
-            n_books += 1
-            if abs(r["root_value_realized"] - opt[n]) > 1e-9:
-                bad_a += 1
-            if abs(r["root_value_penalized"] - float(np.max(opt - lam * np.arange(size + 1)))) > 1e-9:
-                bad_pen += 1
-        for target in sorted({min(size, x) for x in (1, 3, max(1, size // 3), max(1, size // 2))}):
-            res, info = price_search(g, target, log=lambda m: None)
-            nb = res["spent_distinct"]
-            if (abs(res["root_value_realized"] - opt[nb]) > 1e-9
-                    or info["upper_bound"] < opt[target] - 1e-9):
-                bad_b += 1
-    check("A: every price book is the best book of its size", bad_a == 0,
-          f"{bad_a} of {n_books} off the oracle")
-    check("A: penalised value = max_b (oracle(b) - lam*b)", bad_pen == 0, f"{bad_pen} off")
-    check("B: price_search is optimal for its size and its bound holds", bad_b == 0,
-          f"{bad_b} failures")
+# ── the graphs below, as functions (_test_budget_speed walks the same ones) ──
 
-    # policy_value (the shared evaluator) reproduces each price book's own value
-    rng2 = random.Random(7)
-    bad_pv = 0
-    for t in range(20):
-        g = random_tree(rng2, root_ours=(t % 2 == 0))
-        order, _cut = topo_up(g)
-        for lam in (1e-4, 1e-3, 1e-2):
-            r = price_book(g, lam, order)
-            pv = policy_value(g, r["booked"], order)
-            if abs(pv["value"] - r["root_value_realized"]) > 1e-12 or pv["played"] != r["spent_distinct"]:
-                bad_pv += 1
-    check("H: policy_value reproduces price_book's value and size", bad_pv == 0, f"{bad_pv} off")
+def trees(seed: int, n: int) -> list[Graph]:
+    rng = random.Random(seed)
+    return [random_tree(rng, root_ours=(t % 2 == 0)) for t in range(n)]
 
-    # C: three items worth 0.05 each against one 3-move chain worth 0.125
+
+def ab_trees() -> list[Graph]:
+    return trees(20261019, 40)
+
+
+def h_trees() -> list[Graph]:
+    return trees(7, 20)
+
+
+def i_trees() -> list[Graph]:
+    return trees(11, 20)
+
+
+def ab_targets(g: Graph) -> list[int]:
+    size = len(g.our)
+    return sorted({min(size, x) for x in (1, 3, max(1, size // 3), max(1, size // 2))})
+
+
+def i_targets(g: Graph) -> list[int]:
+    size = len(g.our)
+    return sorted({max(1, size // 3), max(1, size // 2)})
+
+
+def graph_c() -> Graph:
+    """C: three items worth 0.05 each against one 3-move chain worth 0.125"""
     g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
     g.opp[1] = OppNode(const_base=0.0, kids=[(0.25, 2, True, 0), (0.25, 3, True, 0),
                                              (0.25, 4, True, 0), (0.25, 5, True, 0)])
@@ -175,6 +163,85 @@ def main() -> int:
     g.our[9] = OurNode(l_node=0.5, cands=[("c3", None, False, 1.0)])
     g.ply = {1: 1, 2: 2, 3: 2, 4: 2, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6}
     g.reach = {1: 1, 2: .25, 3: .25, 4: .25, 5: .25, 6: .25, 7: .25, 8: .25, 9: .25}
+    return g
+
+
+def graph_d() -> Graph:
+    """D: X is reached through A and through B; worth 0.1 over its stop value"""
+    g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
+    g.opp[1] = OppNode(const_base=0.0, kids=[(0.5, 2, True, 0), (0.5, 3, True, 0)])
+    g.our[2] = OurNode(l_node=0.5, cands=[("a", 4, True, 0)])
+    g.our[3] = OurNode(l_node=0.5, cands=[("b", 5, True, 0)])
+    g.opp[4] = OppNode(const_base=0.0, kids=[(1.0, 6, True, 0)])
+    g.opp[5] = OppNode(const_base=0.0, kids=[(1.0, 6, True, 0)])
+    g.our[6] = OurNode(l_node=0.5, cands=[("x", None, False, 0.6)])
+    g.ply = {1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 4}
+    g.reach = {1: 1, 2: .5, 3: .5, 4: .5, 5: .5, 6: .5}       # max over paths
+    return g
+
+
+def graph_f(back_hash: int) -> Graph:
+    """F: a repetition cycle through a main-line position (see the F check)"""
+    g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
+    g.our[1] = OurNode(l_node=0.5, cands=[("m", 2, True, 0)])
+    g.opp[2] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
+    g.our[10] = OurNode(l_node=0.5, cands=[("back", back_hash, True, 0),
+                                           ("good", 30, True, 0)])
+    g.opp[back_hash] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
+    g.opp[30] = OppNode(const_base=0.0, kids=[(1.0, 40, True, 0)])
+    g.our[40] = OurNode(l_node=0.5, cands=[("x", None, False, 0.9)])
+    g.ply = {1: 0, 2: 1, 10: 2, back_hash: 3, 30: 3, 40: 4}
+    g.reach = {h: 1.0 for h in g.ply}
+    return g
+
+
+def graph_e() -> Graph:
+    """E: a fixed policy's move against a better one"""
+    return Graph(root=1, our={1: OurNode(l_node=0.5, cands=[("good", None, False, 0.7),
+                                                            ("src", None, False, 0.6)])},
+                 opp={}, epd={}, ply={1: 0}, reach={1: 1.0})
+
+
+def main() -> int:
+    bad_a = bad_pen = bad_b = 0
+    n_books = 0
+    for g in ab_trees():
+        size = len(g.our)
+        opt = exact(g, size)
+        order, _cut = topo_up(g)
+        for lam in np.logspace(-5, 0, 40):
+            r = price_book(g, float(lam), order)
+            n = r["spent_distinct"]
+            n_books += 1
+            if abs(r["root_value_realized"] - opt[n]) > 1e-9:
+                bad_a += 1
+            if abs(r["root_value_penalized"] - float(np.max(opt - lam * np.arange(size + 1)))) > 1e-9:
+                bad_pen += 1
+        for target in ab_targets(g):
+            res, info = price_search(g, target, log=lambda m: None)
+            nb = res["spent_distinct"]
+            if (abs(res["root_value_realized"] - opt[nb]) > 1e-9
+                    or info["upper_bound"] < opt[target] - 1e-9):
+                bad_b += 1
+    check("A: every price book is the best book of its size", bad_a == 0,
+          f"{bad_a} of {n_books} off the oracle")
+    check("A: penalised value = max_b (oracle(b) - lam*b)", bad_pen == 0, f"{bad_pen} off")
+    check("B: price_search is optimal for its size and its bound holds", bad_b == 0,
+          f"{bad_b} failures")
+
+    # policy_value (the shared evaluator) reproduces each price book's own value
+    bad_pv = 0
+    for g in h_trees():
+        order, _cut = topo_up(g)
+        for lam in (1e-4, 1e-3, 1e-2):
+            r = price_book(g, lam, order)
+            pv = policy_value(g, r["booked"], order)
+            if abs(pv["value"] - r["root_value_realized"]) > 1e-12 or pv["played"] != r["spent_distinct"]:
+                bad_pv += 1
+    check("H: policy_value reproduces price_book's value and size", bad_pv == 0, f"{bad_pv} off")
+
+    # C: three items worth 0.05 each against one 3-move chain worth 0.125
+    g = graph_c()
     opt = exact(g, 6)
     res, info = price_search(g, 6, log=lambda m: None)
     check("C: the whole budget books the chain and all three items (oracle 0.775)",
@@ -192,15 +259,7 @@ def main() -> int:
           f"{r6['spent_distinct']} positions")
 
     # D: X is reached through A and through B; worth 0.1 over its stop value
-    g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
-    g.opp[1] = OppNode(const_base=0.0, kids=[(0.5, 2, True, 0), (0.5, 3, True, 0)])
-    g.our[2] = OurNode(l_node=0.5, cands=[("a", 4, True, 0)])
-    g.our[3] = OurNode(l_node=0.5, cands=[("b", 5, True, 0)])
-    g.opp[4] = OppNode(const_base=0.0, kids=[(1.0, 6, True, 0)])
-    g.opp[5] = OppNode(const_base=0.0, kids=[(1.0, 6, True, 0)])
-    g.our[6] = OurNode(l_node=0.5, cands=[("x", None, False, 0.6)])
-    g.ply = {1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 4}
-    g.reach = {1: 1, 2: .5, 3: .5, 4: .5, 5: .5, 6: .5}       # max over paths
+    g = graph_d()
     order, _cut = topo_up(g)
     per_path = price_book(g, 0.03, order)
     total = dict(g.reach)
@@ -229,13 +288,11 @@ def main() -> int:
     rm, _ = price_search(g, 3, log=lambda m: None, reprice="max")
     check("I: reprice='max' still finds D's book in round 2", rm["spent_distinct"] == 3,
           f"{rm['booked']}")
-    rng3 = random.Random(11)
     bad_i = worse = 0
-    for t in range(20):
-        gt = random_tree(rng3, root_ours=(t % 2 == 0))
+    for gt in i_trees():
         size = len(gt.our)
         opt = exact(gt, size)
-        for target in sorted({max(1, size // 3), max(1, size // 2)}):
+        for target in i_targets(gt):
             cl, _ = price_search(gt, target, log=lambda m: None)
             bs, _ = price_search(gt, target, log=lambda m: None, rounds=4, select="best")
             mx, _ = price_search(gt, target, log=lambda m: None, rounds=3, reprice="max")
@@ -256,16 +313,7 @@ def main() -> int:
     # reach 1, so the cycle is broken at a tie: the book must still find A->good,
     # C->x however the tie falls.
     for back_hash in (50, 5):                  # O2 hashed above and below A
-        g = Graph(root=1, our={}, opp={}, epd={}, ply={}, reach={})
-        g.our[1] = OurNode(l_node=0.5, cands=[("m", 2, True, 0)])
-        g.opp[2] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
-        g.our[10] = OurNode(l_node=0.5, cands=[("back", back_hash, True, 0),
-                                               ("good", 30, True, 0)])
-        g.opp[back_hash] = OppNode(const_base=0.0, kids=[(1.0, 10, True, 0)])
-        g.opp[30] = OppNode(const_base=0.0, kids=[(1.0, 40, True, 0)])
-        g.our[40] = OurNode(l_node=0.5, cands=[("x", None, False, 0.9)])
-        g.ply = {1: 0, 2: 1, 10: 2, back_hash: 3, 30: 3, 40: 4}
-        g.reach = {h: 1.0 for h in g.ply}
+        g = graph_f(back_hash)
         res, _ = price_search(g, 3, log=lambda m: None)
         check(f"F: a repetition cycle does not cost the main line (back edge hash {back_hash})",
               res["booked"] == {1: "m", 10: "good", 40: "x"}
@@ -273,9 +321,7 @@ def main() -> int:
               f"{res['booked']}, {res['root_value_realized']}")
 
     # E: fixed policy
-    g = Graph(root=1, our={1: OurNode(l_node=0.5, cands=[("good", None, False, 0.7),
-                                                        ("src", None, False, 0.6)])},
-              opp={}, epd={}, ply={1: 0}, reach={1: 1.0})
+    g = graph_e()
     r = price_book(g, 0.01, topo_up(g)[0], fixed_policy={1: "src"})
     check("E: fixed_policy books only the source move", r["booked"] == {1: "src"},
           f"{r['booked']}")

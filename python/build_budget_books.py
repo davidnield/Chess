@@ -312,19 +312,21 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
-def evaluate_books(g, specs: list[str], perspective: str, log, what: str = "") -> None:
+def evaluate_books(g, specs: list[str], perspective: str, log, what: str = "",
+                   compiled=None) -> None:
     """In-model value of FOLLOWING each LABEL=PATH book on graph g
     (budget_core.policy_value), then, for two or more books, where they differ: every
     shallow position (ply <= 6) some book reaches in >= 1% of games, with each book's
-    reach and value there."""
-    order, _cut = bc.topo_up(g)
+    reach and value there. compiled: g's budget_compiled.CompiledGraph, if one is built
+    (the same values from array sweeps)."""
+    order = compiled.order if compiled is not None else bc.topo_up(g)[0]
     log(f"evaluating {len(specs)} book(s) on this graph ({what})")
     evals = {}
     for spec in specs:
         label, path = spec.split("=", 1)
         bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
         mv = {h: m for h, sd, m in bd.iter_rows() if sd == perspective and m}
-        r = bc.policy_value(g, mv, order, detail=True)
+        r = bc.policy_value(g, mv, order, detail=True, compiled=compiled)
         evals[label] = r
         log(f"  {label:<28} {len(mv):>7,} moves  value {r['value']:.5f} (our side)  "
             f"played {r['played']:,}  not candidates {r['missing']:,}")
@@ -456,6 +458,13 @@ def main() -> int:
                          "(budget_core.price_search dag_mode; measured against an exact "
                          "oracle in _test_budget_dag.py). polish: coordinate ascent after the "
                          "search, never over the budget. Default off.")
+    ap.add_argument("--price-engine", choices=["auto", "compiled", "legacy"], default="auto",
+                    help="--method price: how the search computes (budget_core.price_search "
+                         "engine). auto (default): array sweeps on a graph compiled once per "
+                         "run (budget_compiled.py) from budget_core.PRICE_COMPILED_MIN_NODES "
+                         "nodes, the dict walks below; legacy: the dict walks throughout, the "
+                         "reference. Every engine writes the same books bit for bit "
+                         "(_test_budget_speed.py); legacy exists to check that on real graphs.")
     ap.add_argument("--price-diagnose", action="store_true",
                     help="DIAGNOSTIC: run a fixed set of price-search variants on this "
                          "graph and log each one's size and in-model value (plus any "
@@ -831,6 +840,27 @@ def main() -> int:
             prev = d
         return 0
 
+    # --method price: compile the (final) graph once for every budget, and the source seed
+    # once (it does not depend on the budget)
+    price_cg = price_seed = None
+    if a.method == "price" and todo:
+        if a.price_engine == "compiled" or (
+                a.price_engine == "auto"
+                and len(g.our) + len(g.opp) >= bc.PRICE_COMPILED_MIN_NODES):
+            import budget_compiled
+            t1 = time.time()
+            price_cg = budget_compiled.compile_graph(g)
+            log(f"  graph compiled for the price search ({time.time()-t1:,.0f}s)")
+        if a.price_seed == "source":
+            # never dearer than the optimistic reach; the source book's policy reach
+            # (summed over its paths) where that is larger
+            order = (price_cg.order if price_cg is not None else
+                     (bc._topo_up_dict if a.price_engine == "legacy" else bc.topo_up)(g)[0])
+            price_seed = dict(g.reach)
+            price_seed.update({h: max(r, price_seed.get(h, 0.0)) for h, r in bc.policy_reach(
+                g, rep_moves, order, compiled=price_cg).items() if r > 0})
+            del order
+
     for b in budgets:
         out = outs[b]
         if b not in todo:
@@ -838,18 +868,12 @@ def main() -> int:
             continue
         price_info = None
         if a.method == "price":
-            seed = None
-            if a.price_seed == "source":
-                # never dearer than the optimistic reach; the source book's policy reach
-                # (summed over its paths) where that is larger
-                seed = dict(g.reach)
-                seed.update({h: max(r, seed.get(h, 0.0)) for h, r in bc.policy_reach(
-                    g, rep_moves, bc.topo_up(g)[0]).items() if r > 0})
             res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
                                               rounds=a.price_rounds,
-                                              select=a.price_select, seed_reach=seed,
+                                              select=a.price_select, seed_reach=price_seed,
                                               reprice=a.price_reprice,
-                                              dag_mode=a.price_dag_mode)
+                                              dag_mode=a.price_dag_mode,
+                                              engine=a.price_engine, compiled=price_cg)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.method == "greedy":
@@ -949,7 +973,8 @@ def main() -> int:
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,
                 "price_seed": a.price_seed, "price_reprice": a.price_reprice,
-                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {})}
+                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {}),
+                "price_engine": a.price_engine}
                if a.method == "price" else {}),
             **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
                 "allowed_courses": a.allowed_courses,
@@ -988,7 +1013,7 @@ def main() -> int:
         evaluate_books(g, [f"this_b{b}={outs[b]}" for b in budgets if outs[b].exists()]
                        + a.evaluate_after, a.perspective, log,
                        f"stop model {a.stop_model}, eps {eps:g}"
-                       f"{', gated' if a.gated_reach else ''}")
+                       f"{', gated' if a.gated_reach else ''}", compiled=price_cg)
     pk = peak_commit_gb()
     log(f"\ndone in {time.time()-t0:,.0f}s"
         + (f"; peak commit {pk:,.1f} GB" if pk is not None else ""))

@@ -215,6 +215,7 @@ python/
   build_sharp_reps.py            the locked recipe (one Stage-3 run per colour)
   build_baseline_books.py        reach-pruned books — the truncation baseline
   budget_core.py                 value-vs-budget curves
+  budget_compiled.py             ... and its price search as array sweeps
   build_budget_books.py          budget-constrained books
   stage1..stage4_*.py            legacy per-(event, elo band) sliced path
   score_repertoire.py            scorecard
