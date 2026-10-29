@@ -62,6 +62,7 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
+from duck_compat import duck_pl  # noqa: E402
 from repertoire_stats import ROOT_HASH, nsan  # noqa: E402
 
 COURSES = Path("E:/chess/courses")
@@ -110,15 +111,15 @@ class HoldoutIndex:
         con.execute(f"""CREATE TEMP TABLE f AS
             SELECT parent_hash, move_san, child_hash, total, white_wins + 0.5 * draws AS ws
             FROM {ps} WHERE parent_hash IN (SELECT position_hash FROM bpos)""")
-        our = con.execute("""
+        our = duck_pl(con, """
             SELECT f.parent_hash, b.san, MIN(f.child_hash) AS child,
                    SUM(f.total)::DOUBLE AS n, SUM(f.ws)::DOUBLE AS ws
             FROM f JOIN bm_df b ON f.parent_hash = b.position_hash
                                AND rtrim(f.move_san, '+#') = b.san
             WHERE f.child_hash IS NOT NULL
-            GROUP BY 1, 2""").pl()
-        tot = con.execute("SELECT parent_hash, SUM(total)::DOUBLE AS n, SUM(ws)::DOUBLE AS ws "
-                          "FROM f GROUP BY 1").pl()
+            GROUP BY 1, 2""")
+        tot = duck_pl(con, "SELECT parent_hash, SUM(total)::DOUBLE AS n, SUM(ws)::DOUBLE AS ws "
+                           "FROM f GROUP BY 1")
         con.execute("DROP TABLE f")
         log(f"  holdout: {our.height:,} of {bm.height:,} book moves played "
             f"({time.time() - t0:,.0f}s)")
@@ -126,18 +127,18 @@ class HoldoutIndex:
         kids = pl.concat([our.select(pl.col("child").alias("h")),
                           pl.DataFrame({"h": [ROOT_HASH]}, schema={"h": pl.Int64})]).unique()
         con.register("kids_df", kids.to_arrow())
-        opp = con.execute(f"""
+        opp = duck_pl(con, f"""
             SELECT parent_hash, child_hash, SUM(total)::DOUBLE AS n,
                    SUM(white_wins + 0.5 * draws)::DOUBLE AS ws
             FROM {ps} WHERE parent_hash IN (SELECT h FROM kids_df) AND child_hash IS NOT NULL
-            GROUP BY 1, 2 ORDER BY 1""").pl()
+            GROUP BY 1, 2 ORDER BY 1""")
         stop_at = pl.concat([bm.select(pl.col("position_hash").alias("h")), kids]).unique()
         con.register("stop_df", stop_at.to_arrow())
-        stops = con.execute(f"""
+        stops = duck_pl(con, f"""
             SELECT position_hash, kind, SUM(total)::DOUBLE AS n,
                    SUM(white_wins + 0.5 * draws)::DOUBLE AS ws
             FROM {term} WHERE position_hash IN (SELECT h FROM stop_df)
-            GROUP BY 1, 2""").pl()
+            GROUP BY 1, 2""")
         con.close()
         self.our = {(h, s): (c, n, w) for h, s, c, n, w in our.iter_rows()}
         self.tot = {h: (n, w) for h, n, w in tot.iter_rows()}

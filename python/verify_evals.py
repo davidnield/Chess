@@ -45,6 +45,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from duck_compat import duck_arrow  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
 
 BUCKETS = 512
@@ -451,9 +452,9 @@ def main() -> int:
                         f"USING SAMPLE reservoir(3000000 ROWS) REPEATABLE ({a.seed})").fetchall()
     var_keys = [(h, e) for h, e in cands if zobrist_int64(chess.Board(e + " 0 1")) != h]
     con.register("vk", pa.table({"h": [k[0] for k in var_keys], "e": [k[1] for k in var_keys]}))
-    rows = con.execute(f"SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket "
-                       f"FROM read_parquet({fl}) o SEMI JOIN vk ON o.position_hash = vk.h AND o.epd = vk.e"
-                       ).to_arrow_table().to_pylist()
+    rows = duck_arrow(con, f"SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket "
+                           f"FROM read_parquet({fl}) o SEMI JOIN vk ON o.position_hash = vk.h AND o.epd = vk.e"
+                      ).to_pylist()
     con.unregister("vk")
     n_var_found = len(rows)
     print(f"    ep_variant: {n_var_found:,} rows (of {len(cands):,} candidates checked)", flush=True)
@@ -462,10 +463,10 @@ def main() -> int:
     for name, where in strata.items():
         q = quota[name]
         # The sample goes on a subquery: DuckDB samples FROM before WHERE.
-        rows = con.execute(f"SELECT * FROM (SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} "
-                           f"AS bucket FROM read_parquet({fl}) WHERE {where})"
-                           + (f" USING SAMPLE reservoir({q} ROWS) REPEATABLE ({a.seed})" if q < 10**9 else "")
-                           ).to_arrow_table().to_pylist()
+        rows = duck_arrow(con, f"SELECT * FROM (SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} "
+                               f"AS bucket FROM read_parquet({fl}) WHERE {where})"
+                               + (f" USING SAMPLE reservoir({q} ROWS) REPEATABLE ({a.seed})" if q < 10**9 else "")
+                          ).to_pylist()
         print(f"    {name}: {len(rows):,} rows", flush=True)
         for r in rows:
             samp[(r["position_hash"], r["epd"])] = r
@@ -619,8 +620,10 @@ def main() -> int:
     for b, v in by_b.items():
         bf = book_files(book, b)
         con.register("pp", pa.table({"h": [x[0] for x in v], "e": [x[1] for x in v]}))
+        # fetchall, not fetchone: duckdb 2.0 keeps a result that was not read to its end open, and then
+        # refuses the unregister below and the next bucket's register.
         found = con.execute(f"""SELECT COUNT(*) FROM pp WHERE EXISTS (SELECT 1 FROM read_parquet({lit(bf)},
-                                hive_partitioning=false) k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e)""").fetchone()[0] if bf else 0
+                                hive_partitioning=false) k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e)""").fetchall()[0][0] if bf else 0
         bad += len(v) - found
         con.unregister("pp")
     check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd) ({bad} are not)")

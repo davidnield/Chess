@@ -58,6 +58,7 @@ import duckdb
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
+from duck_compat import duck_pl  # noqa: E402
 
 RULES = ("popular", "engine-top-1", "greedy-winrate", "from-book")
 # "from-book" is not a baseline — it re-grows an EXISTING repertoire through this
@@ -83,13 +84,13 @@ def edges_for(con, hashes: list[int], stats: str, min_games: int) -> pl.DataFram
     con.execute("CREATE OR REPLACE TEMP TABLE frontier (h BIGINT)")
     if hashes:
         con.executemany("INSERT INTO frontier VALUES (?)", [(h,) for h in hashes])
-    return con.execute(f"""
+    return duck_pl(con, f"""
         SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd, s.ply,
                s.total, s.white_wins, s.draws, s.black_wins
         FROM read_parquet('{stats}') s
         JOIN frontier f ON f.h = s.parent_hash
         WHERE s.total >= {min_games}
-    """).pl()
+    """)
 
 
 def attach_evals(df: pl.DataFrame, mm_hash, mm_cp) -> pl.DataFrame:

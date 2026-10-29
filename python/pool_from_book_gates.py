@@ -194,6 +194,7 @@ def _rem(x: int) -> int:
 def gate_reimpl(a) -> bool:
     import polars as pl
     import pyarrow.parquet as pq
+    from duck_compat import duck_arrow
     from eval_arrays import MISSING, open_eval_arrays
     from stage3_backwards_induction import LICHESS_CP_SCALE
     work = Path(a.work)
@@ -208,11 +209,11 @@ def gate_reimpl(a) -> bool:
     con = _duck(a)
     globs = ", ".join(f"'{g}'" for g in _slice_globs(book, events, bands))
     bl = ", ".join(map(str, a.buckets))
-    arr = pl.from_arrow(con.execute(f"""
+    arr = pl.from_arrow(duck_arrow(con, f"""
         SELECT child_hash, SUM(white_wins) w, SUM(draws) d, SUM(black_wins) b, SUM(total) t
         FROM read_parquet([{globs}], hive_partitioning=false)
         WHERE ply <= {cap} AND ((child_hash % 512) + 512) % 512 IN ({bl})
-        GROUP BY child_hash""").arrow())
+        GROUP BY child_hash"""))
     con.close()
     print(f"  arrivals scan: {arr.height:,} children ({time.time()-t0:.0f}s)", flush=True)
 
@@ -454,6 +455,7 @@ def gate_conservation(a) -> bool:
 def gate_evals(a) -> bool:
     import polars as pl
     from annotate.facts import EvalDB
+    from duck_compat import duck_arrow
     from stage3_backwards_induction import LICHESS_CP_SCALE
     work = Path(a.work)
     prm = load_params(work)
@@ -486,10 +488,10 @@ def gate_evals(a) -> bool:
                  for e in prm["events"] for b in prm["elo_bands"]
                  if (book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet").exists()]
         lst = ", ".join(f"'{f}'" for f in files)
-        below.append(pl.from_arrow(con.execute(f"""
+        below.append(pl.from_arrow(duck_arrow(con, f"""
             SELECT parent_hash, move_san, MIN(child_hash) AS child_hash, SUM(total)::BIGINT AS total
             FROM read_parquet([{lst}], hive_partitioning=false) WHERE ply <= {cap}
-            GROUP BY parent_hash, move_san HAVING SUM(total) < {floor}""").arrow()))
+            GROUP BY parent_hash, move_san HAVING SUM(total) < {floor}""")))
     con.close()
     below = pl.concat(below).filter(pl.col("parent_hash").is_in(list(pp))
                                     & ~pl.col("parent_hash").is_in(list(coll)))
