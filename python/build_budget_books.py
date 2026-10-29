@@ -54,6 +54,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 import budget_core as bc                                    # noqa: E402
+from duck_compat import duck_pl                             # noqa: E402
 from stage3_backwards_induction import cp_to_expected_score  # noqa: E402
 from zobrist import zobrist_int64                            # noqa: E402
 
@@ -245,14 +246,14 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         con.execute("CREATE OR REPLACE TEMP TABLE frontier (h BIGINT)")
         con.executemany("INSERT INTO frontier VALUES (?)",
                         [(h,) for h in frontier])
-        df = con.execute(f"""
+        df = duck_pl(con, f"""
             SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd,
                    s.total, s.white_wins, s.draws, s.black_wins,
                    s.white_score_avg
             FROM read_parquet('{stats}') s
             JOIN frontier f ON f.h = s.parent_hash
             WHERE s.total >= {min_games}
-        """).pl()
+        """)
         fresh = {h for h in frontier if h not in fetched}
         if df.height and fresh:
             keep = df.filter(pl.col("parent_hash").is_in(list(fresh)))

@@ -28,6 +28,8 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
+from duck_compat import duck_pl
+
 WORK = Path("E:/chess/courses")
 
 
@@ -40,7 +42,7 @@ def overlaps(con, course_moves: str, min_shared: int) -> pl.DataFrame:
         SELECT DISTINCT course_id, rep_side AS side, parent_hash,
                rtrim(move_san, '+#') AS m
         FROM read_parquet('{_p(course_moves)}') WHERE in_book""")
-    return con.execute(f"""
+    return duck_pl(con, f"""
         WITH sz AS (SELECT course_id, side, count(*) AS n FROM bm GROUP BY ALL),
         pr AS (SELECT x.course_id AS a, y.course_id AS b, x.side, count(*) AS shared
                FROM bm x JOIN bm y ON x.side = y.side AND x.parent_hash = y.parent_hash
@@ -51,7 +53,7 @@ def overlaps(con, course_moves: str, min_shared: int) -> pl.DataFrame:
                shared / least(sa.n, sb.n) AS containment
         FROM pr JOIN sz sa ON sa.course_id = pr.a AND sa.side = pr.side
                 JOIN sz sb ON sb.course_id = pr.b AND sb.side = pr.side
-        ORDER BY jaccard DESC""").pl()
+        ORDER BY jaccard DESC""")
 
 
 def groups(sizes: dict[tuple[str, str], int], dup: pl.DataFrame) -> pl.DataFrame:

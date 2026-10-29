@@ -41,6 +41,7 @@ import numpy as np
 import polars as pl
 import pyarrow as pa
 
+from duck_compat import duck_pl
 from stage3_backwards_induction import LICHESS_CP_SCALE
 
 MISSING = -32768
@@ -52,13 +53,13 @@ def _edges(con, path: str, keys: np.ndarray, name: str) -> pl.DataFrame:
     if not len(keys):
         return pl.DataFrame(schema={"parent": pl.Int64, "child": pl.Int64, "n": pl.Float64})
     con.register(name, pa.table({"h": pa.array(np.unique(keys), pa.int64())}))
-    df = con.execute(f"""
+    df = duck_pl(con, f"""
         SELECT s.parent_hash AS parent, s.child_hash AS child,
                SUM(s.total)::DOUBLE AS n
         FROM read_parquet('{path}') s JOIN {name} k ON k.h = s.parent_hash
         WHERE s.child_hash IS NOT NULL
         GROUP BY 1, 2
-    """).pl()
+    """)
     con.unregister(name)
     return df
 

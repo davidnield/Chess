@@ -94,6 +94,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_pooled_stats import (_bucket_expr, _duck, _mem_bytes,
                                 _peak_commit_bytes, _sql_path)
 from consolidate_reclaim import read_fully, totals
+from duck_compat import duck_arrow
 from zobrist import zobrist_int64
 
 # The merge's bucket count for the explorer book (spec A2). Every hash bucket
@@ -323,12 +324,12 @@ def _seed_task(task: tuple) -> tuple:
     b, edge_files, out_s, threads, mem, tmp_s = task
     con = _duck(threads, mem, Path(tmp_s))
     try:
-        t = con.execute(f"""
+        t = duck_arrow(con, f"""
             SELECT parent_hash, MIN(parent_epd) AS a, MAX(parent_epd) AS b
             FROM read_parquet({_read_list(edge_files)})
             WHERE parent_epd IS NOT NULL
             GROUP BY parent_hash
-        """).fetch_arrow_table()
+        """)
     finally:
         con.close()
     hs, es = t.column(0).to_pylist(), t.column(1).to_pylist()
@@ -365,7 +366,7 @@ def _replay_task(task: tuple) -> tuple:
                 f"{_read_list(need_files)})) n ON e.c0 = n.h")
     con = _duck(threads, mem, Path(tmp_s))
     try:
-        t = con.execute(f"""
+        t = duck_arrow(con, f"""
             WITH e AS (
                 SELECT parent_hash, move_san,
                        MIN(child_hash) AS c0, MAX(child_hash) AS c1
@@ -380,7 +381,7 @@ def _replay_task(task: tuple) -> tuple:
                    list(e.c0) AS c0s, list(e.c1) AS c1s
             FROM e JOIN k ON e.parent_hash = k.h {semi}
             GROUP BY e.parent_hash, k.epd
-        """).fetch_arrow_table()
+        """)
     finally:
         con.close()
     parents = t.column(0).to_pylist()
@@ -980,14 +981,14 @@ def _pending_task(task: tuple) -> int:
                 f"ON e.parent_hash = q.parent_hash AND e.move_san = q.move_san")
     con = _duck(threads, mem, Path(tmp_s))
     try:
-        t = con.execute(f"""
+        t = duck_arrow(con, f"""
             SELECT e.parent_hash, e.move_san, e.child_hash
             FROM (SELECT DISTINCT parent_hash, move_san, child_hash
                   FROM read_parquet({_read_list(edge_files)})) e
             SEMI JOIN (SELECT h FROM read_parquet({_read_list(need_files)})) n
               ON e.child_hash = n.h
             {anti}
-        """).fetch_arrow_table()
+        """)
     finally:
         con.close()
     out = Path(out_s)
@@ -1095,7 +1096,7 @@ def _shrink_task(task: tuple) -> int:
                    f"read_parquet({_read_list(known_files)}) k ON n.h = k.h")
         else:
             sql = f"SELECT h FROM {src}"
-        t = con.execute(sql).fetch_arrow_table()
+        t = duck_arrow(con, sql)
     finally:
         con.close()
     if t.num_rows:
@@ -1117,7 +1118,7 @@ def _missing_task(task: tuple) -> int:
             """
         else:
             sql = f"SELECT DISTINCT parent_hash AS h FROM {src}"
-        t = con.execute(sql).fetch_arrow_table()
+        t = duck_arrow(con, sql)
     finally:
         con.close()
     if t.num_rows:
