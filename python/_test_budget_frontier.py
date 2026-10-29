@@ -137,8 +137,52 @@ def main() -> int:
           parents <= {e[0] for e in EDGES},
           f"unexpected {sorted(parents - {e[0] for e in EDGES})}")
 
+    check_order_invariance()
+
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
+
+
+def check_order_invariance() -> None:
+    """The same pool in shuffled row orders gives the same frame, row for row
+    (2026-10-29): the walk is order-dependent (a transposition's depth comes from the
+    parent that first gives it its best reach), and DuckDB's join order follows the
+    file's, so two White b2000 builds of one input differed by two positions."""
+    import random
+    rng = random.Random(29)
+    levels = [[1]] + [[100 * d + i for i in range(1, 7)] for d in range(1, 9)]
+    rows = []
+    for d in range(8):
+        for p in levels[d]:
+            kids = rng.sample(levels[d + 1], 3)        # shared children: transpositions
+            if d >= 2 and rng.random() < 0.5:          # and arrivals from two depths
+                kids.append(rng.choice(levels[min(d + 1, 8)][:2]))
+            for j, c in enumerate(dict.fromkeys(kids)):
+                rows.append((p, f"m{j}", c, rng.choice([1, 1, 2, 3, 5]) * 100))
+    frames = []
+    for k in range(4):
+        rng.shuffle(rows)
+        path = Path(__file__).parent / f"_tmp_frontier_order{k}.parquet"
+        pl.DataFrame({
+            "parent_hash": [r[0] for r in rows], "move_san": [r[1] for r in rows],
+            "child_hash": [r[2] for r in rows], "parent_epd": [f"e{r[0]}" for r in rows],
+            "total": [r[3] for r in rows], "white_wins": [r[3] // 2 for r in rows],
+            "draws": [0] * len(rows), "black_wins": [r[3] - r[3] // 2 for r in rows],
+            "white_score_avg": [0.5] * len(rows),
+        }).write_parquet(path, row_group_size=7)
+        try:
+            con = duckdb.connect()
+            con.execute("SET threads TO 4")
+            frames.append(collect_subgraph_edges(
+                con, path.as_posix(), root=1, our_white=True, eps=0.01,
+                max_ply=5, share_floor=0.002, min_games=0))
+            con.close()
+        finally:
+            path.unlink(missing_ok=True)
+    check("shuffled row orders of one pool give the same subgraph, row for row",
+          all(f.equals(frames[0]) for f in frames[1:]),
+          f"{frames[0].height} rows; differ: "
+          f"{[k for k, f in enumerate(frames) if not f.equals(frames[0])]}")
 
 
 if __name__ == "__main__":

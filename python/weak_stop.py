@@ -61,7 +61,9 @@ def _edges(con, path: str, keys: np.ndarray, name: str) -> pl.DataFrame:
         GROUP BY 1, 2
     """)
     con.unregister(name)
-    return df
+    # a fixed row order: the per-parent float sums below run in it (DuckDB's join
+    # order varies run to run, and with it their last bits)
+    return df.sort("parent", "child")
 
 
 def _shares(df: pl.DataFrame, min_share: float) -> pl.DataFrame:

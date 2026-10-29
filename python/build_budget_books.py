@@ -261,6 +261,12 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
             JOIN frontier f ON f.h = s.parent_hash
             WHERE s.total >= {min_games}
         """)
+        # A fixed order (2026-10-29): DuckDB's join order and polars' group_by order
+        # vary run to run, and the walk below is order-dependent -- a transposition's
+        # depth is set by whichever parent first gives it its best reach, and depth
+        # drives the max_ply cut and the turn parity -- so two builds of one input
+        # differed by a few positions. Rows also reach build_graph in this order.
+        df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = {h for h in frontier if h not in fetched}
         if df.height and fresh:
             keep = df.filter(pl.col("parent_hash").is_in(list(fresh)))
@@ -273,7 +279,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
             admit.prefetch(df["parent_hash"].to_list()
                            + df["child_hash"].drop_nulls().to_list())
         if df.height:
-            for ph, grp in df.group_by("parent_hash"):
+            for ph, grp in df.group_by("parent_hash", maintain_order=True):
                 ph = ph[0] if isinstance(ph, tuple) else ph
                 r = reach.get(ph, 0.0)
                 p_ply = ply.get(ph, 0)
@@ -650,7 +656,7 @@ def main() -> int:
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
-    parents = edf["parent_hash"].unique().to_list()
+    parents = edf["parent_hash"].unique(maintain_order=True).to_list()
     log(f"  {edf.height:,} edges, {len(parents):,} parent nodes "
         f"({time.time()-t0:,.0f}s)")
 
