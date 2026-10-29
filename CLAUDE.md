@@ -272,6 +272,21 @@ physical RAM**, ~1 core busy, zero spill, zero output. The fix is a *lower* memo
 ~half of RAM for the OS cache when scanning big inputs), not a higher one — an OOM-adjacent failure
 that looks like a hang rather than an error.
 
+### DuckDB 2.0 — why `requirements.txt` still pins `<2`
+Fetch DuckDB results as frames only through `duck_compat.duck_pl` / `duck_arrow`. 2.0 removed
+`.pl()`, `.arrow()` and `.fetch_arrow_table()` from `con.execute()` results, and the helpers work on
+1.5 and 2.x. Two other 2.0 changes (tested on 2.0.0, 2026-10-29) are what keep the pin:
+- **Parquet nullability.** 2.0's writer marks a column REQUIRED wherever the plan's statistics
+  prove it holds no NULLs, where 1.5 writes every column OPTIONAL. One `COPY` then writes different
+  schemas for different data, and DuckDB-written months stop schema-matching each other and the
+  Rust producer's (`_test_bucket_month`, `_test_rust_extract`; `merge.rs` compares nullability).
+  `SET disabled_optimizers='statistics_propagation'` restores OPTIONAL, but it changes planning on
+  the big merges and is unmeasured.
+- **Open results.** A SELECT run by `con.execute()` and not read to its end (`.fetchone()`) keeps
+  the connection busy: `register()`, `unregister()` of a registered view and the `duck_compat`
+  helpers raise ResourceInUseException until the next `con.execute()`. Use `fetchall()` on a
+  connection that is reused.
+
 ### Polars on Windows at scale
 - `LazyFrame.sink_parquet()` on >10 GB inputs silently produces **no output file** (no exception).
   Use eager `collect().write_parquet()`; if you must stream, check file existence after every write.
