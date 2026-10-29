@@ -30,7 +30,18 @@ most b positions. It is exponential and meant for graphs of a dozen our-nodes.
      size (does it waste the positions it spends); and for each DAG candidate, on how
      many instances it scores below both baselines / below the better one.
   G  gates on the report (plan item 11): polish always fits, is never below both price
-     and dp, and is exact on >= 99% of instances with mean gap < 1e-4.
+     and dp, and is exact on >= 99% of instances with mean gap < 1e-4; dp+polish always
+     fits, is never below dp, and is exact at least as often as dp; polish+dp is the
+     better of polish and dp+polish (to price_search's 1e-15 tie rule).
+  S  stickiness (g.meta["stick"], --incumbent; polish_book's objective J = value - margin
+     x reach of the changed positions). S0: no stick and margin 0 are the same polish bit
+     for bit. S1: with a huge margin polish never changes a move its start kept from the
+     incumbent. S2: sticky polish fits, never lowers its start's J, and reports J and the
+     churn as an independent computation does. REPORT: churn vs value at margins 0 /
+     0.005 / 0.01 / 0.02, the incumbent being the exact optimum of a perturbed copy of
+     each graph, every engine held to the exact optimum of J by the same enumeration;
+     gated on sticky polish fitting, being J-exact on >= 98%, and churning less as the
+     margin rises.
 
 Engines:
   price         price_search with the production DAG flags (--price-seed source
@@ -43,16 +54,23 @@ Engines:
                 candidates (a) and (c).
   dp            build_curves + extract_book (the curve engine, as used for Black).
   dp_leftover   the same with --leftover.
+  dp+polish     polish_book started from the dp book (build_budget_books --method dp
+                --polish).
+  polish+dp     polish with the dp book as a fourth start (price_search polish_from,
+                --polish-from).
 
-Usage:  _test_budget_dag.py [N_GRAPHS]          checks + report (default 300 graphs)
+Usage:  _test_budget_dag.py [N_GRAPHS [N_STICK]]  checks + reports (default 300 graphs, 60
+                                                 for the stickiness report)
         _test_budget_dag.py --scale 10000,100000 400,2000
                                                  wall-clock of each mode on big_dag
                                                  graphs of those sizes, at those targets
-                                                 [--modes polish,...: a subset of the modes]
+                                                 [--modes polish,...: a subset of the modes,
+                                                 plus dp+polish and polish+stick]
 Exit 1 when a check fails.
 """
 from __future__ import annotations
 
+import copy
 import random
 import sys
 import time
@@ -79,9 +97,9 @@ def check(name, ok, detail=""):
 
 # ── the exact oracle ────────────────────────────────────────────────────────
 
-def exact_dag(g: Graph, bmax: int) -> tuple[np.ndarray, list[dict | None]]:
+def exact_dag(g: Graph, bmax: int, on_book=None) -> tuple[np.ndarray, list[dict | None]]:
     """(opt, books): opt[b] = best policy_value of any book playing <= b positions,
-    books[b] one book attaining it."""
+    books[b] one book attaining it. on_book(moves, value, size) sees every book."""
     order, _cut = topo_up(g)
     pos = {h: i for i, h in enumerate(topo_down(g))}
     best = np.full(bmax + 1, -np.inf)
@@ -117,6 +135,8 @@ def exact_dag(g: Graph, bmax: int) -> tuple[np.ndarray, list[dict | None]]:
             pv = policy_value(g, moves, order)
             n = pv["played"]
             assert n == len(moves)
+            if on_book is not None:
+                on_book(moves, pv["value"], n)
             if pv["value"] > best[n]:
                 best[n] = pv["value"]
                 books[n] = dict(moves)
@@ -324,12 +344,41 @@ def scale(sizes: list[int], targets: list[int], modes=None) -> None:
         g = big_dag(random.Random(n), n)
         order, _cut = topo_up(g)
         seed = source_seed(g, order)
+        incs: dict[int, dict] = {}
         for B in targets:
             base = None
             for mode in (None,) + tuple(DAG_MODES if modes is None else modes):
                 t0 = time.time()
-                res, _ = price_search(g, B, log=quiet, rounds=4, select="best",
-                                      reprice="max", seed_reach=seed, dag_mode=mode)
+                if mode == "dp+polish":
+                    # the curve engine, then polish from its book: two rows, the second
+                    # timing the polish alone
+                    curves, _ = build_curves(g, bmax=B)
+                    dp = extract_book(g, curves, B)["booked"]
+                    dt = time.time() - t0
+                    pv = policy_value(g, dp, order)
+                    print(f"  {len(g.our) + len(g.opp):>9,}{B:>8,}  {'dp':<16}"
+                          f"{dt:>9.1f}{dt / base:>9.2f}{pv['played']:>7,}"
+                          f"{pv['value']:>10.5f}", flush=True)
+                    t0 = time.time()
+                    moves, _st = polish_book(g, dp, B, order)
+                    res = book_result(g, moves, order)
+                    mode = "+polish (alone)"
+                elif mode == "polish+stick":
+                    # rebuild stickiness at margin 0.01: the incumbent is the polished
+                    # book of a perturbed copy (perturbed()); the search runs on g
+                    if B not in incs:
+                        h = perturbed(g, random.Random(B))
+                        incs[B] = price_search(h, B, log=quiet, rounds=4, select="best",
+                                               reprice="max", seed_reach=seed,
+                                               dag_mode="polish")[0]["booked"]
+                        t0 = time.time()
+                    g.meta = {"stick": (incs[B], 0.01)}
+                    res, _ = price_search(g, B, log=quiet, rounds=4, select="best",
+                                          reprice="max", seed_reach=seed, dag_mode="polish")
+                    g.meta = {}
+                else:
+                    res, _ = price_search(g, B, log=quiet, rounds=4, select="best",
+                                          reprice="max", seed_reach=seed, dag_mode=mode)
                 dt = time.time() - t0
                 base = dt if mode is None else base
                 print(f"  {len(g.our) + len(g.opp):>9,}{B:>8,}  {mode or 'price':<16}"
@@ -405,6 +454,11 @@ def engines(g: Graph, order: list[int], B: int) -> dict[str, dict]:
     curves, _ = build_curves(g, bmax=B)
     out["dp"] = extract_book(g, curves, B)["booked"]
     out["dp_leftover"] = extract_book(g, curves, B, leftover=True)["booked"]
+    out["dp+polish"] = polish_book(g, out["dp"], B, order)[0]
+    res, _ = price_search(g, B, log=quiet, rounds=4, select="best", reprice="max",
+                          seed_reach=source_seed(g, order), dag_mode="polish",
+                          polish_from=[out["dp"]])
+    out["polish+dp"] = res["booked"]
     return out
 
 
@@ -438,7 +492,9 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
     tallies: dict[str, Tally] = {}
     t_or = t_en = 0.0
     n_inst = n_transpo = 0
-    worse = {m: {"both": 0, "either": 0} for m in DAG_MODES}
+    worse = {m: {"both": 0, "either": 0} for m in DAG_MODES + ("dp+polish",)}
+    below_dp = 0                        # dp+polish below dp
+    not_max = 0                         # polish+dp is not the better of polish, dp+polish
     for t in range(n_graphs):
         g = random_dag(rng, root_ours=(t % 2 == 0), transpo=transpo)
         while len(g.our) < 3:
@@ -465,10 +521,12 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
                 pv = policy_value(g, moves, order)
                 tallies.setdefault(name, Tally()).add(opt, B, pv["value"], pv["played"])
                 got[name] = pv["value"] if pv["played"] <= B else -np.inf
-            for mode in DAG_MODES:
+            for mode in DAG_MODES + ("dp+polish",):
                 v = got[mode]
                 worse[mode]["both"] += (v < got["price"] - TOL and v < got["dp"] - TOL)
                 worse[mode]["either"] += (v < max(got["price"], got["dp"]) - TOL)
+            below_dp += got["dp+polish"] < got["dp"] - TOL
+            not_max += abs(got["polish+dp"] - max(got["polish"], got["dp+polish"])) > 1e-15
     print(f"\n  {n_graphs} random DAGs ({n_transpo} with a transposition), {n_inst} "
           f"(graph, budget) instances; oracle {t_or:.1f}s, engines {t_en:.1f}s")
     print(f"  {'engine':<14}{'fits':>7}{'exact':>8}{'gap mean':>10}{'gap max':>10}"
@@ -478,10 +536,200 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
     print("  (fits: book within budget; exact: fits and equals the oracle at the budget;"
           "\n   gap: oracle(budget) - value over the books that fit;"
           " own: oracle(own size) - value)")
-    for mode in DAG_MODES:
+    for mode in DAG_MODES + ("dp+polish",):
         print(f"  {mode}: below BOTH price and dp on {worse[mode]['both']} instances, "
               f"below the better of the two on {worse[mode]['either']}")
+    print(f"  dp+polish: below dp on {below_dp} instances; polish+dp (polish_from=[dp]) "
+          f"differs from the better of polish and dp+polish on {not_max}")
+    worse["dp+polish"]["below_dp"] = below_dp
+    worse["polish+dp"] = {"not_max": not_max}
     return tallies, worse
+
+
+# ── stickiness (--incumbent) ────────────────────────────────────────────────
+
+STICK_MARGINS = (0.0, 0.005, 0.01, 0.02)
+
+
+def changed(g: Graph, moves: dict, inc: dict, W: dict) -> list[int]:
+    """Positions the book plays (W > 0) where the incumbent's move is a candidate and
+    the book plays another: what polish_book's objective charges."""
+    return [u for u, m in moves.items() if W.get(u, 0.0) > 0 and u in inc
+            and m.rstrip("+#") != inc[u]
+            and any(c[0].rstrip("+#") == inc[u] for c in g.our[u].cands)]
+
+
+def sticky(g: Graph, moves: dict, order: list[int], inc: dict, margin: float) -> dict:
+    """J = value - margin * (reach of the changed positions), from policy_value and
+    policy_reach alone (an independent statement of polish_book's objective)."""
+    pv = policy_value(g, moves, order)
+    W = policy_reach(g, moves, order)
+    ch = changed(g, moves, inc, W)
+    rc = sum(W[u] for u in ch)
+    return {"value": pv["value"], "played": pv["played"], "changed": len(ch),
+            "reach_changed": rc, "J": pv["value"] - margin * rc}
+
+
+def perturbed(g: Graph, rng: random.Random, sd: float = 0.03) -> Graph:
+    """The same graph with every stop and leaf value moved by up to sd: a stand-in for
+    the data the incumbent book was built on."""
+    h = copy.deepcopy(g)
+    for n in h.our.values():
+        n.l_node += rng.uniform(-sd, sd)
+        n.cands = [(s, ch, ins, lv if ins else lv + rng.uniform(-sd, sd))
+                   for s, ch, ins, lv in n.cands]
+    for n in h.opp.values():
+        n.kids = [(p, ch, ins, lv if ins else lv + rng.uniform(-sd, sd))
+                  for p, ch, ins, lv in n.kids]
+    return h
+
+
+def sticky_engines(g: Graph, order: list[int], B: int, seed: dict) -> dict[str, dict]:
+    """The recipe engines under whatever g.meta["stick"] holds: the price search alone
+    and with polish (--price-seed source --price-reprice max --price-rounds 1
+    --price-select best [--price-dag-mode polish]), dp and dp+polish."""
+    quiet = lambda *_: None  # noqa: E731
+    out = {}
+    for name, mode in (("price", None), ("polish", "polish")):
+        res, _ = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
+                              seed_reach=seed, dag_mode=mode)
+        out[name] = res["booked"]
+    curves, _ = build_curves(g, bmax=B)
+    out["dp"] = extract_book(g, curves, B)["booked"]
+    out["dp+polish"] = polish_book(g, out["dp"], B, order)[0]
+    return out
+
+
+def stick_checks() -> None:
+    """S0: no stick, or a margin of 0, is the same polish bit for bit (polish_book and
+    price_search dag_mode='polish'). S1: with a huge margin polish never changes a move
+    its start kept from the incumbent. S2: sticky polish fits, never lowers its start's
+    J, and reports J and the changed positions as sticky() computes them."""
+    quiet = lambda *_: None  # noqa: E731
+    rng = random.Random(41)
+    bad0 = bad1 = bad2 = n1 = 0
+    for t in range(60):
+        g = random_dag(rng, root_ours=(t % 2 == 0))
+        order, _cut = topo_up(g)
+        seed = source_seed(g, order)
+        inc = {h: rng.choice(n.cands)[0] for h, n in g.our.items() if rng.random() < 0.7}
+        starts = [{}, {h: rng.choice(n.cands)[0] for h, n in g.our.items()
+                       if rng.random() < 0.5}, dict(inc)]
+        for B in (2, 5, 8):
+            g.meta = {}
+            ref = [polish_book(g, st, B, order) for st in starts]
+            rp, ip = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
+                                  seed_reach=seed, dag_mode="polish")
+            g.meta = {"stick": (inc, 0.0)}
+            got = [polish_book(g, st, B, order) for st in starts]
+            rq, iq = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
+                                  seed_reach=seed, dag_mode="polish")
+            for (ma, sa), (mb, sb) in zip(ref, got):
+                bad0 += ma != mb or {**sa, "seconds": 0} != {**sb, "seconds": 0}
+            bad0 += (rp["booked"] != rq["booked"]
+                     or rp["root_value_realized"] != rq["root_value_realized"]
+                     or ip["sweep"] != iq["sweep"])
+            for margin in (1e9, 0.01):
+                g.meta = {"stick": (inc, margin)}
+                rs, _ = price_search(g, B, log=quiet, rounds=1, select="best",
+                                     reprice="max", seed_reach=seed)
+                curves, _ = build_curves(g, bmax=B)
+                for st in starts + [rs["booked"], extract_book(g, curves, B)["booked"]]:
+                    mv, pst = polish_book(g, st, B, order)
+                    sj = sticky(g, mv, order, inc, margin)
+                    s0 = sticky(g, st, order, inc, margin)
+                    if margin > 1:
+                        W0 = policy_reach(g, st, order)
+                        kept = [u for u, m in st.items() if W0.get(u, 0.0) > 0
+                                and inc.get(u) == m]
+                        n1 += len(kept)
+                        bad1 += sum(1 for u in kept if u in mv and mv[u] != inc[u])
+                    else:
+                        bad2 += (sj["played"] > B
+                                 or (s0["played"] <= B and sj["J"] < s0["J"] - 1e-12)
+                                 or abs(pst.get("objective", pst["value"]) - sj["J"]) > 1e-12
+                                 or pst.get("changed", 0) != sj["changed"])
+    check("S0: no stick and margin 0 give the same polish, bit for bit", bad0 == 0,
+          f"{bad0} differ")
+    check("S1: with a huge margin polish never changes a move its start kept",
+          bad1 == 0, f"{bad1} of {n1} kept moves changed")
+    check("S2: sticky polish fits, never lowers its start's J, reports J and churn",
+          bad2 == 0, f"{bad2} off")
+
+
+def stick_report(n_graphs: int = 60, seed: int = 20261029, sd: float = 0.03) -> dict:
+    """Churn vs value on random DAGs. The incumbent at each budget is the exact optimum
+    of a perturbed copy of the graph (perturbed()); the rebuild runs each recipe engine
+    with g.meta["stick"] = (incumbent, margin). Per engine and margin: value gap to the
+    true optimum, gap to the exact optimum of J (sticky polish's objective, by the same
+    enumeration), and the changed positions (count, reach). Margin 0 is the unsticky
+    rebuild, its churn measured against the same incumbent."""
+    rng = random.Random(seed)
+    names = ("incumbent", "price", "polish", "dp", "dp+polish")
+    acc = {(e, m): {"n": 0, "fit": 0, "gap": 0.0, "jgap": 0.0, "jexact": 0, "changed": 0,
+                    "reach_changed": 0.0} for e in names for m in STICK_MARGINS}
+    t0 = time.time()
+    for t in range(n_graphs):
+        g = random_dag(rng, root_ours=(t % 2 == 0))
+        while len(g.our) < 3:
+            g = random_dag(rng, root_ours=(t % 2 == 0))
+        budgets = sorted({b for b in (2, 3, 5, 8, 12) if b <= len(g.our)})
+        bmax = max(budgets)
+        _o, inc_books = exact_dag(perturbed(g, rng, sd), bmax)
+        incs = {B: {h: m for h, m in (inc_books[B] or {}).items()} for B in budgets}
+        order, _cut = topo_up(g)
+        # J's optimum at every (budget, margin) from ONE enumeration of the true graph
+        jbest = {(B, m): np.full(bmax + 1, -np.inf) for B in budgets for m in STICK_MARGINS}
+
+        def on_book(moves, value, n, order=order, incs=incs, jbest=jbest):
+            W = policy_reach(g, moves, order)
+            for B in budgets:
+                rc = sum(W[u] for u in changed(g, moves, incs[B], W))
+                for m in STICK_MARGINS:
+                    a = jbest[(B, m)]
+                    a[n] = max(a[n], value - m * rc)
+        opt, _books = exact_dag(g, bmax, on_book)
+        for a in jbest.values():
+            np.maximum.accumulate(a, out=a)
+        seed_r = source_seed(g, order)
+        for B in budgets:
+            inc = incs[B]
+            for m in STICK_MARGINS:
+                g.meta = {"stick": (inc, m)} if m else {}
+                books = sticky_engines(g, order, B, seed_r)
+                books["incumbent"] = inc
+                g.meta = {}
+                for e in names:
+                    r = sticky(g, books[e], order, inc, m)
+                    a = acc[(e, m)]
+                    a["n"] += 1
+                    if r["played"] > B:
+                        continue
+                    a["fit"] += 1
+                    a["gap"] += opt[B] - r["value"]
+                    jg = jbest[(B, m)][B] - r["J"]
+                    a["jgap"] += jg
+                    a["jexact"] += jg <= TOL
+                    a["changed"] += r["changed"]
+                    a["reach_changed"] += r["reach_changed"]
+    n_inst = acc[("polish", 0.0)]["n"]
+    print(f"\n  stickiness: {n_graphs} random DAGs, {n_inst} (graph, budget) instances; "
+          f"incumbent = the exact optimum of a copy perturbed by +-{sd:g}; "
+          f"{time.time() - t0:.1f}s")
+    print(f"  {'engine':<11}{'margin':>7}{'fits':>7}{'gap':>9}{'J gap':>9}{'J exact':>9}"
+          f"{'changed':>9}{'reach chg':>11}")
+    for e in names:
+        for m in STICK_MARGINS:
+            a = acc[(e, m)]
+            f = max(a["fit"], 1)
+            print(f"  {e:<11}{m:>7g}{a['fit'] / a['n']:>7.1%}{a['gap'] / f:>9.5f}"
+                  f"{a['jgap'] / f:>9.5f}{a['jexact'] / a['n']:>9.1%}"
+                  f"{a['changed'] / f:>9.3f}{a['reach_changed'] / f:>11.4f}")
+    print("  (gap: true optimum - value; J gap: optimum of J - J, J = value - margin x reach "
+          "of changed\n   positions; changed: positions where the book plays another move "
+          "than the incumbent's, per instance)")
+    return {k: {**v, "reach_changed": v["reach_changed"] / max(v["fit"], 1)}
+            for k, v in acc.items() if k[0] == "polish"}
 
 
 def main() -> int:
@@ -578,6 +826,28 @@ def main() -> int:
     check("G: polish is (near-)exact: >= 99% of instances, mean gap < 1e-4",
           pol.exact >= 0.99 * pol.n and gaps.mean() < 1e-4,
           f"{pol.exact / pol.n:.1%} exact, mean {gaps.mean():.2e}, max {gaps.max():.4f}")
+    dpp = tallies["dp+polish"]
+    check("G: dp+polish always fits and is never below dp",
+          dpp.fit == dpp.n and worse["dp+polish"]["below_dp"] == 0,
+          f"fits {dpp.fit}/{dpp.n}, below dp on {worse['dp+polish']['below_dp']}")
+    check("G: polish_from=[dp] returns the better of polish and dp+polish (to 1e-15)",
+          worse["polish+dp"]["not_max"] == 0, f"{worse['polish+dp']['not_max']} differ")
+    check("G: dp+polish is at least as often exact as dp",
+          dpp.exact >= tallies["dp"].exact,
+          f"{dpp.exact / dpp.n:.1%} vs dp {tallies['dp'].exact / dpp.n:.1%}")
+
+    # S (stickiness): checks, then churn vs value at the margins of the brief
+    stick_checks()
+    ns = int(sys.argv[2]) if len(sys.argv) > 2 else 60
+    sr = stick_report(ns)
+    check("S: under every margin, sticky polish fits and is (near-)exact on its objective "
+          "J: >= 98% of instances", all(r["fit"] == r["n"] and r["jexact"] >= 0.98 * r["n"]
+                                        for (e, _m), r in sr.items() if e == "polish"),
+          ", ".join(f"{m:g}: {r['jexact'] / r['n']:.1%}" for (e, m), r in sr.items()
+                    if e == "polish"))
+    check("S: churn falls as the margin rises (sticky polish, changed reach)",
+          all(sr[("polish", a)]["reach_changed"] >= sr[("polish", b)]["reach_changed"] - 1e-12
+              for a, b in zip(STICK_MARGINS, STICK_MARGINS[1:])))
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 
