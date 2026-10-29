@@ -12,6 +12,7 @@ The four comparable methods Phase D evaluates:
   greedy             --method greedy: myopic one-step gains, no chain atoms
   fixed-policy DP    --method dp --fixed-policy: optimal stopping, source moves
   full DP            --method dp: joint stopping + policy choice
+                     (--polish: then budget_core.polish_book from the DP book)
 
 Outputs one book per --budget from a single curve build. Books are
 replay_holdout/score_repertoire-compatible; `value` on booked rows is the
@@ -112,6 +113,12 @@ def load_incumbent_moves(path: str, perspective: str) -> dict[int, str]:
     """--incumbent: position -> the previous book's move at our turn (check marks stripped)."""
     d = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
     return {h: m.rstrip("+#") for h, s, m in d.iter_rows() if s == perspective and m}
+
+
+def load_book_moves(path: str, perspective: str) -> dict[int, str]:
+    """A book's moves at our turn, as the book writes them (--polish-from)."""
+    d = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
+    return {h: m for h, s, m in d.iter_rows() if s == perspective and m}
 
 
 def incumbent_churn(booked: dict[int, str], incumbent: dict[int, str],
@@ -455,7 +462,19 @@ def main() -> int:
                     help="--method price: a DAG candidate of plan item 11 "
                          "(budget_core.price_search dag_mode; measured against an exact "
                          "oracle in _test_budget_dag.py). polish: coordinate ascent after the "
-                         "search, never over the budget. Default off.")
+                         "search, never over the budget; under --incumbent it maximises "
+                         "value minus the margin on every changed move (budget_core.polish_book). "
+                         "Default off.")
+    ap.add_argument("--polish-from", action="append", default=[], metavar="BOOK",
+                    help="--price-dag-mode polish: polish also from this book of the colour "
+                         "(e.g. a --method dp book), so the result is never below it polished; "
+                         "repeatable. Moves that are not candidates on this graph are dropped. "
+                         "Default: the price search's own starts only.")
+    ap.add_argument("--polish", action="store_true",
+                    help="--method dp: polish the curve engine's book to the same budget "
+                         "(budget_core.polish_book, the coordinate ascent of --price-dag-mode "
+                         "polish, started from the DP book): never below the DP book in-model, "
+                         "never over the budget. Default off.")
     ap.add_argument("--price-diagnose", action="store_true",
                     help="DIAGNOSTIC: run a fixed set of price-search variants on this "
                          "graph and log each one's size and in-model value (plus any "
@@ -532,9 +551,11 @@ def main() -> int:
     a = ap.parse_args()
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
-    if a.price_dag_mode and "polish" in a.price_dag_mode and a.incumbent:
-        ap.error("--price-dag-mode polish compares true values only; it does not apply "
-                 "--incumbent stickiness (not implemented)")
+    if a.polish_from and not (a.method == "price" and a.price_dag_mode
+                              and "polish" in a.price_dag_mode):
+        ap.error("--polish-from needs --method price --price-dag-mode polish")
+    if a.polish and a.method != "dp":
+        ap.error("--polish is for --method dp (--method price has --price-dag-mode polish)")
     if a.incumbent and a.stick_margin is None:
         a.stick_margin = 0.01
 
@@ -831,6 +852,10 @@ def main() -> int:
             prev = d
         return 0
 
+    polish_order = None
+    polish_from = [load_book_moves(p, a.perspective) for p in a.polish_from]
+    for p, mv in zip(a.polish_from, polish_from):
+        log(f"polish from {p}: {len(mv):,} moves")
     for b in budgets:
         out = outs[b]
         if b not in todo:
@@ -849,7 +874,8 @@ def main() -> int:
                                               rounds=a.price_rounds,
                                               select=a.price_select, seed_reach=seed,
                                               reprice=a.price_reprice,
-                                              dag_mode=a.price_dag_mode)
+                                              dag_mode=a.price_dag_mode,
+                                              polish_from=polish_from or None)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.method == "greedy":
@@ -885,6 +911,18 @@ def main() -> int:
             res = bc.extract_book(g, curves, b, fixed_policy=fixed,
                                   leftover=a.leftover)
             charged, matched = b, res["spent_distinct"] >= b
+        polish_info = None
+        if a.polish:
+            # the DP book is the start; the polished book's values are policy_value's
+            # (book_result), not the curves', and its rows carry no allocation
+            if polish_order is None:
+                polish_order = bc.topo_up(g)[0]
+            moves, polish_info = bc.polish_book(g, res["booked"], b, polish_order,
+                                                fixed_policy=fixed)
+            res = bc.book_result(g, moves, polish_order, fixed)
+            log(f"  dp polish: {polish_info['start_size']:,} -> {polish_info['size']:,} "
+                f"positions, {polish_info['start_value']:.5f} -> {polish_info['value']:.5f} "
+                f"({polish_info['accepted']} moves, {polish_info['seconds']:.1f}s)")
 
         rows = []
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
@@ -949,13 +987,15 @@ def main() -> int:
             "stop_model": a.stop_model,
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,
                 "price_seed": a.price_seed, "price_reprice": a.price_reprice,
-                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {})}
+                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {}),
+                **({"polish_from": a.polish_from} if a.polish_from else {})}
                if a.method == "price" else {}),
             **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
                 "allowed_courses": a.allowed_courses,
                 "allowed_book_only": a.allowed_book_only, "allowed_counts": allowed_counts}
                if a.allowed_moves else {}),
             **({"price": price_info} if price_info is not None else {}),
+            **({"polish": polish_info} if polish_info is not None else {}),
             **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
                 "weak_min_share": a.weak_min_share, "weak_counts": stop_counts,
                 **({"weak_eval_curve": a.weak_eval_curve,

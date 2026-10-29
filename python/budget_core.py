@@ -1785,7 +1785,8 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                  seed_reach: dict[int, float] | None = None, select: str = "closest",
                  select_tol: float = 0.01, on_round=None,
                  reprice: str = "replace", dag_mode: str | None = None,
-                 line_k: int = 8, fixpoint_iters: int = 8) -> tuple[dict, dict]:
+                 line_k: int = 8, fixpoint_iters: int = 8,
+                 polish_from: list[dict[int, str]] | None = None) -> tuple[dict, dict]:
     """Bisect the price onto `target` booked positions; then re-price with the
     book's own total reach (transpositions charged once) and bisect again.
     Returns (result, info): info holds the lam sweep, the chosen lam, the
@@ -1822,9 +1823,15 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                   'polish'    the search as configured, then polish_book from the selected
                               book, the best-valued book that fits and the smallest one over
                               the target; the best polished book is returned (it never
-                              exceeds the target).
+                              exceeds the target). Under g.meta["stick"] polish maximises
+                              polish_book's sticky objective J, and the best J is returned.
                   'fixpoint+polish'  both.
-                  line_k bounds polish_book's line moves."""
+                  line_k bounds polish_book's line moves.
+      polish_from  more books for polish to start from (e.g. the curve engine's book), after
+                  its own three; the result is then never below any of them polished. None
+                  (default) = the three starts only."""
+    if polish_from and dag_mode not in ("polish", "fixpoint+polish"):
+        raise ValueError("polish_from needs dag_mode 'polish' or 'fixpoint+polish'")
     if dag_mode not in (None, "fixpoint", "polish", "fixpoint+polish"):
         raise ValueError(f"dag_mode {dag_mode!r}")
     fixpoint = dag_mode in ("fixpoint", "fixpoint+polish")
@@ -1930,18 +1937,24 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                 starts.append(best_fit[2])
             if over:
                 starts.append(min(over, key=lambda e: (e[0], -e[1]))[2])
+            n_own = len(starts)
+            starts += polish_from or []
             seen_s: set = set()
             best_p = None
             polish_info = []
-            for st in starts:
+            for i, st in enumerate(starts):
                 key = frozenset(st.items())
                 if key in seen_s:
                     continue
                 seen_s.add(key)
                 moves, pst = polish_book(g, st, target, order, fixed_policy=fixed_policy,
                                          line_k=line_k)
+                if i >= n_own:
+                    pst["start"] = f"given {i - n_own}"
                 polish_info.append(pst)
-                if best_p is None or pst["value"] > best_p[1]["value"] + 1e-15:
+                # under stickiness, the best polish OBJECTIVE (value without one)
+                if best_p is None or (pst.get("objective", pst["value"])
+                                      > best_p[1].get("objective", best_p[1]["value"]) + 1e-15):
                     best_p = (moves, pst)
             res = book_result(g, best_p[0], order, fixed_policy, lam=res["lam"])
     ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == rounds)
@@ -2118,15 +2131,48 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
     for a single move on a DAG: W(u) * (new local value - old)); verification re-runs
     the region evaluator. Returns (moves, stats).
 
-    Stickiness (g.meta["stick"], --incumbent) is NOT applied: every step compares true
-    values, so a polished book may churn moves the price search kept for the margin
-    (build_budget_books refuses the combination)."""
+    `moves` may be any book: the price search's own (price_search dag_mode='polish'), or
+    a caller's, e.g. the curve engine's (build_budget_books --method dp --polish). A start
+    that fits is never made worse; one over the target is trimmed first.
+
+    Stickiness (g.meta["stick"] = (incumbent moves, margin), --incumbent). The objective
+    is then
+        J(book) = value(book) - margin * sum of W(u) over the CHANGED positions u,
+    a changed position being one the book plays where the incumbent's move is a
+    candidate (the one incumbent_move would credit) and the book plays another. In u's
+    own units a switch away from the incumbent pays only when it is better by more
+    than the margin, the rule incumbent_move gives every move choice. A position the
+    book drops, or one the incumbent never booked, costs nothing, so whether to book
+    a position at all is still decided on true values. (One band differs from
+    price_book: there a rival that wins the key is booked when its TRUE value beats
+    stopping; here a changed position must beat stopping by the margin too.) Every
+    step, the trim and the choice between starts compare J; a margin of 0, or no
+    stick, is J = value and the same code path bit for bit."""
     import time as _time
     t0 = _time.time()
     pos = {h: i for i, h in enumerate(order)}
     eps = 1e-12
+    st = g.meta.get("stick") if g.meta else None
+    margin = st[1] if st and st[1] else 0.0
+    # position -> its incumbent move, where that move is a candidate here
+    inc: dict[int, str] = {}
+    if margin:
+        for h, im in st[0].items():
+            if h in g.our and any(c[0].rstrip("+#") == im for c in _cands(g, h, fixed_policy)):
+                inc[h] = im
+
+    def churn(h: int, san: str) -> float:
+        """J's charge, in h's own units, for playing san at h"""
+        im = inc.get(h)
+        return margin if im is not None and san.rstrip("+#") != im else 0.0
+
+    def obj(rg: _Region) -> float:
+        if not inc:
+            return rg.value
+        return rg.value - sum(rg.W[u] * churn(u, m) for u, m in rg.booked.items() if u in inc)
+
     reg = _book_region(g, moves, pos, fixed_policy)
-    start_size, start_value = reg.size, reg.value
+    start_size, start_value, start_obj = reg.size, reg.value, obj(reg)
     trims = 0
     accepted: dict[str, int] = {}
 
@@ -2176,7 +2222,8 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         return None
 
     def loss(rg: _Region, u: int) -> float:
-        return rg.W[u] * (rg.T[u] - g.our[u].l_node)
+        """what dropping leaf u costs in J"""
+        return rg.W[u] * (rg.T[u] - churn(u, rg.booked[u]) - g.our[u].l_node)
 
     while reg.size > target:
         lv = leaves(reg)
@@ -2222,12 +2269,13 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         an estimate; verification is exact)."""
         best: list = [(g.our[k].l_node, ())] + [None] * K
         for san, ch, in_sub, lv in _cands(g, k, fixed_policy):
+            cs = churn(k, san)
             if not (in_sub and ch is not None):
-                acc = [None, (lv, ((k, san),))]
+                acc = [None, (lv - cs, ((k, san),))]
             elif ch in g.our:
-                acc = [None, (base_of(ch), ((k, san),))]
+                acc = [None, (base_of(ch) - cs, ((k, san),))]
             else:
-                acc = [None, (base_of(ch), ((k, san),))] + [None] * (K - 1)
+                acc = [None, (base_of(ch) - cs, ((k, san),))] + [None] * (K - 1)
                 if K > 1 and depth < 2 * line_k:
                     share: dict[int, float] = {}
                     for p, kk, in_s, _lv in g.opp[ch].kids:
@@ -2366,7 +2414,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
                 b = best[j]
                 if b is None or not b[1]:
                     continue
-                gain = reg.W[u] * (b[0] - reg.T[u])
+                gain = reg.W[u] * (b[0] - (reg.T[u] - churn(u, reg.booked[u])))
                 if gain > eps and len(b[1]) <= slack + 1:
                     props.append((gain, "rebook", b[1], ()))
         # switch a non-leaf (frees its subtree, books one move)
@@ -2377,12 +2425,19 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
                 if san == w:
                     continue
                 nv = val(reg, ch) if (in_sub and ch is not None) else lv
-                gain = reg.W[u] * (nv - reg.T[u])
+                gain = reg.W[u] * ((nv - churn(u, san)) - (reg.T[u] - churn(u, w)))
                 if gain > eps:
                     props.append((gain, "switch", ((u, san),), ()))
+        if inc:
+            # drop: a changed leaf whose move beats stopping by less than the margin
+            # raises J when dropped (no stick, no drop proposals: the moves are as before)
+            for lo, u in drops:
+                if lo < -eps:
+                    props.append((-lo, "drop", (), (u,)))
         props.sort(key=lambda t: -t[0])
         took = None
         left = max_verify
+        cur = obj(reg)
         for _gain, kind, adds, dels in props:
             if left <= 0:
                 break
@@ -2391,10 +2446,11 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
             for d in dels:
                 m.pop(d, None)
             new = _book_region(g, m, pos, fixed_policy)
-            if new.size <= target and new.value > (took[0].value if took else reg.value) + eps:
+            j = obj(new)
+            if new.size <= target and j > (took[2] if took else cur) + eps:
                 if took is None:
                     left = min(left, verify_after_hit)
-                took = (new, kind)
+                took = (new, kind, j)
         if took is None:
             break
         reg = took[0]
@@ -2402,4 +2458,8 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
     stats = {"start_size": start_size, "start_value": start_value, "size": reg.size,
              "value": reg.value, "trims": trims, "accepted": sum(accepted.values()),
              "by_kind": accepted, "steps": steps, "seconds": _time.time() - t0}
+    if inc:
+        ch = [u for u, m in reg.booked.items() if churn(u, m)]
+        stats.update(start_objective=start_obj, objective=obj(reg), margin=margin,
+                     changed=len(ch), reach_changed=float(sum(reg.W[u] for u in ch)))
     return dict(reg.booked), stats
