@@ -344,7 +344,7 @@ def check_ended_nonnegative(con, label: str) -> None:
 
 def _bucket_task(task: tuple) -> tuple:
     (i, book, events, bands, max_ply, min_games, eval_arrays, work, adir, coll_list,
-     root_hash, threads, mem, tmp) = task
+     root_hash, threads, mem, tmp, allow_coll_survivors) = task
     t0 = time.time()
     from eval_arrays import MISSING, lookup_evals, open_eval_arrays
     # Imported, never redefined: the cp -> expected-score curve must be the one
@@ -399,7 +399,7 @@ def _bucket_task(task: tuple) -> tuple:
                               "OR child_hash <> child_max) LIMIT 5").fetchall()
             raise RuntimeError(f"bucket {i}: {st['multi_valued']} non-collision edges with "
                                f"more than one parent_epd/child_hash: {bad}")
-        if st["coll_surviving"]:
+        if st["coll_surviving"] and not allow_coll_survivors:
             raise RuntimeError(f"bucket {i}: {st['coll_surviving']} collision-parent edges "
                                f"reach the {min_games}-game floor; dropping them would lose "
                                f"real pool edges — the spec's premise is broken")
@@ -557,7 +557,7 @@ def phase_buckets(a, buckets: list[int]) -> None:
           f"({len(coll)} collision hashes dropped as parents)", flush=True)
     tasks = [(i, str(a.book), a.events, a.elo_bands, a.max_ply, a.min_games,
               str(a.eval_arrays), str(work), str(adir), coll, rh, a.threads, a.mem,
-              str(a.tmp_dir))
+              str(a.tmp_dir), a.allow_collision_survivors)
              for i in todo]
     _pool_run(_bucket_task, tasks, a.workers,
               lambda r: (f"bucket {r[0]:3d}: {r[1]['survivors']:,} survivors / "
@@ -715,6 +715,9 @@ def write_metas(a, timings: dict) -> None:
             "collision_parents_dropped": st["coll_parents"],
             "collision_edges_dropped": st["coll_edges"],
             "collision_mass_dropped": st["coll_mass"],
+            # collision-parent edges at or above the floor, dropped with the rest
+            # (--allow-collision-survivors; 0 when the build refuses them)
+            "collision_edges_at_floor_dropped": st["coll_surviving"],
             "root_ply1_games": st.get("root_ply1_games"),
             "root_departures_le_cap": st.get("root_departures_le_cap"),
             "root_term_mass": st.get("root_term_mass"),
@@ -786,6 +789,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "arrivals phase of its own.")
     ap.add_argument("--buckets", nargs="*", type=int, default=None,
                     help="Restrict the buckets phase (smoke runs, gates)")
+    ap.add_argument("--allow-collision-survivors", action="store_true",
+                    help="Drop collision-parent edges that reach the floor (counted in the "
+                         "meta) instead of refusing. Low floors need it: at --min-games 5 a "
+                         "collision twin's edge can reach the floor. Collision hashes are "
+                         "never pool parents either way (Stage 3's dicts are hash-keyed).")
     return ap
 
 

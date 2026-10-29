@@ -159,7 +159,8 @@ def expected(games, coll_hashes, evals):
 
 
 def run_build(td: Path, book: Path, ev: Path, coll: list[int], adir: Path | None,
-              tag: str) -> tuple[pl.DataFrame, pl.DataFrame, list[dict]]:
+              tag: str, allow_coll: bool = False
+              ) -> tuple[pl.DataFrame, pl.DataFrame, list[dict]]:
     work = td / tag
     (work / "buckets").mkdir(parents=True)
     events, bands = [s[0] for s in SLICES], [s[1] for s in SLICES]
@@ -174,7 +175,7 @@ def run_build(td: Path, book: Path, ev: Path, coll: list[int], adir: Path | None
     for i in used:
         stats.append(P._bucket_task((i, str(book), events, bands, CAP, FLOOR, str(ev),
                                      str(work), str(adir), coll, P.root_hash(), 2, "1GB",
-                                     str(td / "duck")))[1])
+                                     str(td / "duck"), allow_coll))[1])
     e = pl.concat([pl.read_parquet(P.bucket_paths(work, i)["edges"]) for i in used])
     a = pl.concat([pl.read_parquet(P.bucket_paths(work, i)["aux"]) for i in used])
     return e, a, stats
@@ -251,6 +252,11 @@ def main() -> int:
             check(False, "a collision parent with a surviving edge raises")
         except RuntimeError as ex:
             check("floor" in str(ex), "a collision parent with a surviving edge raises")
+        e4, _, st4 = run_build(td, book, td / "ev", [fat], P.arrivals_dir(td / "w1"), "w4",
+                               allow_coll=True)
+        check(fat not in set(e4["parent_hash"].to_list())
+              and sum(s["coll_surviving"] for s in st4) > 0,
+              "--allow-collision-survivors drops it as a parent and counts it")
         print("F  negative ended")
         empty = td / "noarr"
         (empty / "g000").mkdir(parents=True)
@@ -266,7 +272,7 @@ def main() -> int:
         _, st = P._bucket_task((free, str(book), [s[0] for s in SLICES],
                                 [s[1] for s in SLICES], CAP, FLOOR, str(td / "ev"),
                                 str(td / "w1"), str(P.arrivals_dir(td / "w1")), [thin],
-                                root, 2, "1GB", str(td / "duck")))
+                                root, 2, "1GB", str(td / "duck"), False))
         pths = P.bucket_paths(td / "w1", free)
         check(st["survivors"] == 0 and pl.read_parquet(pths["aux"]).height == 0
               and P._schema_list(pths["aux"])[0] == ("position_hash", "int64"),
