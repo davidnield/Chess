@@ -112,6 +112,19 @@ There is no lint config, and no build step except the Rust extract below. Every
 of them with a summary. Convention: synthetic tests import the production query/logic rather than
 copying it (`_test_stage3_cycles.py` is the template).
 
+### The price search's two engines
+
+`budget_core.price_search` (and the budget books' `--method price`) runs on a compiled graph,
+`budget_compiled.py`: numpy level sweeps for the solves and reach walks, an index-based and
+incremental evaluator for polish. **It must stay bit-identical to the dict walks it replaced**, which
+stay in `budget_core` as the reference (`engine='legacy'`, `compiled=None`, `_topo_up_dict`):
+every float from the same IEEE operations in the same order, every dict in the same insertion order
+(polish breaks ties by it). `_test_budget_speed.py` holds the two to tolerance 0 (`--scale` times
+them); `build_budget_books.py --price-engine legacy` rebuilds a book the old way to check a real
+graph. `engine='auto'` compiles from `PRICE_COMPILED_MIN_NODES` nodes, as tiny graphs are faster as
+dicts. A `CompiledGraph` is a snapshot: compile after `apply_stop_values`, recompile after mutating
+the graph.
+
 ### The explorer book's three producers
 
 A finished explorer month is `<out>/month=Y_M/bkt=i/part-0000.parquet` (PS_COLS, plain `string`,

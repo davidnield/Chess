@@ -277,6 +277,7 @@ python/
   stage3_backwards_induction.py    the valuation engine
   build_sharp_reps.py              the locked recipe (one Stage-3 run per colour)
   budget_core.py                   budget books: DP, price search, polish
+  budget_compiled.py               ... its price search as array sweeps
   build_budget_books.py            ... and its CLI
   weak_stop.py, empirical_stop.py  out-of-book value models for the budget books
   build_weak_edges.py              weak-population move counts they read

@@ -486,21 +486,41 @@ class Tally:
                 f"{g.mean():>10.5f}{g.max():>10.5f}{o.mean():>10.5f}{o.max():>10.5f}")
 
 
+def report_instances(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35):
+    """The report's (graph, budgets) in order; _test_budget_speed walks the same ones."""
+    rng = random.Random(seed)
+    for t in range(n_graphs):
+        g = random_dag(rng, root_ours=(t % 2 == 0), transpo=transpo)
+        while len(g.our) < 3:
+            g = random_dag(rng, root_ours=(t % 2 == 0), transpo=transpo)
+        yield g, sorted({b for b in (1, 2, 3, 5, 8, 12) if b <= len(g.our)})
+
+
+def e_instances():
+    """Check E's graphs and the random books evaluated on each."""
+    rng = random.Random(17)
+    for t in range(60):
+        g = random_dag(rng, root_ours=(t % 2 == 0))
+        yield g, [{h: rng.choice(n.cands)[0] for h, n in g.our.items() if rng.random() < 0.6}
+                  for _ in range(5)]
+
+
+def np_graphs():
+    """Checks N and P's graphs (searched at budgets 2 and 5)."""
+    rng = random.Random(23)
+    for t in range(40):
+        yield random_dag(rng, root_ours=(t % 2 == 0))
+
+
 def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
            ) -> tuple[dict[str, Tally], dict]:
-    rng = random.Random(seed)
     tallies: dict[str, Tally] = {}
     t_or = t_en = 0.0
     n_inst = n_transpo = 0
     worse = {m: {"both": 0, "either": 0} for m in DAG_MODES + ("dp+polish",)}
     below_dp = 0                        # dp+polish below dp
     not_max = 0                         # polish+dp is not the better of polish, dp+polish
-    for t in range(n_graphs):
-        g = random_dag(rng, root_ours=(t % 2 == 0), transpo=transpo)
-        while len(g.our) < 3:
-            g = random_dag(rng, root_ours=(t % 2 == 0), transpo=transpo)
-        n_our = len(g.our)
-        budgets = sorted({b for b in (1, 2, 3, 5, 8, 12) if b <= n_our})
+    for g, budgets in report_instances(n_graphs, seed, transpo):
         t0 = time.time()
         opt, _books = exact_dag(g, max(budgets))
         t_or += time.time() - t0
@@ -768,13 +788,10 @@ def main() -> int:
         scale(sizes, targets, modes)
         return 0
     # E: the region evaluator behind book_result / polish_book is policy_value
-    rng = random.Random(17)
     bad = 0
-    for t in range(60):
-        g = random_dag(rng, root_ours=(t % 2 == 0))
+    for g, books in e_instances():
         order, _cut = topo_up(g)
-        for _ in range(5):
-            moves = {h: rng.choice(n.cands)[0] for h, n in g.our.items() if rng.random() < 0.6}
+        for moves in books:
             pv = policy_value(g, moves, order)
             br = book_result(g, moves, order)
             if pv["value"] != br["root_value_realized"] or pv["played"] != br["spent_distinct"]:
@@ -794,11 +811,9 @@ def main() -> int:
 
     # N: dag_mode=None is the unchanged search; P: polish never exceeds the target and
     # never lowers its start's value
-    rng = random.Random(23)
     bad_n = bad_p = 0
     quiet = lambda *_: None  # noqa: E731
-    for t in range(40):
-        g = random_dag(rng, root_ours=(t % 2 == 0))
+    for g in np_graphs():
         order, _cut = topo_up(g)
         for B in (2, 5):
             a, ia = price_search(g, B, log=quiet, rounds=3, reprice="max")
