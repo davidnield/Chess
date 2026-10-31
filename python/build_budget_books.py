@@ -76,6 +76,15 @@ def peak_commit_gb() -> float | None:
         return None
 
 
+def _pool_min_games(stats: str) -> int | None:
+    """The pool's own min_games floor, from its <stats>.meta.json (None if absent)."""
+    mp = Path(str(stats) + ".meta.json")
+    if not mp.exists():
+        return None
+    v = json.loads(mp.read_text()).get("min_games")
+    return int(v) if v is not None else None
+
+
 class GateAdmit:
     """--gated-reach for the collector: which of an our-node's recorded moves the
     gates admit (budget_core.gate_candidates, the definition build_graph uses).
@@ -387,7 +396,25 @@ def main() -> int:
                     help="Optimistic-reach floor. Default min(1e-3, 8/max(budget)).")
     ap.add_argument("--max-ply", type=int, default=40)
     ap.add_argument("--share-floor", type=float, default=0.002)
-    ap.add_argument("--min-games", type=int, default=50)
+    ap.add_argument("--min-games", type=int, default=None,
+                    help="Game floor for the edges the subgraph collector reads. Default "
+                         "(2026-10-31): the pool's own floor from <stats>.meta.json, else 50. "
+                         "A floor ABOVE the pool's drops those edges from the reply mix AND "
+                         "from the aux sidecar (whose OTHER bucket holds only replies under "
+                         "the pool's floor), so the survivors are renormalised over a smaller "
+                         "denominator: the Black lifetime book lost its 20-49-game replies "
+                         "that way. Warned about, recorded in the meta.")
+    ap.add_argument("--strict-source", action=argparse.BooleanOptionalAction, default=True,
+                    help="Do not restore a source-book move the gates rejected (it used to "
+                         "come back as an 'engine-augmented' candidate, so --max-eval-loss "
+                         "never bound it); an unrecorded source move must pass "
+                         "--max-eval-loss. DEFAULT ON since 2026-10-31; --no-strict-source "
+                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
+    ap.add_argument("--crack-at-parents", action=argparse.BooleanOptionalAction, default=True,
+                    help="Credit opponent collapses at our-turn arrivals whether we stop "
+                         "or book (taken out at the parent edge), instead of in the stop "
+                         "value only. DEFAULT ON since 2026-10-31; --no-crack-at-parents "
+                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
     ap.add_argument("--max-cands", type=int, default=0,
                     help="Cap on candidates per our-node. DEFAULT 0 (uncapped) "
                          "as of 2026-08-29: the gates are the pruner. This "
@@ -650,6 +677,14 @@ def main() -> int:
         log(f"allowed moves: {sum(map(len, allowed.values())):,} moves at "
             f"{len(allowed):,} positions from {a.allowed_moves}")
         admit = AllowedAdmit(allowed, admit)
+    pool_floor = _pool_min_games(stats)
+    if a.min_games is None:
+        a.min_games = pool_floor if pool_floor is not None else 50
+        log(f"min-games {a.min_games} ({'the pool' + chr(39) + 's floor' if pool_floor is not None else 'default, pool meta has none'})")
+    elif pool_floor is not None and a.min_games > pool_floor:
+        log(f"WARNING: --min-games {a.min_games} is above the pool's floor {pool_floor}: "
+            f"edges with {pool_floor}-{a.min_games - 1} games leave both the reply mix "
+            f"and the aux sidecar")
     log("collecting subgraph edges...")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit)
@@ -727,7 +762,9 @@ def main() -> int:
                        require_eval=not a.no_gates, gates=not a.no_gates,
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach,
-                       max_eval_loss=a.max_eval_loss)
+                       max_eval_loss=a.max_eval_loss,
+                       strict_source=a.strict_source,
+                       crack_at_parents=a.crack_at_parents)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
     incumbent = None
     if a.incumbent:
@@ -979,8 +1016,12 @@ def main() -> int:
                 "side_to_move": side,
                 "value": flip(res["realized"].get(h)),
                 "best_move": res["booked"].get(h),
-                "value_robust": src.get("value_robust"),
-                "value_worst": src.get("value_worst"),
+                # The unrestricted SOURCE rep's soundness numbers, renamed 2026-10-31:
+                # as value_robust/value_worst they read as this book's own, and
+                # score_repertoire reported them as such. Nothing here recomputes them
+                # for the budget policy, so they are labelled for what they are.
+                "source_value_robust": src.get("value_robust"),
+                "source_value_worst": src.get("value_worst"),
                 "eval_score": src.get("eval_score"),
                 "value_unconstrained": src.get("value"),
                 "alloc_budget": res["alloc"].get(h, 0),
@@ -1012,6 +1053,13 @@ def main() -> int:
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss,
+            "min_games": a.min_games, "pool_min_games": pool_floor,
+            # recorded either way: a meta from before 2026-10-31 lacks both keys, which
+            # means both off (the old defaults)
+            "strict_source": a.strict_source,
+            **({"src_rejected": g.meta.get("src_rejected", 0)} if a.strict_source else {}),
+            "crack_at_parents": a.crack_at_parents,
+            **({"crack_edges": g.meta.get("crack_edges", 0)} if a.crack_at_parents else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
