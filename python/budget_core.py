@@ -605,7 +605,10 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     horizon buckets) mirrored into opponent-node constants so V_infinity
     reconciles with the source rep.
 
-    strict_source (--strict-source, 2026-10-31, default off): the source book's move
+    Both flags below default off HERE (the legacy graph, which the oracle and parity
+    tests pin) and ON in build_budget_books since 2026-10-31.
+
+    strict_source (--strict-source, 2026-10-31): the source book's move
     used to be restored as an "engine-augmented" candidate whenever it was missing
     from the gated set -- including when it WAS recorded and the gates (notably
     --max-eval-loss) had rejected it, so the limit never bound the source move (26 White
@@ -614,7 +617,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     it passes --max-eval-loss against the gated candidates and the position's own
     eval, and never without an eval when the limit is on.
 
-    crack_at_parents (--crack-at-parents, 2026-10-31, default off): games that end at
+    crack_at_parents (--crack-at-parents, 2026-10-31): games that end at
     an our-turn arrival because the OPPONENT resigned or was mated (the `crack` mass)
     are ours whatever we would have played. The legacy blend folded them into the stop
     value only, so booking a move compared an unblended child value against a blended

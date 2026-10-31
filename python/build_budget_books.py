@@ -404,15 +404,17 @@ def main() -> int:
                          "the pool's floor), so the survivors are renormalised over a smaller "
                          "denominator: the Black lifetime book lost its 20-49-game replies "
                          "that way. Warned about, recorded in the meta.")
-    ap.add_argument("--strict-source", action="store_true",
+    ap.add_argument("--strict-source", action=argparse.BooleanOptionalAction, default=True,
                     help="Do not restore a source-book move the gates rejected (it used to "
                          "come back as an 'engine-augmented' candidate, so --max-eval-loss "
                          "never bound it); an unrecorded source move must pass "
-                         "--max-eval-loss. Default off (exact no-op). See build_graph.")
-    ap.add_argument("--crack-at-parents", action="store_true",
+                         "--max-eval-loss. DEFAULT ON since 2026-10-31; --no-strict-source "
+                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
+    ap.add_argument("--crack-at-parents", action=argparse.BooleanOptionalAction, default=True,
                     help="Credit opponent collapses at our-turn arrivals whether we stop "
                          "or book (taken out at the parent edge), instead of in the stop "
-                         "value only. Default off (exact no-op). See build_graph.")
+                         "value only. DEFAULT ON since 2026-10-31; --no-crack-at-parents "
+                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
     ap.add_argument("--max-cands", type=int, default=0,
                     help="Cap on candidates per our-node. DEFAULT 0 (uncapped) "
                          "as of 2026-08-29: the gates are the pruner. This "
@@ -1052,10 +1054,12 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss,
             "min_games": a.min_games, "pool_min_games": pool_floor,
-            **({"strict_source": True, "src_rejected": g.meta.get("src_rejected", 0)}
-               if a.strict_source else {}),
-            **({"crack_at_parents": True, "crack_edges": g.meta.get("crack_edges", 0)}
-               if a.crack_at_parents else {}),
+            # recorded either way: a meta from before 2026-10-31 lacks both keys, which
+            # means both off (the old defaults)
+            "strict_source": a.strict_source,
+            **({"src_rejected": g.meta.get("src_rejected", 0)} if a.strict_source else {}),
+            "crack_at_parents": a.crack_at_parents,
+            **({"crack_edges": g.meta.get("crack_edges", 0)} if a.crack_at_parents else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
