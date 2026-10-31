@@ -589,7 +589,9 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gates: bool = True,
                 other_cov_blend: bool = False,
                 gated_reach: bool = False,
-                max_eval_loss: float | None = None) -> Graph:
+                max_eval_loss: float | None = None,
+                strict_source: bool = False,
+                crack_at_parents: bool = False) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -602,6 +604,26 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     engine augmentation). aux_rows: per-position aux sidecar dicts (term/other/
     horizon buckets) mirrored into opponent-node constants so V_infinity
     reconciles with the source rep.
+
+    strict_source (--strict-source, 2026-10-31, default off): the source book's move
+    used to be restored as an "engine-augmented" candidate whenever it was missing
+    from the gated set -- including when it WAS recorded and the gates (notably
+    --max-eval-loss) had rejected it, so the limit never bound the source move (26 White
+    / 37 Black saved choices broke it). Strict: a recorded source move the gates
+    reject stays out; an unrecorded one (truly engine-augmented) is restored only if
+    it passes --max-eval-loss against the gated candidates and the position's own
+    eval, and never without an eval when the limit is on.
+
+    crack_at_parents (--crack-at-parents, 2026-10-31, default off): games that end at
+    an our-turn arrival because the OPPONENT resigned or was mated (the `crack` mass)
+    are ours whatever we would have played. The legacy blend folded them into the stop
+    value only, so booking a move compared an unblended child value against a blended
+    stop and lost the crack credit (undervaluing preparation by crack x (1 - v)). Here
+    they are taken out at the parent instead: an opponent node's edge into such an our
+    node carries probability p * cont/(cont + crack) and the rest, p * crack/(cont +
+    crack), is a win in const_base; the our node itself holds unblended values for
+    both stopping and booking. Exact and engine-agnostic (every sweep reads kids and
+    const_base). The root's own crack, if any, is not applied (no parent).
     """
     eval_ws = eval_ws or {}
     rep_moves = rep_moves or {}
@@ -661,7 +683,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                  _ht, _hs) = aux_row_buckets(aux_rows.get(h), our_white)
                 if crack:
                     cont = (sum(e["total"] for e in es) + _ot + _ht)
-                    ln = aux_our_blend(ln, cont, crack, 1.0)
+                    if not crack_at_parents:
+                        ln = aux_our_blend(ln, cont, crack, 1.0)
             node = OurNode(l_node=ln)
             if aux_rows and crack:
                 node.crack = (cont, crack)
@@ -730,7 +753,10 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 node.cands.append((e["move_san"], ch, in_sub, lv))
                 if e["move_san"] == src:
                     seen_src = True
-            if src and not seen_src:
+            recorded_src = src is not None and any(e["move_san"] == src for e in es)
+            if src and not seen_src and strict_source and recorded_src:
+                g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + 1
+            elif src and not seen_src:
                 # engine-augmented source move: no stats edge. Child hash via
                 # python-chess where an EPD is available (CLI path); tests pass
                 # explicit edges so this stays cold there.
@@ -738,6 +764,15 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 if h in g.epd:
                     from build_baseline_books import child_of
                     ch = child_of(g.epd[h], src)
+                if strict_source and max_eval_loss is not None:
+                    cev = eval_ws.get(ch) if ch is not None else None
+                    kept = None if cev is None else eval_loss_keep(
+                        cand_es + [({"move_san": src}, cev)], eval_ws.get(h),
+                        our_white, max_eval_loss)
+                    if kept is None or not any(e["move_san"] == src for e, _ in kept):
+                        g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + 1
+                        g.our[h] = node
+                        continue
                 in_sub = ch is not None and ch in reach and \
                     edges_by_parent.get(ch) is not None
                 lv = leaf_edge_value(slice_prior, 0,
@@ -790,6 +825,23 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     and p_ply + 1 <= max_ply
                 node.kids.append((p, ch, in_sub, lv))
             g.opp[h] = node
+    g.meta["strict_source"] = strict_source
+    g.meta["crack_at_parents"] = crack_at_parents
+    if crack_at_parents:
+        moved = 0
+        for n in g.opp.values():
+            kids = []
+            for p, ch, in_sub, lv in n.kids:
+                o = g.our.get(ch) if in_sub and ch is not None else None
+                if o is not None and o.crack:
+                    cont, crack = o.crack
+                    a = cont / (cont + crack)
+                    n.const_base += p * (1.0 - a)      # a win, our perspective
+                    p *= a
+                    moved += 1
+                kids.append((p, ch, in_sub, lv))
+            n.kids = kids
+        g.meta["crack_edges"] = moved
     return g
 
 
@@ -823,7 +875,7 @@ def apply_stop_values(g: Graph, W: dict[int, float], R: dict[int, float]) -> dic
         w = W.get(h)
         if w is not None:
             n.l_node = (aux_our_blend(w, n.crack[0], n.crack[1], 1.0)
-                        if n.crack else w)
+                        if n.crack and not g.meta.get("crack_at_parents") else w)
             c["our_l"] += 1
         new = []
         for san, ch, in_sub, lv in n.cands:

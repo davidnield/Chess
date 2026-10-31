@@ -28,7 +28,7 @@ Ply is in the book's key, so the flows answer exactly, slice by slice:
     ended(x, p) = A(x, p) - D(x, p+1)        1 <= p <= max_ply
     horizon(x)  = D(x, max_ply + 1)
 
-The book's cap (30) is above ours, so the ply max_ply+1 rows exist and the split
+The book's cap must be ABOVE ours, so the ply max_ply+1 rows exist and the split
 at the cap is exact. A game whose movetext failed to parse after ply p shows up as
 ended at its last parsed position (the old extract counted it nowhere). Games with
 no moves never touch a move row, so the root's end_ply-0 mass is not derivable.
@@ -797,10 +797,34 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def book_cap(book: Path) -> int | None:
+    """The book's coverage cap (its months' --max-ply), from _merge_params.json."""
+    mp = Path(book) / "_merge_params.json"
+    if not mp.exists():
+        return None
+    return json.loads(mp.read_text(encoding="utf-8")).get("input_params", {}).get("max_ply")
+
+
+def check_cap(book: Path, max_ply: int) -> None:
+    """Refuse a pool cap at or above the book's (2026-10-31, external review). ended(x, p)
+    is DERIVED as arrivals at p minus departures at p+1 and horizon(x) as departures at
+    max_ply+1, so both need the book's ply max_ply+1 rows. At max_ply == the book's cap
+    there are none: every arrival at the cap reads as a finished game and the horizon is
+    empty (the 2000+ p30 pools carry aux_horizon_mass 0). At a White book's our-turn
+    nodes those misfiled games' wins then count as opponent collapses."""
+    cap = book_cap(book)
+    if cap is not None and max_ply >= cap:
+        raise SystemExit(f"FATAL: --max-ply {max_ply} needs a book capped above it (this book's "
+                         f"cap is {cap}): ended/horizon at the cap are derived from the book's "
+                         f"ply {max_ply + 1} rows, which it does not have")
+
+
 def main() -> None:
     a = build_parser().parse_args()
     a.events = list(a.events)
     a.elo_bands = sorted(int(b) for b in a.elo_bands)
+    if a.phase != "meta":
+        check_cap(Path(a.book), a.max_ply)
     if "F:" in str(a.tmp_dir).upper()[:2]:
         sys.exit("FATAL: DuckDB temp on F: (USB HDD) is forbidden")
     lock_params(a)

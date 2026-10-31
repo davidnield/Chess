@@ -278,6 +278,23 @@ def main() -> int:
               and P._schema_list(pths["aux"])[0] == ("position_hash", "int64"),
               "an unreached bucket writes empty, typed outputs")
 
+        print("H  the pool cap must sit below the book's (2026-10-31)")
+        capped = td / "capped_book"
+        capped.mkdir()
+        (capped / "_merge_params.json").write_text('{"input_params": {"max_ply": 30}}')
+        for mp, want in ((30, True), (31, True), (29, False)):
+            try:
+                P.check_cap(capped, mp)
+                refused = False
+            except SystemExit:
+                refused = True
+            check(refused == want, f"cap {mp} on a ply-30 book is {'refused' if want else 'allowed'}")
+        try:
+            P.check_cap(book, CAP)
+            check(True, "a book without merge params is not refused")
+        except SystemExit:
+            check(False, "a book without merge params is not refused")
+
     failed = [label for ok, label in _checks if not ok]
     print(f"\n{len(_checks) - len(failed)}/{len(_checks)} passed")
     return 1 if failed else 0
