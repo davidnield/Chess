@@ -415,6 +415,9 @@ def main() -> int:
                          "or book (taken out at the parent edge), instead of in the stop "
                          "value only. DEFAULT ON since 2026-10-31; --no-crack-at-parents "
                          "rebuilds the old graph exactly (c865f9b). See build_graph.")
+    ap.add_argument("--engine-candidates", default=None, metavar="PARQUET",
+                    help="engine-proposed moves to judge alongside the recorded ones "
+                         "(engine_candidates.py; follow-up review R5). Default off.")
     ap.add_argument("--max-cands", type=int, default=0,
                     help="Cap on candidates per our-node. DEFAULT 0 (uncapped) "
                          "as of 2026-08-29: the gates are the pruner. This "
@@ -752,6 +755,17 @@ def main() -> int:
                         "white_score_avg": ws})
     del edf
 
+    engine_moves = None
+    if a.engine_candidates:
+        ec = pl.read_parquet(a.engine_candidates)
+        engine_moves = {}
+        for h, san, ch, cp in ec.select("position_hash", "move_san", "child_hash",
+                                        "child_cp_white").iter_rows():
+            engine_moves.setdefault(h, []).append((san, ch))
+            if ch not in eval_ws and cp is not None:
+                eval_ws[ch] = cp_to_expected_score(int(cp))
+        log(f"  engine candidates: {ec.height:,} moves at {len(engine_moves):,} positions")
+
     log("building graph...")
     g = bc.build_graph(by_parent, root, our_white, rep_moves=rep_moves,
                        eval_ws=eval_ws,
@@ -764,7 +778,8 @@ def main() -> int:
                        gated_reach=a.gated_reach,
                        max_eval_loss=a.max_eval_loss,
                        strict_source=a.strict_source,
-                       crack_at_parents=a.crack_at_parents)
+                       crack_at_parents=a.crack_at_parents,
+                       engine_moves=engine_moves)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
     incumbent = None
     if a.incumbent:
@@ -993,7 +1008,20 @@ def main() -> int:
                 f"positions, {polish_info['start_value']:.5f} -> {polish_info['value']:.5f} "
                 f"({polish_info['accepted']} moves, {polish_info['seconds']:.1f}s)")
 
+        rc = g.meta.get("root_crack")
+        if rc:
+            # --crack-at-parents moves an our-node's collapses onto its parents' edges; the
+            # root has none, so its own share is applied here, to the reported value only
+            # (an affine map of the root value: no decision depends on it)
+            ra = rc[0] / (rc[0] + rc[1])
+            rv = res["root_value_realized"]
+            res = {**res, "root_value_realized": (1.0 - ra) + ra * rv,
+                   "realized": {**res["realized"], g.root: (1.0 - ra) + ra * res["realized"][g.root]}
+                   if g.root in res["realized"] else res["realized"]}
         rows = []
+        # only with --strict-source: the legacy restore can book a move the limit
+        # rejected, which no exception label describes
+        lexc = g.meta.get("loss_exceptions") if a.strict_source else None
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
                                                 else 1.0 - v)
         for h in (res["visited"] or []):
@@ -1025,6 +1053,10 @@ def main() -> int:
                 "eval_score": src.get("eval_score"),
                 "value_unconstrained": src.get("value"),
                 "alloc_budget": res["alloc"].get(h, 0),
+                # Booked decisions the loss limit could not bind (budget_core.
+                # loss_exceptions): 'fallback' = least-losing move, 'unknown' = no eval.
+                **({"loss_exception": lexc.get(h) if res["booked"].get(h) else None}
+                   if lexc is not None else {}),
             })
         tmp = out.with_suffix(".parquet.tmp")
         pl.DataFrame(rows).write_parquet(tmp, compression="zstd")
@@ -1058,7 +1090,13 @@ def main() -> int:
             # means both off (the old defaults)
             "strict_source": a.strict_source,
             **({"src_rejected": g.meta.get("src_rejected", 0)} if a.strict_source else {}),
+            **({"loss_exceptions_booked": {
+                k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
+                for k in ("fallback", "unknown")}} if lexc is not None else {}),
             "crack_at_parents": a.crack_at_parents,
+            **({"engine_candidates": a.engine_candidates,
+                "engine_cands_added": g.meta.get("engine_cands", 0)}
+               if a.engine_candidates else {}),
             **({"crack_edges": g.meta.get("crack_edges", 0)} if a.crack_at_parents else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}

@@ -591,7 +591,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gated_reach: bool = False,
                 max_eval_loss: float | None = None,
                 strict_source: bool = False,
-                crack_at_parents: bool = False) -> Graph:
+                crack_at_parents: bool = False,
+                engine_moves: dict[int, list[tuple[str, int]]] | None = None) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -616,6 +617,14 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     reject stays out; an unrecorded one (truly engine-augmented) is restored only if
     it passes --max-eval-loss against the gated candidates and the position's own
     eval, and never without an eval when the limit is on.
+
+    engine_moves (--engine-candidates, 2026-10-31, default None = off): our-node ->
+    [(san, child_hash)] proposed by an engine search (engine_candidates.py: Stockfish's
+    principal-variation move where the recorded moves leave the loss limit unenforced). Each
+    joins the node's moves as a zero-game edge BEFORE the gates and --max-eval-loss, so it is
+    judged in the complete set like any recorded move (follow-up review R1/R5); its value is
+    its eval through leaf_edge_value (eval_ws must hold the child's eval). Unless an engine
+    move transposes into the subgraph it is a leaf: nothing below it is prepared.
 
     crack_at_parents (--crack-at-parents, 2026-10-31): games that end at
     an our-turn arrival because the OPPONENT resigned or was mated (the `crack` mass)
@@ -693,7 +702,16 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 node.crack = (cont, crack)
             # gate the recorded candidates; always admit the source move
             src = rep_moves.get(h)
-            cand_es = gate_candidates(h, es, src, eval_ws, our_white,
+            es_g = es
+            if engine_moves and h in engine_moves:
+                have = {e["move_san"].rstrip("+#") for e in es}
+                extra = [{"move_san": san, "child_hash": ch, "total": 0,
+                          "white_score_avg": slice_prior, "engine": True}
+                         for san, ch in engine_moves[h] if san.rstrip("+#") not in have]
+                if extra:
+                    g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + len(extra)
+                    es_g = es + extra
+            cand_es = gate_candidates(h, es_g, src, eval_ws, our_white,
                                       slice_prior, robustness_floor,
                                       gate_rel_floor, gate_rel_own_margin,
                                       require_eval, gates, max_eval_loss)
@@ -776,6 +794,11 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                         g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + 1
                         g.our[h] = node
                         continue
+                    # One loss rule over the COMPLETE set (follow-up review R1): a
+                    # source move better than every recorded one raises the baseline,
+                    # so recorded moves it puts out of range leave too.
+                    keep_sans = {e["move_san"] for e, _ in kept}
+                    node.cands = [c for c in node.cands if c[0] in keep_sans]
                 in_sub = ch is not None and ch in reach and \
                     edges_by_parent.get(ch) is not None
                 lv = leaf_edge_value(slice_prior, 0,
@@ -845,7 +868,33 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 kids.append((p, ch, in_sub, lv))
             n.kids = kids
         g.meta["crack_edges"] = moved
+        ro = g.our.get(root)
+        if ro is not None and ro.crack:
+            g.meta["root_crack"] = ro.crack      # no parent edge: build_budget_books reports it
+    if max_eval_loss is not None:
+        g.meta["loss_exceptions"] = loss_exceptions(g, eval_ws, our_white, max_eval_loss)
     return g
+
+
+def loss_exceptions(g: Graph, eval_ws: dict[int, float], our_white: bool,
+                    max_loss_cp: float) -> dict[int, str]:
+    """Our-nodes whose FINAL candidate set the --max-eval-loss rule could not enforce
+    (follow-up review R1/R5): 'fallback' -- no candidate is within the limit of the
+    position's own eval, so eval_loss_keep kept the least-losing one (the owner's rule,
+    2026-10-08); 'unknown' -- no candidate has an eval, so the rule could not judge any.
+    With strict_source every other our-node's candidates lie within the limit (the
+    legacy restore can add a source move the limit rejected, which this does not see)."""
+    out = {}
+    for h, n in g.our.items():
+        cps = [ws_to_cp(eval_ws[ch], our_white) for _, ch, _, _ in n.cands
+               if ch is not None and ch in eval_ws]
+        if not n.cands:
+            continue
+        if not cps:
+            out[h] = "unknown"
+        elif h in eval_ws and ws_to_cp(eval_ws[h], our_white) - max(cps) > max_loss_cp:
+            out[h] = "fallback"
+    return out
 
 
 def stop_model_positions(g: Graph) -> tuple[set[int], set[int]]:

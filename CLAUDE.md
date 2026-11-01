@@ -103,6 +103,12 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 # Eval-to-score curves by rating pairing (feeds build_budget_books --weak-eval-curve)
 .venv\Scripts\python.exe python\fit_eval_curve.py
 
+# The referee: simulate each book to ply 30 (our side as 1000-1799 players, theirs as 1800+),
+# from side-specific move tables built with a game-fold bootstrap contract
+.venv\Scripts\python.exe python\side_explorer.py --our-colour white --our-elo 1000:1800 --opp-min-elo 0 --folds 64 --sample 0.35 --out <dir>
+.venv\Scripts\python.exe python\convertibility_eval.py --book L=white=<book> ... --seed 1,2,3,4 --compare-to L [--replicates R]
+.venv\Scripts\python.exe python\extend_book.py ...        # sequence extensions (ext_c10)
+
 # Did I break anything
 .venv\Scripts\python.exe python\run_tests.py
 ```
