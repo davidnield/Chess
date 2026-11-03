@@ -18,10 +18,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 import duckdb
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_pooled_stats import discover_source_files  # noqa: E402
 
 

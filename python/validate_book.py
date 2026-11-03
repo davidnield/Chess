@@ -14,15 +14,20 @@ For every decision of OUR colour in the file (base rows and sequence-extension r
                extension       a sequence-extension row (extend_book: engine-chosen)
   eval       parent and child evals from the eval arrays and the cached loss; rows whose loss
              exceeds the limit, or that lack an eval, are FLAGGED
-  fresh      with --nodes N, every flagged row is searched twice by Stockfish at N nodes (free,
-             and restricted to the book's move; hash cleared): confirmed (the fresh loss
-             exceeds the limit too) or cleared (a cached-eval disagreement)
+  fresh      with --nodes N, every flagged row gets a free Stockfish search. If its best move IS
+             the book's move there is nothing to compare: same_move, whatever the scores say
+             (two searches disagreeing is uncertainty, not an error). Otherwise the best move and
+             the book's move are each searched under the same restriction, budget and cleared
+             hash: confirmed (the book's move is worse by more than the limit) or cleared.
+             unstable marks a row whose free and restricted scores of the best move disagree
+             by more than the limit: treat its verdict with care, search deeper
 
---best-defence walks the book against the opponent's strongest replies: at each opponent node
-reached by our book moves, the recorded pool replies plus Stockfish's own best reply (single
-PV at --defence-nodes), our side following the book, to the book's edge; reports the worst
-engine value at the edge (our view) and the line that reaches it. This is the full-policy
-check the local loss limit does not give. --incumbent PATH adds churn against another book.
+--best-defence is a RESTRICTED adversarial audit of the book: at each opponent node reached by
+our book moves, the recorded pool replies plus Stockfish's single best reply (at
+--defence-nodes), our side following the book, to the book's edge; reports the worst engine value
+at the edge (our view) and the line that reaches it. It can expose a failure; it is no proof
+against every legal defence (an unrecorded second-best move can still hurt a later book move), and
+cached edge evals keep their uncertainty. --incumbent PATH adds churn against another book.
 
     PYTHONPATH=python .venv/Scripts/python.exe python/validate_book.py --book PATH \\
         --colour white [--meta PATH] [--nodes 5000000] [--best-defence] [--out PREFIX]
@@ -42,7 +47,7 @@ import duckdb
 import numpy as np
 import polars as pl
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import budget_core as bc  # noqa: E402
 from duck_compat import duck_pl  # noqa: E402
 from eval_arrays import MISSING, lookup_evals, open_eval_arrays  # noqa: E402
@@ -63,6 +68,49 @@ def base_meta(book: Path) -> Path:
 
 def board(epd: str) -> chess.Board:
     return chess.Board(epd + " 0 1")
+
+
+def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dict, our_white: bool,
+             meta: dict, engine_moves: dict | None, epd: str) -> str:
+    """A base row's status, by the builder's own candidate rule (budget_core.final_candidates)
+    under the recipe's gates and limit, always with the strict source rule: the audit holds a
+    book to what is promised, including a book built before that rule existed."""
+    gates = meta.get("gates", True)
+    limit = meta.get("max_eval_loss")
+    cand, restored, _rej, _eng = bc.final_candidates(
+        h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
+        max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
+        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd)
+    pairs = [(e["move_san"], e.get("child_hash")) for e, _ in cand]
+    if restored is not None:
+        pairs.append(restored)
+    if move.rstrip("+#") not in {m.rstrip("+#") for m, _ in pairs}:
+        return "outside_set"
+    if limit is None:
+        return "in_set"
+    return bc.loss_status([c for _, c in pairs], h, ev, our_white, limit) or "in_set"
+
+
+def fresh_verdict(eng, b: chess.Board, move: str, nodes: int, limit: float, our_white: bool) -> dict:
+    """See `fresh` in the header. eng: a python-chess engine (analyse, configure)."""
+    def search(root_moves=None):
+        eng.configure({"Clear Hash": None})
+        kw = {"root_moves": root_moves} if root_moves else {}
+        return eng.analyse(b, chess.engine.Limit(nodes=nodes), **kw)
+
+    def cp(info):
+        return info["score"].pov(our_white).score(mate_score=2000)
+    free = search()
+    best = free["pv"][0]
+    mv = b.parse_san(move)
+    out = {"sf_best": b.san(best), "sf_best_cp": cp(free), "sf_nodes": nodes}
+    if best == mv:
+        return {**out, "sf_move_cp": cp(free), "sf_loss": 0, "fresh": "same_move", "unstable": False}
+    best_cp, mine_cp = cp(search([best])), cp(search([mv]))
+    loss = best_cp - mine_cp
+    return {**out, "sf_best_restricted_cp": best_cp, "sf_move_cp": mine_cp, "sf_loss": loss,
+            "fresh": "confirmed" if loss > limit else "cleared",
+            "unstable": abs(cp(free) - best_cp) > limit}
 
 
 def main():
@@ -137,7 +185,9 @@ def main():
     hs = np.array(sorted(keys), dtype=np.int64)
     cps = {int(h): int(c) for h, c in zip(hs, lookup_evals(hs, *mm)) if c != MISSING}
     ev = {h: cp_to_expected_score(c) for h, c in cps.items()}
-    gates = meta.get("gates", True)
+    engine_moves, conflicts = None, []
+    if meta.get("engine_candidates"):
+        engine_moves, conflicts = bc.load_engine_candidates(meta["engine_candidates"], ev)
     for rec in rows:
         h = rec["position_hash"]
         rec["parent_cp_us"] = sign * cps[h] if h in cps else None
@@ -152,30 +202,8 @@ def main():
         elif not meta:
             rec["status"] = "no_recipe"
         else:
-            es = edges.get(h, [])
-            sm = rec["source_move"]
-            cand = bc.gate_candidates(h, es, sm, ev, our_white, meta["slice_prior"],
-                                      require_eval=gates, gates=gates, max_eval_loss=limit)
-            sc = rec.get("source_child")
-            if sm and sc is not None and sc in ev and limit is not None:
-                kept = bc.eval_loss_keep(cand + [({"move_san": sm, "child_hash": sc}, ev[sc])],
-                                         ev.get(h), our_white, limit)
-                if any(x["move_san"] == sm for x, _ in kept):
-                    cand = kept
-            sans = {x["move_san"].rstrip("+#") for x, _ in cand}
-            if rec["move"].rstrip("+#") not in sans:
-                rec["status"] = "outside_set"
-            elif limit is None:
-                rec["status"] = "in_set"
-            else:
-                cvs = [ev[x["child_hash"]] for x, _ in cand
-                       if x.get("child_hash") is not None and x["child_hash"] in ev]
-                if not cvs:
-                    rec["status"] = "unknown"
-                elif h in ev and sign * (cps[h]) - max(bc.ws_to_cp(c, our_white) for c in cvs) > limit:
-                    rec["status"] = "fallback"
-                else:
-                    rec["status"] = "in_set"
+            rec["status"] = classify(h, rec["move"], edges.get(h, []), rec["source_move"], ev,
+                                     our_white, meta, engine_moves, rec["epd"])
         rec["flagged"] = rec["legal"] and limit is not None and (
             rec["cached_loss"] is None or rec["cached_loss"] > limit)
     # fresh searches of the flagged rows
@@ -184,17 +212,8 @@ def main():
         eng.configure({"Threads": 8, "Hash": 1024})
         try:
             for rec in (r for r in rows if r["flagged"]):
-                b = board(rec["epd"])
-                eng.configure({"Clear Hash": None})
-                free = eng.analyse(b, chess.engine.Limit(nodes=a.nodes))
-                eng.configure({"Clear Hash": None})
-                mv = b.parse_san(rec["move"])
-                mine = eng.analyse(b, chess.engine.Limit(nodes=a.nodes), root_moves=[mv])
-                fb = free["score"].pov(our_white).score(mate_score=2000)
-                fm = mine["score"].pov(our_white).score(mate_score=2000)
-                rec.update(sf_best=b.san(free["pv"][0]), sf_best_cp=fb, sf_move_cp=fm,
-                           sf_loss=fb - fm, sf_nodes=a.nodes,
-                           fresh="confirmed" if fb - fm > limit else "cleared")
+                rec.update(fresh_verdict(eng, board(rec["epd"]), rec["move"], a.nodes, limit,
+                                         our_white))
         finally:
             eng.quit()
     out = pl.DataFrame(rows, infer_schema_length=None)
@@ -203,7 +222,8 @@ def main():
             "extension_rows": int(out["extension"].sum()),
             "status": dict(out.group_by("status").len().iter_rows()),
             "flagged": int(out["flagged"].sum()),
-            "missing_child_eval": int(out["child_cp_us"].is_null().sum())}
+            "missing_child_eval": int(out["child_cp_us"].is_null().sum()),
+            "engine_eval_conflicts": conflicts}
     if "fresh" in out.columns:
         summ["fresh"] = dict(out.filter(pl.col("fresh").is_not_null()).group_by("fresh").len().iter_rows())
     if a.incumbent:

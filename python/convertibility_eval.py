@@ -46,6 +46,7 @@ fingerprint is refused.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import subprocess
@@ -59,7 +60,7 @@ import duckdb
 import numpy as np
 import polars as pl
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from duck_compat import duck_pl  # noqa: E402
 from eval_arrays import MISSING, lookup_evals, open_eval_arrays  # noqa: E402
 from stage3_backwards_induction import LICHESS_CP_SCALE  # noqa: E402
@@ -386,11 +387,22 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
     # share f]: a game from a start whose paths are partly in book carries that share, and its
     # first out-of-book move of ours counts w * f as an exit
     R = []
-    for si, (h, epd, pr, ply, cp, ws, f) in enumerate(starts):
-        for k in range(K):
-            R.append([chess.Board(epd + " 0 1"), h, pr / K, ply, cp, ws / K, si, k, f])
     leaves = []
     book_mass = 0.0
+    for si, (h, epd, pr, ply, cp, ws, f) in enumerate(starts):
+        b0 = chess.Board(epd + " 0 1")
+        # a start that is already over, or at/past the horizon, is a leaf as it stands (follow-up
+        # review of R1-R6, #2): enumerate_book never schedules one, but a direct caller (the
+        # stop sampler) can, and playing a move there scored an extra ply or an engine guess
+        # instead of the game's result
+        if b0.is_game_over(claim_draw=False) or ply >= a.max_ply:
+            us0 = (b0.turn == chess.WHITE) == our_white
+            ex = _outcome(b0, our_white) if b0.is_game_over(claim_draw=False) else None
+            for k in range(K):
+                leaves.append((pr / K, h, cp, us0, ex, epd, ply, ws / K, si, k))
+            continue
+        for k in range(K):
+            R.append([b0.copy(stack=False), h, pr / K, ply, cp, ws / K, si, k, f])
     dists: dict[tuple, list] = {}
     while R:
         hs = np.array([r[1] for r in R], dtype=np.int64)
@@ -540,29 +552,52 @@ def paired_differences(df: pl.DataFrame, base: str, metric: str = "uniform") -> 
                                     pl.len().alias("seeds")).sort("mean_diff", descending=True))
 
 
-def config_key(a, books, tables) -> str:
+def _sha(path) -> str | None:
+    p = Path(path)
+    return hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p.exists() else None
+
+
+def identity() -> dict:
+    """What produced a number, by content: this code, the Maia server and its interpreter, the
+    fitted curves, and the eval arrays' own fingerprint file."""
+    here = Path(__file__).resolve()
+    from eval_arrays import DEFAULT_ARRAY_DIR, META_NAME
+    return {"referee": _sha(here), "maia_server": _sha(here.with_name("maia_server.py")),
+            "maia_batch": _sha(here.with_name("maia_batch.py")), "maia_python": MAIA_PY,
+            "curves": _sha(CURVES), "eval_arrays": _sha(Path(DEFAULT_ARRAY_DIR) / META_NAME)}
+
+
+def table_manifest(root: str) -> list:
+    """One table dir's data files (path, size, mtime), sorted: the data itself, not just its
+    declared settings. Refuses a table whose params promise months that are not finished."""
+    pr = table_params(root)
+    if pr is not None:
+        missing = [m for m in str(pr.get("months", "")).split(",")
+                   if m and not (Path(root) / f"_month={m}.DONE").exists()]
+        if missing:
+            raise SystemExit(f"FATAL: {root} is incomplete: no _month=M.DONE for {missing}")
+    fs = sorted(Path(root).glob("month=*/bkt=*/*.parquet"))
+    return [[str(f), f.stat().st_size, f.stat().st_mtime_ns] for f in fs]
+
+
+def config_key(a, books, tables, engine: str | None = None) -> str:
     """Fingerprint of everything a result depends on (follow-up review R6): the options that
-    change a score, each book file (path, size, mtime) and each table's params (or, for an
-    unversioned table, its dir's file list and mtimes). A resume refuses rows made under
-    another key instead of trusting the label and replicate number."""
-    import hashlib
+    change a score (the bootstrap seed included), each book file (path, size, mtime), each
+    table's params and data files, the engine that fills leaves and identity(). A resume refuses
+    rows made under another key instead of trusting the label and replicate number. Which
+    --seed list is run is not part of it: rows are keyed by their own seed."""
     opts = {k: getattr(a, k) for k in ("tau", "rollouts", "max_ply", "k", "min_p", "our_elo",
                                         "opp_elo", "stockfish_depth", "our_moves", "opp_moves",
-                                        "use_folds", "fold_weights")}
+                                        "use_folds", "fold_weights", "boot_seed")}
     bks = []
     for spec in books:
         label, colour, path = spec.split("=", 2)
         st = Path(path).stat()
         bks.append([label, colour, str(path), st.st_size, st.st_mtime_ns])
-    tbs = {}
-    for r, c in tables.items():
-        if all(p is not None for p in c.params):
-            tbs[r] = c.params
-        else:
-            fs = sorted(f for x in r.split(",") for f in Path(x).glob("month=*/bkt=*/*.parquet"))
-            tbs[r] = [[str(f), f.stat().st_size, f.stat().st_mtime_ns] for f in fs]
-    blob = json.dumps({"opts": opts, "books": bks, "tables": tbs, "curves": CURVES,
-                       "engine": SF_PATH}, sort_keys=True, default=str)
+    tbs = {r: {"params": c.params, "files": [table_manifest(x) for x in r.split(",")]}
+           for r, c in tables.items()}
+    blob = json.dumps({"opts": opts, "books": bks, "tables": tbs, "code": identity(),
+                       "engine": [SF_PATH, engine]}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
@@ -668,6 +703,8 @@ def main():
                          "reweighted (see fold_weights), so every table must carry the fold "
                          "contract (side_explorer --folds F >= 2); rows carry `replicate` "
                          "(0 = as observed). Refused before any work if a table lacks it")
+    ap.add_argument("--boot-seed", type=int, default=1,
+                    help="the fold weights' stream, shared by every table and book in a run")
     ap.add_argument("--use-folds", type=int, default=None,
                     help="bootstrap over G folds (fold %% G; G divides the tables' F)")
     ap.add_argument("--fold-weights", choices=["normalized", "raw"], default="normalized",
@@ -683,6 +720,9 @@ def main():
                          "({colour} = the opponent's colour); default the 1800+ month")
     a = ap.parse_args()
     seeds = [int(s) for s in str(a.seed).split(",")]
+    missing = [spec for spec in a.book if not Path(spec.split("=", 2)[2]).exists()]
+    if missing:
+        raise SystemExit(f"FATAL: no such book: {missing}")
     con = duckdb.connect()
     con.execute("SET threads=8; SET memory_limit='16GB'")
     mm = open_eval_arrays()
@@ -696,7 +736,7 @@ def main():
         for r, nm in ((a.our_moves.format(colour=colour), "ours"),
                       (a.opp_moves.format(colour="black" if colour == "white" else "white"), "opp")):
             if r not in tables:
-                tables[r] = Counts(con, r, nm, seeds[0], a.use_folds, a.fold_weights)
+                tables[r] = Counts(con, r, nm, a.boot_seed, a.use_folds, a.fold_weights)
     if a.replicates:
         # every problem up front, not after hours of replicate 0 (follow-up review R2a)
         bad = {r: c.bootstrap_problem() for r, c in tables.items() if c.bootstrap_problem()}
@@ -707,24 +747,33 @@ def main():
         if len(cs) != 1:
             raise SystemExit(f"FATAL: the tables disagree on the fold contract: {sorted(cs)} -- a "
                              f"game must carry one weight in every table")
-    cfg = config_key(a, a.book, tables)
     maia = Maia()
-    sf = StockfishFill(a.sf_cache, a.stockfish_depth, a.sf_procs)
-    cv = {r["cell"]: (r["a"], r["k"]) for r in pl.read_parquet(CURVES).iter_rows(named=True)}
-    curves = (cv["stm1000-1799_vs_opp1800+"], cv["stm1800+_vs_opp1000-1799"])
-    rows = []
-    leaf_frames = []
-    partial = Path(f"{a.out}.partial.parquet") if a.out else None
-    done: set[tuple] = set()
-    if partial is not None and partial.exists():
-        rows = pl.read_parquet(partial).to_dicts()
-        other = {r.get("config") for r in rows} - {cfg}
-        if other:
-            raise SystemExit(f"FATAL: {partial} holds rows made under another configuration "
-                             f"{sorted(map(str, other))} (this one is {cfg}); delete it to start over")
-        done = {(r["replicate"], r["label"], r["seed"]) for r in rows}
-        print(f"resuming: {len(done)} (replicate, book, seed) results already saved", flush=True)
+    sf = None
     try:
+      sf = StockfishFill(a.sf_cache, a.stockfish_depth, a.sf_procs)
+      cfg = config_key(a, a.book, tables, sf.engine)
+      cv = {r["cell"]: (r["a"], r["k"]) for r in pl.read_parquet(CURVES).iter_rows(named=True)}
+      curves = (cv["stm1000-1799_vs_opp1800+"], cv["stm1800+_vs_opp1000-1799"])
+      rows = []
+      leaf_dir = Path(f"{a.leaves_out}.parts") if a.leaves_out else None
+      if leaf_dir is not None:
+          leaf_dir.mkdir(parents=True, exist_ok=True)
+
+      def leaf_part(label, seed):
+          # by position in --book: labels may hold anything a file name may not
+          return leaf_dir / f"b{[s.split('=', 1)[0] for s in a.book].index(label):03d}_s{seed}.parquet"
+      partial = Path(f"{a.out}.partial.parquet") if a.out else None
+      done: set[tuple] = set()
+      if partial is not None and partial.exists():
+          rows = pl.read_parquet(partial).to_dicts()
+          other = {r.get("config") for r in rows} - {cfg}
+          if other:
+              raise SystemExit(f"FATAL: {partial} holds rows made under another configuration "
+                               f"{sorted(map(str, other))} (this one is {cfg}); delete it to start over")
+          if leaf_dir is not None:      # a score whose leaves were not kept is redone
+              rows = [r for r in rows if r["replicate"] != 0 or leaf_part(r["label"], r["seed"]).exists()]
+          done = {(r["replicate"], r["label"], r["seed"]) for r in rows}
+          print(f"resuming: {len(done)} (replicate, book, seed) results already saved", flush=True)
       for rep in range(a.replicates + 1):
         for spec in a.book:
             label, colour, path = spec.split("=", 2)
@@ -752,14 +801,9 @@ def main():
                        "nodes": nodes, "book_moves_played": ex_book + ro_book,
                        "rollouts": a.rollouts, "tau": a.tau, "config": cfg,
                        "secs": round(time.time() - t0)}
-                rows.append(row)
-                if partial is not None:      # checkpoint: a crash or shutdown loses one walk
-                    tmp = partial.with_suffix(".tmp")
-                    pl.DataFrame(rows).write_parquet(tmp)
-                    tmp.replace(partial)
-                if a.leaves_out and rep == 0:
+                if leaf_dir is not None and rep == 0:      # before the row that counts on them
                     sid = v["sid"]
-                    leaf_frames.append(pl.DataFrame({
+                    lf = pl.DataFrame({
                         "label": [label] * len(leaves), "seed": seed, "prob": v["ps"],
                         "cp_us": v["cp_us"], "us_to_move": v["us"], "exact": v["exact"],
                         "uniform": v["uniform"], "fitted": v["fitted"], "ply": v["ply"],
@@ -767,13 +811,22 @@ def main():
                         "start_hash": [starts[i][0] if i >= 0 else None for i in sid.tolist()],
                         "start_ply": [starts[i][3] if i >= 0 else None for i in sid.tolist()],
                         "hash": v["hs"], "epd": [l[5] for l in leaves],
-                        "stockfish": v["missing_sf"]}))
+                        "stockfish": v["missing_sf"]})
+                    lp = leaf_part(label, seed)
+                    lf.write_parquet(lp.with_suffix(".tmp"))
+                    lp.with_suffix(".tmp").replace(lp)
+                rows.append(row)
+                if partial is not None:      # checkpoint: a crash or shutdown loses one walk
+                    tmp = partial.with_suffix(".tmp")
+                    pl.DataFrame(rows).write_parquet(tmp)
+                    tmp.replace(partial)
                 print(json.dumps(row), flush=True)
                 t0 = time.time()
     finally:
         # always release the engines: an exception used to leave the process alive (the
         # Stockfish thread), stalling the chain behind it for hours
-        sf.close()
+        if sf is not None:
+            sf.close()
         maia.close()
     df = pl.DataFrame(rows)
     if a.out:
@@ -783,7 +836,11 @@ def main():
         if partial is not None and partial.exists():
             partial.unlink()
     if a.leaves_out:
-        pl.concat(leaf_frames).write_parquet(a.leaves_out)
+        # every replicate-0 row has its leaves, resumed or not
+        parts = [leaf_part(r["label"], r["seed"]) for r in rows if r["replicate"] == 0]
+        tmp = Path(a.leaves_out + ".tmp")
+        pl.concat([pl.read_parquet(x) for x in parts]).write_parquet(tmp)
+        tmp.replace(a.leaves_out)
     with pl.Config(tbl_rows=60, tbl_width_chars=200, float_precision=4):
         print(df.select("label", "colour", "seed", "book_moves", "uniform", "fitted",
                         "mc_se_uniform", "book_moves_played", "stockfish_mass", "secs"))

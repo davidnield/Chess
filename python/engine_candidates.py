@@ -28,7 +28,7 @@ import chess
 import chess.engine
 import polars as pl
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from zobrist import zobrist_int64  # noqa: E402
 
 SF = "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe"

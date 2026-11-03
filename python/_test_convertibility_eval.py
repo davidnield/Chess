@@ -13,6 +13,11 @@ R2/R3/R6 fixes, on mock move tables, a mock Maia and a mock eval lookup.
      table, normalised to keep the total data weight (R2b), and all-zero draws are redrawn.
   S  side_explorer: fold_of nests over powers of two, the sample is game-keyed, and a table dir
      is locked to its settings.
+  M  main, end to end on fakes for the engine and Maia: a killed run resumes with its rows and
+     leaves; a resume under changed table data, bootstrap seed or options is refused, a reordered
+     --seed list is not; an incomplete table is refused; leaves cover the score table. A missing
+     book is refused before any engine starts, and a refusal after they start releases them (an
+     open engine keeps the process alive, stalling whatever waits on it).
 
 Run: .venv/Scripts/python.exe python/_test_convertibility_eval.py
 """
@@ -194,6 +199,30 @@ for our_white, book, ply0 in ((True, BOOK_W, 2), (False, {}, 1)):
               abs(sum(v[0] for v in ex.values()) - 1.0) < 1e-9 and {p for _, p in ex} == {ply0},
               f"{sum(v[0] for v in ex.values()):.6f} {sorted({p for _, p in ex})}")
 
+print("T  direct starts: terminal and horizon positions are leaves as they stand")
+MATED_W = "rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq -"     # fool's mate, White mated
+STALE = "7k/5Q2/6K1/8/8/8/8/8 b - -"                                    # Black stalemated
+BARE = "8/8/4k3/8/8/3K4/8/8 w - -"                                      # insufficient material
+for our_white in (True, False):
+    c = "White" if our_white else "Black"
+    a = opts(rollouts=3, max_ply=30)
+    for epd, ply, want_ply, want_exact, label in (
+            (chess.Board().epd(), 30, 30, None, "at the horizon"),
+            (chess.Board().epd(), 34, 34, None, "past the horizon"),
+            (MATED_W, 4, 4, 0.0 if our_white else 1.0, "checkmated"),
+            (STALE, 20, 20, 0.5, "stalemate"),
+            (BARE, 20, 20, 0.5, "insufficient material")):
+        st = [(zobrist_int64(chess.Board(epd + " 0 1")), epd, 1.0, ply, None, 0.0, 0.0)]
+        rl, bm = cv.rollouts(st, {}, our_white, 0, a, 1, NC, NC, MAIA, lookup)
+        ok = (len(rl) == 3 and all(l[6] == want_ply for l in rl)
+              and all((l[4] is None) if want_exact is None else (l[4] == want_exact) for l in rl))
+        check(f"{c}: {label}: leaves at ply {want_ply}, exact {want_exact}", ok,
+              str([(l[6], l[4]) for l in rl]))
+a = opts(rollouts=2, max_ply=30)
+st = [(zobrist_int64(chess.Board()), chess.Board().epd(), 1.0, 28, None, 0.0, 0.0)]
+rl, _ = cv.rollouts(st, {}, True, 0, a, 1, NC, NC, MAIA, lookup)
+check("below the horizon: games still end exactly at ply 30", {l[6] for l in rl} == {30})
+
 print("P  paired differences")
 rows = []
 for s in (1, 2, 3):
@@ -304,6 +333,143 @@ with tempfile.TemporaryDirectory() as td:
           got.select(want.columns).equals(want) and got.schema == want.schema
           and tot == 2 * (kept - failed) and n_tm == tm.height,
           f"{got.schema} vs {want.schema}")
+
+print("M  main: resume and fingerprints")
+with tempfile.TemporaryDirectory() as td:
+    td = Path(td)
+    curves = td / "curves.parquet"
+    pl.DataFrame({"cell": ["stm1000-1799_vs_opp1800+", "stm1800+_vs_opp1000-1799"],
+                  "a": [0.0, 0.0], "k": [0.004, 0.004]}).write_parquet(curves)
+
+    def table(name):
+        d = td / name
+        (d / "month=2026_8" / "bkt=0").mkdir(parents=True)
+        pl.DataFrame({"parent_hash": [1], "move_san": ["e4"], "fold": [0], "total": [10]},
+                     schema={"parent_hash": pl.Int64, "move_san": pl.Utf8, "fold": pl.Int16,
+                             "total": pl.Int64}).write_parquet(d / "month=2026_8" / "bkt=0" / "part-0000.parquet")
+        (d / "_explorer_params.json").write_text(json.dumps(
+            {"folds": 4, "fold_rule": sx.FOLD_RULE, "sample_rule": sx.SAMPLE_RULE, "months": "2026_8"}))
+        (d / "_month=2026_8.DONE").write_text("ok")
+        return d
+
+    ours, opp = table("ours"), table("opp")
+    bk = td / "book.parquet"
+    pl.DataFrame({"position_hash": [zobrist_int64(chess.Board())], "side_to_move": ["white"],
+                  "best_move": ["e4"]}).write_parquet(bk)
+    out, lv = td / "r.parquet", td / "l.parquet"
+
+    closed: list[str] = []
+
+    class FakeMaia(MockMaia):
+        def __init__(self, *a, **k):
+            closed.append("maia started")
+            super().__init__(*a, **k)
+
+        def close(self):
+            closed.append("maia")
+
+    class FakeSF:
+        engine = "fake 1"
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __call__(self, todo):
+            return {h: 0 for h, _ in todo}
+
+        def close(self):
+            closed.append("sf")
+
+    saved = (cv.Maia, cv.StockfishFill, cv.open_eval_arrays, cv.lookup_evals, cv.CURVES, cv.summarize)
+    cv.Maia, cv.StockfishFill, cv.open_eval_arrays = FakeMaia, FakeSF, lambda: ()
+    cv.lookup_evals, cv.CURVES = (lambda hs, *mm: lookup(hs)), str(curves)
+
+    def run(*extra, seed="1,2", kill_after=None):
+        calls = [0]
+
+        def summ(*a_, **k_):
+            calls[0] += 1
+            if kill_after is not None and calls[0] > kill_after:
+                raise RuntimeError("killed")
+            return saved[5](*a_, **k_)
+        cv.summarize = summ
+        argv = sys.argv
+        sys.argv = ["convertibility_eval", "--book", f"A=white={bk}", "--book", f"B=white={bk}",
+                    "--max-ply", "4", "--tau", "0.2", "--rollouts", "2", "--seed", seed,
+                    "--our-moves", str(ours), "--opp-moves", str(opp), "--out", str(out),
+                    "--leaves-out", str(lv), "--sf-cache", "", *extra]
+        try:
+            cv.main()
+        finally:
+            sys.argv = argv
+    partial = Path(f"{out}.partial.parquet")
+    try:
+        try:
+            run(kill_after=3)
+            check("the kill fires", False)
+        except RuntimeError:
+            check("a killed run leaves its rows", pl.read_parquet(partial).height == 3)
+        # a score whose leaves were lost is redone, not trusted
+        lost = next((td / "l.parquet.parts").glob("b000_s2*"))
+        lost.unlink()
+        run()
+        r = pl.read_parquet(out)
+        check("resumed: all four (book, seed) rows", sorted(r.select("label", "seed").rows()) ==
+              [("A", 1), ("A", 2), ("B", 1), ("B", 2)], str(r.select("label", "seed").rows()))
+        ll = pl.read_parquet(lv)
+        check("the leaves cover every row", sorted(ll.select("label", "seed").unique().rows()) ==
+              [("A", 1), ("A", 2), ("B", 1), ("B", 2)])
+        check("every leaf carries its start's identity",
+              {"start_hash", "start_ply", "rollout", "seed"} <= set(ll.columns))
+        check("the partial is gone", not partial.exists())
+
+        def killed_partial():
+            out.unlink(missing_ok=True)
+            partial.unlink(missing_ok=True)
+            try:
+                run(kill_after=1)
+            except RuntimeError:
+                pass
+
+        def is_refused(*extra):
+            try:
+                run(*extra)
+                return False
+            except SystemExit:
+                return True
+        part = opp / "month=2026_8" / "bkt=0" / "part-0000.parquet"
+        orig = part.read_bytes()
+        killed_partial()
+        part.write_bytes(orig + b"x")
+        check("a table whose data changed is refused, params unchanged", is_refused())
+        part.write_bytes(orig)
+        killed_partial()
+        check("another bootstrap seed is refused", is_refused("--boot-seed", "2"))
+        check("another option is refused", is_refused("--k", "50"))
+        killed_partial()
+        closed.clear()
+        check("refused after the engines started", is_refused("--k", "50"))
+        check("  and they are released", sorted(closed) == ["maia", "maia started", "sf"], str(closed))
+        closed.clear()
+        argv = sys.argv
+        sys.argv = ["convertibility_eval", "--book", f"A=white={td / 'no_such_book.parquet'}",
+                    "--our-moves", str(ours), "--opp-moves", str(opp), "--sf-cache", ""]
+        try:
+            cv.main()
+            check("a missing book is refused", False)
+        except SystemExit as e:
+            check("a missing book is refused", "no such book" in str(e.code), str(e.code))
+        finally:
+            sys.argv = argv
+        check("  before any engine starts", closed == [], str(closed))
+        run(seed="2,1")
+        check("a reordered --seed list resumes", pl.read_parquet(out).height == 4)
+        (ours / "_month=2026_8.DONE").unlink()
+        out.unlink()
+        check("a table with an unfinished month is refused", is_refused())
+        (ours / "_month=2026_8.DONE").write_text("ok")
+    finally:
+        cv.Maia, cv.StockfishFill, cv.open_eval_arrays, cv.lookup_evals, cv.CURVES, cv.summarize = saved
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

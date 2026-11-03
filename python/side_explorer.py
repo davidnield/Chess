@@ -40,7 +40,7 @@ import chess
 import polars as pl
 import pyarrow.parquet as pq
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_pooled_stats import discover_source_files  # noqa: E402
 from stage1_extract_positions import iter_san_moves  # noqa: E402
 from zobrist import IncrementalZobrist, zobrist_int64  # noqa: E402

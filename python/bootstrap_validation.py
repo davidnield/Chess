@@ -28,13 +28,14 @@ import argparse
 import json
 import math
 import sys
+from pathlib import Path
 import time
 from types import SimpleNamespace
 
 import chess
 import numpy as np
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import convertibility_eval as cv  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
 

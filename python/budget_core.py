@@ -490,6 +490,12 @@ class Graph:
     ply: dict[int, int]
     reach: dict[int, float]
     meta: dict = field(default_factory=dict)
+    # build_graph(track_route_ply=True): position -> the ply of its highest-reach route (see
+    # route_plies). ply above is what the depth cut and turn parity read; this is for values.
+    route_ply: dict[int, int] = field(default_factory=dict)
+    # build_graph(track_other=True): opponent node -> (the other bucket's share of the node, its
+    # value and the node's engine value, our view, engine None if unknown). See sampled_other.py.
+    other: dict[int, tuple[float, float, float | None]] = field(default_factory=dict)
 
     def side(self, h: int) -> str:
         return "our" if h in self.our else "opp"
@@ -569,6 +575,194 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
     return reach, ply
 
 
+def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int, float],
+                     our_white: bool, slice_prior: float, *,
+                     robustness_floor: float = ROBUSTNESS_FLOOR,
+                     gate_rel_floor: float = GATE_REL_FLOOR,
+                     gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
+                     require_eval: bool = True, gates: bool = True,
+                     max_eval_loss: float | None = None, max_cands: int = 0,
+                     strict_source: bool = False,
+                     engine_moves: dict[int, list[tuple[str, int]]] | None = None,
+                     edges_by_parent: dict | None = None, epd: str | None = None):
+    """The moves an our-node may book: one definition for build_graph and validate_book, so the
+    book and its checker cannot disagree. Engine proposals join the recorded moves before the
+    gates; the gates and --max-eval-loss run over that set; then the candidate cap; then the
+    source move, if the set lacks it (see strict_source in build_graph). Returns (cand_es = the
+    (edge, child eval) pairs, restored = (source move, child hash) or None, rejected source
+    moves, engine moves added)."""
+    edges_by_parent = edges_by_parent if edges_by_parent is not None else {}
+    es_g, n_eng = es, 0
+    if engine_moves and h in engine_moves:
+        have = {e["move_san"].rstrip("+#") for e in es}
+        extra = [{"move_san": san, "child_hash": ch, "total": 0,
+                  "white_score_avg": slice_prior, "engine": True}
+                 for san, ch in engine_moves[h] if san.rstrip("+#") not in have]
+        if extra:
+            n_eng = len(extra)
+            es_g = es + extra
+    cand_es = gate_candidates(h, es_g, src, eval_ws, our_white,
+                              slice_prior, robustness_floor,
+                              gate_rel_floor, gate_rel_own_margin,
+                              require_eval, gates, max_eval_loss)
+    # Candidate cap.
+    #
+    # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py
+    # measured 4.26M nodes uncapped vs 410K at top-3 and the cap was
+    # adopted as "the lever that makes the DP tractable" — but the probe
+    # applied the cap DURING level expansion, and this code runs after
+    # build_budget_books.collect_subgraph_edges has already expanded
+    # every gate-passing child. So in production the cap does not shrink
+    # the subgraph at all: mc3 and mc5 builds of the same book both
+    # report 53,060 our / 97,889 opponent nodes. It is a CHOICE-SET
+    # knob, and its cost is paid in value, not saved in memory.
+    # scratch/python/budget_gate_fanout.py has the fanout distribution:
+    # gates alone leave a mean of 2.66 candidates/node, 62% of nodes
+    # have exactly one, and a top-3 cap binds on 19.5% of them.
+    # Making the cap a real memory lever means capping inside
+    # collect_subgraph_edges, which needs evals at expansion time.
+    #
+    # Ranking is deliberately NOT eval alone: eval-ranking biases the
+    # cap toward the unconstrained book's own preference, and the whole
+    # point of a budget is that a lower-eval move with a CHEAPER subtree
+    # can win. So we keep, in order: the source book's move (always —
+    # it passed the real gates, incl. engine augmentation), the top-K by
+    # our-perspective child eval, and the single most FORCING candidate
+    # (highest reply concentration = fewest opponent branches to
+    # prepare), which is precisely the budget-relevant axis eval misses.
+    if max_cands and len(cand_es) > max_cands:
+        def _ev(pair):
+            _e, cv = pair
+            if cv is None:
+                return -1e9
+            return cv if our_white else 1.0 - cv
+
+        def _forcing(pair):
+            e, _cv = pair
+            ch = e.get("child_hash")
+            kids = edges_by_parent.get(ch) if ch is not None else None
+            return forcingness(kids) if kids else 0.0
+
+        srcs = [c for c in cand_es if c[0]["move_san"] == src]
+        rest = [c for c in cand_es if c[0]["move_san"] != src]
+        rest.sort(key=_ev, reverse=True)
+        kept = rest[:max(0, max_cands - len(srcs))]
+        if rest and not any(c is max(rest, key=_forcing) for c in kept):
+            kept = kept[:-1] + [max(rest, key=_forcing)] if kept \
+                else [max(rest, key=_forcing)]
+        cand_es = srcs + kept
+    seen_src = any(e["move_san"] == src for e, _cv in cand_es)
+    recorded_src = src is not None and any(e["move_san"] == src for e in es)
+    if src and not seen_src and strict_source and recorded_src:
+        return cand_es, None, 1, n_eng
+    if src and not seen_src:
+        # engine-augmented source move: no stats edge. Child hash via
+        # python-chess where an EPD is available (CLI path); tests pass
+        # explicit edges so this stays cold there.
+        ch = None
+        if epd is not None:
+            from build_baseline_books import child_of
+            ch = child_of(epd, src)
+        if strict_source and max_eval_loss is not None:
+            cev = eval_ws.get(ch) if ch is not None else None
+            kept = None if cev is None else eval_loss_keep(
+                cand_es + [({"move_san": src}, cev)], eval_ws.get(h),
+                our_white, max_eval_loss)
+            if kept is None or not any(e["move_san"] == src for e, _ in kept):
+                return cand_es, None, 1, n_eng
+            # One loss rule over the COMPLETE set (follow-up review R1): a
+            # source move better than every recorded one raises the baseline,
+            # so recorded moves it puts out of range leave too.
+            keep_sans = {e["move_san"] for e, _ in kept}
+            cand_es = [c for c in cand_es if c[0]["move_san"] in keep_sans]
+        return cand_es, (src, ch), 0, n_eng
+    return cand_es, None, 0, n_eng
+
+
+def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
+                max_loss_cp: float) -> str | None:
+    """Could --max-eval-loss bind on this final candidate set? 'fallback': no candidate is within
+    the limit of the position's own eval, so the least-losing one stayed (the owner's rule,
+    2026-10-08). 'unknown': no candidate has an eval. None: every candidate is within it."""
+    cps = [ws_to_cp(eval_ws[ch], our_white) for ch in children
+           if ch is not None and ch in eval_ws]
+    if not cps:
+        return "unknown"
+    if h in eval_ws and ws_to_cp(eval_ws[h], our_white) - max(cps) > max_loss_cp:
+        return "fallback"
+    return None
+
+
+def load_engine_candidates(path: str, eval_ws: dict[int, float], conflict_cp: float = 25.0):
+    """engine_candidates.py's table -> (engine_moves, conflicts). A proposal's child takes the
+    proposal's own fresh eval: it was searched on purpose, deeper than the cached one. Where a
+    cached eval exists and differs by more than conflict_cp (white view) it is replaced and
+    recorded, as a conflict the caller reports, never silently kept or dropped."""
+    import polars as pl
+    from stage3_backwards_induction import cp_to_expected_score
+    moves: dict[int, list[tuple[str, int]]] = {}
+    conflicts = []
+    cols = ["position_hash", "move_san", "child_hash", "child_cp_white"]
+    for h, san, ch, cp in pl.read_parquet(path).select(cols).iter_rows():
+        moves.setdefault(h, []).append((san, ch))
+        if cp is None:
+            continue
+        fresh = cp_to_expected_score(int(cp))
+        old = eval_ws.get(ch)
+        if old is not None:
+            old_cp = ws_to_cp(old, True)
+            if abs(old_cp - cp) > conflict_cp:
+                conflicts.append({"position_hash": h, "move": san, "child_hash": ch,
+                                  "cached_cp_white": old_cp, "fresh_cp_white": int(cp)})
+        eval_ws[ch] = fresh
+    return moves, conflicts
+
+
+def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: bool,
+                reach: dict[int, float], ply: dict[int, int], max_ply: int,
+                share_floor: float, admitted: dict[int, set] | None = None) -> dict[int, int]:
+    """The ply of each position's HIGHEST-REACH route (2026-11-01). optimistic_reach's ply is a
+    traversal-dependent mix: it takes the minimum over every parent that happened to push the
+    position before it was finalised, so a reach-1 parent's 10% reply sets the ply even when
+    the position's reach of 0.9 comes from a longer route. Changing it would change the depth
+    cut for every recipe, so this is separate: a breadth-first walk over the TIGHT edges alone,
+    those whose reach product equals the child's final reach. Ties go to the shortest route,
+    independently of edge order. A stop value that stands for one ply stands for this one: the
+    objective averages over the games played, so the value should be the one at the ply most of
+    them arrive at (sampled_stop.py)."""
+    out = {root: 0}
+    level = [root]
+    while level:
+        nxt = []
+        for h in level:
+            if ply[h] >= max_ply:
+                continue
+            es = edges_by_parent.get(h)
+            if not es:
+                continue
+            r = reach[h]
+            our_turn = (ply[h] % 2 == 0) == root_our
+            tot = sum(e["total"] for e in es)
+            for e in es:
+                ch = e.get("child_hash")
+                if ch is None or ch in out or ch not in reach:
+                    continue
+                if our_turn:
+                    if admitted is not None and ch not in admitted.get(h, ()):
+                        continue
+                    cr = r
+                else:
+                    share = e["total"] / tot if tot else 0.0
+                    if share < share_floor:
+                        continue
+                    cr = r * share
+                if cr == reach[ch]:
+                    out[ch] = out[h] + 1
+                    nxt.append(ch)
+        level = nxt
+    return out
+
+
 def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 our_white: bool, *,
                 rep_moves: dict[int, str] | None = None,
@@ -592,7 +786,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 max_eval_loss: float | None = None,
                 strict_source: bool = False,
                 crack_at_parents: bool = False,
-                engine_moves: dict[int, list[tuple[str, int]]] | None = None) -> Graph:
+                engine_moves: dict[int, list[tuple[str, int]]] | None = None,
+                track_route_ply: bool = False, track_other: bool = False) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -651,10 +846,21 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
         # consults it at our-turn nodes.
         admitted = {}
         for h, es in edges_by_parent.items():
-            admitted[h] = {e["child_hash"] for e, _ in gate_candidates(
-                h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
-                robustness_floor, gate_rel_floor, gate_rel_own_margin,
-                require_eval, gates, max_eval_loss) if e.get("child_hash") is not None}
+            if strict_source or engine_moves:
+                # reach flows only through what the node can finally book
+                cs = final_candidates(
+                    h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
+                    robustness_floor=robustness_floor, gate_rel_floor=gate_rel_floor,
+                    gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
+                    gates=gates, max_eval_loss=max_eval_loss, strict_source=strict_source,
+                    engine_moves=engine_moves, edges_by_parent=edges_by_parent,
+                    epd=es[0].get("parent_epd"))[0]
+            else:
+                cs = gate_candidates(
+                    h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
+                    robustness_floor, gate_rel_floor, gate_rel_own_margin,
+                    require_eval, gates, max_eval_loss)
+            admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
     reach, ply = optimistic_reach(edges_by_parent, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
@@ -667,7 +873,9 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             return None
         return e if our_white else 1.0 - e
 
-    g = Graph(root=root, our={}, opp={}, epd={}, ply=dict(ply),
+    route = (route_plies(edges_by_parent, root, our_white, reach, ply, max_ply, share_floor,
+                         admitted) if track_route_ply else {})
+    g = Graph(root=root, our={}, opp={}, epd={}, ply=dict(ply), route_ply=route,
               reach=dict(reach), meta={
                   "eps": eps, "max_ply": max_ply, "share_floor": share_floor,
                   "slice_prior": slice_prior, "our_white": our_white})
@@ -702,66 +910,17 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 node.crack = (cont, crack)
             # gate the recorded candidates; always admit the source move
             src = rep_moves.get(h)
-            es_g = es
-            if engine_moves and h in engine_moves:
-                have = {e["move_san"].rstrip("+#") for e in es}
-                extra = [{"move_san": san, "child_hash": ch, "total": 0,
-                          "white_score_avg": slice_prior, "engine": True}
-                         for san, ch in engine_moves[h] if san.rstrip("+#") not in have]
-                if extra:
-                    g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + len(extra)
-                    es_g = es + extra
-            cand_es = gate_candidates(h, es_g, src, eval_ws, our_white,
-                                      slice_prior, robustness_floor,
-                                      gate_rel_floor, gate_rel_own_margin,
-                                      require_eval, gates, max_eval_loss)
-            # Candidate cap.
-            #
-            # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py
-            # measured 4.26M nodes uncapped vs 410K at top-3 and the cap was
-            # adopted as "the lever that makes the DP tractable" — but the probe
-            # applied the cap DURING level expansion, and this code runs after
-            # build_budget_books.collect_subgraph_edges has already expanded
-            # every gate-passing child. So in production the cap does not shrink
-            # the subgraph at all: mc3 and mc5 builds of the same book both
-            # report 53,060 our / 97,889 opponent nodes. It is a CHOICE-SET
-            # knob, and its cost is paid in value, not saved in memory.
-            # scratch/python/budget_gate_fanout.py has the fanout distribution:
-            # gates alone leave a mean of 2.66 candidates/node, 62% of nodes
-            # have exactly one, and a top-3 cap binds on 19.5% of them.
-            # Making the cap a real memory lever means capping inside
-            # collect_subgraph_edges, which needs evals at expansion time.
-            #
-            # Ranking is deliberately NOT eval alone: eval-ranking biases the
-            # cap toward the unconstrained book's own preference, and the whole
-            # point of a budget is that a lower-eval move with a CHEAPER subtree
-            # can win. So we keep, in order: the source book's move (always —
-            # it passed the real gates, incl. engine augmentation), the top-K by
-            # our-perspective child eval, and the single most FORCING candidate
-            # (highest reply concentration = fewest opponent branches to
-            # prepare), which is precisely the budget-relevant axis eval misses.
-            if max_cands and len(cand_es) > max_cands:
-                def _ev(pair):
-                    _e, cv = pair
-                    if cv is None:
-                        return -1e9
-                    return cv if our_white else 1.0 - cv
-
-                def _forcing(pair):
-                    e, _cv = pair
-                    ch = e.get("child_hash")
-                    kids = edges_by_parent.get(ch) if ch is not None else None
-                    return forcingness(kids) if kids else 0.0
-
-                srcs = [c for c in cand_es if c[0]["move_san"] == src]
-                rest = [c for c in cand_es if c[0]["move_san"] != src]
-                rest.sort(key=_ev, reverse=True)
-                kept = rest[:max(0, max_cands - len(srcs))]
-                if rest and not any(c is max(rest, key=_forcing) for c in kept):
-                    kept = kept[:-1] + [max(rest, key=_forcing)] if kept \
-                        else [max(rest, key=_forcing)]
-                cand_es = srcs + kept
-            seen_src = False
+            cand_es, restored, n_rej, n_eng = final_candidates(
+                h, es, src, eval_ws, our_white, slice_prior,
+                robustness_floor=robustness_floor, gate_rel_floor=gate_rel_floor,
+                gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
+                gates=gates, max_eval_loss=max_eval_loss, max_cands=max_cands,
+                strict_source=strict_source, engine_moves=engine_moves,
+                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"))
+            if n_eng:
+                g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + n_eng
+            if n_rej:
+                g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + n_rej
             for e, _cv in cand_es:
                 ch = e.get("child_hash")
                 in_sub = ch is not None and ch in reach and \
@@ -772,33 +931,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                                      prior_strength, eval_weight,
                                      eval_weight_min, eval_weight_k)
                 node.cands.append((e["move_san"], ch, in_sub, lv))
-                if e["move_san"] == src:
-                    seen_src = True
-            recorded_src = src is not None and any(e["move_san"] == src for e in es)
-            if src and not seen_src and strict_source and recorded_src:
-                g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + 1
-            elif src and not seen_src:
-                # engine-augmented source move: no stats edge. Child hash via
-                # python-chess where an EPD is available (CLI path); tests pass
-                # explicit edges so this stays cold there.
-                ch = None
-                if h in g.epd:
-                    from build_baseline_books import child_of
-                    ch = child_of(g.epd[h], src)
-                if strict_source and max_eval_loss is not None:
-                    cev = eval_ws.get(ch) if ch is not None else None
-                    kept = None if cev is None else eval_loss_keep(
-                        cand_es + [({"move_san": src}, cev)], eval_ws.get(h),
-                        our_white, max_eval_loss)
-                    if kept is None or not any(e["move_san"] == src for e, _ in kept):
-                        g.meta["src_rejected"] = g.meta.get("src_rejected", 0) + 1
-                        g.our[h] = node
-                        continue
-                    # One loss rule over the COMPLETE set (follow-up review R1): a
-                    # source move better than every recorded one raises the baseline,
-                    # so recorded moves it puts out of range leave too.
-                    keep_sans = {e["move_san"] for e, _ in kept}
-                    node.cands = [c for c in node.cands if c[0] in keep_sans]
+            if restored is not None:
+                src, ch = restored
                 in_sub = ch is not None and ch in reach and \
                     edges_by_parent.get(ch) is not None
                 lv = leaf_edge_value(slice_prior, 0,
@@ -832,6 +966,16 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 # the bucket sums, so the our-score numerator is den - num.
                 aux_num = w_num if our_white else aux_den - w_num
             denom = tot + aux_den
+            if track_other and aux_rows and o_tot:
+                # the same mix with only this bucket in it: it is linear, so this is the
+                # bucket's own part of aux_num
+                o_num, o_den = aux_opp_mix(
+                    0.0, 0.0, o_tot, o_sum, o_eval, o_cov, 0.0, 0.0, None,
+                    eval_weight, eval_weight_min, eval_weight_k,
+                    cov_blend=other_cov_blend)
+                v_ws, e_ws = o_num / o_den, eval_ws.get(h)
+                g.other[h] = (o_den / denom, v_ws if our_white else 1.0 - v_ws,
+                              None if e_ws is None else (e_ws if our_white else 1.0 - e_ws))
             node = OppNode(const_base=(aux_num / denom) if denom else 0.0)
             for e in es:
                 ch = e.get("child_hash")
@@ -886,14 +1030,11 @@ def loss_exceptions(g: Graph, eval_ws: dict[int, float], our_white: bool,
     legacy restore can add a source move the limit rejected, which this does not see)."""
     out = {}
     for h, n in g.our.items():
-        cps = [ws_to_cp(eval_ws[ch], our_white) for _, ch, _, _ in n.cands
-               if ch is not None and ch in eval_ws]
         if not n.cands:
             continue
-        if not cps:
-            out[h] = "unknown"
-        elif h in eval_ws and ws_to_cp(eval_ws[h], our_white) - max(cps) > max_loss_cp:
-            out[h] = "fallback"
+        st = loss_status([c[1] for c in n.cands], h, eval_ws, our_white, max_loss_cp)
+        if st:
+            out[h] = st
     return out
 
 

@@ -42,7 +42,7 @@ import duckdb
 import numpy as np
 import polars as pl
 
-sys.path.insert(0, "python")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from convertibility_eval import Maia, blend  # noqa: E402
 from eval_arrays import MISSING, lookup_evals, open_eval_arrays  # noqa: E402
 from stage3_backwards_induction import LICHESS_CP_SCALE  # noqa: E402

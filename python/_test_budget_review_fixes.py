@@ -11,6 +11,7 @@
      legacy graph credits the resignations to stopping only, so booking reads 0.5, and a
      move that beats stopping is never booked. Legacy and compiled engines agree.
   F  --min-games defaults to the pool's own floor (build_budget_books._pool_min_games).
+  W  the book frame holds a loss label past polars' 100-row inference, and changes nothing else.
   O  both flags off are exact no-ops on the graph.
 
 Run: .venv/Scripts/python.exe python/_test_budget_review_fixes.py
@@ -23,6 +24,7 @@ import tempfile
 from pathlib import Path
 
 import chess
+import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
 import budget_core as bc  # noqa: E402
@@ -286,6 +288,17 @@ with tempfile.TemporaryDirectory() as td:
     check("no meta -> None", _pool_min_games(str(p)) is None)
     Path(str(p) + ".meta.json").write_text(json.dumps({"min_games": 20}))
     check("meta floor 20 is read", _pool_min_games(str(p)) == 20)
+
+# ── W: the book frame ────────────────────────────────────────────────────────
+print("W  book frame")
+from build_budget_books import book_frame  # noqa: E402
+late = [{"position_hash": i, "loss_exception": "fallback" if i == 150 else None} for i in range(200)]
+wf = book_frame(late)
+check("a label after row 100 is kept", wf["loss_exception"].drop_nulls().to_list() == ["fallback"])
+nl = book_frame([{"position_hash": 1, "loss_exception": None}])
+check("no exceptions: still a string column", nl["loss_exception"].dtype == pl.Utf8, str(nl.schema))
+plain = [{"position_hash": i, "value": i / 2, "best_move": None if i % 2 else "e4"} for i in range(9)]
+check("a book without the column is the default frame", book_frame(plain).equals(pl.DataFrame(plain)))
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)
