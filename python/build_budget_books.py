@@ -76,6 +76,14 @@ def peak_commit_gb() -> float | None:
         return None
 
 
+def book_frame(rows: list[dict]) -> pl.DataFrame:
+    """The book's rows as a frame. Every row counts for the schema: loss_exception is null on
+    nearly all of them, and a label past polars' default 100-row inference raises, at the very
+    end of a long build. It stays a string column in a book without exceptions."""
+    df = pl.DataFrame(rows, infer_schema_length=None)
+    return df.with_columns(pl.col("loss_exception").cast(pl.Utf8)) if "loss_exception" in df.columns else df
+
+
 def _pool_min_games(stats: str) -> int | None:
     """The pool's own min_games floor, from its <stats>.meta.json (None if absent)."""
     mp = Path(str(stats) + ".meta.json")
@@ -415,6 +423,22 @@ def main() -> int:
                          "or book (taken out at the parent edge), instead of in the stop "
                          "value only. DEFAULT ON since 2026-10-31; --no-crack-at-parents "
                          "rebuilds the old graph exactly (c865f9b). See build_graph.")
+    ap.add_argument("--dump-stop-positions", default=None, metavar="PARQUET",
+                    help="write every stop position of the graph (ply, reach, weak-stop value) "
+                         "and stop: the input of sampled_stop.py (2026-10-31)")
+    ap.add_argument("--sampled-stop", default=None, metavar="PARQUET",
+                    help="replace the weak-stop values by the referee's, sampled per (position, "
+                         "ply) by sampled_stop.py and calibrated/shrunk there (owner's decision on "
+                         "the follow-up review's R4, 2026-10-31). Needs --stop-model weak.")
+    ap.add_argument("--dump-other-positions", default=None, metavar="PARQUET",
+                    help="write every opponent node's other bucket (share, value, pool children) "
+                         "and stop: the input of sampled_other.py (2026-11-02)")
+    ap.add_argument("--sampled-other", default=None, metavar="PARQUET",
+                    help="put the other bucket on the referee's scale, sampled and calibrated by "
+                         "sampled_other.py (2026-11-02). Default off.")
+    ap.add_argument("--engine-candidates", default=None, metavar="PARQUET",
+                    help="engine-proposed moves to judge alongside the recorded ones "
+                         "(engine_candidates.py; follow-up review R5). Default off.")
     ap.add_argument("--max-cands", type=int, default=0,
                     help="Cap on candidates per our-node. DEFAULT 0 (uncapped) "
                          "as of 2026-08-29: the gates are the pruner. This "
@@ -752,6 +776,12 @@ def main() -> int:
                         "white_score_avg": ws})
     del edf
 
+    engine_moves, engine_conflicts = None, []
+    if a.engine_candidates:
+        engine_moves, engine_conflicts = bc.load_engine_candidates(a.engine_candidates, eval_ws)
+        log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
+            f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
+
     log("building graph...")
     g = bc.build_graph(by_parent, root, our_white, rep_moves=rep_moves,
                        eval_ws=eval_ws,
@@ -764,8 +794,35 @@ def main() -> int:
                        gated_reach=a.gated_reach,
                        max_eval_loss=a.max_eval_loss,
                        strict_source=a.strict_source,
-                       crack_at_parents=a.crack_at_parents)
+                       crack_at_parents=a.crack_at_parents,
+                       engine_moves=engine_moves,
+                       track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
+                                            or a.dump_other_positions or a.sampled_other),
+                       track_other=bool(a.dump_other_positions or a.sampled_other))
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    other_report = None
+    if a.dump_other_positions or a.sampled_other:
+        import sampled_other as so
+        other_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
+                     "aux_stats": str(aux_path)}
+        if not g.other:
+            log("FATAL: no other buckets on this graph (--aux-stats?)")
+            return 1
+    if a.dump_other_positions:
+        dump = so.other_positions(g)
+        tmp = Path(a.dump_other_positions + ".tmp")
+        dump.write_parquet(tmp)
+        tmp.replace(a.dump_other_positions)
+        Path(a.dump_other_positions + ".meta.json").write_text(json.dumps(other_key, indent=1),
+                                                               encoding="utf-8")
+        log(f"other buckets: {dump.height:,} nodes -> {a.dump_other_positions}; stopping (sample "
+            f"them with sampled_other.py)")
+        return 0
+    terminal = None
+    if a.dump_stop_positions or a.sampled_stop:
+        import sampled_stop as ss
+        terminal = ss.terminal_outcomes(by_parent, our_white)
+        log(f"  {len(terminal):,} recorded moves end the game")
     incumbent = None
     if a.incumbent:
         incumbent = load_incumbent_moves(a.incumbent, a.perspective)
@@ -783,6 +840,10 @@ def main() -> int:
     import gc
     gc.collect()
     stop_counts = None
+    sampled_fit = None
+    if (a.sampled_stop or a.dump_stop_positions) and a.stop_model not in ("weak", "empirical"):
+        log("FATAL: --sampled-stop / --dump-stop-positions need --stop-model weak (or empirical)")
+        return 1
     if a.stop_model in ("weak", "empirical"):
         if a.stop_model == "empirical" and not (a.stop_table and Path(a.stop_table).exists()):
             log(f"FATAL: --stop-model empirical needs --stop-table (got {a.stop_table})")
@@ -807,10 +868,71 @@ def main() -> int:
             R.update(Re)
             wc = {**dict(wc), **{f"empirical_{k}": v for k, v in ec.items()}}
             log(f"  empirical stop values: {ec}")
+        if a.dump_stop_positions or a.sampled_stop:
+            info = ss.stop_positions(g)
+            dump_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
+                        "weak_pool": str(a.weak_pool), "weak_min_games": a.weak_min_games,
+                        "weak_min_share": a.weak_min_share, "stop_model": a.stop_model}
+        if a.dump_stop_positions:
+            dump = info.with_columns(
+                pl.struct("side", "hash").map_elements(
+                    lambda r: (W if r["side"] == "x" else R).get(r["hash"]),
+                    return_dtype=pl.Float64).alias("stop"),
+                pl.col("hash").map_elements(lambda h: terminal.get(h), return_dtype=pl.Float64)
+                .alias("exact"))
+            tmp = Path(a.dump_stop_positions + ".tmp")
+            dump.write_parquet(tmp)
+            tmp.replace(a.dump_stop_positions)
+            Path(a.dump_stop_positions + ".meta.json").write_text(json.dumps(dump_key, indent=1),
+                                                                  encoding="utf-8")
+            log(f"stop positions: {dump.height:,} ({dump.filter(pl.col('side') == 'x').height:,} our "
+                f"turn), horizon {a.max_ply + 1} -> {a.dump_stop_positions}; stopping (sample them "
+                f"with sampled_stop.py)")
+            return 0
+        if a.sampled_stop:
+            # the table must be the referee's at THIS book's colour and horizon, sampled from a
+            # dump of this recipe (a horizon H is a graph capped at H - 1: see sampled_stop.py)
+            smp = Path(a.sampled_stop + ".meta.json")
+            sm = json.loads(smp.read_text(encoding="utf-8")) if smp.exists() else {}
+            bad = {k: (sm.get("dump", {}).get(k), v) for k, v in dump_key.items()
+                   if sm.get("dump", {}).get(k) != v}
+            if sm.get("max_ply") != a.max_ply + 1:
+                bad["referee horizon"] = (sm.get("max_ply"), a.max_ply + 1)
+            if bad:
+                log(f"FATAL: --sampled-stop {a.sampled_stop} does not match this build (table, "
+                    f"build): {bad}. A referee horizon H needs --max-ply H - 1.")
+                return 1
+            W, R, sampled_report = ss.apply(W, R, info, pl.read_parquet(a.sampled_stop),
+                                            horizon=a.max_ply + 1, terminal=terminal,
+                                            evals=EvalSource(our_white))
+            sampled_fit = {k: sampled_report.get(k) for k in
+                           ("model", "cross_ply_refused", "multi_ply_reach_share", "terminal",
+                            "horizon", "horizon_no_eval")}
+            log(f"  sampled stop values: {sampled_report['sampled']} sampled, "
+                f"{sampled_report['predicted']} predicted, {sampled_report['horizon']} at the horizon "
+                f"({sampled_report['horizon_no_eval']} without an eval), {sampled_report['terminal']} "
+                f"finished, {sampled_report['cross_ply_refused']} refused (sampled at another ply); "
+                f"fit {sampled_report['model']}; graph diagnostic, optimistic stop reach at "
+                f"positions reachable at several plies {sampled_report.get('multi_ply_reach_share')}")
+            wc = {**dict(wc), **{f"sampled_{k}": v for k, v in sampled_report["sampled"].items()},
+                  **{f"predicted_{k}": v for k, v in sampled_report["predicted"].items()}}
+            del info
         ac = bc.apply_stop_values(g, W, R)
         stop_counts = {**dict(wc), **{f"applied_{k}": v for k, v in ac.items()}}
         log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
         del W, R
+    if a.sampled_other:
+        smp = Path(a.sampled_other + ".meta.json")
+        sm = json.loads(smp.read_text(encoding="utf-8")) if smp.exists() else {}
+        bad = {k: (sm.get("dump", {}).get(k), v) for k, v in other_key.items()
+               if sm.get("dump", {}).get(k) != v}
+        if bad:
+            log(f"FATAL: --sampled-other {a.sampled_other} does not match this build (table, "
+                f"build): {bad}")
+            return 1
+        other_report = so.apply(g, pl.read_parquet(a.sampled_other))
+        log(f"  sampled other buckets: {other_report}")
+    g.other = {}
 
     if a.price_diagnose:
         order, _cut = bc.topo_up(g)
@@ -993,7 +1115,20 @@ def main() -> int:
                 f"positions, {polish_info['start_value']:.5f} -> {polish_info['value']:.5f} "
                 f"({polish_info['accepted']} moves, {polish_info['seconds']:.1f}s)")
 
+        rc = g.meta.get("root_crack")
+        if rc:
+            # --crack-at-parents moves an our-node's collapses onto its parents' edges; the
+            # root has none, so its own share is applied here, to the reported value only
+            # (an affine map of the root value: no decision depends on it)
+            ra = rc[0] / (rc[0] + rc[1])
+            rv = res["root_value_realized"]
+            res = {**res, "root_value_realized": (1.0 - ra) + ra * rv,
+                   "realized": {**res["realized"], g.root: (1.0 - ra) + ra * res["realized"][g.root]}
+                   if g.root in res["realized"] else res["realized"]}
         rows = []
+        # only with --strict-source: the legacy restore can book a move the limit
+        # rejected, which no exception label describes
+        lexc = g.meta.get("loss_exceptions") if a.strict_source else None
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
                                                 else 1.0 - v)
         for h in (res["visited"] or []):
@@ -1025,9 +1160,13 @@ def main() -> int:
                 "eval_score": src.get("eval_score"),
                 "value_unconstrained": src.get("value"),
                 "alloc_budget": res["alloc"].get(h, 0),
+                # Booked decisions the loss limit could not bind (budget_core.
+                # loss_exceptions): 'fallback' = least-losing move, 'unknown' = no eval.
+                **({"loss_exception": lexc.get(h) if res["booked"].get(h) else None}
+                   if lexc is not None else {}),
             })
         tmp = out.with_suffix(".parquet.tmp")
-        pl.DataFrame(rows).write_parquet(tmp, compression="zstd")
+        book_frame(rows).write_parquet(tmp, compression="zstd")
         tmp.replace(out)
         meta = {
             "budget_requested": b,
@@ -1058,13 +1197,26 @@ def main() -> int:
             # means both off (the old defaults)
             "strict_source": a.strict_source,
             **({"src_rejected": g.meta.get("src_rejected", 0)} if a.strict_source else {}),
+            **({"loss_exceptions_booked": {
+                k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
+                for k in ("fallback", "unknown")}} if lexc is not None else {}),
             "crack_at_parents": a.crack_at_parents,
+            **({"engine_candidates": a.engine_candidates,
+                "engine_cands_added": g.meta.get("engine_cands", 0),
+                "engine_eval_conflicts": engine_conflicts}
+               if a.engine_candidates else {}),
             **({"crack_edges": g.meta.get("crack_edges", 0)} if a.crack_at_parents else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
             "leftover": a.leftover,
             "stop_model": a.stop_model,
+            **({"sampled_stop": a.sampled_stop, "sampled_fit": sampled_fit,
+                "sampled_config": json.loads(Path(a.sampled_stop + ".meta.json").read_text(encoding="utf-8"))
+                if Path(a.sampled_stop + ".meta.json").exists() else None}
+               if a.sampled_stop else {}),
+            **({"sampled_other": a.sampled_other, "sampled_other_fit": other_report}
+               if a.sampled_other else {}),
             **({"price_rounds": a.price_rounds, "price_select": a.price_select,
                 "price_seed": a.price_seed, "price_reprice": a.price_reprice,
                 **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {}),

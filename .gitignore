@@ -31,3 +31,5 @@ scratch/
 # (C: is nearly full), but a plain `cargo build` would land here: never commit
 # a binary or its build tree.
 target/
+# Local research output, not for this repo
+outputs/

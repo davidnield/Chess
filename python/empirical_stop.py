@@ -2,7 +2,7 @@
 
 The budget optimiser's weak-us stop model (weak_stop.py) values a position where the book ends by
 ONE move of play-out and then the engine. The convertibility evaluation that judges books
-(scratch/python/convertibility_eval.py) plays every line out to ply 30 with real moves. This
+(python/convertibility_eval.py) plays every line out to ply 30 with real moves. This
 module computes the optimiser-side counterpart once per (pool, colour): for every position of the
 pool,
 

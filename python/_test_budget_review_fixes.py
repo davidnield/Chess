@@ -11,6 +11,7 @@
      legacy graph credits the resignations to stopping only, so booking reads 0.5, and a
      move that beats stopping is never booked. Legacy and compiled engines agree.
   F  --min-games defaults to the pool's own floor (build_budget_books._pool_min_games).
+  W  the book frame holds a loss label past polars' 100-row inference, and changes nothing else.
   O  both flags off are exact no-ops on the graph.
 
 Run: .venv/Scripts/python.exe python/_test_budget_review_fixes.py
@@ -23,6 +24,7 @@ import tempfile
 from pathlib import Path
 
 import chess
+import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
 import budget_core as bc  # noqa: E402
@@ -120,6 +122,84 @@ for ev, want, label in ((ws(30), True, "+30 (within 60 of +40)"),
           ("Nf3" in cands(gs)) == want, str(cands(gs)))
     check(f"unrecorded source move at {label}: legacy restores it", "Nf3" in cands(gl))
 
+print("S2 an unrecorded source move better than every recorded one (follow-up review R1)")
+
+
+def aug_graph(white: bool):
+    """Our node with one recorded move (0 cp, empirically 0.95) and an unrecorded
+    source move at +300 cp; the position's own eval is 0 and the limit 30. The loss
+    rule over the complete set keeps only the source move."""
+    pre = () if white else ("e4",)
+    rec, aug = ("e4", "d4") if white else ("e5", "d5")
+    b = chess.Board()
+    for s in pre:
+        b.push_san(s)
+    h = zobrist_int64(b)
+    sgn = 1 if white else -1
+    hr, ha = h_after(*pre, rec), h_after(*pre, aug)
+    emp = 0.95 if white else 0.05
+    edges = {h: [{"move_san": rec, "child_hash": hr, "total": 100,
+                  "white_score_avg": emp, "parent_epd": b.epd()}]}
+    if not white:       # the root (White to move) leads to our node
+        edges = {ROOT: [{"move_san": "e4", "child_hash": h, "total": 1000,
+                         "white_score_avg": 0.5, "parent_epd": EPD}], **edges}
+    ev = {h: ws(0), hr: ws(0), ha: ws(sgn * 300)}
+    g = bc.build_graph(edges, ROOT, white, rep_moves={h: aug}, eval_ws=ev, gates=False,
+                       max_eval_loss=30, strict_source=True, prior_strength=1,
+                       eval_weight=0)
+    g.our[h].l_node = 0.2          # a weak stop model can be worse than booking
+    return g, h, aug
+
+
+for white in (True, False):
+    g, h, aug = aug_graph(white)
+    c = "White" if white else "Black"
+    check(f"{c}: only the qualifying source move is a candidate",
+          [x[0] for x in g.our[h].cands] == [aug], str([x[0] for x in g.our[h].cands]))
+    check(f"{c}: both engines book it", book_dp(g).get(h) == aug
+          and book_price(g).get(h) == aug,
+          f"dp {book_dp(g).get(h)}, price {book_price(g).get(h)}")
+    check(f"{c}: no loss exception", g.meta["loss_exceptions"] == {},
+          str(g.meta["loss_exceptions"]))
+
+print("S3 loss exceptions are recorded")
+es3 = {ROOT: [{"move_san": "e4", "child_hash": h_after("e4"), "total": 100,
+               "white_score_avg": 0.6, "parent_epd": EPD},
+              {"move_san": "d4", "child_hash": h_after("d4"), "total": 100,
+               "white_score_avg": 0.6, "parent_epd": EPD}]}
+g = bc.build_graph(es3, ROOT, True, eval_ws={ROOT: ws(200), h_after("e4"): ws(0),
+                                             h_after("d4"): ws(-50)},
+                   gates=False, max_eval_loss=30, strict_source=True, **SPURE)
+check("all fail: the least-losing move stays, flagged 'fallback'",
+      cands(g) == ["e4"] and g.meta["loss_exceptions"] == {ROOT: "fallback"},
+      f"{cands(g)} {g.meta['loss_exceptions']}")
+g = bc.build_graph(es3, ROOT, True, eval_ws={}, gates=False, max_eval_loss=30,
+                   strict_source=True, **SPURE)
+check("no evals: every move stays, flagged 'unknown'",
+      cands(g) == ["d4", "e4"] and g.meta["loss_exceptions"] == {ROOT: "unknown"},
+      f"{cands(g)} {g.meta['loss_exceptions']}")
+g = bc.build_graph(es3, ROOT, True, eval_ws={}, gates=False, **SPURE)
+check("no limit: nothing recorded", "loss_exceptions" not in g.meta)
+
+print("S4 engine-proposed candidates (--engine-candidates)")
+nf3 = h_after("Nf3")
+ev4 = {ROOT: ws(200), h_after("e4"): ws(0), h_after("d4"): ws(-50), nf3: ws(190)}
+g = bc.build_graph(es3, ROOT, True, eval_ws=ev4, gates=False, max_eval_loss=30,
+                   strict_source=True, engine_moves={ROOT: [("Nf3", nf3)]}, **SPURE)
+check("an engine move within the limit replaces the all-fail fallback",
+      cands(g) == ["Nf3"] and g.meta["loss_exceptions"] == {} and g.meta["engine_cands"] == 1,
+      f"{cands(g)} {g.meta['loss_exceptions']}")
+g.our[ROOT].l_node = 0.2
+check("...and both engines book it", book_dp(g).get(ROOT) == "Nf3" and book_price(g).get(ROOT) == "Nf3")
+g = bc.build_graph(es3, ROOT, True, eval_ws={**ev4, nf3: ws(-100)}, gates=False, max_eval_loss=30,
+                   strict_source=True, engine_moves={ROOT: [("Nf3", nf3)]}, **SPURE)
+check("a worse engine move is judged like any other (dropped)", cands(g) == ["e4"], str(cands(g)))
+a_ = bc.build_graph(es3, ROOT, True, eval_ws=ev4, gates=False, max_eval_loss=30, strict_source=True,
+                    **SPURE)
+b_ = bc.build_graph(es3, ROOT, True, eval_ws=ev4, gates=False, max_eval_loss=30, strict_source=True,
+                    engine_moves=None, **SPURE)
+check("engine_moves=None is a no-op", cands(a_) == cands(b_) == ["e4"])
+
 # ── C: opponent collapses at an our-turn arrival ──────────────────────────────
 # A Black book. Root R (White to move) -> x -> A, y -> B; A and B are ours.
 R, A, B, MA, MB = 1, 2, 3, 4, 5
@@ -208,6 +288,17 @@ with tempfile.TemporaryDirectory() as td:
     check("no meta -> None", _pool_min_games(str(p)) is None)
     Path(str(p) + ".meta.json").write_text(json.dumps({"min_games": 20}))
     check("meta floor 20 is read", _pool_min_games(str(p)) == 20)
+
+# ── W: the book frame ────────────────────────────────────────────────────────
+print("W  book frame")
+from build_budget_books import book_frame  # noqa: E402
+late = [{"position_hash": i, "loss_exception": "fallback" if i == 150 else None} for i in range(200)]
+wf = book_frame(late)
+check("a label after row 100 is kept", wf["loss_exception"].drop_nulls().to_list() == ["fallback"])
+nl = book_frame([{"position_hash": 1, "loss_exception": None}])
+check("no exceptions: still a string column", nl["loss_exception"].dtype == pl.Utf8, str(nl.schema))
+plain = [{"position_hash": i, "value": i / 2, "best_move": None if i % 2 else "e4"} for i in range(9)]
+check("a book without the column is the default frame", book_frame(plain).equals(pl.DataFrame(plain)))
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

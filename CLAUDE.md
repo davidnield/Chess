@@ -103,6 +103,25 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 # Eval-to-score curves by rating pairing (feeds build_budget_books --weak-eval-curve)
 .venv\Scripts\python.exe python\fit_eval_curve.py
 
+# The referee: simulate each book to ply 30 (our side as 1000-1799 players, theirs as 1800+),
+# from side-specific move tables built with a game-fold bootstrap contract
+.venv\Scripts\python.exe python\side_explorer.py --our-colour white --our-elo 1000:1800 --opp-min-elo 0 --folds 64 --sample 0.35 --out <dir>
+.venv\Scripts\python.exe python\convertibility_eval.py --book L=white=<book> ... --seed 1,2,3,4 --compare-to L [--replicates R]
+.venv\Scripts\python.exe python\extend_book.py ...        # sequence extensions (ext_c10)
+# Budget books on the referee's stop values: dump the graph's stop positions, sample them, rebuild.
+# A referee horizon H needs the recipe's --max-ply H-1 (--max-ply N keeps decisions AT ply N); the
+# builder refuses anything else. Contract in sampled_stop.py's header.
+.venv\Scripts\python.exe python\build_budget_books.py <recipe> --dump-stop-positions <stops.parquet>
+.venv\Scripts\python.exe python\sampled_stop.py --dump <stops.parquet> --colour white --pool <stats> --our-moves <dir> --opp-moves <dir> --out <table.parquet>
+.venv\Scripts\python.exe python\build_budget_books.py <recipe> --sampled-stop <table.parquet>
+# The same for the "other moves" bucket (below-floor replies), which otherwise stays on the all-time
+# 1800+ scale. Contract in sampled_other.py's header.
+.venv\Scripts\python.exe python\build_budget_books.py <recipe> --dump-other-positions <other.parquet>
+.venv\Scripts\python.exe python\sampled_other.py --dump <other.parquet> --colour white --our-moves <dir> --opp-moves <dir> --out <other_table.parquet>
+.venv\Scripts\python.exe python\build_budget_books.py <recipe> --sampled-stop <table.parquet> --sampled-other <other_table.parquet>
+# Check the exact files a person will learn
+.venv\Scripts\python.exe python\validate_book.py --book <file> --colour white [--nodes N] [--best-defence]
+
 # Did I break anything
 .venv\Scripts\python.exe python\run_tests.py
 ```

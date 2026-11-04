@@ -768,6 +768,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--book", type=Path, default=BOOK)
+    ap.add_argument("--book-cap", type=int, default=None,
+                    help="The book's coverage cap, required only when the book records none "
+                         "(_merge_params.json); must match it otherwise. See check_cap.")
     ap.add_argument("--events", nargs="+", required=True)
     ap.add_argument("--elo-bands", nargs="+", type=int, required=True)
     ap.add_argument("--max-ply", type=int, required=True)
@@ -805,15 +808,25 @@ def book_cap(book: Path) -> int | None:
     return json.loads(mp.read_text(encoding="utf-8")).get("input_params", {}).get("max_ply")
 
 
-def check_cap(book: Path, max_ply: int) -> None:
+def check_cap(book: Path, max_ply: int, declared: int | None = None) -> None:
     """Refuse a pool cap at or above the book's (2026-10-31, external review). ended(x, p)
     is DERIVED as arrivals at p minus departures at p+1 and horizon(x) as departures at
     max_ply+1, so both need the book's ply max_ply+1 rows. At max_ply == the book's cap
     there are none: every arrival at the cap reads as a finished game and the horizon is
     empty (the 2000+ p30 pools carry aux_horizon_mass 0). At a White book's our-turn
-    nodes those misfiled games' wins then count as opponent collapses."""
+    nodes those misfiled games' wins then count as opponent collapses.
+
+    A book without _merge_params.json must have its cap declared (--book-cap): an
+    unknown cap is not evidence of a safe one (follow-up review R6). A declared cap that
+    disagrees with the recorded one is refused too."""
     cap = book_cap(book)
-    if cap is not None and max_ply >= cap:
+    if cap is None and declared is None:
+        raise SystemExit(f"FATAL: {book} records no coverage cap (_merge_params.json); "
+                         f"pass --book-cap N, the --max-ply its months were extracted at")
+    if cap is not None and declared is not None and cap != declared:
+        raise SystemExit(f"FATAL: --book-cap {declared} disagrees with the book's recorded cap {cap}")
+    cap = cap if cap is not None else declared
+    if max_ply >= cap:
         raise SystemExit(f"FATAL: --max-ply {max_ply} needs a book capped above it (this book's "
                          f"cap is {cap}): ended/horizon at the cap are derived from the book's "
                          f"ply {max_ply + 1} rows, which it does not have")
@@ -824,7 +837,7 @@ def main() -> None:
     a.events = list(a.events)
     a.elo_bands = sorted(int(b) for b in a.elo_bands)
     if a.phase != "meta":
-        check_cap(Path(a.book), a.max_ply)
+        check_cap(Path(a.book), a.max_ply, a.book_cap)
     if "F:" in str(a.tmp_dir).upper()[:2]:
         sys.exit("FATAL: DuckDB temp on F: (USB HDD) is forbidden")
     lock_params(a)

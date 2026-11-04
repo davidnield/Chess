@@ -289,11 +289,16 @@ def main() -> int:
             except SystemExit:
                 refused = True
             check(refused == want, f"cap {mp} on a ply-30 book is {'refused' if want else 'allowed'}")
-        try:
-            P.check_cap(book, CAP)
-            check(True, "a book without merge params is not refused")
-        except SystemExit:
-            check(False, "a book without merge params is not refused")
+        for args, want, label in (((book, CAP), True, "a book without merge params, no --book-cap"),
+                                  ((book, CAP, CAP + 1), False, "...with --book-cap above the pool cap"),
+                                  ((book, CAP, CAP), True, "...with --book-cap equal to it"),
+                                  ((capped, 29, 31), True, "a --book-cap disagreeing with the record")):
+            try:
+                P.check_cap(*args)
+                refused = False
+            except SystemExit:
+                refused = True
+            check(refused == want, f"{label}: {'refused' if want else 'allowed'}")
 
     failed = [label for ok, label in _checks if not ok]
     print(f"\n{len(_checks) - len(failed)}/{len(_checks)} passed")
