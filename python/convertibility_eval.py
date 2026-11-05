@@ -288,7 +288,10 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
     book's exits: (hash, ply) -> [probability, epd] of games that reach an our-turn position
     the book has no move for, before any move of ours out of book (the walk carries each
     position's in-book share separately, so paths that merge there are split correctly)."""
+    recall = getattr(a, "recall", 1.0)
     start = chess.Board()
+    # With imperfect recall, "first exit" means the first unaided decision,
+    # including a forgotten move at a covered position.
     # frontier: hash -> [epd, prob, last known cp (white view) or None, weak-move sum]
     # (weak-move sum = sum over the paths merged here of prob x our out-of-book moves)
     # (ib = the part of prob whose paths have not yet left the book: exits are counted on it)
@@ -337,10 +340,16 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
                 except ValueError:
                     leaves.append((pr, h, cp, us, None, epd, ply, ws, -1, -1))
                     continue
-                book_mass += pr
-                b.push(mv)
-                put(nxt, zobrist_int64(b), b.epd(), pr, cp, ws, ib)
-                continue
+                if recall > 0:
+                    book_mass += pr * recall
+                    b.push(mv)
+                    put(nxt, zobrist_int64(b), b.epd(), pr * recall, cp, ws * recall, ib * recall)
+                if recall == 1:
+                    continue
+                # Forgetting draws from the same human policy as playing out of book.
+                miss = 1 - recall
+                pr, ws, ib = pr * miss, ws * miss, ib * miss
+                frontier[h] = [epd, pr, cp, ws, ib]
             if us and exits is not None and ib > 0.0:
                 exits.setdefault((h, ply), [0.0, epd])[0] += ib
             (ours_need if us else theirs_need).append(h)
@@ -367,7 +376,7 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
 
 
 def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
-             exits=None):
+             exits=None, weak_edges=None):
     """Continue every branch the exhaustive walk left under --tau by sampling: --rollouts K
     games each from its position to --max-ply (or game over), moving exactly as the walk does
     (the book where it has a move, else the blended move shares). Each sampled game carries
@@ -383,6 +392,7 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
     differences stay paired (common random numbers). exits: as enumerate_book's, from the
     sampled games (each game's first our-turn position out of book)."""
     K = a.rollouts
+    recall = getattr(a, "recall", 1.0)
     # one state per sampled game: [board, hash, weight, ply, cp, weak, start_id, k, in-book
     # share f]: a game from a start whose paths are partly in book carries that share, and its
     # first out-of-book move of ours counts w * f as an exit
@@ -410,10 +420,13 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
             if c != MISSING:
                 r[4] = int(c)
         ours, theirs = set(), set()
+        remembered = set()
         for r in R:
             b = r[0]
             us = (b.turn == chess.WHITE) == our_white
-            if us and r[1] in book:
+            if us and r[1] in book and (recall == 1 or u01(
+                    seed, starts[r[6]][0], starts[r[6]][3], r[7], r[3], 0x524543) < recall):
+                remembered.add((r[6], r[7]))
                 continue
             (ours if us else theirs).add(r[1])
         for need, cnt, se, oe, tag in ((ours, our_counts, a.our_elo, a.opp_elo, "o"),
@@ -433,7 +446,8 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
         for r in R:
             b, h, w, ply, cp, wk, si, k, f = r
             us = (b.turn == chess.WHITE) == our_white
-            if us and h in book:
+            use_book = (si, k) in remembered
+            if use_book:
                 try:
                     mv = b.parse_san(book[h])
                 except ValueError:
@@ -458,9 +472,12 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
                 mv = b.parse_san(san)
                 if us:
                     wk += w
+            before = b.epd() if weak_edges is not None and us and not use_book else None
             b.push(mv)
             ply += 1
             h2 = zobrist_int64(b)
+            if before is not None:
+                weak_edges.append((si, k, h, before, h2, b.epd()))
             if b.is_game_over(claim_draw=False):
                 leaves.append((w, h2, cp, (b.turn == chess.WHITE) == our_white,
                                _outcome(b, our_white), b.epd(), ply, wk, si, k))
@@ -589,6 +606,7 @@ def config_key(a, books, tables, engine: str | None = None) -> str:
     opts = {k: getattr(a, k) for k in ("tau", "rollouts", "max_ply", "k", "min_p", "our_elo",
                                         "opp_elo", "stockfish_depth", "our_moves", "opp_moves",
                                         "use_folds", "fold_weights", "boot_seed")}
+    opts["recall"] = getattr(a, "recall", 1.0)
     bks = []
     for spec in books:
         label, colour, path = spec.split("=", 2)
@@ -693,6 +711,10 @@ def main():
     ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache.parquet",
                     help="persistent (hash, depth) -> cp cache for --stockfish-depth leaves")
     ap.add_argument("--max-ply", type=int, default=30)
+    ap.add_argument("--recall", type=float, default=1.0, help="probability of remembering a "
+                    "prescribed move on each visit; otherwise draw a population move")
+    ap.add_argument("--exits-out", help="directory of replicate-0 first unaided decisions "
+                    "(including forgotten moves), partitioned by book and seed")
     ap.add_argument("--k", type=float, default=100.0)
     ap.add_argument("--min-p", type=float, default=0.005)
     ap.add_argument("--our-elo", type=int, default=1450)
@@ -720,6 +742,10 @@ def main():
                          "({colour} = the opponent's colour); default the 1800+ month")
     a = ap.parse_args()
     seeds = [int(s) for s in str(a.seed).split(",")]
+    if not 0 <= a.recall <= 1:
+        ap.error("--recall must lie between 0 and 1")
+    if len(set(seeds)) != len(seeds) or len({s.split("=", 1)[0] for s in a.book}) != len(a.book):
+        ap.error("seeds and book labels must be unique")
     missing = [spec for spec in a.book if not Path(spec.split("=", 2)[2]).exists()]
     if missing:
         raise SystemExit(f"FATAL: no such book: {missing}")
@@ -762,6 +788,17 @@ def main():
       def leaf_part(label, seed):
           # by position in --book: labels may hold anything a file name may not
           return leaf_dir / f"b{[s.split('=', 1)[0] for s in a.book].index(label):03d}_s{seed}.parquet"
+      def exit_part(label, seed):
+          return Path(a.exits_out) / f"b{[s.split('=', 1)[0] for s in a.book].index(label):03d}_s{seed}.parquet"
+      def exits_complete(row):
+          import pyarrow.parquet as pq
+          part = exit_part(row["label"], row["seed"])
+          if not part.exists():
+              return False
+          raw = pq.read_metadata(part).metadata.get(b"exit_job")
+          return raw is not None and json.loads(raw) == [row["label"], row["colour"], row["seed"], cfg]
+      if a.exits_out:
+          Path(a.exits_out).mkdir(parents=True, exist_ok=True)
       partial = Path(f"{a.out}.partial.parquet") if a.out else None
       done: set[tuple] = set()
       if partial is not None and partial.exists():
@@ -770,8 +807,11 @@ def main():
           if other:
               raise SystemExit(f"FATAL: {partial} holds rows made under another configuration "
                                f"{sorted(map(str, other))} (this one is {cfg}); delete it to start over")
+          rows = [r for r in rows if r["seed"] in seeds and r["replicate"] <= a.replicates]
           if leaf_dir is not None:      # a score whose leaves were not kept is redone
               rows = [r for r in rows if r["replicate"] != 0 or leaf_part(r["label"], r["seed"]).exists()]
+          if a.exits_out:
+              rows = [r for r in rows if r["replicate"] != 0 or exits_complete(r)]
           done = {(r["replicate"], r["label"], r["seed"]) for r in rows}
           print(f"resuming: {len(done)} (replicate, book, seed) results already saved", flush=True)
       for rep in range(a.replicates + 1):
@@ -786,20 +826,22 @@ def main():
             opp_counts = tables[a.opp_moves.format(colour="black" if our_white else "white")]
             bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
             book = {h: m for h, s, m in bd.iter_rows() if s == colour and m}
+            exact_exits = {} if a.exits_out and rep == 0 else None
             ex_leaves, starts, ex_book, nodes = enumerate_book(
-                book, our_white, rep, a, our_counts, opp_counts, maia, lookup)
+                book, our_white, rep, a, our_counts, opp_counts, maia, lookup, exact_exits)
             for seed in todo:
+                exits = {k: list(v) for k, v in exact_exits.items()} if exact_exits is not None else None
                 leaves, ro_book = list(ex_leaves), 0.0
                 if starts:
                     rl, ro_book = rollouts(starts, book, our_white, rep, a, seed,
-                                           our_counts, opp_counts, maia, lookup)
+                                           our_counts, opp_counts, maia, lookup, exits)
                     leaves += rl
                 v = value_leaves(leaves, our_white, lookup,
                                  sf if a.stockfish_depth > 0 else None, curves)
                 row = {"label": label, "colour": colour, "replicate": rep, "seed": seed,
                        "book_moves": len(book), **summarize(v, a.rollouts, a.max_ply),
                        "nodes": nodes, "book_moves_played": ex_book + ro_book,
-                       "rollouts": a.rollouts, "tau": a.tau, "config": cfg,
+                       "rollouts": a.rollouts, "tau": a.tau, "recall": a.recall, "config": cfg,
                        "secs": round(time.time() - t0)}
                 if leaf_dir is not None and rep == 0:      # before the row that counts on them
                     sid = v["sid"]
@@ -815,6 +857,16 @@ def main():
                     lp = leaf_part(label, seed)
                     lf.write_parquet(lp.with_suffix(".tmp"))
                     lp.with_suffix(".tmp").replace(lp)
+                if exits is not None:
+                    frame = pl.DataFrame(
+                        [(h, p, epd, mass) for (h, p), (mass, epd) in exits.items()],
+                        schema={"hash": pl.Int64, "ply": pl.Int32, "epd": pl.String, "mass": pl.Float64},
+                        orient="row").with_columns(pl.lit(label).alias("book"), pl.lit(seed).alias("seed"),
+                            pl.lit(colour).alias("colour"), pl.lit(cfg).alias("config"))
+                    dest = exit_part(label, seed)
+                    tmp = dest.with_suffix(".tmp")
+                    frame.write_parquet(tmp, metadata={"exit_job": json.dumps([label, colour, seed, cfg])})
+                    tmp.replace(dest)
                 rows.append(row)
                 if partial is not None:      # checkpoint: a crash or shutdown loses one walk
                     tmp = partial.with_suffix(".tmp")

@@ -221,7 +221,7 @@ def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit=None) -> pl.DataFrame:
+                           min_games: int, admit=None, engine_moves=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -305,6 +305,10 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                 tot = int(grp["total"].sum())
                 our_turn = (p_ply % 2 == 0) == our_white
                 rows = list(grp.iter_rows(named=True))
+                if our_turn and engine_moves and ph in engine_moves:
+                    existing = {r["child_hash"] for r in rows}
+                    rows.extend({"move_san": san, "child_hash": ch, "total": 0}
+                                for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
                 for row in rows:
                     ch = row["child_hash"]
@@ -436,6 +440,9 @@ def main() -> int:
     ap.add_argument("--sampled-other", default=None, metavar="PARQUET",
                     help="put the other bucket on the referee's scale, sampled and calibrated by "
                          "sampled_other.py (2026-11-02). Default off.")
+    ap.add_argument("--dump-engine-targets", metavar="PARQUET",
+                    help="export reachable unsound, empty or unevaluated decisions for "
+                         "engine_candidates.py before spending the learning budget")
     ap.add_argument("--engine-candidates", default=None, metavar="PARQUET",
                     help="engine-proposed moves to judge alongside the recorded ones "
                          "(engine_candidates.py; follow-up review R5). Default off.")
@@ -661,7 +668,7 @@ def main() -> int:
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
-    if not todo:
+    if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
         return 0
     outs[budgets[0]].parent.mkdir(parents=True, exist_ok=True)
@@ -710,8 +717,16 @@ def main() -> int:
             f"edges with {pool_floor}-{a.min_games - 1} games leave both the reply mix "
             f"and the aux sidecar")
     log("collecting subgraph edges...")
+    proposal_moves = None
+    if a.engine_candidates:
+        fresh = {}
+        proposal_moves, _ = bc.load_engine_candidates(a.engine_candidates, fresh)
+        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        if gate is not None:
+            gate.eval_ws.update(fresh)
+            gate._seen.update(fresh)
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit)
+                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -800,6 +815,18 @@ def main() -> int:
                                             or a.dump_other_positions or a.sampled_other),
                        track_other=bool(a.dump_other_positions or a.sampled_other))
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    if a.dump_engine_targets:
+        from engine_candidates import target_rows
+        if a.max_eval_loss is None:
+            raise SystemExit("--dump-engine-targets needs --max-eval-loss in cp")
+        targets = target_rows(g, a.perspective)
+        target_path = Path(a.dump_engine_targets)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = Path(str(target_path) + ".tmp")
+        targets.write_parquet(tmp)
+        tmp.replace(target_path)
+        log(f"{targets.height:,} pre-selection targets -> {target_path}")
+        return 0
     other_report = None
     if a.dump_other_positions or a.sampled_other:
         import sampled_other as so

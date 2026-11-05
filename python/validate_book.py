@@ -35,6 +35,7 @@ cached edge evals keep their uncertainty. --incumbent PATH adds churn against an
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -218,6 +219,7 @@ def main():
             eng.quit()
     out = pl.DataFrame(rows, infer_schema_length=None)
     summ = {"book": a.book, "colour": a.colour, "meta": str(meta_p) if meta else None,
+            "book_sha256": hashlib.sha256(Path(a.book).read_bytes()).hexdigest(),
             "max_eval_loss": limit, "min_games": min_games, "decisions": len(rows),
             "extension_rows": int(out["extension"].sum()),
             "status": dict(out.group_by("status").len().iter_rows()),

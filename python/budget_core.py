@@ -819,7 +819,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     joins the node's moves as a zero-game edge BEFORE the gates and --max-eval-loss, so it is
     judged in the complete set like any recorded move (follow-up review R1/R5); its value is
     its eval through leaf_edge_value (eval_ws must hold the child's eval). Unless an engine
-    move transposes into the subgraph it is a leaf: nothing below it is prepared.
+    move leads to an expanded pool node it is valued as a leaf.
 
     crack_at_parents (--crack-at-parents, 2026-10-31): games that end at
     an our-turn arrival because the OPPONENT resigned or was mated (the `crack` mass)
@@ -861,7 +861,17 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     robustness_floor, gate_rel_floor, gate_rel_own_margin,
                     require_eval, gates, max_eval_loss)
             admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
-    reach, ply = optimistic_reach(edges_by_parent, root, our_white, eps,
+    # Search below an unplayed nominated move when its child has pool replies.
+    # Zero observations keep it out of empirical frequencies and stop estimates.
+    reach_edges = edges_by_parent
+    if engine_moves:
+        reach_edges = dict(edges_by_parent)
+        for h, moves in engine_moves.items():
+            if h in edges_by_parent:
+                existing = {e.get("child_hash") for e in edges_by_parent[h]}
+                reach_edges[h] = edges_by_parent[h] + [
+                    {"child_hash": ch, "total": 0} for _, ch in moves if ch not in existing]
+    reach, ply = optimistic_reach(reach_edges, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
     def is_our(h: int) -> bool:
@@ -873,7 +883,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             return None
         return e if our_white else 1.0 - e
 
-    route = (route_plies(edges_by_parent, root, our_white, reach, ply, max_ply, share_floor,
+    route = (route_plies(reach_edges, root, our_white, reach, ply, max_ply, share_floor,
                          admitted) if track_route_ply else {})
     g = Graph(root=root, our={}, opp={}, epd={}, ply=dict(ply), route_ply=route,
               reach=dict(reach), meta={

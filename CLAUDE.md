@@ -67,6 +67,13 @@ failing.
 
 ## Running things
 
+For practical book comparisons see [practical repertoire experiments](docs/practical-repertoire.md).
+Engine nominations are zero-observation edges on our turns. The collector may follow them to real
+pool replies. Recall is an independent probability on each visit, and a failed recall follows the
+human move distribution. First-exit partitions record the first unaided decision, including a
+missed recall. Keep comparison populations explicit and keep the blind deck's key separate from
+the participant's materials.
+
 All commands use `.venv/Scripts/python.exe` (uv-managed, Python 3.11) from
 `C:/Users/David/Documents/Chess`. Every pipeline script carries an authoritative header docstring
 with its exact CLI — **read it before running; don't trust remembered flags.**
