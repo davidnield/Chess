@@ -6,6 +6,7 @@ review-games writes a worksheet for classifying what happened in actual games.
 """
 import argparse
 import csv
+import hashlib
 from collections import defaultdict
 from datetime import date, timedelta
 import json
@@ -64,8 +65,31 @@ def worksheet(path, rows):
     temporary.replace(path)
 
 
+def publish_deck(folder, output):
+    """Publish staged files individually. Windows can lock populated directory renames."""
+    files = sorted(p for p in folder.rglob("*") if p.is_file())
+    manifest = {p.relative_to(folder).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                for p in files}
+    marker = output / "INCOMPLETE.json"
+    if output.exists():
+        if not marker.exists() or json.loads(marker.read_text()) != manifest:
+            raise ValueError("existing deck or different interrupted run; choose a fresh directory")
+    else:
+        output.mkdir()
+        marker.write_text(json.dumps(manifest))
+    for name, digest in manifest.items():
+        dest = output / name
+        if dest.exists():
+            if hashlib.sha256(dest.read_bytes()).hexdigest() != digest:
+                raise ValueError(f"{dest} was edited; resume in a fresh directory")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        (folder / name).replace(dest)
+    marker.unlink(missing_ok=True)
+
+
 def deck(a):
-    if a.count < 1 or a.out.exists():
+    if a.count < 1 or (a.out.exists() and not (a.out/"INCOMPLETE.json").exists()):
         raise ValueError("choose a positive count and a fresh deck directory to preserve earlier observations")
     sources = defaultdict(list)
     for arg in a.exits:
@@ -101,7 +125,7 @@ def deck(a):
         worksheet(folder/"observations.csv", notes)
         (folder/"private").mkdir()
         (folder/"private"/"key.json").write_text(json.dumps(key,indent=2),encoding="utf-8")
-        folder.rename(a.out)
+        publish_deck(folder, a.out)
     print(f"{len(key)} positions, two sessions seven days apart -> {a.out}")
 
 

@@ -130,6 +130,12 @@ def main():
     sign = 1 if our_white else -1
     meta_p = Path(a.meta) if a.meta else base_meta(Path(a.book))
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.exists() else {}
+    proposal_input = None
+    if meta.get("engine_candidates"):
+        proposal_input = Path(meta["engine_candidates"]).read_bytes()
+        expected = meta.get("engine_candidates_sha256")
+        if expected and hashlib.sha256(proposal_input).hexdigest() != expected:
+            raise SystemExit("Engine proposals differ from this book's recorded input")
     limit = meta.get("max_eval_loss")
     min_games = meta.get("min_games", 50)          # pre-2026-10-31 metas: the old default
     d = pl.read_parquet(a.book)
@@ -187,8 +193,8 @@ def main():
     cps = {int(h): int(c) for h, c in zip(hs, lookup_evals(hs, *mm)) if c != MISSING}
     ev = {h: cp_to_expected_score(c) for h, c in cps.items()}
     engine_moves, conflicts = None, []
-    if meta.get("engine_candidates"):
-        engine_moves, conflicts = bc.load_engine_candidates(meta["engine_candidates"], ev)
+    if proposal_input is not None:
+        engine_moves, conflicts = bc.load_engine_candidates(proposal_input, ev)
     for rec in rows:
         h = rec["position_hash"]
         rec["parent_cp_us"] = sign * cps[h] if h in cps else None

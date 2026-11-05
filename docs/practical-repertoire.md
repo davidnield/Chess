@@ -6,7 +6,7 @@ Run these commands from the checkout containing this branch with the project Pyt
 
 1. Run the intended `build_budget_books.py` recipe with `--max-eval-loss CP --dump-engine-targets targets.parquet`. This exports reachable decisions where the recorded choices fail the loss limit, have unknown evaluations or leave no candidate. It exits before optimizing a book.
 2. Run Stockfish on those positions. For a bounded trial, `--limit N` selects the N highest optimistic reach weights. Inspect the number left outside the search.
-3. Repeat the original builder command with `--engine-candidates proposals.parquet`, using a fresh candidate output prefix. The search evaluates recorded and nominated moves under the same soundness rule. If the new move has recorded opponent replies, the builder can prepare below it. A new move without reply data is valued as a leaf.
+3. Repeat the original builder command with `--engine-candidates proposals.parquet`, using a fresh candidate output prefix. For sampled-stop or sampled-other builds, regenerate the graph dumps and sample tables with that proposal file first. The builder checks its content fingerprint since proposals can change reachable continuations. The search evaluates recorded and nominated moves under the same soundness rule. If the new move has recorded opponent replies, the builder can prepare below it. A new move without reply data is valued as a leaf.
 4. Validate and score the resulting deliverable. The target list describes the initial graph. Another pre-selection pass with the proposals supplied can discover problems newly reachable through them.
 
 ```powershell

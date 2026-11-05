@@ -39,6 +39,7 @@ aux + reply_shrink 0) — the build refuses rather than silently diverging.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -623,6 +624,8 @@ def main() -> int:
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
+    if a.dump_engine_targets and a.max_eval_loss is None:
+        ap.error("--dump-engine-targets requires --max-eval-loss")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
     if a.polish_from and not (a.method == "price" and a.price_dag_mode
@@ -718,9 +721,15 @@ def main() -> int:
             f"and the aux sidecar")
     log("collecting subgraph edges...")
     proposal_moves = None
+    proposal_sha = None
+    proposal_input = None
     if a.engine_candidates:
+        # A resumed engine job can replace its parquet while the collector runs.
+        # Pin both graph passes and the output provenance to exactly one snapshot.
+        proposal_input = Path(a.engine_candidates).read_bytes()
+        proposal_sha = hashlib.sha256(proposal_input).hexdigest()
         fresh = {}
-        proposal_moves, _ = bc.load_engine_candidates(a.engine_candidates, fresh)
+        proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
         gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
         if gate is not None:
             gate.eval_ws.update(fresh)
@@ -792,8 +801,8 @@ def main() -> int:
     del edf
 
     engine_moves, engine_conflicts = None, []
-    if a.engine_candidates:
-        engine_moves, engine_conflicts = bc.load_engine_candidates(a.engine_candidates, eval_ws)
+    if proposal_input is not None:
+        engine_moves, engine_conflicts = bc.load_engine_candidates(proposal_input, eval_ws)
         log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
             f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
 
@@ -817,8 +826,6 @@ def main() -> int:
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
     if a.dump_engine_targets:
         from engine_candidates import target_rows
-        if a.max_eval_loss is None:
-            raise SystemExit("--dump-engine-targets needs --max-eval-loss in cp")
         targets = target_rows(g, a.perspective)
         target_path = Path(a.dump_engine_targets)
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -831,7 +838,7 @@ def main() -> int:
     if a.dump_other_positions or a.sampled_other:
         import sampled_other as so
         other_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
-                     "aux_stats": str(aux_path)}
+                     "aux_stats": str(aux_path), "engine_candidates_sha256": proposal_sha}
         if not g.other:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
@@ -899,7 +906,8 @@ def main() -> int:
             info = ss.stop_positions(g)
             dump_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
                         "weak_pool": str(a.weak_pool), "weak_min_games": a.weak_min_games,
-                        "weak_min_share": a.weak_min_share, "stop_model": a.stop_model}
+                        "weak_min_share": a.weak_min_share, "stop_model": a.stop_model,
+                        "engine_candidates_sha256": proposal_sha}
         if a.dump_stop_positions:
             dump = info.with_columns(
                 pl.struct("side", "hash").map_elements(
@@ -1228,7 +1236,7 @@ def main() -> int:
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
                 for k in ("fallback", "unknown")}} if lexc is not None else {}),
             "crack_at_parents": a.crack_at_parents,
-            **({"engine_candidates": a.engine_candidates,
+            **({"engine_candidates": a.engine_candidates, "engine_candidates_sha256": proposal_sha,
                 "engine_cands_added": g.meta.get("engine_cands", 0),
                 "engine_eval_conflicts": engine_conflicts}
                if a.engine_candidates else {}),

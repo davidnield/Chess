@@ -22,7 +22,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ENTRY = ["convertibility_eval", "side_explorer", "extend_book", "validate_book", "stop_alignment",
          "bootstrap_validation", "band_contamination", "engine_candidates", "sampled_stop",
-         "build_budget_books", "budget_core"]
+         "build_budget_books", "budget_core", "practical_scenarios", "exit_practice",
+         "exit_difficulty"]
 FAIL = 0
 
 

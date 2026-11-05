@@ -19,7 +19,7 @@ import convertibility_eval as cv
 from build_budget_books import collect_subgraph_edges
 from engine_candidates import target_rows
 from exit_difficulty import edge_risks, read_exits
-from exit_practice import deck, departures, draw_positions, practice_results, review_games, worksheet
+from exit_practice import deck, departures, draw_positions, practice_results, publish_deck, review_games, worksheet
 from practical_scenarios import paired_summary
 from stage3_backwards_induction import cp_to_expected_score
 from zobrist import zobrist_int64
@@ -196,7 +196,34 @@ def test_practice_roundtrip():
         assert float(departure["clock_after_seconds"]) == 598
 
 
+def test_deck_resume():
+    import hashlib
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        staged = root/"staged"
+        output = root/"published"
+        staged.mkdir()
+        output.mkdir()
+        state = {}
+        for name in ("session.pgn", "observations.csv"):
+            (staged/name).write_text("original data")
+            state[name] = hashlib.sha256((staged/name).read_bytes()).hexdigest()
+        (output/"INCOMPLETE.json").write_text(json.dumps(state))
+        (output/"observations.csv").write_text("user's notes")
+        try:
+            publish_deck(staged, output)
+        except ValueError:
+            assert (output/"observations.csv").read_text() == "user's notes"
+        else:
+            raise AssertionError("edited observations must survive a retry")
+        (output/"observations.csv").write_text("original data")
+        publish_deck(staged, output)
+        assert not (output/"INCOMPLETE.json").exists()
+        assert (output/"session.pgn").read_text() == "original data"
+
+
 if __name__=="__main__":
-    for test in (test_nomination,test_recall,test_risk_and_exits,test_comparison,test_practice_roundtrip):
+    for test in (test_nomination,test_recall,test_risk_and_exits,test_comparison,
+                 test_practice_roundtrip,test_deck_resume):
         test()
         print("PASS",test.__name__)

@@ -58,7 +58,9 @@ def ready(path, band, colour, events, horizon):
     expected = {"our_colour": colour, "our_elo": band, "events": events,
                 "months": MONTHS, "sample": .35, "folds": 64, "opp_min_elo": 0}
     return (all(pr.get(k) == v for k, v in expected.items()) and pr.get("max_ply", 0) >= horizon
-            and all((path/f"_month={m}.DONE").is_file() for m in MONTHS.split(",")))
+            and all((path / f"_month={m}.DONE").is_file()
+                    and (path / f"month={m}/bkt=0/part-0000.parquet").is_file()
+                    for m in MONTHS.split(",")))
 
 
 def decisions(path, colour):

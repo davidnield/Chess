@@ -693,7 +693,7 @@ def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
     return None
 
 
-def load_engine_candidates(path: str, eval_ws: dict[int, float], conflict_cp: float = 25.0):
+def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflict_cp: float = 25.0):
     """engine_candidates.py's table -> (engine_moves, conflicts). A proposal's child takes the
     proposal's own fresh eval: it was searched on purpose, deeper than the cached one. Where a
     cached eval exists and differs by more than conflict_cp (white view) it is replaced and
