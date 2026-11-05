@@ -721,31 +721,37 @@ def load_engine_candidates(path: str, eval_ws: dict[int, float], conflict_cp: fl
 def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: bool,
                 reach: dict[int, float], ply: dict[int, int], max_ply: int,
                 share_floor: float, admitted: dict[int, set] | None = None) -> dict[int, int]:
-    """The ply of each position's HIGHEST-REACH route (2026-11-01). optimistic_reach's ply is a
-    traversal-dependent mix: it takes the minimum over every parent that happened to push the
-    position before it was finalised, so a reach-1 parent's 10% reply sets the ply even when
-    the position's reach of 0.9 comes from a longer route. Changing it would change the depth
-    cut for every recipe, so this is separate: a breadth-first walk over the TIGHT edges alone,
-    those whose reach product equals the child's final reach. Ties go to the shortest route,
-    independently of edge order. A stop value that stands for one ply stands for this one: the
-    objective averages over the games played, so the value should be the one at the ply most of
-    them arrive at (sampled_stop.py)."""
-    out = {root: 0}
-    level = [root]
-    while level:
-        nxt = []
-        for h in level:
+    """The ply of each position's highest-reach route AMONG THE ROUTES THAT ARRIVE IN TIME.
+    optimistic_reach's ply is a traversal-dependent mix: it takes the minimum over every parent
+    that happened to push the position before it was finalised, so a reach-1 parent's 10% reply
+    sets the ply even when the position's reach of 0.9 comes from a longer route. Changing it
+    would change the depth cut for every recipe, so this is separate. A stop value that stands for
+    one ply stands for this one: the objective averages over the games played, so the value should
+    be the one at the ply most of them arrive at (sampled_stop.py).
+
+    Best reach per (position, ply), level by level up to the cap (2026-11-04, review finding 1).
+    Keeping only each position's overall best route ran past the horizon: a high-reach long arrival
+    hid the short, less likely arrival that was the only way to reach a later child in time. Every
+    label is at most max_ply; a stop just outside is then at most max_ply + 1, the horizon. Ties
+    (within rounding, as products of the same shares can differ in the last bit) go to the shortest
+    route, independently of edge order. Only edges the graph can hold are walked: a node whose
+    legacy ply is at the cap has no children in it."""
+    best: dict[int, tuple[float, int]] = {root: (1.0, 0)}
+    level = {root: 1.0}
+    t = 0
+    while level and t < max_ply:
+        nxt: dict[int, float] = {}
+        our_turn = (t % 2 == 0) == root_our
+        for h, r in level.items():
             if ply[h] >= max_ply:
                 continue
             es = edges_by_parent.get(h)
             if not es:
                 continue
-            r = reach[h]
-            our_turn = (ply[h] % 2 == 0) == root_our
             tot = sum(e["total"] for e in es)
             for e in es:
                 ch = e.get("child_hash")
-                if ch is None or ch in out or ch not in reach:
+                if ch is None or ch not in reach:
                     continue
                 if our_turn:
                     if admitted is not None and ch not in admitted.get(h, ()):
@@ -756,11 +762,15 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
                     if share < share_floor:
                         continue
                     cr = r * share
-                if cr == reach[ch]:
-                    out[ch] = out[h] + 1
-                    nxt.append(ch)
+                if cr > nxt.get(ch, 0.0):
+                    nxt[ch] = cr
+        t += 1
+        for ch, cr in nxt.items():
+            b = best.get(ch)
+            if b is None or cr > b[0] * (1.0 + 1e-12):
+                best[ch] = (cr, t)
         level = nxt
-    return out
+    return {h: p for h, (_r, p) in best.items()}
 
 
 def build_graph(edges_by_parent: dict[int, list[dict]], root: int,

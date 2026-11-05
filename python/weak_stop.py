@@ -45,6 +45,13 @@ from duck_compat import duck_pl
 from stage3_backwards_induction import LICHESS_CP_SCALE
 
 MISSING = -32768
+
+
+def uniform_score(cp_us):
+    """The referee's uniform utility: cp from our view, clipped to +-EVAL_CLIP, through the Lichess
+    curve. The one definition: convertibility_eval scores leaves with it and a sampled build values
+    its horizon positions with it, so builder and referee agree there."""
+    return 1 / (1 + np.exp(-LICHESS_CP_SCALE * np.clip(cp_us, -EVAL_CLIP, EVAL_CLIP)))
 EVAL_CLIP = 1000          # fit_eval_curve.CLIP: the fitted curves' cp domain
 
 
@@ -83,7 +90,12 @@ class EvalSource:
     sigmoid(a + k * cp), cp from its view clipped to +-EVAL_CLIP (fit_eval_curve.py),
     with 'us' where we are to move and 'them' where they are."""
 
-    def __init__(self, our_white: bool, lookup=None, curves: dict | None = None):
+    def __init__(self, our_white: bool, lookup=None, curves: dict | None = None,
+                 boundary: bool = False, fills: dict | None = None):
+        """boundary: the referee's value at a horizon position (uniform_score, and a stored
+        Stockfish eval from fills, hash -> cp from White's view, where the arrays have none).
+        Off, the weak stop model's values exactly as before."""
+        self.boundary, self.fills = boundary, fills or {}
         if lookup is None:
             from eval_arrays import lookup_evals, open_eval_arrays
             mm = open_eval_arrays()
@@ -92,6 +104,15 @@ class EvalSource:
 
     def __call__(self, keys: np.ndarray, our_turn: bool = True) -> np.ndarray:
         cp = np.asarray(self._lookup(np.asarray(keys, dtype=np.int64)))
+        if self.boundary:
+            keys = np.asarray(keys, dtype=np.int64)
+            c = cp.astype(np.float64)
+            c[cp == MISSING] = np.nan
+            for i in np.nonzero(np.isnan(c))[0]:
+                f = self.fills.get(int(keys[i]))
+                if f is not None:
+                    c[i] = f
+            return uniform_score(c if self.our_white else -c)      # NaN stays NaN
         if self.curves is None:
             es = 1.0 / (1.0 + np.exp(-LICHESS_CP_SCALE * cp.astype(np.float64)))
             es = np.where(cp == MISSING, np.nan, es)

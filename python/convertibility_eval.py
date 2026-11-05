@@ -63,12 +63,13 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from duck_compat import duck_pl  # noqa: E402
 from eval_arrays import MISSING, lookup_evals, open_eval_arrays  # noqa: E402
-from stage3_backwards_induction import LICHESS_CP_SCALE  # noqa: E402
+from weak_stop import EVAL_CLIP, uniform_score  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
 
 HX = "E:/chess/holdout_explorer"
 CURVES = "E:/chess/calibration/eval_curves_pooled_20261020.parquet"
 MAIA_PY = "D:/chess/maia/.venv/Scripts/python.exe"
+MAIA_HF = "D:/chess/maia/hf_cache"      # snapshot directory names are the weights' commit hashes
 
 
 class Maia:
@@ -495,8 +496,8 @@ def value_leaves(leaves, our_white, lookup, sf_fill, curves):
     cps = np.where(nocp, 0.0, cps)
     us = np.array([l[3] for l in leaves])
     exact = np.array([np.nan if l[4] is None else l[4] for l in leaves])
-    cp_us = np.clip(cps if our_white else -cps, -1000, 1000)
-    uni = 1 / (1 + np.exp(-LICHESS_CP_SCALE * cp_us))
+    cp_us = np.clip(cps if our_white else -cps, -EVAL_CLIP, EVAL_CLIP)
+    uni = uniform_score(cp_us)
     fit = np.where(us, 1 / (1 + np.exp(-(a_us + k_us * cp_us))),
                    1 - 1 / (1 + np.exp(-(a_th + k_th * -cp_us))))
     return {"ps": ps, "hs": hs, "cp_us": cp_us, "us": us, "exact": exact,
@@ -564,7 +565,8 @@ def identity() -> dict:
     from eval_arrays import DEFAULT_ARRAY_DIR, META_NAME
     return {"referee": _sha(here), "maia_server": _sha(here.with_name("maia_server.py")),
             "maia_batch": _sha(here.with_name("maia_batch.py")), "maia_python": MAIA_PY,
-            "curves": _sha(CURVES), "eval_arrays": _sha(Path(DEFAULT_ARRAY_DIR) / META_NAME)}
+            "curves": _sha(CURVES), "eval_arrays": _sha(Path(DEFAULT_ARRAY_DIR) / META_NAME),
+            "maia_models": sorted(p.name for p in Path(MAIA_HF).glob("hub/models--*/snapshots/*"))}
 
 
 def table_manifest(root: str) -> list:

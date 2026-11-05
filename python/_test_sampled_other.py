@@ -57,6 +57,16 @@ def node_snapshot(g):
             {h: (n.l_node, n.cands) for h, n in g.our.items()})
 
 
+print("S  the whole bucket is sampled")
+rep_ = [(1, "a", 0.5), (2, "b", 0.3), (3, "c", 0.2)]
+check("by default every reply is played", so.select_replies(rep_, 0) == rep_)
+check("a cap keeps the most likely (a cost comparison only)", so.select_replies(rep_, 2) == rep_[:2])
+vals_ = {1: 0.5, 2: 0.5, 3: 0.2}
+full_ = sum(p * vals_[h] for h, _e, p in so.select_replies(rep_, 0))
+capped = so.select_replies(rep_, 2)
+cap_ = sum(p * vals_[h] for h, _e, p in capped) / sum(p for _h, _e, p in capped)
+check("a capped tail changes a node's target", abs(full_ - 0.44) < 1e-12 and abs(cap_ - 0.5) < 1e-12, f"{full_} {cap_}")
+
 print("O  off is a no-op")
 off = bc.build_graph(edges, R, True, **kw)
 on = bc.build_graph(edges, R, True, track_other=True, track_route_ply=True, **kw)

@@ -803,8 +803,10 @@ def main() -> int:
     other_report = None
     if a.dump_other_positions or a.sampled_other:
         import sampled_other as so
-        other_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
-                     "aux_stats": str(aux_path)}
+        from sampled_stop import recipe_key
+        other_key = recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
+                               aux_stats=aux_path, eval_weight=a.eval_weight,
+                               other_cov_blend=other_cov_blend)
         if not g.other:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
@@ -870,9 +872,9 @@ def main() -> int:
             log(f"  empirical stop values: {ec}")
         if a.dump_stop_positions or a.sampled_stop:
             info = ss.stop_positions(g)
-            dump_key = {"colour": a.perspective, "horizon": a.max_ply + 1, "stats": str(stats),
-                        "weak_pool": str(a.weak_pool), "weak_min_games": a.weak_min_games,
-                        "weak_min_share": a.weak_min_share, "stop_model": a.stop_model}
+            dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
+                                     weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
+                                     weak_min_share=a.weak_min_share, stop_model=a.stop_model)
         if a.dump_stop_positions:
             dump = info.with_columns(
                 pl.struct("side", "hash").map_elements(
@@ -894,17 +896,27 @@ def main() -> int:
             # dump of this recipe (a horizon H is a graph capped at H - 1: see sampled_stop.py)
             smp = Path(a.sampled_stop + ".meta.json")
             sm = json.loads(smp.read_text(encoding="utf-8")) if smp.exists() else {}
-            bad = {k: (sm.get("dump", {}).get(k), v) for k, v in dump_key.items()
-                   if sm.get("dump", {}).get(k) != v}
+            bad = ss.table_problems(sm, dump_key)
             if sm.get("max_ply") != a.max_ply + 1:
                 bad["referee horizon"] = (sm.get("max_ply"), a.max_ply + 1)
             if bad:
                 log(f"FATAL: --sampled-stop {a.sampled_stop} does not match this build (table, "
                     f"build): {bad}. A referee horizon H needs --max-ply H - 1.")
                 return 1
+            if a.sampled_other:
+                om = Path(a.sampled_other + ".meta.json")
+                diff = ss.simulation_mismatch(sm, json.loads(om.read_text(encoding="utf-8")) if om.exists() else {})
+                if diff:
+                    log(f"FATAL: the stop and other tables come from different simulations (stop, other): {diff}")
+                    return 1
+            bp = Path(a.sampled_stop + ".boundary.parquet")
+            if not bp.exists():
+                log(f"FATAL: {bp} is missing: the stored evals for horizon positions")
+                return 1
+            fills = dict(pl.read_parquet(bp).select("hash", "cp").iter_rows())
             W, R, sampled_report = ss.apply(W, R, info, pl.read_parquet(a.sampled_stop),
                                             horizon=a.max_ply + 1, terminal=terminal,
-                                            evals=EvalSource(our_white))
+                                            evals=EvalSource(our_white, boundary=True, fills=fills))
             sampled_fit = {k: sampled_report.get(k) for k in
                            ("model", "cross_ply_refused", "multi_ply_reach_share", "terminal",
                             "horizon", "horizon_no_eval")}
@@ -924,8 +936,8 @@ def main() -> int:
     if a.sampled_other:
         smp = Path(a.sampled_other + ".meta.json")
         sm = json.loads(smp.read_text(encoding="utf-8")) if smp.exists() else {}
-        bad = {k: (sm.get("dump", {}).get(k), v) for k, v in other_key.items()
-               if sm.get("dump", {}).get(k) != v}
+        from sampled_stop import table_problems
+        bad = table_problems(sm, other_key)
         if bad:
             log(f"FATAL: --sampled-other {a.sampled_other} does not match this build (table, "
                 f"build): {bad}")
