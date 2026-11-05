@@ -37,13 +37,25 @@ BOUNDARY VALUES ARE NOT ESTIMATED. A stop position whose game is over gets its r
 past the horizon gets the engine's eval through the uniform curve, the referee's own value
 there. Neither is sampled, neither enters the calibration, and neither gets its prediction.
 
+A horizon position the arrays have no eval for gets the Stockfish eval stored beside the table
+(<table>.boundary.parquet, written by this script's CLI), the fill the referee uses for its leaves,
+through the same utility (weak_stop.uniform_score). A game that is over keeps its exact result.
+
+WHAT A TABLE STANDS FOR (2026-11-04). <table>.meta.json records the simulation it was sampled from
+("sim": mover tables by content, the prior, cut-offs, referee and model identities) and the dump's
+recipe (pool, aux and weak pool by identity, floor, and for the other bucket the eval weighting that
+sets its calibration feature). The builder refuses a table whose recipe differs, a table without
+that record, and a stop table and an other table from different simulations. Budgets and loss limits
+are not part of it: a sample is a value at (position, ply), and the ply check below covers the rest.
+
 PLY IS APPROXIMATED (owner's decision, 2026-10-31, option A of three). The referee's value of a
 position depends on its ply (fewer moves left at a later one), but the builder's graph has one
 node per position -- the move one memorises there is shared by every move order -- so each
 stop position carries ONE value, the one at the ply of its HIGHEST-REACH ROUTE
 (budget_core.route_plies; ties to the shortest). The objective averages over the games actually
 played, so one value should be the one at the ply most games reach; the earliest ply would
-favour the shortest move order, usually the rare one. The route's reach is optimistic -- the
+favour the shortest move order, usually the rare one. Only routes that arrive in time count
+(budget_core.route_plies), so no stop position is valued past the horizon. The route's reach is optimistic -- the
 best single path, every candidate of ours playable -- so it is a proxy for where the final book's
 games arrive, and a position reached at other plies gets this ply's value there too (1.e4 e6
 2.d4 d5 3.Nc3 dxe4 4.Nxe4 Nf6 5.Nxf6+ gxf6 at ply 10 is 1.e4 d5 2.exd5 Qxd5 3.Nc3 Qd8 4.d4 e6
@@ -104,7 +116,10 @@ def stop_positions(g) -> pl.DataFrame:
     be reached at (n_plies; a diagnostic), that route's optimistic reach, and its EPD or (for a
     position outside the subgraph) its parent's hash and EPD. One row per (side, hash). Ply and
     reach always come from the same route: an outside position takes them from its most likely
-    incoming edge (the parent's reach times that edge's share), ties to the shorter."""
+    incoming edge (the parent's reach times that edge's share), ties to the shorter. Where the
+    best route overall arrives too late, the ply is the best in-time route's and the reach still
+    the position's optimistic reach, which only orders the sampling and weights the calibration.
+    Raises if a position would be valued past the horizon: that is the contract."""
     if not g.route_ply:
         raise ValueError("stop_positions needs build_graph(track_route_ply=True)")
     rows: dict[tuple, list] = {}
@@ -141,6 +156,10 @@ def stop_positions(g) -> pl.DataFrame:
         for p, ch, _lv in n.floor:
             add("x", ch, p0 + 1, r0 * p, g.epd.get(ch), h, g.epd.get(h), nxt)
     df = pl.DataFrame(list(rows.values()), schema=DUMP_SCHEMA, orient="row")
+    late = df.filter(pl.col("ply") > horizon)
+    if late.height:
+        raise ValueError(f"{late.height} stop positions past the horizon {horizon}, up to ply "
+                         f"{late['ply'].max()}")
     return df.with_columns(pl.Series("n_plies", [len(reached[(sd, h)]) for sd, h in
                                                  df.select("side", "hash").iter_rows()],
                                      dtype=pl.Int32))
@@ -350,10 +369,57 @@ def file_identity(path) -> dict:
     return {"path": str(path), "size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
+def recipe_key(colour: str, horizon: int, stats, min_games, share_floor, **extra) -> dict:
+    """What a dump's positions and features depend on, recorded with the dump and checked by the
+    builder. Files by identity: a rebuilt pool at the same path is another pool."""
+    key = {"colour": colour, "horizon": horizon, "stats": str(stats), "stats_id": file_identity(stats),
+           "min_games": min_games, "share_floor": share_floor}
+    for k, v in extra.items():
+        key[k] = str(v) if isinstance(v, Path) else v
+        if k in ("aux_stats", "weak_pool") and v:
+            key[f"{k}_id"] = file_identity(v)
+    return key
+
+
+def simulation(a, cv, our_white: bool) -> dict:
+    """The simulation a table samples, by content: the mover tables' params and data files, the
+    prior and cut-offs, the referee and model identities."""
+    import hashlib
+
+    def movers(spec: str) -> dict:
+        blob = [[r, cv.table_params(r), cv.table_manifest(r)] for r in spec.split(",")]
+        return {"roots": spec, "digest": hashlib.sha256(json.dumps(blob, sort_keys=True, default=str).encode()).hexdigest()[:16]}
+    return {"our_moves": movers(a.our_moves.format(colour=a.colour)),
+            "opp_moves": movers(a.opp_moves.format(colour="black" if our_white else "white")),
+            "k": a.k, "min_p": a.min_p, "horizon": a.max_ply, "our_elo": a.our_elo, "opp_elo": a.opp_elo,
+            "sf_depth": 10, "sf_path": cv.SF_PATH, "identity": cv.identity()}
+
+
+def sampler_code(cv) -> dict:
+    """The samplers' own source, for the resume guard: chunks from other code are not resumed."""
+    here = Path(__file__).resolve()
+    return {n: cv._sha(here.with_name(n)) for n in ("sampled_stop.py", "sampled_other.py", "stop_alignment.py")}
+
+
+def table_problems(meta: dict, key: dict) -> dict:
+    """{field: (table, build)} where a table's meta does not match this build's recipe; empty if
+    it does. A table without the record cannot be trusted and must be re-sampled."""
+    bad = {k: (meta.get("dump", {}).get(k), v) for k, v in key.items() if meta.get("dump", {}).get(k) != v}
+    if "sim" not in meta:
+        bad["sim"] = ("not recorded", "re-sample with this code")
+    return bad
+
+
+def simulation_mismatch(stop_meta: dict, other_meta: dict) -> dict:
+    """Where a stop table and an other table describe different simulations."""
+    a, b = stop_meta.get("sim") or {}, other_meta.get("sim") or {}
+    return {k: (a.get(k), b.get(k)) for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)}
+
+
 def main():
     import convertibility_eval as cv
     import duckdb
-    from eval_arrays import lookup_evals, open_eval_arrays
+    from eval_arrays import MISSING, lookup_evals, open_eval_arrays
     from stop_alignment import per_start
     ap = argparse.ArgumentParser()
     ap.add_argument("--dump", required=True, help="build_budget_books --dump-stop-positions output")
@@ -394,7 +460,8 @@ def main():
     cfg["referee"] = "convertibility_eval.rollouts, empty book, uniform curve, SF depth 10 fill"
     cfg["dump"] = dump_meta
     cfg["dump_file"] = file_identity(a.dump)
-    cfg["code"] = cv.identity()
+    cfg["sim"] = simulation(a, cv, our_white)
+    cfg["sampler"] = sampler_code(cv)
     # every chunk file belongs to exactly this selection: a different dump, --top or --chunk would
     # mix graphs or misread what a chunk holds, so it is refused (delete the parts to start over)
     mp = parts / "_config.json"
@@ -435,6 +502,20 @@ def main():
     sf = cv.StockfishFill(a.sf_cache, 10, a.sf_procs)
     chunks = []
     try:
+        # the horizon positions the arrays have no eval for: stored, so the builder values them
+        # with the fill the referee would use
+        bd = dump.filter(pl.col("exact").is_null() & (pl.col("ply") >= a.max_ply))
+        bd = bd.filter(pl.Series(np.asarray(lookup(bd["hash"].to_numpy())) == MISSING, dtype=pl.Boolean))
+        bd = resolve_epds(bd, pool)
+        no_epd = bd.filter(pl.col("epd").is_null()).height
+        bd = bd.filter(pl.col("epd").is_not_null()).unique("hash")
+        got = sf(list(zip(bd["hash"].to_list(), bd["epd"].to_list()))) if bd.height else {}
+        bp = Path(str(out) + ".boundary.parquet")
+        tmpb = bp.with_suffix(".tmp")
+        pl.DataFrame({"hash": list(got), "cp": list(got.values())}, schema={"hash": pl.Int64, "cp": pl.Int32}).write_parquet(tmpb)
+        tmpb.replace(bp)
+        cfg_boundary = {"filled": len(got), "no_epd": no_epd}
+        print(f"horizon positions without an eval: {len(got):,} filled, {no_epd:,} without an EPD", flush=True)
         for ci in range(0, pick.height, a.chunk):
             pp = parts / f"c{ci // a.chunk:05d}.parquet"
             chunks.append(pp)
@@ -459,8 +540,9 @@ def main():
     tmp.replace(out)
     m, hold = fit(tab), holdout_check(tab)
     Path(str(out) + ".meta.json").write_text(json.dumps({**cfg, "rows": tab.height, "fit": m,
-                                                         "holdout": hold}, indent=1), encoding="utf-8")
-    print(json.dumps({"fit": m, "holdout": hold}, indent=1))
+                                                         "holdout": hold, "boundary": cfg_boundary},
+                                                        indent=1), encoding="utf-8")
+    print(json.dumps({"fit": m, "holdout": hold, "boundary": cfg_boundary}, indent=1))
 
 
 if __name__ == "__main__":

@@ -17,7 +17,10 @@ in-model value and its referee score. The bucket must be on the same scale as th
              remaining reply's position is played out to the horizon with NO book, exactly as the
              referee plays (convertibility_eval.rollouts). Games per reply follow its share, about
              --games per node. Replies under the referee's --min-p are never played there; a node
-             left with none has no sample, and gets the prediction below.
+             left with none has no sample, and gets the prediction below. Every remaining reply
+             is played, at its true share (2026-11-04): capping them at eight and rescaling
+             dropped 3.7% of the bucket on average and up to a third of a node, from training
+             and held-out targets alike, so the held-out check could not see it.
   3. apply   build_budget_books --sampled-other TABLE: V ~ a(ply band) + b * bucket value + c *
              engine value, fitted on the sampled nodes weighted by bucket mass; an unsampled node
              gets the prediction, a sampled one the empirical-Bayes blend, as sampled_stop does.
@@ -45,7 +48,7 @@ import numpy as np
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).parent))
-from sampled_stop import BANDS, band, file_identity  # noqa: E402
+from sampled_stop import BANDS, band, file_identity, sampler_code, simulation  # noqa: E402
 
 DUMP_SCHEMA = {"hash": pl.Int64, "ply": pl.Int32, "reach": pl.Float64, "share": pl.Float64,
                "value": pl.Float64, "engine": pl.Float64, "epd": pl.Utf8,
@@ -83,6 +86,12 @@ def below_floor_replies(epd: str, dist: dict, children) -> list[tuple[int, str, 
         b.pop()
     s = sum(r[2] for r in out)
     return sorted(((h, e, p / s) for h, e, p in out), key=lambda r: (-r[2], r[0]))
+
+
+def select_replies(rep: list, max_replies: int) -> list:
+    """The replies a node's value is averaged over: all of them, or (max_replies > 0, for a cost
+    comparison) only the most likely, rescaled by the caller."""
+    return rep[:max_replies] if max_replies > 0 else rep
 
 
 def design(ply: np.ndarray, value: np.ndarray, engine: np.ndarray) -> np.ndarray:
@@ -196,7 +205,8 @@ def main():
     ap.add_argument("--nodes", type=int, default=2000)
     ap.add_argument("--games", type=int, default=32, help="about this many per node, split over "
                     "its replies by share")
-    ap.add_argument("--max-replies", type=int, default=8, help="the most likely this many per node")
+    ap.add_argument("--max-replies", type=int, default=0, help="0 = every reply (the full bucket); "
+                    "N = only the most likely N, which biases the target")
     ap.add_argument("--chunk", type=int, default=250)
     ap.add_argument("--seed", type=int, default=41)
     ap.add_argument("--our-moves", required=True)
@@ -229,7 +239,8 @@ def main():
     cfg["referee"] = "convertibility_eval.rollouts, empty book, uniform curve, SF depth 10 fill"
     cfg["dump"] = dump_meta
     cfg["dump_file"] = file_identity(a.dump)
-    cfg["code"] = cv.identity()
+    cfg["sim"] = simulation(a, cv, our_white)
+    cfg["sampler"] = sampler_code(cv)
     mp = parts / "_config.json"
     if mp.exists() and json.loads(mp.read_text(encoding="utf-8")) != json.loads(json.dumps(cfg)):
         raise SystemExit(f"FATAL: {parts} was sampled under other settings; delete it to start over")
@@ -273,7 +284,7 @@ def main():
             covered = [0.0] * len(hs)
             for i, (c, m) in enumerate(zip(cs, ms)):
                 rep = below_floor_replies(epds[i], cv.blend(c, m, a.k, a.min_p), ch["children"][i])
-                rep = rep[:a.max_replies]
+                rep = select_replies(rep, a.max_replies)
                 s = sum(r[2] for r in rep)
                 n_replies[i], covered[i] = len(rep), s
                 for h, e, p in rep:

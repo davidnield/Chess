@@ -8,6 +8,10 @@
      outside positions follow their most likely incoming edge.
   H  a referee horizon H is a graph capped at H - 1, from the collector on: no decision and no
      stop position past the boundary, and a value past it cannot change the book.
+  T  a transposition whose likely route arrives late: the ply is the best IN-TIME route's, so the
+     dump stays inside the horizon and the later child keeps the only arrival that reaches it.
+  V  builder and referee give a horizon position the same value, clipped, filled or exact.
+  C  a table carries what it stands for: another pool, floor or simulation is refused.
   B  boundary positions get their known values: the result of a finished game, the engine at
      the horizon; neither is estimated.
   F  fit recovers a known calibration V0 = a[band] + b * stop, and its tau^2 nets out the
@@ -209,6 +213,100 @@ with tempfile.TemporaryDirectory() as td:
     res, _ = bc.price_search(g, 16, log=lambda m: None)
     check("capped AT 30 (legacy meaning): an attractive value past it books a ply-30 move",
           len(late) == 1 and late[0] in res["booked"], str(len(res["booked"])))
+
+print("T  a likely route that arrives too late")
+# cap 4, horizon 5. P is reached at ply 2 by a 10% reply and at ply 4 by a 90% route, so the legacy
+# ply is 2 and P is expanded. P's child Q and grandchild X exist only through the ply-2 arrival: by
+# the 90% route they would fall at plies 5 and 6, past the cap.
+P_, Q_, X_, T1, T2, OUT = 41, 42, 43, 44, 45, 46
+late = {R: [e_("a", OP, 10)],
+        OP: [e_("p", P_, 10), e_("y", T1, 90)],
+        T1: [e_("t", T2, 10)],
+        T2: [e_("q", P_, 10)],
+        P_: [e_("m", Q_, 10)],
+        Q_: [e_("n", X_, 10)],
+        X_: [e_("o", OUT, 10)]}
+for flip in (False, True):
+    es = {k: (list(reversed(v)) if flip else list(v)) for k, v in late.items()}
+    gt = bc.build_graph(es, R, True, gates=False, prior_strength=1.0, eval_weight=0.0, eps=0.0,
+                        share_floor=0.0, max_ply=4, track_route_ply=True)
+    lab = "reversed" if flip else "given"
+    check(f"P keeps its likely arrival at the cap ({lab})", gt.route_ply[P_] == 4, str(gt.route_ply[P_]))
+    check(f"Q and X are labelled by the short arrival, in time ({lab})",
+          gt.route_ply[Q_] == 3 and gt.route_ply[X_] == 4,
+          f"{gt.route_ply[Q_]} {gt.route_ply[X_]}")
+    check(f"every label is within the cap ({lab})", max(gt.route_ply.values()) <= 4, str(gt.route_ply))
+    spt = ss.stop_positions(gt)
+    check(f"the dump stays inside horizon 5 ({lab})", spt["ply"].max() <= 5, str(spt["ply"].max()))
+    wt = {h: 0.5 for h in spt.filter(pl.col("side") == "x")["hash"].to_list()}
+    rt = {h: 0.5 for h in spt.filter(pl.col("side") == "y")["hash"].to_list()}
+    _w, _r, rept = ss.apply(wt, rt, spt, pl.DataFrame(schema={"side": pl.Utf8, "hash": pl.Int64, "ply": pl.Int32,
+                                                              "reach": pl.Float64, "stop": pl.Float64,
+                                                              "v0": pl.Float64, "se": pl.Float64}),
+                            horizon=5, terminal={}, evals=lambda hs: np.full(len(hs), 0.7))
+    plies = dict(spt.select("hash", "ply").iter_rows())
+    check(f"X's stop is valued before the horizon, not as a boundary ({lab})", plies[X_] == 4 and _w[X_] == 0.5, f"{plies[X_]} {_w[X_]}")
+# black to book, the same shape
+gb = bc.build_graph(late, R, False, gates=False, prior_strength=1.0, eval_weight=0.0, eps=0.0,
+                    share_floor=0.0, max_ply=4, track_route_ply=True)
+check("the same for Black", max(gb.route_ply.values()) <= 4 and ss.stop_positions(gb)["ply"].max() <= 5,
+      str(gb.route_ply))
+gbad = bc.build_graph(short_edge, R, True, gates=False, prior_strength=1.0, eval_weight=0.0, eps=0.0,
+                      share_floor=0.0, max_ply=4, track_route_ply=True)
+gbad.route_ply[X] = 9
+try:
+    ss.stop_positions(gbad)
+    check("a stop past the horizon is an error", False)
+except ValueError:
+    check("a stop past the horizon is an error", True)
+
+print("V  one value at the boundary")
+from convertibility_eval import value_leaves  # noqa: E402
+from weak_stop import MISSING, EvalSource  # noqa: E402
+
+cps = {11: 2000, 12: -2000, 13: 1000, 14: 150, 15: MISSING}
+look = lambda hs: np.array([cps[int(h)] for h in hs], dtype=np.int64)  # noqa: E731
+fills = {15: -1500}
+sf_fill = lambda todo: {h: fills[h] for h, _e in todo}  # noqa: E731
+curves0 = ((0.0, 0.003), (0.0, 0.003))
+for our_white in (True, False):
+    leaves = [(1.0, h, None, True, None, "e", 30, 1.0, i, 1) for i, h in enumerate(cps)]
+    ref = value_leaves(leaves, our_white, look, sf_fill, curves0)["uniform"]
+    mine = EvalSource(our_white, lookup=look, boundary=True, fills=fills)(np.array(list(cps), dtype=np.int64))
+    check(f"builder equals referee at the boundary, {'White' if our_white else 'Black'}",
+          np.array_equal(ref, mine), f"{ref} {mine}")
+check("the clip applies: +2000 is worth what +1000 is", ref[0] == ref[2], f"{ref[0]} {ref[2]}")
+old = EvalSource(True, lookup=look)(np.array([11], dtype=np.int64))[0]
+new = EvalSource(True, lookup=look, boundary=True)(np.array([11], dtype=np.int64))[0]
+check("the weak stop model's own values are unchanged, unclipped", old > 0.999 and new < 0.98, f"{old} {new}")
+check("no eval and no fill stays unknown", np.isnan(EvalSource(True, lookup=look, boundary=True)(np.array([15], dtype=np.int64))[0]))
+# a finished game keeps its result whatever the eval says
+Wv, Rv, _ = ss.apply({11: 0.5}, {}, pl.DataFrame({"side": ["x"], "hash": [11], "ply": [30], "reach": [1.0]}),
+                     pl.DataFrame(schema={"side": pl.Utf8, "hash": pl.Int64, "ply": pl.Int32, "reach": pl.Float64,
+                                          "stop": pl.Float64, "v0": pl.Float64, "se": pl.Float64}),
+                     horizon=30, terminal={11: 0.0}, evals=EvalSource(True, lookup=look, boundary=True))
+check("an exact result outranks the boundary value", Wv[11] == 0.0, str(Wv[11]))
+
+print("C  what a table stands for")
+with tempfile.TemporaryDirectory() as td:
+    pool, aux = Path(td) / "pool.parquet", Path(td) / "aux.parquet"
+    pool.write_bytes(b"pool")
+    aux.write_bytes(b"aux")
+    key = ss.recipe_key("black", 30, pool, 20, 0.002, aux_stats=aux, eval_weight=0.75, other_cov_blend=True)
+    meta = {"dump": dict(key), "sim": {"k": 100}}
+    check("the same recipe passes", ss.table_problems(meta, key) == {}, str(ss.table_problems(meta, key)))
+    check("a lower floor is refused", "min_games" in ss.table_problems(
+        meta, ss.recipe_key("black", 30, pool, 5, 0.002, aux_stats=aux, eval_weight=0.75, other_cov_blend=True)))
+    check("another eval weighting is refused", "eval_weight" in ss.table_problems(
+        meta, ss.recipe_key("black", 30, pool, 20, 0.002, aux_stats=aux, eval_weight=0.5, other_cov_blend=True)))
+    check("an old table without the record is refused", "sim" in ss.table_problems({"dump": dict(key)}, key))
+    pool.write_bytes(b"pool, rebuilt")
+    check("a rebuilt pool at the same path is refused", "stats_id" in ss.table_problems(
+        meta, ss.recipe_key("black", 30, pool, 20, 0.002, aux_stats=aux, eval_weight=0.75, other_cov_blend=True)))
+s1 = {"sim": {"our_moves": {"digest": "a"}, "k": 100}}
+check("two tables of one simulation pass", ss.simulation_mismatch(s1, {"sim": {"our_moves": {"digest": "a"}, "k": 100}}) == {})
+check("other mover data is refused", "our_moves" in ss.simulation_mismatch(s1, {"sim": {"our_moves": {"digest": "b"}, "k": 100}}))
+check("another prior is refused", "k" in ss.simulation_mismatch(s1, {"sim": {"our_moves": {"digest": "a"}, "k": 30}}))
 
 print("B  boundary values")
 ch_mate, ch_stale = 91, 92
