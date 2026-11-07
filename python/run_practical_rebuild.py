@@ -347,7 +347,34 @@ def audit(colour, books):
                 raise RuntimeError(f"Final selection failed its safety audit: {colour} {result}")
         if audits[label]["status"].get("illegal", 0):
             raise RuntimeError(f"Illegal decision in {label} {colour}")
+        if label == "NEW":
+            publish_verified_book(colour, book, prefix, audits[label])
     return audits
+
+
+def publish_verified_book(colour, book, audit_prefix, audit_result):
+    """Publish the conventional output paths only after auditing these exact book bytes."""
+    checksum = digest(book)
+    if checksum != audit_result["book_sha256"] or audit_result["decisions"] != 2000:
+        raise RuntimeError("Final audit does not describe the selected 2,000-decision book")
+    rows = pl.read_parquet(Path(str(audit_prefix) + ".rows.parquet")).filter(pl.col("selected_cloud"))
+    if rows.height and ("verification_source" not in rows.columns or
+            any(s != "selection search" for s in rows["verification_source"]) or
+            any(n < 15_000_000 for n in rows["sf_nodes"])):
+        raise RuntimeError("Selected cloud verification was not fed back into the book")
+    dest = OUT / colour / f"practical_{colour}_b2000.parquet"
+    # Installing the book last ensures a first-time consumer finds its recipe alongside it.
+    for suffix in (".meta.json", ""):
+        source, target = Path(str(book) + suffix), Path(str(dest) + suffix)
+        if target.exists():
+            if digest(target) != digest(source):
+                raise RuntimeError(f"Existing published output differs: {target}")
+            continue
+        tmp = target.with_name(target.name + ".tmp")
+        shutil.copyfile(source, tmp)
+        tmp.replace(target)
+    publish(dest.parent / "verified-book.json", {"book":dest, "book_sha256":checksum, "recipe":str(dest)+".meta.json",
+            "audit":str(audit_prefix)+".json", "selected_and_verified_cloud_moves":rows.height})
 
 
 def compare(colour, books, audits, name, scenario):
