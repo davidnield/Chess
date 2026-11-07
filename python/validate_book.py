@@ -195,8 +195,15 @@ def main():
     engine_moves, conflicts = None, []
     if proposal_input is not None:
         engine_moves, conflicts = bc.load_engine_candidates(proposal_input, ev)
+    cloud_moves = set()
+    if proposal_input is not None:
+        proposals = pl.read_parquet(proposal_input)
+        if "engine" in proposals.columns:
+            cloud_moves = set(proposals.filter(pl.col("engine") == "Lichess cloud PV").select(
+                "position_hash", "position_epd", "child_hash").iter_rows())
     for rec in rows:
         h = rec["position_hash"]
+        rec["selected_cloud"] = (h, rec["epd"], rec["child_hash"]) in cloud_moves
         rec["parent_cp_us"] = sign * cps[h] if h in cps else None
         ch = rec["child_hash"]
         rec["child_cp_us"] = sign * cps[ch] if ch in cps else None
@@ -218,7 +225,7 @@ def main():
         eng = chess.engine.SimpleEngine.popen_uci(SF)
         eng.configure({"Threads": 8, "Hash": 1024})
         try:
-            for rec in (r for r in rows if r["flagged"]):
+            for rec in (r for r in rows if r["flagged"] or r["selected_cloud"]):
                 rec.update(fresh_verdict(eng, board(rec["epd"]), rec["move"], a.nodes, limit,
                                          our_white))
         finally:
@@ -234,6 +241,13 @@ def main():
             "engine_eval_conflicts": conflicts}
     if "fresh" in out.columns:
         summ["fresh"] = dict(out.filter(pl.col("fresh").is_not_null()).group_by("fresh").len().iter_rows())
+    selected = [r for r in rows if r["selected_cloud"]]
+    checked = [r for r in selected if r.get("fresh")]
+    summ["cloud_verification"] = {"selected": len(selected), "checked": len(checked),
+                                  "over_limit": sum(r["fresh"] == "confirmed" for r in checked),
+                                  "unstable": sum(r["unstable"] for r in checked), "nodes": a.nodes}
+    if a.nodes and len(checked) != len(selected):
+        raise ValueError("Missing an independent verdict for a selected cloud move")
     if a.incumbent:
         inc = pl.read_parquet(a.incumbent).filter((pl.col("side_to_move") == a.colour)
                                                   & pl.col("best_move").is_not_null())

@@ -4,6 +4,10 @@ Run these commands from the checkout containing this branch with the project Pyt
 
 ## Nominate moves before selection
 
+For hybrid nomination, run `python python/hybrid_candidates.py --targets targets.parquet --colour black --out hybrid.parquet` (also supports White). The default database is the merged `D:/chess/eval_full`, built from the raw cloud and fishnet downloads on H:. An exact hash and EPD match can supply the legal first cloud PV move at depth 22 or higher and at least 10,000 knodes. Ambiguous hashes and decisive fishnet disagreements go to local Stockfish. Pass `--keep-local FILE` to reuse completed local searches from the same target file, engine, node budget and thread count.
+
+Use the hybrid output as the builder's engine proposals. On the resulting book, `validate_book.py --nodes 15000000` independently searches every selected cloud move as well as flagged decisions. The JSON audit records the number selected, checked, over the book's loss limit and unstable. The rows file identifies the position and verdict for each move.
+
 1. Run the intended `build_budget_books.py` recipe with `--max-eval-loss CP --dump-engine-targets targets.parquet`. This exports reachable decisions where the recorded choices fail the loss limit, have unknown evaluations or leave no candidate. It exits before optimizing a book.
 2. Run Stockfish on those positions. For a bounded trial, `--limit N` selects the N highest optimistic reach weights. Inspect the number left outside the search.
 3. Repeat the original builder command with `--engine-candidates proposals.parquet`, using a fresh candidate output prefix. For sampled-stop or sampled-other builds, regenerate the graph dumps and sample tables with that proposal file first. The builder checks its content fingerprint since proposals can change reachable continuations. The search evaluates recorded and nominated moves under the same soundness rule. If the new move has recorded opponent replies, the builder can prepare below it. A new move without reply data is valued as a leaf.
