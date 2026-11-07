@@ -70,7 +70,8 @@ def edge_risks(edges, games, our_white, threshold, lookup, sf):
         leaves.append((1., h, None, board.turn == our_white, exact, epd, 0, 0., -1, -1))
     worst = np.zeros(games)
     if leaves:
-        curve = (0., cv.LICHESS_CP_SCALE)
+        from weak_stop import LICHESS_CP_SCALE
+        curve = (0., LICHESS_CP_SCALE)
         values = cv.value_leaves(leaves, our_white, lookup, sf, (curve, curve))
         if values["missing"].any():
             raise ValueError("difficulty needs an evaluation for every observed position")
