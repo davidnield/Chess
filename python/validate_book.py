@@ -72,7 +72,7 @@ def board(epd: str) -> chess.Board:
 
 
 def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dict, our_white: bool,
-             meta: dict, engine_moves: dict | None, epd: str) -> str:
+             meta: dict, engine_moves: dict | None, epd: str, excluded=None) -> str:
     """A base row's status, by the builder's own candidate rule (budget_core.final_candidates)
     under the recipe's gates and limit, always with the strict source rule: the audit holds a
     book to what is promised, including a book built before that rule existed."""
@@ -81,7 +81,7 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
     cand, restored, _rej, _eng = bc.final_candidates(
         h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
         max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
-        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd)
+        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded)
     pairs = [(e["move_san"], e.get("child_hash")) for e, _ in cand]
     if restored is not None:
         pairs.append(restored)
@@ -196,11 +196,19 @@ def main():
     if proposal_input is not None:
         engine_moves, conflicts = bc.load_engine_candidates(proposal_input, ev)
     cloud_moves = set()
+    checked_moves = {}
+    excluded = bc.verified_exclusions(proposal_input, limit)
     if proposal_input is not None:
         proposals = pl.read_parquet(proposal_input)
         if "engine" in proposals.columns:
-            cloud_moves = set(proposals.filter(pl.col("engine") == "Lichess cloud PV").select(
+            origin = pl.col("cloud_origin") if "cloud_origin" in proposals.columns else pl.col("engine") == "Lichess cloud PV"
+            cloud_moves = set(proposals.filter(origin).select(
                 "position_hash", "position_epd", "child_hash").iter_rows())
+        if "verification_nodes" in proposals.columns and a.nodes:
+            engine_sha = hashlib.sha256(Path(SF).read_bytes()).hexdigest()
+            for row in proposals.filter((pl.col("verification_nodes") >= a.nodes)
+                    & (pl.col("verification_engine_sha256") == engine_sha)).iter_rows(named=True):
+                checked_moves[row["position_hash"], row["position_epd"], row["child_hash"]] = row
     for rec in rows:
         h = rec["position_hash"]
         rec["selected_cloud"] = (h, rec["epd"], rec["child_hash"]) in cloud_moves
@@ -217,19 +225,31 @@ def main():
             rec["status"] = "no_recipe"
         else:
             rec["status"] = classify(h, rec["move"], edges.get(h, []), rec["source_move"], ev,
-                                     our_white, meta, engine_moves, rec["epd"])
+                                     our_white, meta, engine_moves, rec["epd"], excluded)
         rec["flagged"] = rec["legal"] and limit is not None and (
             rec["cached_loss"] is None or rec["cached_loss"] > limit)
     # fresh searches of the flagged rows
     if a.nodes and limit is not None:
-        eng = chess.engine.SimpleEngine.popen_uci(SF)
-        eng.configure({"Threads": 8, "Hash": 1024})
+        eng = None
         try:
             for rec in (r for r in rows if r["flagged"] or r["selected_cloud"]):
+                checked = checked_moves.get((rec["position_hash"], rec["epd"], rec["child_hash"]))
+                if checked:
+                    loss = checked["verified_loss_cp"]
+                    same = checked["verification_best"] == rec["move"]
+                    rec.update(sf_best=checked["verification_best"], sf_best_cp=sign*checked["parent_cp_white"],
+                               sf_move_cp=sign*checked["child_cp_white"], sf_nodes=checked["verification_nodes"],
+                               sf_loss=loss, fresh="confirmed" if loss > limit else ("same_move" if same else "cleared"),
+                               unstable=checked["verification_unstable"], verification_source="selection search")
+                    continue
+                if eng is None:
+                    eng = chess.engine.SimpleEngine.popen_uci(SF)
+                    eng.configure({"Threads": 8, "Hash": 1024})
                 rec.update(fresh_verdict(eng, board(rec["epd"]), rec["move"], a.nodes, limit,
                                          our_white))
         finally:
-            eng.quit()
+            if eng:
+                eng.quit()
     out = pl.DataFrame(rows, infer_schema_length=None)
     summ = {"book": a.book, "colour": a.colour, "meta": str(meta_p) if meta else None,
             "book_sha256": hashlib.sha256(Path(a.book).read_bytes()).hexdigest(),

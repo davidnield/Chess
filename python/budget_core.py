@@ -584,7 +584,8 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
                      max_eval_loss: float | None = None, max_cands: int = 0,
                      strict_source: bool = False,
                      engine_moves: dict[int, list[tuple[str, int]]] | None = None,
-                     edges_by_parent: dict | None = None, epd: str | None = None):
+                     edges_by_parent: dict | None = None, epd: str | None = None,
+                     excluded: dict | None = None):
     """The moves an our-node may book: one definition for build_graph and validate_book, so the
     book and its checker cannot disagree. Engine proposals join the recorded moves before the
     gates; the gates and --max-eval-loss run over that set; then the candidate cap; then the
@@ -592,12 +593,17 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
     (edge, child eval) pairs, restored = (source move, child hash) or None, rejected source
     moves, engine moves added)."""
     edges_by_parent = edges_by_parent if edges_by_parent is not None else {}
+    veto = excluded.get(h, ()) if excluded else ()
+    if veto:
+        es = [e for e in es if e["move_san"].rstrip("+#") not in veto]
+        if src and src.rstrip("+#") in veto:
+            src = None
     es_g, n_eng = es, 0
     if engine_moves and h in engine_moves:
         have = {e["move_san"].rstrip("+#") for e in es}
         extra = [{"move_san": san, "child_hash": ch, "total": 0,
                   "white_score_avg": slice_prior, "engine": True}
-                 for san, ch in engine_moves[h] if san.rstrip("+#") not in have]
+                 for san, ch in engine_moves[h] if san.rstrip("+#") not in have and san.rstrip("+#") not in veto]
         if extra:
             n_eng = len(extra)
             es_g = es + extra
@@ -693,6 +699,19 @@ def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
     return None
 
 
+def verified_cp_overrides(frame):
+    """One verified White-view score per position, also used by the weak-stop model."""
+    import polars as pl
+    if "parent_cp_white" not in frame.columns:
+        return {}
+    verified = frame.filter(pl.col("parent_cp_white").is_not_null())
+    parents = verified.select("position_hash", "parent_cp_white").unique()
+    if parents["position_hash"].n_unique() != parents.height:
+        raise ValueError("Conflicting reference scores for a single verified root")
+    child = verified.group_by("child_hash").agg(pl.col("child_cp_white").median().round().cast(pl.Int32))
+    return dict(child.iter_rows()) | dict(parents.iter_rows())
+
+
 def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflict_cp: float = 25.0):
     """engine_candidates.py's table -> (engine_moves, conflicts). A proposal's child takes the
     proposal's own fresh eval: it was searched on purpose, deeper than the cached one. Where a
@@ -703,7 +722,11 @@ def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflic
     moves: dict[int, list[tuple[str, int]]] = {}
     conflicts = []
     cols = ["position_hash", "move_san", "child_hash", "child_cp_white"]
-    for h, san, ch, cp in pl.read_parquet(path).select(cols).iter_rows():
+    frame = pl.read_parquet(path)
+    overrides = verified_cp_overrides(frame)
+    eval_ws.update({h: cp_to_expected_score(cp) for h, cp in overrides.items()})
+    for h, san, ch, cp in frame.select(cols).iter_rows():
+        cp = overrides.get(ch, cp)
         moves.setdefault(h, []).append((san, ch))
         if cp is None:
             continue
@@ -716,6 +739,19 @@ def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflic
                                   "cached_cp_white": old_cp, "fresh_cp_white": int(cp)})
         eval_ws[ch] = fresh
     return moves, conflicts
+
+
+def verified_exclusions(proposals, limit):
+    """Edge-local vetoes also apply to recorded moves, restored source moves and fallbacks."""
+    import polars as pl
+    if proposals is None or limit is None:
+        return {}
+    frame = pl.read_parquet(proposals)
+    excluded = {}
+    if "verified_loss_cp" in frame.columns:
+        for h, san in frame.filter(pl.col("verified_loss_cp") > limit).select("position_hash", "move_san").iter_rows():
+            excluded.setdefault(h, set()).add(san.rstrip("+#"))
+    return excluded
 
 
 def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: bool,
@@ -797,7 +833,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 strict_source: bool = False,
                 crack_at_parents: bool = False,
                 engine_moves: dict[int, list[tuple[str, int]]] | None = None,
-                track_route_ply: bool = False, track_other: bool = False) -> Graph:
+                track_route_ply: bool = False, track_other: bool = False,
+                excluded: dict | None = None) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -864,7 +901,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                     gates=gates, max_eval_loss=max_eval_loss, strict_source=strict_source,
                     engine_moves=engine_moves, edges_by_parent=edges_by_parent,
-                    epd=es[0].get("parent_epd"))[0]
+                    epd=es[0].get("parent_epd"), excluded=excluded)[0]
             else:
                 cs = gate_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
@@ -936,7 +973,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                 gates=gates, max_eval_loss=max_eval_loss, max_cands=max_cands,
                 strict_source=strict_source, engine_moves=engine_moves,
-                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"))
+                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"), excluded=excluded)
             if n_eng:
                 g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + n_eng
             if n_rej:

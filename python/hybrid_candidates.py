@@ -19,7 +19,7 @@ from zobrist import zobrist_int64
 
 CLOUD = "Lichess cloud PV"
 MIN_DEPTH = 22
-MIN_KNODES = 10000
+MIN_KNODES = 0
 
 
 def sha(path):
@@ -38,7 +38,7 @@ def write_json(value, path):
     tmp.replace(path)
 
 
-def cloud_bucket(con, targets, db, bucket, colour, date):
+def cloud_bucket(con, targets, db, bucket, colour, date, min_knodes=MIN_KNODES):
     con.register("wanted", targets.to_arrow())
     rows = con.execute("""SELECT t.position_hash, t.epd, t.status, e.cloud_line,
                         e.cloud_cp, e.cloud_mate, e.cloud_depth, e.cloud_knodes
@@ -46,7 +46,7 @@ def cloud_bucket(con, targets, db, bucket, colour, date):
         WHERE e.source='cloud' AND NOT e.fishnet_disagrees AND NOT e.hash_ambiguous
         AND e.cloud_depth >= ? AND e.cloud_knodes >= ? AND e.cloud_line <> ''
         AND (e.cloud_cp IS NULL) <> (e.cloud_mate IS NULL)
-        ORDER BY t.position_hash""", [str(db / f"bkt{bucket:03d}.parquet"), MIN_DEPTH, MIN_KNODES]).fetchall()
+        ORDER BY t.position_hash""", [str(db / f"bkt{bucket:03d}.parquet"), MIN_DEPTH, min_knodes]).fetchall()
     proposals = []
     for h, epd, status, line, cp, mate, depth, knodes in rows:
         board = chess.Board(epd + " 0 1")
@@ -72,17 +72,24 @@ def main():
     parser.add_argument("--colour", required=True, choices=["black", "white"])
     parser.add_argument("--db", type=Path, default=Path("D:/chess/eval_full"))
     parser.add_argument("--keep-local", type=Path)
+    parser.add_argument("--cutoff-study", type=Path,
+                        help="Checkpoint a paired spot-check on the first cloud nominations")
+    parser.add_argument("--prepare-only", action="store_true", help="Checkpoint cloud hits and misses, then exit")
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--nodes", type=int, default=10_000_000)
     parser.add_argument("--threads", type=int, default=6)
+    parser.add_argument("--min-knodes", type=int, default=MIN_KNODES,
+                        help="Optional cloud node floor, in thousands of nodes (default: depth only)")
     args = parser.parse_args()
+    if args.min_knodes < 0:
+        parser.error("--min-knodes must be nonnegative")
     if not (args.db / "_DONE").is_file():
         raise ValueError("Incomplete evaluation database")
     parts = Path(str(args.out) + ".parts")
     parts.mkdir(parents=True, exist_ok=True)
     contract = {"targets": sha(args.targets), "db": str(args.db.resolve()),
                 "db_build": sha(args.db / "_build.meta.json"), "db_manifest": sha(args.db / "_manifest.parquet"),
-                "depth": MIN_DEPTH, "knodes": MIN_KNODES, "colour": args.colour,
+                "depth": MIN_DEPTH, "knodes": args.min_knodes, "colour": args.colour,
                 "local_nodes": args.nodes, "threads": args.threads, "script": sha(__file__),
                 "legacy": sha(args.keep_local) if args.keep_local else None, "engine": sha(ec.SF)}
     lock = parts / "inputs.json"
@@ -96,6 +103,10 @@ def main():
     local = pl.DataFrame(schema=ec.SCHEMA)
     if args.keep_local:
         old = json.loads(Path(str(args.keep_local) + ".meta.json").read_text())
+        if old.get("kind") == "migrated-local":
+            if old["output_sha256"] != contract["legacy"] or not old["sources"]:
+                raise ValueError("Changed or undocumented migration checkpoint")
+            old = old["search_contract"]
         if old != {"input_sha256": contract["targets"], "nodes": args.nodes, "colour": args.colour,
                    "threads": args.threads, "limit": None, "engine_sha256": contract["engine"]}:
             raise ValueError("Legacy Stockfish cache has different inputs")
@@ -112,18 +123,24 @@ def main():
         for i, ((bucket,), group) in enumerate(sorted(groups.items()), 1):
             path = parts / f"cloud-{bucket:03d}.parquet"
             if not path.exists():
-                write_frame(cloud_bucket(con, group, args.db, bucket, args.colour, datetime.date.today().isoformat()), path)
+                write_frame(cloud_bucket(con, group, args.db, bucket, args.colour,
+                                         datetime.date.today().isoformat(), args.min_knodes), path)
             hits.append(pl.read_parquet(path))
             if i % 16 == 0:
                 print(f"Cloud buckets {i}/{len(groups)}", flush=True)
     cloud = pl.concat(hits) if hits else local.clear()
+    if args.cutoff_study:
+        from cloud_cutoff_check import run
+        run(cloud, args.cutoff_study, args.colour, 60 if args.colour == "white" else 30)
     missing = todo.join(cloud.rename({"position_epd":"epd"}).select(keys), on=keys, how="anti")
     misses = parts / "misses.parquet"
     if not misses.exists():
         write_frame(missing, misses)
-    elif not pl.read_parquet(misses).equals(missing):
+    elif not pl.read_parquet(misses).sort(keys).equals(missing.sort(keys)):
         raise ValueError("Remaining target set changed")
     print(f"{cloud.height} cloud hits, {missing.height} fresh Stockfish searches.", flush=True)
+    if args.prepare_only:
+        return
     result = parts / "local.parquet"
     subprocess.run([sys.executable, ec.__file__, "--colour", args.colour, "--targets", str(misses),
                     "--out", str(result), "--threads", str(args.threads), "--nodes", str(args.nodes)], check=True)

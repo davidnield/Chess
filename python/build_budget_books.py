@@ -110,6 +110,7 @@ class GateAdmit:
         self.max_eval_loss = max_eval_loss
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
+        self.excluded = {}
 
     def prefetch(self, hashes) -> None:
         new = np.array([h for h in set(hashes) if h not in self._seen], dtype=np.int64)
@@ -122,6 +123,8 @@ class GateAdmit:
 
     def __call__(self, ph: int, rows: list[dict]) -> set[int]:
         src = self.rep_moves.get(ph)
+        if ph in self.excluded:
+            rows = [r for r in rows if r["move_san"].rstrip("+#") not in self.excluded[ph]]
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
             require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss)
@@ -723,15 +726,20 @@ def main() -> int:
     proposal_moves = None
     proposal_sha = None
     proposal_input = None
+    excluded = {}
+    verified_cp = {}
     if a.engine_candidates:
         # A resumed engine job can replace its parquet while the collector runs.
         # Pin both graph passes and the output provenance to exactly one snapshot.
         proposal_input = Path(a.engine_candidates).read_bytes()
         proposal_sha = hashlib.sha256(proposal_input).hexdigest()
         fresh = {}
+        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
+        verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
         gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
         if gate is not None:
+            gate.excluded = excluded
             gate.eval_ws.update(fresh)
             gate._seen.update(fresh)
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
@@ -819,7 +827,7 @@ def main() -> int:
                        max_eval_loss=a.max_eval_loss,
                        strict_source=a.strict_source,
                        crack_at_parents=a.crack_at_parents,
-                       engine_moves=engine_moves,
+                       engine_moves=engine_moves, excluded=excluded,
                        track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
                                             or a.dump_other_positions or a.sampled_other),
                        track_other=bool(a.dump_other_positions or a.sampled_other))
@@ -895,7 +903,7 @@ def main() -> int:
             log(f"  weak stop model: fitted eval curves {curves}")
         xs, ys = bc.stop_model_positions(g)
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white, curves=curves),
+                                    evals=EvalSource(our_white, curves=curves, overrides=verified_cp),
                                     min_weak=a.weak_min_games,
                                     min_share=a.weak_min_share, log=log)
         if a.stop_model == "empirical":
@@ -952,7 +960,8 @@ def main() -> int:
             fills = dict(pl.read_parquet(bp).select("hash", "cp").iter_rows())
             W, R, sampled_report = ss.apply(W, R, info, pl.read_parquet(a.sampled_stop),
                                             horizon=a.max_ply + 1, terminal=terminal,
-                                            evals=EvalSource(our_white, boundary=True, fills=fills))
+                                            evals=EvalSource(our_white, boundary=True, fills=fills,
+                                                             overrides=verified_cp))
             sampled_fit = {k: sampled_report.get(k) for k in
                            ("model", "cross_ply_refused", "multi_ply_reach_share", "terminal",
                             "horizon", "horizon_no_eval")}

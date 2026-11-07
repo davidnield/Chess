@@ -91,11 +91,12 @@ class EvalSource:
     with 'us' where we are to move and 'them' where they are."""
 
     def __init__(self, our_white: bool, lookup=None, curves: dict | None = None,
-                 boundary: bool = False, fills: dict | None = None):
+                 boundary: bool = False, fills: dict | None = None, overrides: dict | None = None):
         """boundary: the referee's value at a horizon position (uniform_score, and a stored
         Stockfish eval from fills, hash -> cp from White's view, where the arrays have none).
         Off, the weak stop model's values exactly as before."""
         self.boundary, self.fills = boundary, fills or {}
+        self.overrides = overrides or {}
         if lookup is None:
             from eval_arrays import lookup_evals, open_eval_arrays
             mm = open_eval_arrays()
@@ -104,6 +105,9 @@ class EvalSource:
 
     def __call__(self, keys: np.ndarray, our_turn: bool = True) -> np.ndarray:
         cp = np.asarray(self._lookup(np.asarray(keys, dtype=np.int64)))
+        if self.overrides:
+            cp = np.fromiter((self.overrides.get(int(h), c) for h, c in zip(keys, cp)),
+                             dtype=cp.dtype, count=len(cp))
         if self.boundary:
             keys = np.asarray(keys, dtype=np.int64)
             c = cp.astype(np.float64)
