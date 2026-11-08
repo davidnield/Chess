@@ -4,9 +4,11 @@ Run these commands from the checkout containing this branch with the project Pyt
 
 ## Nominate moves before selection
 
-For hybrid nomination, run `python python/hybrid_candidates.py --targets targets.parquet --colour black --out hybrid.parquet` (also supports White). The default database is the merged `D:/chess/eval_full`, built from the raw cloud and fishnet downloads on H:. An exact hash and EPD match can supply the legal first cloud PV move at depth 22 or higher and at least 10,000 knodes. Ambiguous hashes and decisive fishnet disagreements go to local Stockfish. Pass `--keep-local FILE` to reuse completed local searches from the same target file, engine, node budget and thread count.
+For hybrid nomination, run `python python/hybrid_candidates.py --targets targets.parquet --colour black --out hybrid.parquet` (also supports White). The default database is the merged `D:/chess/eval_full`, built from the raw cloud and fishnet downloads on H:. An exact hash and EPD match can supply the legal first cloud PV move at depth 22 or higher. The default minimum knodes is zero. Ambiguous hashes and decisive fishnet disagreements go to local Stockfish. Pass `--keep-local FILE` to reuse completed local searches from the same target file, engine, node budget and thread count.
 
-Use the hybrid output as the builder's engine proposals. On the resulting book, `validate_book.py --nodes 15000000` independently searches every selected cloud move as well as flagged decisions. The JSON audit records the number selected, checked, over the book's loss limit and unstable. The rows file identifies the position and verdict for each move.
+The rebuild reconciles transpositions before each graph that consumes proposals. For unverified incoming scores it prefers a local nomination, then the greatest depth, then the greatest node count. Equal-quality scores use their median. A spread over 30 cp between incoming edges from different parents triggers a fresh 30M-node search from the shared child. The proposal overlay records the positional score separately from each incoming search and its move-specific verified loss.
+
+The feedback loop searches selected cloud moves locally at 15M nodes and feeds those scores back into selection. The publication audit reuses those searches. The JSON audit records the number selected, checked, over the book's loss limit and unstable. A fresh post-selection audit of the frozen finalists is a separate step.
 
 1. Run the intended `build_budget_books.py` recipe with `--max-eval-loss CP --dump-engine-targets targets.parquet`. This exports reachable decisions where the recorded choices fail the loss limit, have unknown evaluations or leave no candidate. It exits before optimizing a book.
 2. Run Stockfish on those positions. For a bounded trial, `--limit N` selects the N highest optimistic reach weights. Inspect the number left outside the search.
@@ -32,6 +34,8 @@ python python/exit_difficulty.py --exits E:/chess/repertoire/_align/L28.parquet 
 At each selected exit, the tool plays through the next three unaided decisions or the absolute horizon, whichever comes first. The risk column estimates the probability that at least one of those moves costs 0.10 of uniform engine utility. It also reports the mean worst loss, sampled decisions, per-exit Monte Carlo uncertainty, and the covered root mass. Compare books using both score and risk, keeping the covered mass in view. Model ratings, tables and engine settings should match the scenario being studied.
 
 ## Compare candidate books
+
+For a wholesale switch, retain the November 4 decision rule: at least +.005 modeled expected score against the same-color canonical 2,000-decision book over four paired seeds, a gain clearly above game-fold bootstrap uncertainty, and a fresh Stockfish check of commonly reached moves. Compare the unrestricted finalists for both colors and the previous engine-nominated Black finalist. Check each canonical seed before reusing previous scores. Freeze the books and decision rule before scoring the reserved month. A narrow repair to the incumbent needs its own paired test and an agreed tolerance for deterioration before seeing the result.
 
 `practical_scenarios.py` runs one color at a time. Use the same seeds for each book in a scenario and keep an incumbent in every comparison. It reports the paired gain and its Monte Carlo standard error alongside the number of prescribed decisions, changes from the incumbent, and optional safety audit fields.
 

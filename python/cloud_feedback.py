@@ -26,12 +26,14 @@ GATE_MARGIN_CP = 15
 EXTRA = {"cloud_origin":pl.Boolean, "parent_cp_white":pl.Int32, "verified_loss_cp":pl.Int32,
          "verification_nodes":pl.Int64, "verification_best":pl.String,
          "verification_free_cp_white":pl.Int32, "verification_unstable":pl.Boolean,
-         "verification_engine_sha256":pl.String}
+         "verification_engine_sha256":pl.String, "transposition_cp_white":pl.Int32}
 SCHEMA = ec.SCHEMA | EXTRA
 
 
 def normalize(frame):
     if "cloud_origin" in frame.columns:
+        if "transposition_cp_white" not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=pl.Int32).alias("transposition_cp_white"))
         return frame.select(SCHEMA.keys())
     return frame.with_columns((pl.col("engine") == CLOUD).alias("cloud_origin"),
         *[pl.lit(None, dtype=t).alias(k) for k, t in EXTRA.items() if k != "cloud_origin"])
@@ -114,8 +116,7 @@ def decisions(book, meta, proposals, colour):
         positions.append((h, epd, board.san(board.parse_san(selected)), moves))
     keys = np.array(sorted(wanted), dtype=np.int64)
     cp = {int(h):int(v) for h,v in zip(keys,lookup_evals(keys,*open_eval_arrays())) if v != MISSING}
-    cp.update(dict(proposals.select("child_hash","child_cp_white").drop_nulls().iter_rows()))
-    cp.update(bc.verified_cp_overrides(proposals))
+    cp.update(bc.proposal_cp(proposals))
     sign = 1 if colour == "white" else -1
     for h, epd, selected, moves in positions:
         old = prior.get(h, {})

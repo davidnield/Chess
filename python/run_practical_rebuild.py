@@ -7,6 +7,7 @@ has a command fingerprint, output checksums, a log and elapsed wall time.
 from __future__ import annotations
 
 import datetime as dt
+import errno
 import hashlib
 import json
 import msvcrt
@@ -16,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 import polars as pl
@@ -24,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "outputs/rebuild-2026-11-06"
 CODE = OUT / "code"
 DEPTH = OUT / "depth-code"
+SELECTION = OUT / "selection-code-v2"
 STATUS_FILE = OUT / "status.json"
 HX = Path("E:/chess/holdout_explorer")
 FROZEN = Path("E:/chess/repertoire/final")
@@ -182,6 +185,39 @@ def setup():
         publish(frozen_record, frozen)
 
 
+def setup_selection():
+    """Keep nomination checkpoints on DEPTH; pin the revised graph, feedback and audit code."""
+    if not SELECTION.exists():
+        changed = ("budget_core.py", "cloud_feedback.py", "transposition_search.py",
+                   "run_practical_rebuild.py", "_test_cloud_feedback.py", "_test_transposition_search.py")
+        with tempfile.TemporaryDirectory(dir=OUT) as temp:
+            candidate = Path(temp) / "selection"
+            candidate.mkdir()
+            for p in DEPTH.glob("*.py"):
+                shutil.copy2(p, candidate / p.name)
+            for name in changed:
+                shutil.copy2(ROOT / "python" / name, candidate / name)
+            publish(candidate / "source.json", {
+                "parent_manifest_sha256": digest(DEPTH / "source.json"),
+                "driver_sha256": digest(__file__),
+                "files": {p.name: digest(p) for p in candidate.glob("*.py")}})
+            candidate.rename(SELECTION)
+    manifest = json.loads((SELECTION / "source.json").read_text())
+    if (manifest["files"] != {p.name: digest(p) for p in SELECTION.glob("*.py")}
+            or manifest["parent_manifest_sha256"] != digest(DEPTH / "source.json")
+            or manifest["driver_sha256"] != digest(__file__)):
+        raise RuntimeError("Selection snapshot or its driver changed")
+    sys.path.insert(0, str(SELECTION))
+
+
+def resolve_proposals(colour, label, raw):
+    resolved = raw.with_name(raw.stem + "-resolved.parquet")
+    stage(f"{label}-transpositions", cmd(SELECTION / "transposition_search.py", "--proposals", raw,
+          "--cache", OUT / colour / "depth-policy/transposition-cache-v2", "--out", resolved),
+          [resolved, Path(str(resolved) + ".meta.json")])
+    return resolved
+
+
 def nominate(colour, work, label, base, proposals, searched, epoch):
     from cloud_feedback import normalize
     round_id = 0
@@ -191,8 +227,9 @@ def nominate(colour, work, label, base, proposals, searched, epoch):
         graph_work = OUT / "black" if first_black else work
         targets = graph_work / f"targets-{round_id:02d}.parquet"
         overlay = ["--engine-candidates", proposals] if proposals else []
+        graph_code = SELECTION if proposals else (CODE if first_black else DEPTH)
         stage("black-targets-01" if first_black else f"{label}-targets-{round_id:02d}",
-              cmd(CODE / "build_budget_books.py" if first_black else "build_budget_books.py",
+              cmd(graph_code / "build_budget_books.py",
                   *base, *overlay, "--out-prefix", graph_work / "graph", "--dump-engine-targets", targets), [targets])
         new = pl.read_parquet(targets).filter(~pl.col("position_hash").is_in(list(searched)))
         if not new.height:
@@ -224,7 +261,7 @@ def nominate(colour, work, label, base, proposals, searched, epoch):
             tmp = combined.with_suffix(".tmp")
             merged.write_parquet(tmp)
             tmp.replace(combined)
-        proposals = combined
+        proposals = resolve_proposals(colour, f"{label}-nom-{round_id:02d}", combined)
         searched.update(new["position_hash"].to_list())
 
 
@@ -234,7 +271,7 @@ def provisional(colour, work, label, base, proposals):
     for kind in ("other", "stop"):
         dump = work / f"{kind}-positions.parquet"
         stage(f"{label}-dump-{kind}",
-              cmd("build_budget_books.py", *base, *nomination, "--out-prefix", work / "dump",
+              cmd(SELECTION / "build_budget_books.py", *base, *nomination, "--out-prefix", work / "dump",
                   f"--dump-{kind}-positions", dump), [dump, Path(str(dump) + ".meta.json")])
         dumps[kind] = dump
     tables = []
@@ -246,7 +283,7 @@ def provisional(colour, work, label, base, proposals):
         if kind == "stop":
             outputs.append(Path(str(table) + ".boundary.parquet"))
         stage(f"{label}-sample-{kind}",
-              cmd(f"sampled_{kind}.py", "--dump", dumps[kind], "--colour", colour,
+              cmd(SELECTION / f"sampled_{kind}.py", "--dump", dumps[kind], "--colour", colour,
                   *args, "--games", 32, "--max-ply", 30, "--sf-procs", 3,
                   "--our-moves", HX / "movers1000_{colour}_f64_2026_08_09",
                   "--opp-moves", HX / "movers1800_{colour}_f64_2026_08_09",
@@ -254,7 +291,7 @@ def provisional(colour, work, label, base, proposals):
         tables += [f"--sampled-{kind}", table]
     book = work / f"practical_{colour}_b2000.parquet"
     stage(f"{label}-build",
-          cmd("build_budget_books.py", *base, *nomination, *tables, "--force",
+          cmd(SELECTION / "build_budget_books.py", *base, *nomination, *tables, "--force",
               "--out-prefix", work / f"practical_{colour}"),
           [book, Path(str(book) + ".meta.json")])
     actual = pl.read_parquet(book).filter((pl.col("side_to_move") == colour) & pl.col("best_move").is_not_null())
@@ -315,7 +352,7 @@ def build(colour):
         book = provisional(colour, work, label, base, proposals)
         corrected = work / "verified-proposals.parquet"
         record = Path(str(corrected) + ".meta.json")
-        stage(f"{label}-verify", cmd("cloud_feedback.py", "--book", book, "--colour", colour,
+        stage(f"{label}-verify", cmd(SELECTION / "cloud_feedback.py", "--book", book, "--colour", colour,
               "--proposals", proposals, "--cache", root / "verification-cache", "--out", corrected),
               [corrected, record])
         info = json.loads(record.read_text())
@@ -323,9 +360,10 @@ def build(colour):
             if digest(proposals) != digest(corrected):
                 raise RuntimeError("Stable feedback round changed proposals")
             publish(root / "selected.json", {"round":epoch, "book":book, "book_sha256":digest(book),
-                    "verified_proposals":proposals, "verified_proposals_sha256":digest(proposals)})
+                    "verified_proposals":proposals, "verified_proposals_sha256":digest(proposals),
+                    "selection_manifest_sha256":digest(SELECTION / "source.json")})
             return {"CANON":incumbent(colour), "NEW":book, "LEARNED":incumbent(colour, True)}
-        proposals = corrected
+        proposals = resolve_proposals(colour, f"{label}-feedback", corrected)
         searched.update(pl.read_parquet(corrected, columns=["position_hash"])["position_hash"].to_list())
         epoch += 1
 
@@ -336,7 +374,7 @@ def audit(colour, books):
     for label, book in books.items():
         prefix = OUT / colour / f"audit-{label}"
         stage(f"{colour}-audit-{label}",
-              cmd("validate_book.py", "--book", book, "--colour", colour,
+              cmd(SELECTION / "validate_book.py", "--book", book, "--colour", colour,
                   "--nodes", 15000000, "--best-defence", "--defence-nodes", 1000000,
                   "--incumbent", incumbent(colour), "--out", prefix),
               [Path(str(prefix) + ".json"), Path(str(prefix) + ".rows.parquet")])
@@ -438,7 +476,14 @@ def main():
     (OUT / "logs").mkdir(exist_ok=True)
     with (OUT / "run.lock").open("a+b") as lock:
         lock.seek(0)
-        msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        while True:
+            try:
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError as exc:
+                if "--wait-for-run-lock" not in sys.argv or exc.errno != errno.EACCES:
+                    raise
+                time.sleep(10)
         try:
             if "--wait-for-tests" in sys.argv:
                 status(state="waiting-for-tests", log=OUT / "logs/tests.log")
@@ -451,6 +496,7 @@ def main():
                         raise RuntimeError("Full suite has not finished after two hours")
                     time.sleep(5)
             setup()
+            setup_selection()
             import practical_scenarios as ps
             books, audits = {}, {}
             # Publish the first baseline comparison before spending time on other cohorts.

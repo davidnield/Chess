@@ -700,44 +700,66 @@ def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
 
 
 def verified_cp_overrides(frame):
-    """One verified White-view score per position, also used by the weak-stop model."""
+    """Local positional overrides. Keep each edge's verified loss separate."""
     import polars as pl
+    direct = {}
+    if "transposition_cp_white" in frame.columns:
+        rows = frame.select("child_hash", "transposition_cp_white").drop_nulls().unique()
+        direct = dict(rows.iter_rows())
+        if len(direct) != rows.height:
+            raise ValueError("Conflicting direct searches for a transposition")
     if "parent_cp_white" not in frame.columns:
-        return {}
+        return direct
     verified = frame.filter(pl.col("parent_cp_white").is_not_null())
     parents = verified.select("position_hash", "parent_cp_white").unique()
     if parents["position_hash"].n_unique() != parents.height:
         raise ValueError("Conflicting reference scores for a single verified root")
-    child = verified.group_by("child_hash").agg(pl.col("child_cp_white").median().round().cast(pl.Int32))
-    return dict(child.iter_rows()) | dict(parents.iter_rows())
+    child = verified.group_by("child_hash").agg(pl.col("child_cp_white").cast(pl.Int32).median().round().cast(pl.Int32))
+    return dict(child.drop_nulls().iter_rows()) | direct | dict(parents.iter_rows())
+
+
+def proposal_cp(frame):
+    """Resolve incoming PV scores once per position, independent of parquet row order."""
+    import polars as pl
+    from hybrid_candidates import CLOUD
+    # Old nomination files may have only the four graph columns. Equal-quality
+    # estimates use their median; a missing field ranks below a known one.
+    best = frame.filter(pl.col("child_cp_white").is_not_null())
+    if "engine" in best.columns:
+        best = best.with_columns((pl.col("engine") != CLOUD).fill_null(False).alias("local"))
+    for key in ("local", "depth", "nodes"):
+        if key in best.columns:
+            quality = pl.col(key).cast(pl.Int64).fill_null(-1)
+            best = best.filter(quality == quality.max().over("child_hash"))
+    values = best.group_by("child_hash").agg(pl.col("child_cp_white").cast(pl.Int32).median().round().cast(pl.Int32))
+    return dict(values.iter_rows()) | verified_cp_overrides(frame)
 
 
 def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflict_cp: float = 25.0):
-    """engine_candidates.py's table -> (engine_moves, conflicts). A proposal's child takes the
-    proposal's own fresh eval: it was searched on purpose, deeper than the cached one. Where a
-    cached eval exists and differs by more than conflict_cp (white view) it is replaced and
-    recorded, as a conflict the caller reports, never silently kept or dropped."""
+    """Load candidate edges and overlay the resolved White-view position scores.
+
+    Report each child whose new score differs materially from the original cache.
+    """
     import polars as pl
     from stage3_backwards_induction import cp_to_expected_score
     moves: dict[int, list[tuple[str, int]]] = {}
     conflicts = []
-    cols = ["position_hash", "move_san", "child_hash", "child_cp_white"]
     frame = pl.read_parquet(path)
-    overrides = verified_cp_overrides(frame)
-    eval_ws.update({h: cp_to_expected_score(cp) for h, cp in overrides.items()})
-    for h, san, ch, cp in frame.select(cols).iter_rows():
-        cp = overrides.get(ch, cp)
+    resolved = proposal_cp(frame)
+    edges = frame.select("position_hash", "move_san", "child_hash").unique().sort(
+        "position_hash", pl.col("move_san").str.to_lowercase(), "move_san", "child_hash")
+    reported = set()
+    for h, san, ch in edges.iter_rows():
         moves.setdefault(h, []).append((san, ch))
-        if cp is None:
-            continue
-        fresh = cp_to_expected_score(int(cp))
         old = eval_ws.get(ch)
-        if old is not None:
+        cp = resolved.get(ch)
+        if old is not None and cp is not None and ch not in reported:
             old_cp = ws_to_cp(old, True)
             if abs(old_cp - cp) > conflict_cp:
                 conflicts.append({"position_hash": h, "move": san, "child_hash": ch,
-                                  "cached_cp_white": old_cp, "fresh_cp_white": int(cp)})
-        eval_ws[ch] = fresh
+                                  "cached_cp_white": old_cp, "fresh_cp_white": cp})
+                reported.add(ch)
+    eval_ws.update({h: cp_to_expected_score(cp) for h, cp in resolved.items()})
     return moves, conflicts
 
 

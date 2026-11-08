@@ -69,7 +69,11 @@ failing.
 
 For practical book comparisons see [practical repertoire experiments](docs/practical-repertoire.md).
 Engine nominations are zero-observation edges on our turns. The collector may follow them to real
-pool replies. Recall is an independent probability on each visit, and a failed recall follows the
+pool replies. In the hybrid rebuild, nomination stays on its original source snapshot. Selection
+and verification use a separate snapshot and one score per transposed position. Before the graph
+consumes a cumulative or corrected overlay, `transposition_search.py` checks material disagreements
+from the shared child. Preserve the original incoming scores and edge-specific verification losses.
+Recall is an independent probability on each visit, and a failed recall follows the
 human move distribution. First-exit partitions record the first unaided decision, including a
 missed recall. Keep comparison populations explicit and keep the blind deck's key separate from
 the participant's materials.
