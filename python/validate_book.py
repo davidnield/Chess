@@ -81,6 +81,7 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
     cand, restored, _rej, _eng = bc.final_candidates(
         h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
         max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
+        **{k: meta[k] for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin") if k in meta},
         engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded)
     pairs = [(e["move_san"], e.get("child_hash")) for e, _ in cand]
     if restored is not None:

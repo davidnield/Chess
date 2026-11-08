@@ -21,6 +21,67 @@ python python/engine_candidates.py --targets targets.parquet --colour black --no
 
 Proposal caches are tied to the input file, color, engine binary, search budget and thread count. Supply a new cache path for different settings. In the bounded Queen's Gambit example the original pool contribution was `7...Bc5`, and Stockfish nominated `7...Nh6` at three million nodes. Nominating a move lets the optimizer compare it with stopping and spending the card elsewhere.
 
+## November 8 nomination and tuning experiment
+
+Resume with the project interpreter from this worktree:
+
+```powershell
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -u python/run_nomination_comparison.py
+```
+
+The run is under `outputs/rebuild-2026-11-06/nomination-trial`. The original Black
+stage receipts and sampler checkpoints remain under its parent directory. The coordinator
+checks the Windows run locks, reuses completed stages, and resumes broad Black after a
+shutdown. Start one coordinator. Its queue takes precedence over the old two-color
+driver. Read `design.json`, `queue.json`, the current stage's status and log, and
+`comparison-black/decision.json` for the design, schedule and decision.
+
+* Both Black arms use the same frozen solver, 2,000 decisions, loss limit, mover populations,
+  ply-30 horizon, stop/other sampling and cloud feedback. If the DP skips 2,000, use its
+  existing polish on the affected arm and check the resulting count.
+* The targeted arm starts from the pre-nomination graph, requests every eligible cloud PV
+  at discovered failure targets, then builds its own provisional book. It requests a local
+  nomination for uncovered booked failures and missing/borderline evaluations (within 15 cp
+  of the loss limit). The cumulative off-book allowance is 128 uncovered failure targets with
+  optimistic reach at least .001 that can arise after a different recorded book-side move and
+  an opponent reply. Requests are frozen by hash and EPD before replay. Only raw 10M local
+  results for those requests may enter from broad Black. Missing requests are searched.
+  Selected cloud moves get the ordinary independent feedback check. Calibration and subsequent
+  feedback never borrow broad's book or verified overlays.
+* Score both frozen arms, canonical, FREE and the historical 2,001-decision ENGINE reference
+  together on four common seeds. Separately score 16 shared game-fold replicates at seed 1.
+  Report the four-seed mean difference, a one-sided three-degree-of-freedom rollout allowance,
+  and empirical fold perturbations centered on that seed. The resulting bounds are a development
+  heuristic. Sixteen replicates give limited precision at the tails. Compare nominal engine work,
+  actual stage times and estimated cold hours at 1,428 local nominations/hour. The cloud part
+  write span approximates disk lookup time; search receipts after restarts omit earlier uptime.
+* Freeze a fresh safety audit at 30M nodes (60M retry for instability) of commonly reached
+  changes, flagged/borderline decisions and 32 controls. Audit both moves on the same board.
+  Reach here is expected visits before book exit under the recorded opponent pool, over 30 plies.
+  Common means at least .001 expected visits/game. Record severity and reach for each check.
+* Use targeted as the development default if its lower bound is at least -.002 expected score,
+  cold time improves, and the audit finds no additional common risk or unresolved common
+  instability. A clear score loss or additional confirmed common failure favors broad. An
+  inconclusive result permits a provisional targeted White and keeps its exhaustive queue
+  deferred. Changing the canonical books still requires the separate promotion and holdout tests.
+
+For quick parameter changes use `python/screen_repertoires.py --one black relative-tight`
+(also accepts `white`). The one-factor screen varies the absolute and relative score gates
+independently from .10 to .06 and .14, with the source repertoire held fixed for each color.
+It uses the inexpensive weak stop model, followed by two paired seeds and one rollout for
+ranking. The best recipe and baseline get freshly calibrated stop/other tables at the
+shortlisted Maia weights and four paired seeds. The human evaluator stays fixed at k=100.
+Elapsed time for a complete grid is separate from a single warm screening build.
+
+Compare 2000+ at floors 5, 20 and 50 and compare 1800+ and 2000+ at floor 50. The two
+rating pools were constructed by different historical producers, so interpret the latter
+as an operational pool comparison. `rebucket_pool.py` moves discarded edges and their
+covered expected scores into the aux and verifies per-parent count conservation.
+`tune_maia_shrinkage.py` uses game folds 0–47 for counts (scaled to the full table size)
+and 48–63 for observed moves at sampled canonical positions, using only August–September.
+It saves move-weighted and position-weighted log loss plus actual mass removed by the
+production probability cutoff. October and November are reserved.
+
 ## Recall and difficulty
 
 `convertibility_eval.py --recall 0.85` remembers a prescribed move with probability 0.85 on each visit. On a miss, the player uses the usual weak-player policy and may find the prescribed move anyway. The result's book-move count measures remembered decisions. The default is perfect recall. The exact walk splits probability at covered nodes. Sampled walks use a separate random draw for remembering. Later arrivals can re-enter the book.

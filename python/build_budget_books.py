@@ -101,13 +101,14 @@ class GateAdmit:
     the eval_ws the graph is built from afterwards."""
 
     def __init__(self, rep_moves, our_white: bool, slice_prior: float,
-                 gates: bool = True, max_eval_loss: float | None = None):
+                 gates: bool = True, max_eval_loss: float | None = None, **gate_settings):
         from eval_arrays import MISSING, lookup_evals, open_eval_arrays
         self._lookup, self._missing = lookup_evals, MISSING
         self._mm = open_eval_arrays()
         self.rep_moves, self.our_white = rep_moves, our_white
         self.slice_prior, self.gates = slice_prior, gates
         self.max_eval_loss = max_eval_loss
+        self.gate_settings = gate_settings
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
         self.excluded = {}
@@ -127,7 +128,8 @@ class GateAdmit:
             rows = [r for r in rows if r["move_san"].rstrip("+#") not in self.excluded[ph]]
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
-            require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss)
+            require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss,
+            **self.gate_settings)
             if e.get("child_hash") is not None}
 
 
@@ -605,6 +607,12 @@ def main() -> int:
     ap.add_argument("--stick-margin", type=float, default=None,
                     help="Expected-score advantage a new move needs to replace the incumbent's "
                          "(default 0.01 with --incumbent; 0 = no stickiness, churn report only).")
+    ap.add_argument("--robustness-floor", type=float, default=bc.ROBUSTNESS_FLOOR,
+                    help="Absolute gate tolerance in expected-score units")
+    ap.add_argument("--gate-rel-floor", type=float, default=bc.GATE_REL_FLOOR,
+                    help="Relative gate tolerance in expected-score units")
+    ap.add_argument("--gate-rel-own-margin", type=float, default=bc.GATE_REL_OWN_MARGIN,
+                    help="Discount on the position's own eval for the relative gate")
     ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
                     help="Soundness gate: at our nodes book only moves whose engine eval "
                          "is within CP centipawns of the best play there (the best "
@@ -627,6 +635,11 @@ def main() -> int:
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
+    gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
+    if any(not 0 <= v <= 1 for v in gate_settings.values()):
+        ap.error("gate tolerances must be between 0 and 1 expected-score units")
+    gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=not a.no_gates,
+                       gated_reach=a.gated_reach, strict_source=a.strict_source)
     if a.dump_engine_targets and a.max_eval_loss is None:
         ap.error("--dump-engine-targets requires --max-eval-loss")
     if a.stick_margin is not None and not a.incumbent:
@@ -704,7 +717,7 @@ def main() -> int:
         src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
                                  _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
-        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss)
+        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss, **gate_settings)
     allowed = None
     if a.allowed_moves:
         allowed = load_allowed_moves(
@@ -824,7 +837,7 @@ def main() -> int:
                        require_eval=not a.no_gates, gates=not a.no_gates,
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach,
-                       max_eval_loss=a.max_eval_loss,
+                       max_eval_loss=a.max_eval_loss, **gate_settings,
                        strict_source=a.strict_source,
                        crack_at_parents=a.crack_at_parents,
                        engine_moves=engine_moves, excluded=excluded,
@@ -850,6 +863,7 @@ def main() -> int:
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
         other_key["engine_candidates_sha256"] = proposal_sha
+        other_key["gate_policy"] = gate_recipe
         if not g.other:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
@@ -919,6 +933,7 @@ def main() -> int:
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=a.weak_min_share, stop_model=a.stop_model)
             dump_key["engine_candidates_sha256"] = proposal_sha
+            dump_key["gate_policy"] = gate_recipe
         if a.dump_stop_positions:
             dump = info.with_columns(
                 pl.struct("side", "hash").map_elements(
@@ -1248,7 +1263,7 @@ def main() -> int:
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
-            "max_eval_loss": a.max_eval_loss,
+            "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
             # means both off (the old defaults)

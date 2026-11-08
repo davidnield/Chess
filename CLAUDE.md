@@ -78,6 +78,12 @@ human move distribution. First-exit partitions record the first unaided decision
 missed recall. Keep comparison populations explicit and keep the blind deck's key separate from
 the participant's materials.
 
+Use `python/run_nomination_comparison.py` to resume the broad-versus-targeted experiment.
+It takes over the frozen Black checkpoints and controls White's search method. Targeted requests
+are persisted before reading raw local nominations. Keep its calibration, verification and
+stage records separate from the broad arm. The development tuning commands and decision
+criteria are in `docs/practical-repertoire.md`.
+
 All commands use `.venv/Scripts/python.exe` (uv-managed, Python 3.11) from
 `C:/Users/David/Documents/Chess`. Every pipeline script carries an authoritative header docstring
 with its exact CLI — **read it before running; don't trust remembered flags.**
