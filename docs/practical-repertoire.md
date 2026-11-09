@@ -75,6 +75,88 @@ Outputs are under `outputs/rebuild-2026-11-06/expanded-opponent-comparison`.
 `paired-vs-BASE.json` for the comparison with the broad book and
 `paired-vs-EXP0.json` for the incremental effect of K=30.
 
+### November 9 root-based search pilot
+
+The pilot starts from the initial board and takes two sets of six first moves by
+historical frequency rank. The main set uses ranks 1, 2, 3, 5, 7 and 10. The
+second uses 4, 6, 8, 9, 11 and 13. It follows popular and lower-ranked routes
+under K=0 and K=30. The canonical and provisional books play no role in
+eligibility. An audit starts at plies 1, 5, 9 and 11 wherever the sampled route
+has a Black candidate. Each audited position considers all legal Black moves
+with cached evaluations passing the builder's absolute, relative and 30 cp gates.
+
+Each subtree reserves one study position for the first Black move and can
+prepare zero, one or three further Black answers after White replies. The
+pilot conditions on a White move being played. If there are no historical
+replies, both arms use the parent evaluation. Once preparation ends, the
+model takes one empirical weak Black move and uses the cached Lichess-curve
+evaluation. With fewer than 20 weak games it uses the position's own score,
+with 0.5 as the fallback for a missing evaluation. These local budgets and
+leaf values define the reference used for this pilot.
+
+The five-game pool supplies named reply counts and the remaining historical
+mass. Maia supplies the full legal distribution at every reached White decision
+in the pilot. The selective solver computes the unaided Black score for each
+reply. Until it evaluates a prepared answer, its possible improvement is at
+most one minus the unaided score. With B positions available including the
+first Black move, only B−1 of these gains can enter the candidate's upper bound.
+The solver also bounds what it can gain or lose from the remaining unnamed
+historical mass. It refines competitive candidates across both K values and all
+budgets until the upper bound on the optimum exceeds the selected policy's
+lower bound by at most 0.001 expected points per game. The archive and deeper
+response queries are shared across those comparisons.
+
+The first implementation used a wider bound and achieved 1.58× end-to-end on
+the main set. A budget-aware version reduced the response searches but read
+the archive for all 81 unresolved parents and achieved 1.16×. The final version
+orders work by potential improvement per estimated cost. It prices one archive
+lookup at twenty response lookups for scheduling. This affects the order of
+work, while the stopping condition retains the same bound. The second opening
+set was first scored after this scheduling rule was fixed.
+
+| Final run | Subtrees | K/budget cases | Same first move | Same whole local book | Selective / full including shared setup | Speedup |
+|---|---:|---:|---:|---:|---:|---:|
+| Main set | 22 | 132 | 132 | 132 | 18.48 s / 35.34 s | 1.91× |
+| Second set | 20 | 120 | 120 | 116 | 19.34 s / 49.14 s | 2.54× |
+
+The complete reference recovered every unresolved historical reply distribution
+and evaluated every positive-probability response in the bounded trees. It ran
+second on the main set and first on the second set. Both methods saw identical
+common inputs per set. The main set reused its cached Maia predictions from
+development. Of the 169 White positions on the second set, 168 needed fresh
+predictions. These are single-machine elapsed times with other chess work active.
+
+Summing both sets gave 37.82 s selective versus 84.48 s exhaustive (2.23×).
+A replay with solve order reversed on each set and all Maia predictions cached
+reproduced every per-case decision and score. It took 36.08 s versus 65.94 s
+(1.83×). The 2× end-to-end target was met on the first combined run only.
+
+The selective runs performed 52 raw parent lookups and 1,276 deeper response
+evaluations in total. Full expansion performed 148 and 5,820 respectively.
+All 165 cases with a competing Black move and a lead exceeding 0.001 agreed on
+the first move. The largest loss from a different follow-up was 0.000111 points
+per game, or 0.0111 percentage points, measured against full expansion at that
+subtree. For example, after `1.c4 Nf6 2.Nc3 e5 3.g3`, both methods chose
+`3...d5` and prepared for `4.cxd5` and `4.Bg2`. The exhaustive book also used
+its last available position on `4.e3 d4`. Across the 42 distinct roots, 30 were
+absent from both earlier books' booked Black decisions.
+
+The next integration test should use a common study budget across openings,
+charge a transposed position once, and apply the production ply-30 sampled
+stop model. The pilot's small-tree error bound and timings apply to the local
+objective above.
+
+The two run directories are under `outputs/rebuild-2026-11-06/root-search-pilot`.
+Each has `design.json`, `result.json` and a per-case `cases.json`. To reproduce
+from this worktree, use fresh output directories and the project's interpreter.
+
+```powershell
+$pilot = 'outputs/rebuild-2026-11-06/root-search-pilot'
+$python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
+& $python -X utf8 python/experiments/root_search_pilot.py --out "$pilot/replay-main" --policy-cache $pilot --panel main
+& $python -X utf8 python/experiments/root_search_pilot.py --out "$pilot/replay-second" --policy-cache $pilot --panel second --full-first
+```
+
 ## November 8 nomination and tuning experiment
 
 Resume with the project interpreter from this worktree:
