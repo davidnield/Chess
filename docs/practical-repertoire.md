@@ -21,6 +21,29 @@ python python/engine_candidates.py --targets targets.parquet --colour black --no
 
 Proposal caches are tied to the input file, color, engine binary, search budget and thread count. Supply a new cache path for different settings. In the bounded Queen's Gambit example the original pool contribution was `7...Bc5`, and Stockfish nominated `7...Nh6` at three million nodes. Nominating a move lets the optimizer compare it with stopping and spending the card elsewhere.
 
+## November 9 Black opponent-policy challenger
+
+After a reboot, start the November 8 coordinator below and run this second command
+from the same worktree in a separate terminal.
+
+```powershell
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -u python/experiments/run_opponent_prior_challenger.py
+```
+
+The challenger waits for the broad Black selection and reuses its verified nominations.
+It applies 30 Maia pseudogames at 15,235 White-to-move positions drawn from the
+canonical and provisional books' decisions and alternatives. At these positions,
+all historical replies have individual successors. The rest of the graph uses
+the original empirical policy. Both graph expansion and move selection use
+the blended probabilities. True game counts still determine empirical outcome
+estimates. The experiment tests naming rare replies and adding the prior together.
+
+Under `outputs/rebuild-2026-11-06`, the `opponent-prior-pilot` directory holds
+`design.json`, `results.json`, `matched-results.json`, and the reusable policy cache.
+The separate `opponent-prior-challenger/status.json` records the active stage or
+dependency. Its verified book, per-scenario comparisons against both references,
+and stage receipts stay in that directory. All seven comparisons run to ply 30.
+
 ## November 8 nomination and tuning experiment
 
 Resume with the project interpreter from this worktree:

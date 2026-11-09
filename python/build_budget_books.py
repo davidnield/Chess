@@ -227,7 +227,7 @@ def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit=None, engine_moves=None) -> pl.DataFrame:
+                           min_games: int, admit=None, engine_moves=None, reply_overlay=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -289,6 +289,8 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         # depth is set by whichever parent first gives it its best reach, and depth
         # drives the max_ply cut and the turn parity -- so two builds of one input
         # differed by a few positions. Rows also reach build_graph in this order.
+        if reply_overlay is not None:
+            df = reply_overlay.attach(df)
         df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = {h for h in frontier if h not in fetched}
         if df.height and fresh:
@@ -325,7 +327,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                             continue
                         cr = r
                     else:
-                        share = row["total"] / tot if tot else 0.0
+                        share = bc.reply_share(row,tot)
                         if share < share_floor:
                             continue
                         cr = r * share
@@ -397,6 +399,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rep", required=True, help="Unconstrained source rep parquet.")
     ap.add_argument("--stats", required=True)
+    ap.add_argument("--opponent-prior", help="Frozen named replies and Maia probabilities at opponent positions")
+    ap.add_argument("--opponent-pseudogames", type=float, default=0.0)
     ap.add_argument("--perspective", choices=["white", "black"], required=True)
     ap.add_argument("--out-prefix", required=True,
                     help="Books land at <prefix>_b<N>.parquet (+ .meta.json).")
@@ -755,8 +759,15 @@ def main() -> int:
             gate.excluded = excluded
             gate.eval_ws.update(fresh)
             gate._seen.update(fresh)
+    reply_overlay = None
+    if a.opponent_prior:
+        from opponent_prior import ReplyOverlay
+        reply_overlay = ReplyOverlay(a.opponent_prior,a.opponent_pseudogames,stats,aux_path,
+                                     a.perspective,a.min_games)
+    elif a.opponent_pseudogames != 0:
+        ap.error("--opponent-pseudogames requires --opponent-prior")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves)
+                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves, reply_overlay)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -809,9 +820,10 @@ def main() -> int:
     # Only the fields build_graph reads, and the EPD on a parent's first row only:
     # a full row dict per edge was most of the peak at a few million edges.
     by_parent: dict[int, list[dict]] = {}
-    for ph, ms, ch, tot, ws, epd in edf.select(
-            ["parent_hash", "move_san", "child_hash", "total", "white_score_avg",
-             "parent_epd"]).iter_rows():
+    cols = ["parent_hash","move_san","child_hash","total","white_score_avg","parent_epd"]
+    if reply_overlay is not None:
+        cols.extend(["reply_mass","reach_share"])
+    for ph, ms, ch, tot, ws, epd, *weights in edf.select(cols).iter_rows():
         lst = by_parent.get(ph)
         if lst is None:
             by_parent[ph] = [{"move_san": ms, "child_hash": ch, "total": tot,
@@ -819,6 +831,8 @@ def main() -> int:
         else:
             lst.append({"move_san": ms, "child_hash": ch, "total": tot,
                         "white_score_avg": ws})
+        if weights and weights[0] is not None:
+            by_parent[ph][-1].update(reply_mass=weights[0], reach_share=weights[1])
     del edf
 
     engine_moves, engine_conflicts = None, []
@@ -864,6 +878,8 @@ def main() -> int:
                                other_cov_blend=other_cov_blend)
         other_key["engine_candidates_sha256"] = proposal_sha
         other_key["gate_policy"] = gate_recipe
+        if reply_overlay is not None:
+            other_key["opponent_prior"] = reply_overlay.recipe
         if not g.other:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
@@ -934,6 +950,8 @@ def main() -> int:
                                      weak_min_share=a.weak_min_share, stop_model=a.stop_model)
             dump_key["engine_candidates_sha256"] = proposal_sha
             dump_key["gate_policy"] = gate_recipe
+            if reply_overlay is not None:
+                dump_key["opponent_prior"] = reply_overlay.recipe
         if a.dump_stop_positions:
             dump = info.with_columns(
                 pl.struct("side", "hash").map_elements(
@@ -1265,6 +1283,8 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
+            **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
+               if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
             # means both off (the old defaults)
             "strict_source": a.strict_source,

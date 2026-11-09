@@ -415,12 +415,14 @@ def publish_verified_book(colour, book, audit_prefix, audit_result):
             "audit":str(audit_prefix)+".json", "selected_and_verified_cloud_moves":rows.height})
 
 
-def compare(colour, books, audits, name, scenario):
+def compare(colour, books, audits, name, scenario, *, private_tables=None):
     import practical_scenarios as ps
     from exit_difficulty import read_exits
     paths = []
     for player, side in [(scenario.ours, colour), (scenario.theirs, "black" if colour == "white" else "white")]:
         path, command = ps.cohort(HX, player[0], scenario.events, side)
+        if private_tables is not None and not ps.ready(path, player[0], side, scenario.events, 30):
+            path, command = ps.cohort(private_tables, player[0], scenario.events, side)
         if not ps.ready(path, player[0], side, scenario.events, 30):
             # One extractor at a time. Same partition contract as existing baseline tables.
             command += ["--workers", "4", "--mem", "16GB", "--tmp-dir", str(OUT / "duckdb-temp")]

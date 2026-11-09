@@ -520,6 +520,13 @@ def _bonus(san: str, im: str | None, margin: float) -> float:
     return margin if im is not None and san.rstrip("+#") == im else 0.0
 
 
+def reply_share(edge, recorded_total):
+    share = edge.get("reach_share")
+    if share is not None:
+        return share
+    return edge["total"] / recorded_total if recorded_total else 0.0
+
+
 def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      root_our: bool, eps: float, max_ply: int,
                      share_floor: float,
@@ -562,7 +569,7 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                     continue
                 cr = r
             else:
-                share = e["total"] / tot if tot else 0.0
+                share = reply_share(e,tot)
                 if share < share_floor:
                     continue
                 cr = r * share
@@ -816,7 +823,7 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
                         continue
                     cr = r
                 else:
-                    share = e["total"] / tot if tot else 0.0
+                    share = reply_share(e,tot)
                     if share < share_floor:
                         continue
                     cr = r * share
@@ -915,6 +922,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
         # consults it at our-turn nodes.
         admitted = {}
         for h, es in edges_by_parent.items():
+            if es and "reply_mass" in es[0]:
+                continue  # the overlay contains only opponent-to-move positions
             if strict_source or engine_moves:
                 # reach flows only through what the node can finally book
                 cs = final_candidates(
@@ -1022,7 +1031,15 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 node.cands.append((src, ch, in_sub, lv))
             g.our[h] = node
         else:
-            tot = sum(e["total"] for e in es)
+            named = "reply_mass" in es[0]
+            tot = sum(e.get("reply_mass",e["total"]) for e in es)
+            if named:
+                metrics = g.meta.setdefault("named_opponent_replies", {
+                    "positions":0, "additional_edges":0, "additional_edges_without_cached_eval":0})
+                metrics["positions"] += 1
+                metrics["additional_edges"] += sum(e["total"]==0 for e in es)
+                metrics["additional_edges_without_cached_eval"] += sum(
+                    e["total"]==0 and e.get("child_hash") not in eval_ws for e in es)
             # The OTHER bucket used to enter raw here while Stage 3 blended
             # other_eval_mean into it at a coverage-weighted eval weight -- the
             # second half of the objective drift. aux_opp_mix owns all three
@@ -1036,6 +1053,10 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             if aux_rows:
                 (t_tot, t_sum, _crack, o_tot, o_sum, o_eval, o_cov,
                  hr_tot, hr_sum) = aux_row_buckets(aux_rows.get(h), our_white)
+                if named:
+                    # Every observed rare reply is now explicit. Terminal and
+                    # horizon outcomes still retain their original weight.
+                    o_tot, o_sum, o_eval, o_cov = 0.0, 0.0, float("nan"), 0.0
                 w_num, aux_den = aux_opp_mix(
                     t_tot, t_sum, o_tot, o_sum, o_eval, o_cov,
                     hr_tot, hr_sum, eval_ws.get(h),
@@ -1058,8 +1079,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             node = OppNode(const_base=(aux_num / denom) if denom else 0.0)
             for e in es:
                 ch = e.get("child_hash")
-                p = (e["total"] / denom) if denom else 0.0
-                share = (e["total"] / tot) if tot else 0.0
+                p = (e.get("reply_mass",e["total"]) / denom) if denom else 0.0
+                share = reply_share(e,tot)
                 lv = leaf_edge_value(e["white_score_avg"], e["total"],
                                      eval_ws.get(ch) if ch is not None else None,
                                      slice_prior, our_white,
