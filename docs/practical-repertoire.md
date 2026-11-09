@@ -255,6 +255,126 @@ $python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 & $python -X utf8 python/experiments/shared_budget_slice.py --policy-cache "$base/root-search-pilot" --out "$base/shared-budget-slice/deeper-replay" --anchor-ply 9 --roots 96 --budget 256
 ```
 
+### November 9 multi-depth test with 2,000 Black positions
+
+The four decision plies are 7, 9, 11 and 13. A root-led prefix plays the
+engine-preferred admissible Black move until ply 7, with historical White
+replies at K=0 and 30. The 320 starting boards account for 92.89% of arrivals
+under the K=30 prefix. Scores are conditional on entering the panel and a reply
+being played. The same five-game pool, legal Maia distribution, engine gates
+and ply-30 continuation model serve both search methods.
+
+At each paid board the comparison admits the two lowest White-perspective
+cached evaluations passing the Black gates. The four frontier widths are
+320, 1,600, 3,600 and 6,500. A coarse reach ranking sets initial membership.
+Then the graph includes every encounter with any eligible card during the
+four decision plies. This closure gives 320, 1,600, 3,605 and 6,540 Black
+decision occurrences, or 12,014 distinct boards. All earlier and later visits
+to a bought board have to play the same move. Replies outside the panel go
+into the production continuation model at their actual ply. The fixed prefix
+is outside the study budget.
+
+The selective arm requests raw reply counts in batches. It accounts for
+unresolved historical mass at the first unresolved step on a route. For
+each possible child, reach takes the maximum over competing Black choices
+at each parent and sums across parents. The remaining error allowances cover
+very low-probability unaided exits and the largest 2,000 possible gains left
+unexamined on the final decision ply. These bounds apply to the common finite
+panel. They measure input approximation separately from the budget allocator.
+
+The full arm resolves every residual distribution, keeps all reply mass and
+evaluates every eligible final decision on this panel. Both arms price the
+shared study budget with backwards induction, enforce one move per board,
+and improve feasible books using realized arrivals. The global allocation
+is heuristic. A separate linear relaxation of the full graph gives an upper
+bound on the best possible book. Replay checks use both direct board-level
+distributions and independent forward and backward passes on the full graph.
+
+The SQLite cache keeps historical counts independent of K, all admitted
+Black moves before the experiment's two-move cutoff, and continuation values
+keyed by board and absolute ply. Each kind has a source and recipe identity.
+The stop keys include the Black fit, sampled inputs, engine arrays, verified
+overrides and evaluation code. Each record checks its EPD. Empty lookups and
+unsupported-stop flags are cached. The compressed panel includes its prefix
+weights and Maia distributions. The existing Maia policy cache is separate.
+
+Both methods produced 2,000 reachable cards for each K. At K=30 the selective
+book pays for 215, 429, 558 and 798 moves at the four successive decision
+plies. It uses 178 cards from multiple active incoming routes. The panel
+contains cross-ply aliases, although no card in this particular selective
+book was reached twice at different plies.
+
+| Historical reply model | Identical position and move | Selective on full data | Full-input book on full data |
+|---|---:|---:|---:|
+| K=0 | 1,997 / 2,000 | 0.391561309 | 0.391560292 |
+| K=30 | 1,993 / 2,000 | 0.391684821 | 0.391690762 |
+
+The largest difference between the feasible books was 0.0005942 percentage
+points. The full allocator's continuous relaxation still leaves up to 0.277
+percentage points between the K=30 selective book and the true finite-panel
+optimum. At K=0 the selective book narrowly outscored the full-input book,
+as can happen with heuristic allocation.
+
+Common discovery took 266.62 seconds with an empty shared-input database and an
+existing Maia cache. Each method started from its own copy of those discovered
+inputs. The selective arm then took 1,383.64 seconds and the full arm 1,525.17
+seconds, for both K values together. Selective search requested 6,813 raw reply
+lookups versus 8,323 for full expansion and computed 160,809 distinct
+continuation inputs versus 303,706. It still examined 6,490 of the 6,540
+final-ply boards. Timings for producing books exclude the independent audits.
+
+The reverse-order warm repeat read the shared cache with zero misses and
+reproduced every card. It took 23.93 seconds for selective search and 20.08
+seconds for the full reference. Input preparation after startup took 4.07
+and 6.23 seconds, respectively. The separate full-graph LP audits took
+21.02 seconds on the first run and 25.26 seconds on the repeat. The
+board-level replay conserved exit probability and reproduced the matrix
+scores within 1e-8. At K=30 about 2.48% of the exit mass in each book
+needed the population-prior fallback.
+
+The primary shared database is `multidepth-b2000/inputs.sqlite` (73.4 MiB)
+under the November 6 output root. The panel adds 14.0 MiB. The shared input
+database was empty for initial discovery, and the pre-existing Maia cache
+supplied all but two policies. A separate copy of the shared starting inputs
+isolated the first selective search from the first full search. The recorded
+books, timings, counters, linear bounds, and exit audits are in
+`multidepth-b2000/benchmark`.
+
+Changing the White reply prior from K=0 to K=30 changed 205 cards in the
+full-input Black book. To identify the next parameters worth screening,
+`multidepth_gate_screen.py` regenerated every legal Black candidate on the
+12,014 boards from the saved panel and applied seven gate configurations
+in 101.56 seconds. Each row varies one threshold from the Black baseline
+(absolute .10, relative .10, maximum loss 30 cp).
+
+| Change | Boards with any change in eligible moves | Boards with a change among the two options used by this experiment |
+|---|---:|---:|
+| Absolute .06 | 9 | 8 |
+| Absolute .14 | 2 | 2 |
+| Relative .06 | 6 | 6 |
+| Relative .14 | 0 | 0 |
+| Maximum loss 15 cp | 7,232 | 2,502 |
+| Maximum loss 60 cp | 9,146 | 1,672 |
+
+The panel was discovered under the existing recipe. For tuning, build a common
+set of candidates and opening panels from the union of the settings under
+consideration. Prioritize the centipawn cap and compare 1800+ and 2000+ as
+training pools for each color using the same raw archive, date range and
+move-count floor. Score their books against identical held-out opponent
+scenarios, with paired seeds and an independent best-play safety audit for the
+finalists. The warm timings apply to repeated work with compatible inputs.
+A new opponent pool changes the counts and can expose new branches, while
+widening a gate can require additional continuation inputs.
+
+Use distinct output directories when comparing configurations. Pass the same
+cache directory to reuse compatible inputs.
+
+```powershell
+$base = 'outputs/rebuild-2026-11-06'
+$python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
+& $python -X utf8 python/experiments/multidepth_search.py --out "$base/multidepth-replay" --cache-dir "$base/multidepth-b2000" --budget 2000
+```
+
 ## November 8 nomination and tuning experiment
 
 Resume with the project interpreter from this worktree:
@@ -269,6 +389,15 @@ checks the Windows run locks, reuses completed stages, and resumes broad Black a
 shutdown. Start one coordinator. Its queue takes precedence over the old two-color
 driver. Read `design.json`, `queue.json`, the current stage's status and log, and
 `comparison-black/decision.json` for the design, schedule and decision.
+
+The November 9 White hold is recorded in `nomination-trial/hold-before-white.json`.
+The supported launcher loads the immutable Black experiment through
+`nomination_queue.py`. It finishes the Black controls and decision, writes
+`held-before-white` to the queue, and exits before either White build path.
+On restart it checks the same marker again. During the handover,
+`queue-control.json` identifies the already-running Black sampling worker.
+When White is explicitly released, remove only the hold marker and start the
+usual coordinator to continue from its Black receipts.
 
 * Both Black arms use the same frozen solver, 2,000 decisions, loss limit, mover populations,
   ply-30 horizon, stop/other sampling and cloud feedback. If the DP skips 2,000, use its
