@@ -215,7 +215,7 @@ def launch():
             r.publish(candidate/"trial-runtime.json",{"checkout":str(r.ROOT),
                       "files":{p.name:r.digest(p) for p in candidate.glob("*.py")}})
             candidate.rename(pin)
-    subprocess.run([sys.executable,"-u",str(pin/Path(__file__).name)],cwd=r.ROOT,check=True)
+    subprocess.run([sys.executable,"-u",str(nt.HERE/"nomination_queue.py"),str(pin)],cwd=r.ROOT,check=True)
 
 
 if __name__=="__main__":
