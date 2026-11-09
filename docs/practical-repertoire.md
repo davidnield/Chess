@@ -157,6 +157,104 @@ $python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 & $python -X utf8 python/experiments/root_search_pilot.py --out "$pilot/replay-second" --policy-cache $pilot --panel second --full-first
 ```
 
+### November 9 shared-budget Black slices
+
+The slice starts from the initial board. Until the specified starting ply, Black
+plays the lowest White-perspective cached evaluation among admissible moves,
+with SAN breaking ties. White uses the uncut historical counts with either
+zero or 30 Maia pseudogames. After each White ply the prefix retains the
+highest-reach boards across the two policies. Arrivals at a transposition add.
+Reported coverage is the retained probability under this fixed prefix. Scores
+are conditional on entering the slice and on a reply being played.
+
+At each slice root the optimizer can stop unaided or spend one card on any
+cached, engine-admissible Black move. It can then prepare a Black answer to
+any White reply. The prefix is fixed outside the budget. One budget covers
+every opening within the slice. A binary choice buys a board once across
+all move orders. If a board appears at both book depths, its chosen move is
+compulsory on both visits. The full reference recovers every unresolved
+historical distribution, evaluates every eligible follow-up, and solves the
+shared allocation as a mixed-integer program. Forward replay independently
+sums the realized arrivals and checks both the score bound and the card count.
+
+Exits use the saved Black round-00 continuation model calibrated to absolute
+ply 30. Its 21,901 rows come from 32-game simulations using weak Black versus
+strong White move distributions. The simulation's own fixed pseudocount is
+100. K=0 and K=30 vary only White's in-book policy. Exits at a matching sampled
+board and ply get the production shrinkage adjustment. Other exits use the
+production weak-play predictor and the fitted calibration. An unsupported
+exit with neither a weak proxy nor a cached evaluation uses the Black pool
+prior. A spot check of 300 sampled and 300 predicted exits matched the
+production application exactly. These are comparisons of model scores on the same inputs.
+
+The first selective schedule reran the shared optimizer after each small batch.
+On the 64-root, 128-card slice it selected the same 128 cards as the full
+reference in each K arm. It searched 5,357 of 9,344 follow-ups but took 265.72
+seconds including setup, versus 125.31 seconds for full expansion. The repeated
+data reads and solves outweighed the work saved.
+
+The batched schedule bounds the total unresolved historical mass across roots.
+For each possible follow-up it takes the largest incoming probability over
+mutually exclusive moves at each root, then sums across roots. At most the
+study budget's worth of distinct follow-up gains can enter a book. This gives
+a bound on the score change from leaving low-reach moves unresolved, including
+when a move order transposes. Both K arms use the union of the requested data.
+The prescribed tolerance is 0.001 expected points per game conditional on entry.
+
+| Slice | Retained prefix mass at K=30 | Selective / full lookups of raw parents | Selective / full follow-up boards | Selective / full wall time including setup | Matching cards at each K |
+|---|---:|---:|---:|---:|---:|
+| Ply 3, 64 roots, 128 cards | 98.89% | 113 / 341 | 2,640 / 9,344 | 55.59 / 117.07 s | 126 / 128 |
+| Ply 9, 96 roots, 256 cards | 61.95% | 242 / 351 | 3,436 / 11,970 | 172.70 / 207.34 s | 256 / 256 |
+
+On the ply-3 slice the fully replayed Black expected scores at K=30 were
+0.335085556 for the batched book and 0.335085957 for full expansion. At K=0
+they were 0.335085332 and 0.335085734. The largest difference was 0.000041
+percentage points. After `1.d4 Nf6 2.c3`, the two methods picked `2...g6`
+and `2...c5`, respectively. Full expansion also prepared `2...g6` after
+`1.f4 Nf6 2.e3`, where the batched book stopped. On the ply-9 slice, both
+methods scored 0.364067094 at K=30 and 0.364124340 at K=0. Changing K
+changed three cards in that slice's full book. Each comparison of search
+methods uses the same opponent policy.
+
+At K=30 the early batched book contains 17 follow-up cards reached from more
+than one active parent. For example, the book plays `3...Nxe4` after both
+`1.e4 e5 2.Nf3 Nf6 3.Bc4` and `1.e4 e5 2.Bc4 Nf6 3.Nf3`. These routes
+contribute 4.42% and 0.45% of the conditional arrivals. The deeper book has
+13 such cards. Neither panel had a board at both paid depths. That case has a
+separate regression test, including a move with negative gain on its later
+visit.
+
+Reversing evaluation order on each panel reproduced every book and score.
+The ply-3 repeat took 62.40 seconds versus 118.94 seconds (1.91×), and the
+ply-9 repeat took 141.26 seconds versus 208.87 seconds (1.48×). The first
+runs yielded 2.11× and 1.20×. Each time includes one copy of shared setup
+and its own arm's search. The independent replay is excluded from the timings.
+At K=30 the population-prior fallback accounted for 0.000056% of the early
+book's exit probability and 0.3501% of the deeper book's. The latter reached
+0.4119% at K=0 and was identical between search methods within each K arm.
+
+Use batched expansion for the next multi-depth Black comparison. Persisting
+the opening-prefix archive reads and ply-specific continuation inputs should
+help parameter sweeps. Both slices buy moves at two Black decision depths.
+They measure pruning error under the continuation model. The remaining test
+is how the method scales with several consecutive decision depths and the
+full 2,000-card budget, followed by a paired strength comparison with the incumbent.
+
+Machine-readable results and books are under
+`outputs/rebuild-2026-11-06/shared-budget-slice`. The early and deeper
+batched runs are `batched` and `ply9`. The reverse-order runs are
+`early-repeat` and `deep-repeat`. The initial iterative timing is in `main`.
+
+Run with the project libraries, Maia environment and SciPy's MILP solver.
+The report and both books are written under the specified output directory.
+
+```powershell
+$base = 'outputs/rebuild-2026-11-06'
+$python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
+& $python -X utf8 python/experiments/shared_budget_slice.py --policy-cache "$base/root-search-pilot" --out "$base/shared-budget-slice/replay" --full-first
+& $python -X utf8 python/experiments/shared_budget_slice.py --policy-cache "$base/root-search-pilot" --out "$base/shared-budget-slice/deeper-replay" --anchor-ply 9 --roots 96 --budget 256
+```
+
 ## November 8 nomination and tuning experiment
 
 Resume with the project interpreter from this worktree:
