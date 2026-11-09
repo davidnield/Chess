@@ -42,7 +42,7 @@ def lock(path):
             msvcrt.locking(fp.fileno(),msvcrt.LK_UNLCK,1)
 
 
-def pin(checkout,dest):
+def pin(checkout,dest,extra_scripts=()):
     pin_dir = dest/"code"
     if not pin_dir.exists():
         temp = dest/("pin-"+uuid.uuid4().hex)
@@ -50,6 +50,8 @@ def pin(checkout,dest):
         for source in (checkout/"python").glob("*.py"):
             shutil.copy2(source,temp/source.name)
         shutil.copy2(__file__,temp/"run_opponent_prior_challenger.py")
+        for script in extra_scripts:
+            shutil.copy2(script,temp/script.name)
         checks = {f.name:digest(f) for f in temp.glob("*.py")}
         (temp/"sources.json").write_text(json.dumps(checks,indent=2))
         temp.rename(pin_dir)

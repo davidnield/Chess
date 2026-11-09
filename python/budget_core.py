@@ -1037,9 +1037,9 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 metrics = g.meta.setdefault("named_opponent_replies", {
                     "positions":0, "additional_edges":0, "additional_edges_without_cached_eval":0})
                 metrics["positions"] += 1
-                metrics["additional_edges"] += sum(e["total"]==0 for e in es)
+                metrics["additional_edges"] += sum(e.get("additional_reply",e["total"]==0) for e in es)
                 metrics["additional_edges_without_cached_eval"] += sum(
-                    e["total"]==0 and e.get("child_hash") not in eval_ws for e in es)
+                    e.get("additional_reply",e["total"]==0) and e.get("child_hash") not in eval_ws for e in es)
             # The OTHER bucket used to enter raw here while Stage 3 blended
             # other_eval_mean into it at a coverage-weighted eval weight -- the
             # second half of the objective drift. aux_opp_mix owns all three

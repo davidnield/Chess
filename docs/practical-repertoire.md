@@ -44,6 +44,37 @@ The separate `opponent-prior-challenger/status.json` records the active stage or
 dependency. Its verified book, per-scenario comparisons against both references,
 and stage receipts stay in that directory. All seven comparisons run to ply 30.
 
+### Expanded historical replies, K=0 versus K=30
+
+The follow-up uses the same frozen Black decision inventory for both books. It
+looks up individual replies and their actual win/draw/loss counts in the archive,
+including positions where every reply falls below 20 games. A frontier lookup
+can introduce one of those positions even if the main pool returns no rows.
+Parents with zero historical replies cannot define an empirical K=0 policy and
+are excluded from both arms. Both books preserve the observed probability of
+game endings and horizon observations. K only changes the choice of reply given
+that someone plays a move.
+
+The November 9 inventory contains 16,736 positions. Of these, 16,680 have
+historical replies, including 1,445 with no retained move. These newly eligible
+positions account for 44,910 historical replies. The most frequent such position
+had 103 replies spread over 14 moves, with 18 games for the most popular move.
+
+Run this coordinator alongside the two commands for the earlier comparisons
+after a reboot. It can resume the extraction from any completed bucket. It
+waits for the original Black comparison before selecting the two books. If a
+verification changes a nomination, both final books must use the corrected
+proposal set. Each book gets its own stop calibration and 2,000-decision audit.
+
+```powershell
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -u python/experiments/run_expanded_reply_comparison.py
+```
+
+Outputs are under `outputs/rebuild-2026-11-06/expanded-opponent-comparison`.
+`status.json` identifies the current stage. After scoring, each scenario has
+`paired-vs-BASE.json` for the comparison with the broad book and
+`paired-vs-EXP0.json` for the incremental effect of K=30.
+
 ## November 8 nomination and tuning experiment
 
 Resume with the project interpreter from this worktree:

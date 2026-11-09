@@ -290,7 +290,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         # drives the max_ply cut and the turn parity -- so two builds of one input
         # differed by a few positions. Rows also reach build_graph in this order.
         if reply_overlay is not None:
-            df = reply_overlay.attach(df)
+            df = reply_overlay.attach(df, frontier)
         df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = {h for h in frontier if h not in fetched}
         if df.height and fresh:
@@ -815,6 +815,12 @@ def main() -> int:
     aux_rows = {}
     if aux_path:
         aux_rows = bc.load_aux_rows(aux_path, parents)
+        if reply_overlay is not None:
+            for h in parents:
+                if h in reply_overlay.extra_aux:
+                    if h in aux_rows:
+                        raise ValueError(f"Duplicate termination data for expanded parent {h}")
+                    aux_rows[h] = reply_overlay.extra_aux[h]
         log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
 
     # Only the fields build_graph reads, and the EPD on a parent's first row only:
@@ -822,7 +828,7 @@ def main() -> int:
     by_parent: dict[int, list[dict]] = {}
     cols = ["parent_hash","move_san","child_hash","total","white_score_avg","parent_epd"]
     if reply_overlay is not None:
-        cols.extend(["reply_mass","reach_share"])
+        cols.extend(["reply_mass","reach_share","additional_reply"])
     for ph, ms, ch, tot, ws, epd, *weights in edf.select(cols).iter_rows():
         lst = by_parent.get(ph)
         if lst is None:
@@ -832,7 +838,7 @@ def main() -> int:
             lst.append({"move_san": ms, "child_hash": ch, "total": tot,
                         "white_score_avg": ws})
         if weights and weights[0] is not None:
-            by_parent[ph][-1].update(reply_mass=weights[0], reach_share=weights[1])
+            by_parent[ph][-1].update(reply_mass=weights[0], reach_share=weights[1], additional_reply=weights[2])
     del edf
 
     engine_moves, engine_conflicts = None, []
