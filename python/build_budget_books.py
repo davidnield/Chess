@@ -227,7 +227,8 @@ def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit=None, engine_moves=None, reply_overlay=None) -> pl.DataFrame:
+                           min_games: int, admit=None, engine_moves=None, reply_overlay=None,
+                           uncut_own: bool = False) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -265,6 +266,10 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     position, and the max is not an upper bound on the sum. It is used here only
     as a pruning heuristic; see the plan's note on policy-free reach.
     """
+    floor = f"s.total >= {int(min_games)}"
+    if uncut_own:
+        our_turn = "w" if our_white else "b"
+        floor += f" OR split_part(s.parent_epd, ' ', 2) = '{our_turn}'"
     frames: list[pl.DataFrame] = []
     reach: dict[int, float] = {root: 1.0}
     ply: dict[int, int] = {root: 0}
@@ -282,7 +287,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                    s.white_score_avg
             FROM read_parquet('{stats}') s
             JOIN frontier f ON f.h = s.parent_hash
-            WHERE s.total >= {min_games}
+            WHERE {floor}
         """)
         # A fixed order (2026-10-29): DuckDB's join order and polars' group_by order
         # vary run to run, and the walk below is order-dependent -- a transposition's
@@ -638,6 +643,9 @@ def main() -> int:
                          "reachable at all or whether the distinct count skips "
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
+                    help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
+                         "Give --stats and --aux-stats for its original population.")
     a = ap.parse_args()
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
@@ -690,6 +698,19 @@ def main() -> int:
             "--other-cov-blend)")
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
+    uncut = None
+    if a.uncut_own_moves:
+        from uncut_own_moves import load
+        if not aux_path:
+            ap.error("--uncut-own-moves requires the native aux sidecar")
+        uncut = load(a.uncut_own_moves, a.stats, aux_path, a.perspective, a.opponent_prior)
+    uncut_recipe = uncut["recipe_sha256"] if uncut else None
+    for dest in outs.values():
+        if dest.exists() and not a.force:
+            mp = Path(str(dest) + ".meta.json")
+            old = json.loads(mp.read_text()).get("uncut_own_recipe") if mp.exists() else None
+            if old != uncut_recipe:
+                ap.error("Existing output uses another move lookup; choose a fresh output prefix")
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
     if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
@@ -766,8 +787,13 @@ def main() -> int:
                                      a.perspective,a.min_games)
     elif a.opponent_pseudogames != 0:
         ap.error("--opponent-pseudogames requires --opponent-prior")
-    edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves, reply_overlay)
+    graph_stats = (a.uncut_own_moves / "graph.parquet").as_posix() if uncut else stats
+    graph_aux = str(a.uncut_own_moves / "aux.parquet") if uncut else aux_path
+    if uncut:
+        log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
+    edf = collect_subgraph_edges(con, graph_stats, root, our_white, eps,
+                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
+                                 reply_overlay, uncut_own=bool(uncut))
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -814,7 +840,7 @@ def main() -> int:
 
     aux_rows = {}
     if aux_path:
-        aux_rows = bc.load_aux_rows(aux_path, parents)
+        aux_rows = bc.load_aux_rows(graph_aux, parents)
         if reply_overlay is not None:
             for h in parents:
                 if h in reply_overlay.extra_aux:
@@ -883,6 +909,7 @@ def main() -> int:
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
         other_key["engine_candidates_sha256"] = proposal_sha
+        other_key["uncut_own_recipe"] = uncut_recipe
         other_key["gate_policy"] = gate_recipe
         if reply_overlay is not None:
             other_key["opponent_prior"] = reply_overlay.recipe
@@ -955,6 +982,7 @@ def main() -> int:
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=a.weak_min_share, stop_model=a.stop_model)
             dump_key["engine_candidates_sha256"] = proposal_sha
+            dump_key["uncut_own_recipe"] = uncut_recipe
             dump_key["gate_policy"] = gate_recipe
             if reply_overlay is not None:
                 dump_key["opponent_prior"] = reply_overlay.recipe
@@ -1289,6 +1317,8 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
+            **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
+               if uncut else {}),
             **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
                if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
