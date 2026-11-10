@@ -59,6 +59,14 @@ python python/experiments/summarize_repertoire_recall.py $pilot --scores "$pilot
 
 The practice model can be regenerated separately with `python/experiments/repertoire_recall.py`, the saved `books.json` manifest, `--trainer` pointing to the main checkout's trainer database, and `--as-of 2026-11-09`. For the 100 cp books, extract historical opponent counts at their new opponent nodes before adding them. Use a fresh output directory for a changed panel.
 
+## Restore all observed choices on our turn
+
+Treat the 30/60/100 cp sweep underway as the historical-cutoff baseline. Before selecting a gate, repeat the comparison with every observed own move available at each explored decision, for both White and Black, including boards newly reachable through restored moves. Use the matching uncut archive slices, combine transpositions, cache lookups across gates, and apply the same engine gates to the expanded choice set. Keep opponent frequencies, Other mass and the 30-pseudogame opponent-policy experiment distinct from our choice of moves. Compare frozen books at 2,000 decisions and rescore them under the same referee. Recheck high-impact changes independently with Stockfish. An engine nomination can still add a move with zero historical observations.
+
+The Black cutoff audit found 28 observations of Petroff 9...f5, 12 of 9...O-O and one of 9...Bf5. Restoring castling changes the only eligible 30 cp move from 9...f5 to 9...O-O. Across 2,000 Black decisions, 37 prescriptions in the 30 cp book and 28 in the 60 cp book lose eligibility when all observed alternatives compete. [Audit](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/floor-audit/candidate-cutoff.json)
+
+Implementation and bounded timing tests are on `codex/uncut-move-lookup` in the sibling `uncut-move-lookup` worktree. Hold full uncut builds until the next session after the baseline White 100 cp book. Use separate output prefixes and a persistent population-specific cache. Measure a deeper cold and warm frontier before budgeting a full sweep.
+
 ## Where to resume
 
 At the November 9 evening recall pilot, the Black and White 30 and 60 cp books had successful build receipts and exactly 2,000 decisions each. The gate coordinator had started Black 100 cp. White 100 cp was queued. The next decision is which caps to advance after scoring. The new construction-pool builds are a subsequent experiment.
