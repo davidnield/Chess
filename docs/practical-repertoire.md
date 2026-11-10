@@ -1,5 +1,7 @@
 # Practical repertoire experiments
 
+For the current gate sweep, pool shortlist, and next decision, start with the [lifetime repertoire experiment plan](lifetime-repertoire-plan.md).
+
 Run these commands from the checkout containing this branch with the project Python interpreter. In a linked worktree, the original checkout's virtual environment also works. Write candidates and experiment results to a dedicated output directory.
 
 ## Nominate moves before selection
