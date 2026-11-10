@@ -105,6 +105,29 @@ if ($LASTEXITCODE -ne 0) { throw 'Book build failed' }
 
 ## Where to resume
 
+### November 10 restart
+
+The corrected sweep runs on `codex/uncut-move-lookup`. Both native cache producers started on November 10. Black reads the 2000+ banded archive, and White reads the original 1800+ monthly files. The coordinator builds one book at a time in this order: Black and White 30 cp, Black and White 60 cp, then Black and White 100 cp. The old cutoff White 100 cp remains held. The old Black nomination sampler and the old population comparison resumed separately.
+
+The sweep's `D:/chess/uncut-own-v1/status.json` gives the active build stage. Each side's `cache/parts` contains completed source parts. `cache/ready.json` records completion of the full count checks. Each published `<side>/cp<cap>/receipt.json` records the original recipe, code and book hashes, actual footprint, graph size, peak commit, elapsed solve time and cutoff overlap. A directory ending in `.building` is work in progress. The Petroff sentinel in each Black receipt reports both eligible moves and the actual prescription, which can be absent if the book spends its budget elsewhere.
+
+On the first production read of Black bucket 82, the Petroff counts were 28 for `f5`, 12 for `O-O`, and 1 for `Bf5`. At 30 cp only castling passed; at 60 and 100 cp both castling and `f5` passed. A deterministic sample of 1,024 parents in that bucket contained 6,844 observed moves. All 1,230 retained rows matched on child, parent EPD and outcomes. The 668 previously represented parents reconciled their Other W/D/L exactly. The full cache producer independently checks the complete lookup before publishing it.
+
+The first practical comparison is Black 30 cp, its historical-cutoff control and canonical under the current Rapid population, with two paired seeds and 30 Maia pseudogames. `D:/chess/uncut-own-v1/referee/status.json` tracks that job. After the books freeze, both colors get their historical gate screen (100 pseudogames) and the same 30-pseudogame population matrix as the cutoff controls. Current and future own strength, the three speeds and the separate 2200+ Classical stress test retain their original definitions. Reach, missing engine coverage, fresh checks on large losses and recall sensitivity are subsequent analyses of the published books.
+
+On an 87,335-node historical Black graph truncated at ply 9, the previous and optimized budget matchers returned identical allocations, moves, values and budget. The match took 7.54 seconds with two sorts and 2.95 seconds with one. Both exhausted the available curves at a charge of 3,000 and returned 761 decisions (realized score 0.5371996012). This trial measures the matching stage only. Cyclic and transposed test graphs also agreed across multiple probes with leftover allocation both enabled and disabled. The actual 2,000-decision production footprint is checked separately at publication.
+
+After a reboot, these commands take the same baseline and output paths. Run them as separate processes with the repository's virtual environment. The build coordinator can finish either cache from its completed parts.
+
+```powershell
+$baseline=(Resolve-Path '../practical-repertoire/outputs/rebuild-2026-11-06/cp-screen-030-060-100').Path
+$root='D:/chess/uncut-own-v1'
+python python/run_uncut_sweep.py --baseline $baseline --out $root
+python python/score_uncut_sweep.py --baseline $baseline --out $root
+```
+
+The separate 2200+ construction arm still needs a native pool and source repertoire. The available 2013–July 2026 banded archive ends at ply 30. Its termination table pools all ratings and speeds. The current exporter needs ply 31 departures to distinguish real endings from the horizon when exporting a ply-30 pool. Check for a deeper source or independently counted, band-specific boundary flows before making this arm. If those are unavailable, use matched 2000+ and 2200+ construction depths supported by the archive, and score both to ply 30. A shorter 2200+ build by itself would confound population with depth.
+
 After the corrected six-book gate sweep, the first additional pool build is Black 60 cp on all-speed 2200+. Pair it with corrected Black 60 cp on 2000+ under the same referee and 2,000-position budget. On 131,355 White OTB decisions after the opening move, the Brier scores for 1800+, 2000+ and 2200+ were 0.5163, 0.5020 and 0.4918 respectively. Keep White at 1800+ and Black at 2000+ for the initial gate sweep. Record each pool’s implied absolute floor and reply coverage when interpreting a difference. [OTB results by side](../outputs/rebuild-2026-11-06/population-transfer-v1/lichess-speed-cutoffs/by-side-all-speeds.json)
 
 Baseline Black 100 cp finished November 10 at 00:06:13 Pacific after 4 h 23 min 17 s, with exactly 2,000 distinct decisions. The coordinator is held before White 100 cp. Five cutoff baselines have successful receipts. The 100 cp Black book shares 1,260 exact prescriptions with 60 cp, 576 with 30 cp and 557 with canonical. On the 2000+ historical White reply distribution, its book-exit engine score is 61.23% versus 60.36% for 60 cp. The probability of reaching a booked move evaluated below −1.00 for Black rises from 1.01% to 8.84% using stored values. The new Petroff 3...c6 is reached in 15.18% of games and falls from −0.98 stored to −1.14 at two million nodes. Substituting that single evaluation raises the 100 cp exposure to 16.69%. Keep the separate ply-30 human-continuation scores as the conversion test. [Comparison and reach](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/book-comparison/black-100-comparison.json) · [Opening PGN](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/book-comparison/black-100-opening-comparison.pgn)

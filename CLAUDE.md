@@ -13,6 +13,14 @@ here last days, and a compaction that drops them turns a status check into a re-
 
 ## Project purpose
 
+The uncut gate sweep replays successful control receipts with
+`python/run_uncut_sweep.py --baseline <cutoff-screen> --out <uncut-root>`.
+It publishes a book directory after validating the budget, legal prescriptions,
+cache identity and gate settings. Its separate `python/score_uncut_sweep.py`
+coordinator takes the same arguments and consumes published receipts. The
+construction and referee coordinators keep separate status and cache files.
+The resume commands and experiment order are in `docs/lifetime-repertoire-plan.md`.
+
 Chess opening repertoire builder. Ingests Lichess monthly PGN dumps, extracts position-move edges
 from millions of games, aggregates them into per-position move statistics, then runs backwards
 induction on the position DAG to produce an empirical "best move at each position" repertoire.

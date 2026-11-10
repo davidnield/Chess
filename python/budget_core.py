@@ -1592,8 +1592,10 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     that rung is actually run, and size it from a measured distinct-vs-charged
     curve rather than by guessing which end the exact hit sits at.
     """
-    lo_kw = {"leftover": True} if leftover else {}   # stubs in tests take no kwarg
-    res = extract_book(g, curves, target, fixed_policy=fixed_policy, **lo_kw)
+    # The graph is fixed while the budget and curve set change between probes.
+    order = topo_down(g)
+    res = extract_book(g, curves, target, fixed_policy=fixed_policy,
+                       leftover=leftover, order=order)
     if res["spent_distinct"] >= target or target >= bmax:
         return (res, target, res["spent_distinct"] >= target,
                 res["spent_distinct"])
@@ -1627,7 +1629,8 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     def probe_at(b: int) -> dict:
         if b not in seen:
             seen[b] = extract_book(g, curves_at(b), b,
-                                   fixed_policy=fixed_policy, **lo_kw)
+                                   fixed_policy=fixed_policy, leftover=leftover,
+                                   order=order)
         return seen[b]
 
     lo, best_lo = target, res           # books < target
@@ -1683,7 +1686,7 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
 def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                  fixed_policy: dict[int, str] | None = None,
                  force_booked: set[int] | None = None,
-                 leftover: bool = False
+                 leftover: bool = False, *, order: list[int] | None = None
                  ) -> dict:
     """Top-down allocation of `budget` over the curves; returns the booked
     tree, per-node allocations, realized bottom-up values, and spend stats.
@@ -1735,7 +1738,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
     # booking decision runs. The naive stack version processed a node at
     # whichever allocation happened to pop first; _test_budget_transpo caught
     # it booking nothing on the zero-alloc path.
-    for h in topo_down(g):
+    for h in topo_down(g) if order is None else order:
         if h not in reached:
             continue
         b = alloc.get(h, 0)
