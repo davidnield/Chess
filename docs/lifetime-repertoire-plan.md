@@ -65,7 +65,35 @@ Treat the 30/60/100 cp sweep underway as the historical-cutoff baseline. Before 
 
 The Black cutoff audit found 28 observations of Petroff 9...f5, 12 of 9...O-O and one of 9...Bf5. Restoring castling changes the only eligible 30 cp move from 9...f5 to 9...O-O. Across 2,000 Black decisions, 37 prescriptions in the 30 cp book and 28 in the 60 cp book lose eligibility when all observed alternatives compete. [Audit](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/floor-audit/candidate-cutoff.json)
 
-Implementation and bounded timing tests are on `codex/uncut-move-lookup` in the sibling `uncut-move-lookup` worktree. Hold full uncut builds until the next session after the baseline White 100 cp book. Use separate output prefixes and a persistent population-specific cache. Measure a deeper cold and warm frontier before budgeting a full sweep.
+Implementation and tests are on `codex/uncut-move-lookup` in the sibling `uncut-move-lookup` worktree. Hold full uncut builds until the next session after the baseline White 100 cp book. Each cache covers the initial White board and/or children of named opponent replies, including replies in a supplied overlay. Its preparation is independent of the current books, gate and budget. The builder uses it during frontier expansion and budget optimization. A novel observed move can still fail an engine gate or lead to an opponent position with too little historical support for further construction.
+
+Use the exact source for each baseline. Black uses the 2000+ banded archive and White uses the original 1800+ monthly consolidations. The separately reconstructed 1800+ banded pool disagrees with the native White pool even at the root. Each lookup checks retained move identities and W/D/L against the old pool and recovered W/D/L against Other. Completed months or archive buckets survive an interrupted cache build. The final merge can be restarted from those parts. The book solver still requires a complete run for a publishable book.
+
+On November 9 the new reader reproduced the Petroff counts and gate menus above. The Black preflight measured 7.1–11.0 seconds per bucket on three of 512 equally sized buckets. The final White streaming query took 18.4 seconds for 1.37 GB and 111.7 seconds for 10.22 GB, out of 753.57 GB across 163 months. Estimated input stages are 1.2 hours for Black and 2.4 hours for White. Full aggregation, verification and disk spill are additional and have not yet been measured. Allow roughly 1½–3 hours for the completed Black cache and 4–8 hours for White. Store the cache and DuckDB temporary data on a high-free-space disk.
+
+Tomorrow, start with Black 30 cp, check the Petroff gate and record expanded graph size, memory, elapsed solve time, distinct count and practical score. Run White 30 cp and then 60 and 100 cp in each color, revising the time budget from the first complete solves. Compare to the frozen cutoff baseline at the same cap using the same population, stop model, evaluation weight and referee. Include reach-weighted prescription changes, missing-evaluation coverage and fresh Stockfish checks of the largest losses.
+
+From the `uncut-move-lookup` checkout, replay each completed sweep receipt as follows. Set `$side` and `$gate` for the desired book. The example reads the original population and solver arguments from the receipt, uses fresh output paths, and reuses the cache across gate values.
+
+```powershell
+$side = 'black'
+$gate = 30
+$baseline = '../practical-repertoire/outputs/rebuild-2026-11-06/cp-screen-030-060-100'
+$receipt = Get-Content "$baseline/stages/$side-cp$gate.json" -Raw | ConvertFrom-Json
+$exe = $receipt.command[0]
+$first = [array]::IndexOf($receipt.command, '--rep')
+$buildArgs = [string[]]($receipt.command[$first..($receipt.command.Count - 1)] | Where-Object { $_ -ne '--force' })
+$pool = $buildArgs[[array]::IndexOf($buildArgs, '--stats') + 1]
+$aux = $buildArgs[[array]::IndexOf($buildArgs, '--aux-stats') + 1]
+$work = "D:/chess/uncut-own-v1/$side"
+$cache = "$work/cache"
+$buildArgs[[array]::IndexOf($buildArgs, '--out-prefix') + 1] = "$work/cp$gate/book"
+$buildArgs[[array]::IndexOf($buildArgs, '--tmp-dir') + 1] = "$work/cp$gate/tmp"
+& $exe python/uncut_own_moves.py --stats $pool --aux-stats $aux --perspective $side --out $cache
+if ($LASTEXITCODE -ne 0) { throw 'Cache preparation failed' }
+& $exe python/build_budget_books.py @buildArgs --uncut-own-moves $cache
+if ($LASTEXITCODE -ne 0) { throw 'Book build failed' }
+```
 
 ## Where to resume
 
