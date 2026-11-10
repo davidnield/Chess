@@ -65,7 +65,7 @@ Treat the 30/60/100 cp sweep underway as the historical-cutoff baseline. Before 
 
 The Black cutoff audit found 28 observations of Petroff 9...f5, 12 of 9...O-O and one of 9...Bf5. Restoring castling changes the only eligible 30 cp move from 9...f5 to 9...O-O. Across 2,000 Black decisions, 37 prescriptions in the 30 cp book and 28 in the 60 cp book lose eligibility when all observed alternatives compete. [Audit](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/floor-audit/candidate-cutoff.json)
 
-Implementation and tests are on `codex/uncut-move-lookup` in the sibling `uncut-move-lookup` worktree. Hold full uncut builds until the next session after the baseline White 100 cp book. Each cache covers the initial White board and/or children of named opponent replies, including replies in a supplied overlay. Its preparation is independent of the current books, gate and budget. The builder uses it during frontier expansion and budget optimization. A novel observed move can still fail an engine gate or lead to an opponent position with too little historical support for further construction.
+Implementation and tests are on `codex/uncut-move-lookup` in the sibling `uncut-move-lookup` worktree. The November 9 evening hold is after baseline Black 100 cp and before White 100 cp. Hold full uncut builds until the next session. Each cache covers the initial White board and/or children of named opponent replies, including replies in a supplied overlay. Its preparation is independent of the current books, gate and budget. The builder uses it during frontier expansion and budget optimization. A novel observed move can still fail an engine gate or lead to an opponent position with too little historical support for further construction.
 
 Use the exact source for each baseline. Black uses the 2000+ banded archive and White uses the original 1800+ monthly consolidations. The separately reconstructed 1800+ banded pool disagrees with the native White pool even at the root. Each lookup checks retained move identities and W/D/L against the old pool and recovered W/D/L against Other. Completed months or archive buckets survive an interrupted cache build. The final merge can be restarted from those parts. The book solver still requires a complete run for a publishable book.
 
@@ -73,16 +73,24 @@ On November 9 the new reader reproduced the Petroff counts and gate menus above.
 
 Tomorrow, start with Black 30 cp, check the Petroff gate and record expanded graph size, memory, elapsed solve time, distinct count and practical score. Run White 30 cp and then 60 and 100 cp in each color, revising the time budget from the first complete solves. Compare to the frozen cutoff baseline at the same cap using the same population, stop model, evaluation weight and referee. Include reach-weighted prescription changes, missing-evaluation coverage and fresh Stockfish checks of the largest losses.
 
-From the `uncut-move-lookup` checkout, replay each completed sweep receipt as follows. Set `$side` and `$gate` for the desired book. The example reads the original population and solver arguments from the receipt, uses fresh output paths, and reuses the cache across gate values.
+The recommended next experiment skips the old White 100 cp build. Five frozen baseline books provide matched controls, including two White caps and the permissive Black cap. Regenerate all six books with the expanded menus. White 100 cp can be compared with the other corrected White caps. If a same-cap White before/after estimate becomes important, its archived 60 cp recipe with `--max-eval-loss 100` reconstructs the omitted control. Keep old and corrected populations of books in separate scoring manifests.
+
+In the old White 30 and 60 cp books, 230 and 265 of the 2,000 decisions respectively had just one named historical move and positive Other mass. Across all decisions, 1,940 and 1,950 respectively had positive Other mass. These are exposure counts. The number of additional moves that will pass the gate requires the native lookup and a new search.
+
+Before timing the permissive corrected books, test reusing the graph’s topological order across the budget probes in a single solve. At 23:58 Pacific on November 9, a nonblocking sample of Black 100 cp found extra probe 61 of 64 inside `topo_down`, sorting the same graph again. `match_distinct` changes the charged budget while its graph stays fixed. Compare the charged budget, selected moves and realized value against the original extractor, including a graph with cycles. Any shared order belongs to one concrete graph. The current screen reads existing engine arrays and does not produce new Stockfish or Maia predictions.
+
+From the `uncut-move-lookup` checkout, set `$side` and `$gate` for the desired book. The example reads the original population and solver arguments, uses fresh output paths, and reuses the cache across gate values.
 
 ```powershell
 $side = 'black'
 $gate = 30
 $baseline = '../practical-repertoire/outputs/rebuild-2026-11-06/cp-screen-030-060-100'
-$receipt = Get-Content "$baseline/stages/$side-cp$gate.json" -Raw | ConvertFrom-Json
+$templateGate = if ($side -eq 'white' -and $gate -eq 100) { 60 } else { $gate }
+$receipt = Get-Content "$baseline/stages/$side-cp$templateGate.json" -Raw | ConvertFrom-Json
 $exe = $receipt.command[0]
 $first = [array]::IndexOf($receipt.command, '--rep')
 $buildArgs = [string[]]($receipt.command[$first..($receipt.command.Count - 1)] | Where-Object { $_ -ne '--force' })
+$buildArgs[[array]::IndexOf($buildArgs, '--max-eval-loss') + 1] = [string]$gate
 $pool = $buildArgs[[array]::IndexOf($buildArgs, '--stats') + 1]
 $aux = $buildArgs[[array]::IndexOf($buildArgs, '--aux-stats') + 1]
 $work = "D:/chess/uncut-own-v1/$side"
@@ -97,7 +105,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Book build failed' }
 
 ## Where to resume
 
-At the November 9 evening recall pilot, the Black and White 30 and 60 cp books had successful build receipts and exactly 2,000 decisions each. The gate coordinator had started Black 100 cp. White 100 cp was queued. The next decision is which caps to advance after scoring. The new construction-pool builds are a subsequent experiment.
+Baseline Black 100 cp finished November 10 at 00:06:13 Pacific after 4 h 23 min 17 s, with exactly 2,000 distinct decisions. The coordinator is held before White 100 cp. Five cutoff baselines have successful receipts. The 100 cp Black book shares 1,260 exact prescriptions with 60 cp, 576 with 30 cp and 557 with canonical. On the 2000+ historical White reply distribution, its book-exit engine score is 61.23% versus 60.36% for 60 cp. The probability of reaching a booked move evaluated below −1.00 for Black rises from 1.01% to 8.84% using stored values. The new Petroff 3...c6 is reached in 15.18% of games and falls from −0.98 stored to −1.14 at two million nodes. Substituting that single evaluation raises the 100 cp exposure to 16.69%. Keep the separate ply-30 human-continuation scores as the conversion test. [Comparison and reach](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/book-comparison/black-100-comparison.json) · [Opening PGN](../outputs/rebuild-2026-11-06/cp-screen-030-060-100/book-comparison/black-100-opening-comparison.pgn)
 
 These links point to local artifacts in the practical-repertoire worktree:
 
