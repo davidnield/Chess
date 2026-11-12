@@ -1392,8 +1392,7 @@ def topo_down(g: Graph) -> list[int]:
     return order
 
 
-def build_curves(g: Graph, bmax: int, k_atoms: int = 256,
-                 fixed_policy: dict[int, str] | None = None
+def build_curves(g: Graph, bmax: int, k_atoms: int = 256
                  ) -> tuple[dict[int, Curve], dict]:
     """Bottom-up value-vs-budget curves over the subgraph.
 
@@ -1410,7 +1409,7 @@ def build_curves(g: Graph, bmax: int, k_atoms: int = 256,
     processed = 0
     while q:
         h = q.popleft()
-        curves[h] = _node_curve(g, h, curves, bmax, k_atoms, fixed_policy)
+        curves[h] = _node_curve(g, h, curves, bmax, k_atoms)
         processed += 1
         for par in parents[h]:
             pending[par] -= 1
@@ -1468,7 +1467,7 @@ def build_curves(g: Graph, bmax: int, k_atoms: int = 256,
             h = q.popleft()
             if h not in remaining:
                 continue
-            curves[h] = _node_curve(g, h, curves, bmax, k_atoms, fixed_policy)
+            curves[h] = _node_curve(g, h, curves, bmax, k_atoms)
             remaining.discard(h)
             for par in parents[h]:
                 pending[par] -= 1
@@ -1480,13 +1479,10 @@ def build_curves(g: Graph, bmax: int, k_atoms: int = 256,
 
 
 def _node_curve(g: Graph, h: int, curves: dict[int, Curve], bmax: int,
-                k_atoms: int, fixed_policy: dict[int, str] | None) -> Curve:
+                k_atoms: int) -> Curve:
     if h in g.our:
         n = g.our[h]
         cands = n.cands
-        if fixed_policy is not None:
-            want = fixed_policy.get(h)
-            cands = [c for c in cands if c[0] == want]
         pts: dict[int, float] = {0: n.l_node}
         keys: dict[int, float] = {0: n.l_node}     # selection keys (== pts unless sticky)
         im, margin = incumbent_move(g, h)
@@ -1538,66 +1534,12 @@ def exact_opp_curve(g: Graph, h: int, curves: dict[int, Curve],
     return grid
 
 
-# ── greedy stopping (Phase-B comparison method, deliberately myopic) ────────
-
-def greedy_stopping(g: Graph, policy: dict[int, str], budget: int
-                    ) -> tuple[set[int], float]:
-    """One-step gain-greedy over the FIXED policy: repeatedly book the frontier
-    our-node with the largest reach * (one_step_value - L_node). No chain
-    atoms — this is the strawman whose trap-blindness the DP fixes; it exists
-    so Phase D can attribute wins. Returns (booked our-node hashes, spent)."""
-    import heapq
-
-    def one_step_gain(h: int) -> float:
-        n = g.our[h]
-        want = policy.get(h)
-        for san, ch, in_sub, leaf_val in n.cands:
-            if san != want:
-                continue
-            if in_sub and ch is not None and ch in g.opp:
-                opp = g.opp[ch]
-                v = opp.const_base + sum(
-                    p * (g.our[k].l_node if in_s and k in g.our else lv)
-                    for p, k, in_s, lv in opp.kids)
-            else:
-                v = leaf_val
-            return g.reach.get(h, 0.0) * (v - n.l_node)
-        return -np.inf
-
-    booked: set[int] = set()
-    heap = [(-one_step_gain(g.root), 0, g.root)] if g.root in g.our else []
-    tie = 1
-    if g.root in g.opp:
-        for p, ch, in_sub, _ in g.opp[g.root].kids:
-            if in_sub and ch in g.our:
-                heap.append((-one_step_gain(ch), tie, ch))
-                tie += 1
-        heapq.heapify(heap)
-    spent = 0
-    while heap and spent < budget:
-        ng, _, h = heapq.heappop(heap)
-        if h in booked or -ng == -np.inf:
-            continue
-        booked.add(h)
-        spent += 1
-        want = policy.get(h)
-        for san, ch, in_sub, _ in g.our[h].cands:
-            if san != want or not in_sub or ch not in g.opp:
-                continue
-            for p, k, in_s, _ in g.opp[ch].kids:
-                if in_s and k in g.our and k not in booked:
-                    heapq.heappush(heap, (-one_step_gain(k), tie, k))
-                    tie += 1
-    return booked, spent
-
-
 # ── extraction ──────────────────────────────────────────────────────────────
 
 def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
-                   bmax: int, fixed_policy: dict[int, str] | None = None,
+                   bmax: int,
                    probe_curves: dict[int, Curve] | None = None,
-                   scan_cap: int = 64, plain_bmax: int | None = None,
-                   leftover: bool = False
+                   scan_cap: int = 64, plain_bmax: int | None = None
                    ) -> tuple[dict, int, bool, int]:
     """Extract a book holding EXACTLY `target` DISTINCT decisions where one is
     reachable, and at least `target` otherwise.
@@ -1709,8 +1651,7 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     """
     # The graph is fixed while the budget and curve set change between probes.
     order = topo_down(g)
-    res = extract_book(g, curves, target, fixed_policy=fixed_policy,
-                       leftover=leftover, order=order)
+    res = extract_book(g, curves, target, order=order)
     if res["spent_distinct"] >= target or target >= bmax:
         return (res, target, res["spent_distinct"] >= target,
                 res["spent_distinct"])
@@ -1743,9 +1684,7 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
 
     def probe_at(b: int) -> dict:
         if b not in seen:
-            seen[b] = extract_book(g, curves_at(b), b,
-                                   fixed_policy=fixed_policy, leftover=leftover,
-                                   order=order)
+            seen[b] = extract_book(g, curves_at(b), b, order=order)
         return seen[b]
 
     lo, best_lo = target, res           # books < target
@@ -1798,38 +1737,14 @@ def match_distinct(g: Graph, curves: dict[int, Curve], target: int,
     return best_hi, hi, True, best_hi["spent_distinct"]
 
 
-def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
-                 fixed_policy: dict[int, str] | None = None,
-                 force_booked: set[int] | None = None,
-                 leftover: bool = False, *, order: list[int] | None = None
-                 ) -> dict:
+def extract_book(g: Graph, curves: dict[int, Curve], budget: int, *,
+                 order: list[int] | None = None) -> dict:
     """Top-down allocation of `budget` over the curves; returns the booked
     tree, per-node allocations, realized bottom-up values, and spend stats.
 
     Our node: book iff the curve strictly beats stopping; move chosen by
     value (mirrors Stage 3). Opponent node: greedy density prefix over child atoms with skip-fit
     (a child whose atom is skipped is closed — atoms are prefixes).
-
-    leftover (2026-10-19): at an opponent node, budget the density pass could not
-    spend -- because the next atom of every remaining child was too big to fit --
-    goes to the closed child whose blocking atom has the highest density. The
-    atom is indivisible in the HULL, but the child's own extraction reads its
-    children's finer curves and can usually spend part of it. Without this, a
-    big subtree whose curve fused into one expensive atom (a long chain, or the
-    grid cap merging its tail) gets nothing once cheaper atoms elsewhere have
-    been bought: the b2000 White books left 1...e5 and 1...c5 (56% of games)
-    unprepared after one move while 2,200 moves of budget went unspent.
-
-    force_booked: book these our-nodes unconditionally, skipping both the
-    allocation test and the beats-stopping test, and still walk the values
-    bottom-up over the result. This exists for the greedy arm, whose SET is
-    chosen by greedy_stopping and must not then be re-decided by the density
-    allocator. Measured 2026-08-29 without it: greedy selected 6 nodes (all
-    with positive one-step gain) and only 3 were booked, every miss caused by
-    receiving alloc 0 and NONE by failing a value test — so the arm silently
-    reported a 14-move book for a 20-move budget, which makes it useless as an
-    equal-footprint comparator. Callers pass the greedy set here and keep the
-    same set as fixed_policy so the values stay consistent with the moves.
     """
     booked: dict[int, str] = {}
     alloc: dict[int, int] = {0: 0}
@@ -1837,17 +1752,6 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
     visited: list[int] = []
     spent_paths = 0
     alloc = {g.root: budget}
-    if force_booked:
-        # Forced nodes must be REACHED as well as exempt from the value test.
-        # The topo walk below skips anything not in `reached` BEFORE it looks at
-        # `forced`, so exempting the value test alone changes nothing for a pick
-        # the allocator never walks to. Measured 2026-08-30: with only the value
-        # exemption, greedy_white still booked 3/6, 4/10 and 12/20 at eps 0.005,
-        # because essentially every missing pick was never-reached rather than
-        # merely unfunded. Seeding here is what actually lets greedy keep its
-        # own selection.
-        reached |= set(force_booked)
-
     # Top-down in topological order so a transposed node's allocation is FINAL
     # (max over every in-path — funding one path funds the position) before its
     # booking decision runs. The naive stack version processed a node at
@@ -1860,13 +1764,9 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
         visited.append(h)
         if h in g.our:
             n = g.our[h]
-            forced = force_booked is not None and h in force_booked
-            if b < 1 and not forced:
+            if b < 1:
                 continue
             cands = n.cands
-            if fixed_policy is not None:
-                want = fixed_policy.get(h)
-                cands = [c for c in cands if c[0] == want]
             best = None
             im, margin = incumbent_move(g, h)
             for san, ch, in_sub, leaf_val in cands:
@@ -1880,7 +1780,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
             if best is None:
                 continue
             _key, v, san, ch, in_sub = best
-            if not forced and v <= n.l_node + 1e-12:
+            if v <= n.l_node + 1e-12:
                 continue                       # stopping is at least as good
             booked[h] = san
             spent_paths += 1
@@ -1902,7 +1802,6 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
             remaining = b
             child_alloc = dict.fromkeys(range(len(n.kids)), 0)
             closed: set[int] = set()
-            blocked: dict[int, float] = {}     # closed child -> its blocking atom's density
             for dens, idx, _j, cost in entries:
                 if idx in closed:
                     continue
@@ -1911,11 +1810,6 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
                     remaining -= cost
                 else:
                     closed.add(idx)            # prefix property: no later atoms
-                    blocked[idx] = dens
-            if leftover and remaining > 0 and blocked:
-                best = max(blocked, key=lambda i: (blocked[i], -i))
-                child_alloc[best] += remaining
-                remaining = 0
             for idx, (p, ch, in_sub, _lv) in enumerate(n.kids):
                 if in_sub and ch is not None and ch in curves:
                     reached.add(ch)
@@ -1969,7 +1863,7 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
 # line's first moves gain almost nothing over the stop value and the payoff sits
 # deep, so the curves fuse it into one big atom and the density pass can starve
 # it (the b2000 White books left 1...e5 and 1...c5 unprepared). Every patch
-# (grid cap, skip-fit, --leftover, match-inflate) fixes a symptom of that.
+# (grid cap, skip-fit, the retired --leftover, match-inflate) fixes a symptom of that.
 #
 # Price per move replaces the budget with a price `lam` per learned position,
 # in root expected-score units, and maximises  value - lam * positions:
@@ -1985,18 +1879,14 @@ def extract_book(g: Graph, curves: dict[int, Curve], budget: int,
 # (sizes jump where a whole chain flips in at once), and any size B is bounded
 # by  min over the lams tried of  (V_pen(lam) + lam * B),  reported as the gap.
 #
-# Transpositions: price_search first prices with the policy-free max-path reach
-# (g.reach), which charges a shared position once per path, then re-prices
-# with the TOTAL reach the chosen book actually gives each position (summed
-# over the paths it follows), so a position is charged once. Positions the book
-# does not reach keep the max-path reach, so an alternative line is priced as
-# if it were taken. With transpositions this is a self-consistent answer, not a
-# proven optimum; on a tree the two passes coincide.
-#
-# price_search(dag_mode=...) (plan item 11, off by default) adds the DAG candidates
-# measured against an exact oracle in _test_budget_dag.py: a reach fixed point per
-# solve, and polish_book, a coordinate ascent on the reached region after the search
-# (see the "DAG polish" section at the end of this module).
+# Transpositions: the recipe prices with max(optimistic reach, the source book's
+# total reach) (seed_reach), so a shared position the source book takes is charged
+# once rather than once per path, and a line it does not take is priced as if it
+# were. On a DAG that is an approximation, not a proven optimum; polish_book (a
+# coordinate ascent on the reached region, the "DAG polish" section at the end of
+# this module) then closes nearly all of the gap to the exact oracle in
+# _test_budget_dag.py. The re-pricing rounds and reach fixed points tried before
+# polish (plan item 11) were retired on 2026-11-12.
 
 def topo_up(g: Graph) -> tuple[list[int], set[int]]:
     """Bottom-up order (children before parents) for valuation, and the nodes
@@ -2240,8 +2130,7 @@ def policy_value(g: Graph, moves: dict[int, str], order: list[int],
 
 
 def price_book(g: Graph, lam: float, order: list[int],
-               reach: dict[int, float] | None = None,
-               fixed_policy: dict[int, str] | None = None, *, compiled=None) -> dict:
+               reach: dict[int, float] | None = None, *, compiled=None) -> dict:
     """One price-per-move solve at price `lam`. `order` = topo_up(g)[0]
     (children first). Returns extract_book's keys plus root_value_penalized, lam,
     reach_policy. compiled: a budget_compiled.CompiledGraph of g (same order) -> the
@@ -2249,7 +2138,7 @@ def price_book(g: Graph, lam: float, order: list[int],
     reach = g.reach if reach is None else reach
     if compiled is not None and compiled.ok:
         import budget_compiled
-        return budget_compiled.price_book(compiled, lam, reach, fixed_policy)
+        return budget_compiled.price_book(compiled, lam, reach)
     V: dict[int, float] = {}     # penalised value (local units)
     T: dict[int, float] = {}     # true value under the chosen policy
     choice: dict[int, str] = {}
@@ -2267,9 +2156,6 @@ def price_book(g: Graph, lam: float, order: list[int],
         if h in g.our:
             n = g.our[h]
             cands = n.cands
-            if fixed_policy is not None:
-                want = fixed_policy.get(h)
-                cands = [c for c in cands if c[0] == want]
             best = None
             im, margin = incumbent_move(g, h)
             for san, ch, in_sub, lv in cands:
@@ -2392,57 +2278,32 @@ def _gc_paused(fn):
 
 
 @_gc_paused
-def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = None,
-                 steps: int = 40, log=print, *, rounds: int = 2,
-                 seed_reach: dict[int, float] | None = None, select: str = "closest",
-                 select_tol: float = 0.01, on_round=None,
-                 reprice: str = "replace", dag_mode: str | None = None,
-                 line_k: int = 8, fixpoint_iters: int = 8,
-                 polish_from: list[dict[int, str]] | None = None, engine: str = "auto",
+def price_search(g: Graph, target: int,
+                 steps: int = 40, log=print, *,
+                 seed_reach: dict[int, float] | None = None, select_tol: float = 0.01,
+                 polish: bool = True, line_k: int = 8, engine: str = "auto",
                  compiled=None) -> tuple[dict, dict]:
-    """Bisect the price onto `target` booked positions; then re-price with the
-    book's own total reach (transpositions charged once) and bisect again.
-    Returns (result, info): info holds the lam sweep, the chosen lam, the
-    nearest sizes either side of the target, and the duality bound on how much
-    more any book of `target` positions could score.
+    """Bisect the price onto `target` booked positions, keep the best-valued solve whose
+    size is within select_tol of the target (else the solve nearest the target), then
+    polish it. Returns (result, info): info holds the lam sweep, the chosen lam, the
+    nearest sizes either side of the target, and the duality bound on how much more any
+    book of `target` positions could score.
 
-    The re-pricing is exact only on a tree. On a DAG a position's true reach
-    depends on the whole book, and round 2 can do WORSE than round 1: a
-    transposition the round-1 book reaches only by a minor path is re-priced
-    at that small reach and dropped (Black b2000, 2026-10-20: round 1 0.5941 at
-    1,917 positions, round 2 0.5869 at 1,994; a curve-engine book of 2,001
-    scored 0.6067 on the same graph). Off-default knobs:
-      rounds      re-pricing rounds (each prices with the previous round's book
-                  reach, the optimistic reach where that book does not go)
-      seed_reach  the base reach for EVERY round instead of the optimistic g.reach:
-                  round 1 prices with it, later rounds re-price the previous book's
-                  positions over it (e.g. max(optimistic, the source book's
-                  policy_reach), so a transposition the book does not take yet is
-                  still priced at the reach a full book would give it)
-      select      'closest' = the last round's book nearest the target (default);
-                  'best' = the highest realized value of every solve, any round,
-                  whose size is within select_tol of the target
-      on_round    called as on_round(round, closest_book, best_book_so_far)
-      reprice     'replace' (default): a node the previous book reaches is priced at that
-                  book's reach, even below its optimistic reach; 'max': at the larger of
-                  the two, so a transposition is still charged once but a node reached only
-                  by a minor path is never made dearer than round 1 priced it
-      dag_mode    None (default): all of the above, unchanged. Otherwise the DAG candidates
-                  of plan item 11 (measured against an exact oracle in _test_budget_dag):
-                  'fixpoint'  every solve re-prices with its own book's total reach until
-                              the booked set repeats (at most fixpoint_iters times), keeping
-                              the iterate with the best value - lam * size; the result is the
-                              best-valued book of any solve that fits the target.
-                  'polish'    the search as configured, then polish_book from the selected
-                              book, the best-valued book that fits and the smallest one over
-                              the target; the best polished book is returned (it never
-                              exceeds the target). Under g.meta["stick"] polish maximises
-                              polish_book's sticky objective J, and the best J is returned.
-                  'fixpoint+polish'  both.
-                  line_k bounds polish_book's line moves.
-      polish_from  more books for polish to start from (e.g. the curve engine's book), after
-                  its own three; the result is then never below any of them polished. None
-                  (default) = the three starts only.
+    One pricing round. The price recursion is exact only on a tree: on a DAG a position's
+    true reach depends on the whole book. Re-pricing rounds, reach fixed points and extra
+    polish starts were measured against an exact oracle (plan item 11, 2026-10-28) and
+    retired on 2026-11-12: one round plus polish matched four rounds (tag
+    archive-2026-11-11 keeps them).
+      seed_reach  the base reach to price with instead of the optimistic g.reach (the
+                  recipe passes max(optimistic, the source book's policy_reach), so a
+                  transposition the book does not take yet is still priced at the reach
+                  a full book would give it)
+      polish      True (the recipe): polish_book from the selected book, the best-valued
+                  solve that fits and the smallest solve over the target; the best
+                  polished book is returned (it never exceeds the target). Under
+                  g.meta["stick"] polish maximises polish_book's sticky objective J, and
+                  the best J is returned. line_k bounds polish_book's line moves.
+                  False: the selected solve itself (tests of the price recursion).
       engine      'compiled': every solve, reach walk and polish evaluation runs on a
                   budget_compiled.CompiledGraph (array sweeps; `compiled` passes one already
                   built from this graph, e.g. shared across budgets); 'legacy': the dict walks
@@ -2451,18 +2312,13 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                   walks. All return the same book, value and sweep bit for bit
                   (_test_budget_speed.py); info['timing'] says where the time went."""
     import time as _time
-    if polish_from and dag_mode not in ("polish", "fixpoint+polish"):
-        raise ValueError("polish_from needs dag_mode 'polish' or 'fixpoint+polish'")
-    if dag_mode not in (None, "fixpoint", "polish", "fixpoint+polish"):
-        raise ValueError(f"dag_mode {dag_mode!r}")
     if engine not in ("auto", "compiled", "legacy"):
         raise ValueError(f"engine {engine!r}")
     if engine == "auto":
         engine = ("compiled" if compiled is not None
                   or len(g.our) + len(g.opp) >= PRICE_COMPILED_MIN_NODES else "dict")
     t_start = _time.time()
-    fixpoint = dag_mode in ("fixpoint", "fixpoint+polish")
-    pool: list[tuple[int, float, dict]] = []   # (size, value, booked) of every solve, dag_mode only
+    pool: list[tuple[int, float, dict]] = []   # (size, value, booked) of every solve
     cg = pos = None
     if engine == "legacy":
         order, cut = _topo_up_dict(g)
@@ -2481,56 +2337,33 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
     t_solves = [0.0]
     if cut:
         log(f"  price search: {len(cut):,} back edges cut in repetition cycles")
-    tried: list[tuple[float, int, float, float, int]] = []  # lam, n, T, Vpen, round
+    tried: list[tuple[float, int, float, float]] = []  # lam, n, T, Vpen
     near: list[dict] = []               # solves within select_tol of the target
+    reach = g.reach if seed_reach is None else seed_reach
 
-    def solve(lam, reach, rnd):
+    def solve(lam):
         t0 = _time.time()
-        res = price_book(g, lam, order, reach, fixed_policy, compiled=cg)
+        res = price_book(g, lam, order, reach, compiled=cg)
         t_solves[0] += _time.time() - t0
-        if dag_mode is not None:
-            pool.append((res["spent_distinct"], res["root_value_realized"], res["booked"]))
-        if fixpoint:
-            res = _fixpoint(res, lam, reach)
+        pool.append((res["spent_distinct"], res["root_value_realized"], res["booked"]))
         tried.append((lam, res["spent_distinct"], res["root_value_realized"],
-                      res["root_value_penalized"], rnd))
+                      res["root_value_penalized"]))
         if abs(res["spent_distinct"] - target) <= select_tol * target:
             near.append(res)
         return res
 
-    def _fixpoint(res, lam, reach):
-        """Candidate (a): price each position the book reaches at the book's own total
-        reach, re-solve, repeat until the booked set repeats (cycling is possible, so keep
-        the iterate with the best true Lagrangian value - lam * size)."""
-        best, seen = res, {frozenset(res["booked"].items())}
-        for _ in range(fixpoint_iters):
-            rr = dict(reach)
-            rr.update({h: w for h, w in res["reach_policy"].items() if w > 0})
-            t0 = _time.time()
-            res = price_book(g, lam, order, rr, fixed_policy, compiled=cg)
-            t_solves[0] += _time.time() - t0
-            pool.append((res["spent_distinct"], res["root_value_realized"], res["booked"]))
-            if (res["root_value_realized"] - lam * res["spent_distinct"]
-                    > best["root_value_realized"] - lam * best["spent_distinct"] + 1e-15):
-                best = res
-            key = frozenset(res["booked"].items())
-            if key in seen:
-                break
-            seen.add(key)
-        return best
-
-    def bisect(reach, rnd):
+    def bisect():
         lo, hi = math.log(1e-10), math.log(1.0)   # log lam: N(lo) large, N(hi) ~ 0
-        r_hi = solve(math.exp(hi), reach, rnd)
+        r_hi = solve(math.exp(hi))
         if r_hi["spent_distinct"] >= target:
             return None, r_hi
-        r_lo = solve(math.exp(lo), reach, rnd)
+        r_lo = solve(math.exp(lo))
         if r_lo["spent_distinct"] <= target:
             return r_lo, None
         best_under, best_over = r_hi, r_lo
         for _ in range(steps):
             mid = (lo + hi) / 2
-            r = solve(math.exp(mid), reach, rnd)
+            r = solve(math.exp(mid))
             n = r["spent_distinct"]
             if n == target:
                 return r, r
@@ -2542,81 +2375,54 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
                 break
         return best_under, best_over
 
-    def closest(under, over):
-        if over is None:
-            return under
-        if under is None:
-            return over
-        if target - under["spent_distinct"] <= over["spent_distinct"] - target:
-            return under
-        return over
-
-    base = g.reach if seed_reach is None else seed_reach
-    reach = base
-    for rnd in range(1, rounds + 1):
-        u, o = bisect(reach, rnd)
-        res = closest(u, o)
-        if on_round is not None:
-            on_round(rnd, res, max(near, key=lambda r: r["root_value_realized"])
-                     if near else None)
-        if rnd < rounds:
-            reach = dict(base)
-            if reprice == "max":
-                reach.update({h: max(r, base.get(h, 0.0))
-                              for h, r in res["reach_policy"].items() if r > 0})
-            else:
-                reach.update({h: r for h, r in res["reach_policy"].items() if r > 0})
-    if select == "best" and near:
+    u, o = bisect()
+    if near:
         res = max(near, key=lambda r: r["root_value_realized"])
+    elif o is None:
+        res = u
+    elif u is None:
+        res = o
+    else:
+        res = u if target - u["spent_distinct"] <= o["spent_distinct"] - target else o
     polish_info = None
     t_polish = _time.time()
-    if dag_mode is not None:
+    if polish:
         fits = [e for e in pool if e[0] <= target]
         best_fit = max(fits, key=lambda e: e[1]) if fits else None
-        if fixpoint and best_fit is not None and (
-                res["spent_distinct"] > target
-                or best_fit[1] > res["root_value_realized"] + 1e-15):
-            res = book_result(g, best_fit[2], order, fixed_policy, lam=res["lam"], pos=pos,
-                              compiled=cg)
-        if dag_mode in ("polish", "fixpoint+polish"):
-            over = [e for e in pool if e[0] > target]
-            starts = [res["booked"]]
-            if best_fit is not None:
-                starts.append(best_fit[2])
-            if over:
-                starts.append(min(over, key=lambda e: (e[0], -e[1]))[2])
-            n_own = len(starts)
-            starts += polish_from or []
-            seen_s: set = set()
-            best_p = None
-            polish_info = []
-            free_lines: dict = {}
-            for i, st in enumerate(starts):
-                key = frozenset(st.items())
-                if key in seen_s:
-                    continue
-                seen_s.add(key)
-                moves, pst = polish_book(g, st, target, order, fixed_policy=fixed_policy,
-                                         line_k=line_k, compiled=cg, free_lines=free_lines)
-                if i >= n_own:
-                    pst["start"] = f"given {i - n_own}"
-                polish_info.append(pst)
-                # under stickiness, the best polish OBJECTIVE (value without one)
-                if best_p is None or (pst.get("objective", pst["value"])
-                                      > best_p[1].get("objective", best_p[1]["value"]) + 1e-15):
-                    best_p = (moves, pst)
-            free_lines.clear()
-            res = book_result(g, best_p[0], order, fixed_policy, lam=res["lam"], pos=pos,
-                              compiled=cg)
+        over = [e for e in pool if e[0] > target]
+        starts = [res["booked"]]
+        if best_fit is not None:
+            starts.append(best_fit[2])
+        if over:
+            starts.append(min(over, key=lambda e: (e[0], -e[1]))[2])
+        seen_s: set = set()
+        best_p = None
+        polish_info = []
+        free_lines: dict = {}
+        for st in starts:
+            key = frozenset(st.items())
+            if key in seen_s:
+                continue
+            seen_s.add(key)
+            moves, pst = polish_book(g, st, target, order,
+                                     line_k=line_k, compiled=cg, free_lines=free_lines)
+            polish_info.append(pst)
+            # under stickiness, the best polish OBJECTIVE (value without one)
+            if best_p is None or (pst.get("objective", pst["value"])
+                                  > best_p[1].get("objective", best_p[1]["value"]) + 1e-15):
+                best_p = (moves, pst)
+        free_lines.clear()
+        res = book_result(g, best_p[0], order, lam=res["lam"], pos=pos,
+                          compiled=cg)
     t_polish = _time.time() - t_polish
-    ub = min(vp + lam * target for lam, _n, _t, vp, rnd in tried if rnd == rounds)
+    ub = min(vp + lam * target for lam, _n, _t, vp in tried)
     info = {"lam": res["lam"], "booked": res["spent_distinct"],
             "under": None if u is None else u["spent_distinct"],
             "over": None if o is None else o["spent_distinct"],
             "value": res["root_value_realized"], "upper_bound": ub,
             "gap": ub - res["root_value_realized"],
-            "sweep": [{"lam": lam, "booked": n, "value": t, "round": rnd}
-                      for lam, n, t, _vp, rnd in sorted(tried)],
+            "sweep": [{"lam": lam, "booked": n, "value": t, "round": 1}
+                      for lam, n, t, _vp in sorted(tried)],
             "timing": {"engine": ("compiled" if cg is not None
                                   else "legacy" if engine == "legacy" else "dict"),
                        "order_s": round(t_order, 3), "solves_s": round(t_solves[0], 3),
@@ -2629,8 +2435,8 @@ def price_search(g: Graph, target: int, fixed_policy: dict[int, str] | None = No
     tm = info["timing"]
     log(f"  price search time ({tm['engine']}): order {tm['order_s']:.1f}s, solves "
         f"{tm['solves_s']:.1f}s, dag mode {tm['dag_s']:.1f}s, total {tm['total_s']:.1f}s")
-    if dag_mode is not None:
-        info["dag_mode"] = dag_mode
+    if polish:
+        info["dag_mode"] = "polish"
         info["polish"] = polish_info
         if polish_info:
             log("  dag polish: " + "; ".join(
@@ -2665,14 +2471,6 @@ def _static_value(g: Graph, h: int) -> float:
         for p, k, in_s, lv in n.kids)
 
 
-def _cands(g: Graph, h: int, fixed_policy: dict[int, str] | None):
-    cands = g.our[h].cands
-    if fixed_policy is not None:
-        want = fixed_policy.get(h)
-        cands = [c for c in cands if c[0] == want]
-    return cands
-
-
 @dataclass
 class _Region:
     """A book on the reached region: W = total reach (policy_reach), T = value
@@ -2689,8 +2487,7 @@ class _Region:
         return len(self.booked)
 
 
-def _book_region(g: Graph, moves: dict[int, str], pos: dict[int, int],
-                 fixed_policy: dict[int, str] | None = None) -> _Region:
+def _book_region(g: Graph, moves: dict[int, str], pos: dict[int, int]) -> _Region:
     """policy_reach and policy_value of `moves`, computed on the reached nodes only and
     in the same order (pos = index in topo_up's order), so the floats are identical. A
     book move that is not an (allowed) candidate is dropped, as are moves at positions
@@ -2708,7 +2505,7 @@ def _book_region(g: Graph, moves: dict[int, str], pos: dict[int, int],
             want = moves.get(h)
             if want is None:
                 continue
-            c = next((c for c in _cands(g, h, fixed_policy) if c[0] == want), None)
+            c = next((c for c in g.our[h].cands if c[0] == want), None)
             if c is None:
                 continue
             booked[h] = want
@@ -2751,25 +2548,25 @@ def _book_region(g: Graph, moves: dict[int, str], pos: dict[int, int],
     return _Region(W=W, T=T, booked=booked, child=child, value=T[root])
 
 
-def _region_compiled(cg, moves: dict[int, str], fixed_policy) -> _Region:
+def _region_compiled(cg, moves: dict[int, str]) -> _Region:
     """_book_region on a CompiledGraph (budget_compiled.region): the same _Region, plus
     the index-keyed view polish's incremental verification reads."""
     import budget_compiled
-    W, T, booked, child, value, aux = budget_compiled.region(cg, moves, fixed_policy)
+    W, T, booked, child, value, aux = budget_compiled.region(cg, moves)
     return _Region(W=W, T=T, booked=booked, child=child, value=value, aux=aux)
 
 
 def book_result(g: Graph, moves: dict[int, str], order: list[int],
-                fixed_policy: dict[int, str] | None = None, lam: float | None = None,
+                lam: float | None = None,
                 pos: dict[int, int] | None = None, compiled=None) -> dict:
     """price_book's result dict for an arbitrary book (what the DAG modes return).
     compiled: a budget_compiled.CompiledGraph of g -> its region evaluator (same floats)."""
     if compiled is not None and compiled.ok:
-        reg = _region_compiled(compiled, moves, fixed_policy)
+        reg = _region_compiled(compiled, moves)
         pos = compiled.pos
     else:
         pos = {h: i for i, h in enumerate(order)} if pos is None else pos
-        reg = _book_region(g, moves, pos, fixed_policy)
+        reg = _book_region(g, moves, pos)
     visited = sorted(reg.W, key=lambda h: -pos[h])
     return {"booked": reg.booked, "alloc": {}, "visited": visited,
             "realized": {h: reg.T[h] for h in visited},
@@ -2779,7 +2576,7 @@ def book_result(g: Graph, moves: dict[int, str], order: list[int],
 
 
 def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], *,
-                fixed_policy: dict[int, str] | None = None, line_k: int = 8,
+                line_k: int = 8,
                 max_verify: int = 24, max_steps: int = 100_000,
                 fill_width: int = 256, max_exchange: int = 16,
                 verify_after_hit: int = 4, compiled=None,
@@ -2806,7 +2603,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
     for a single move on a DAG: W(u) * (new local value - old)); verification re-runs
     the region evaluator. Returns (moves, stats).
 
-    `moves` may be any book: the price search's own (price_search dag_mode='polish'), or
+    `moves` may be any book: the price search's own (price_search with polish), or
     a caller's, e.g. the curve engine's (build_budget_books --method dp --polish). A start
     that fits is never made worse; one over the target is trimmed first.
 
@@ -2833,8 +2630,8 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
     region is rebuilt the same way (budget_compiled.advance); static values are
     memoised; a line table is reused from an earlier step when everything it reads (its
     children's values, which replies are booked, the free-line memo entries) is bitwise
-    unchanged; and free_lines (a dict shared by the polishes of one search, same graph
-    and fixed_policy) carries book-free line tables between them (see line_free)."""
+    unchanged; and free_lines (a dict shared by the polishes of one search, same graph)
+    carries book-free line tables between them (see line_free)."""
     import time as _time
     t0 = _time.time()
     st = g.meta.get("stick") if g.meta else None
@@ -2843,7 +2640,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
     inc: dict[int, str] = {}
     if margin:
         for h, im in st[0].items():
-            if h in g.our and any(c[0].rstrip("+#") == im for c in _cands(g, h, fixed_policy)):
+            if h in g.our and any(c[0].rstrip("+#") == im for c in g.our[h].cands):
                 inc[h] = im
     fast = compiled is not None and compiled.ok and not inc
     if fast:
@@ -2851,7 +2648,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         pos = compiled.pos
 
         def evaluate(m: dict[int, str]) -> _Region:
-            return _region_compiled(compiled, m, fixed_policy)
+            return _region_compiled(compiled, m)
 
         def static_h(h: int) -> float:
             return compiled.static(pos[h])
@@ -2859,7 +2656,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         pos = {h: i for i, h in enumerate(order)}
 
         def evaluate(m: dict[int, str]) -> _Region:
-            return _book_region(g, m, pos, fixed_policy)
+            return _book_region(g, m, pos)
 
         def static_h(h: int) -> float:
             return _static_value(g, h)
@@ -2972,7 +2769,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         the cone unfolded as a tree (a transposition inside it is charged per path --
         an estimate; verification is exact)."""
         best: list = [(g.our[k].l_node, ())] + [None] * K
-        for san, ch, in_sub, lv in _cands(g, k, fixed_policy):
+        for san, ch, in_sub, lv in g.our[k].cands:
             cs = churn(k, san)
             if not (in_sub and ch is not None):
                 acc = [None, (lv - cs, ((k, san),))]
@@ -3021,7 +2818,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         tables): [lo, hi] narrowed to the floors that make the same reach decisions over
         the explored cone -- the largest reach left out, the smallest let in."""
         best: list = [(our_d[k].l_node, ())] + [None] * K
-        for san, ch, in_sub, lv in _cands(g, k, fixed_policy):
+        for san, ch, in_sub, lv in g.our[k].cands:
             if not (in_sub and ch is not None):
                 acc = [None, (lv, ((k, san),))]
             elif ch in our_d:
@@ -3101,7 +2898,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
 
     # Compiled only: line tables kept across steps, keyed (k, K). The top level of
     # _extend(k, K, 0, val(rg, .), rg.booked, line_free) reads, besides the fixed graph,
-    # floor and fixed_policy: val(rg, ch) of each in-subgraph candidate child (rg.T[ch], or
+    # floor: val(rg, ch) of each in-subgraph candidate child (rg.T[ch], or
     # for a child outside the region its replies' rg.T), whether each reply it would
     # explore is booked, and the free-line memo entry of each unbooked one. After every
     # step, positions whose region value/membership (tchg) or booked status (bchg) changed
@@ -3116,7 +2913,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
 
     def line_deps(rg: _Region, k: int, K: int) -> tuple[list, list, list]:
         vdeps, rdeps, mdeps = [], [], []
-        for _san, ch, in_sub, _lv in _cands(g, k, fixed_policy):
+        for _san, ch, in_sub, _lv in g.our[k].cands:
             if not (in_sub and ch is not None):
                 continue
             vdeps.append(ch)
@@ -3301,7 +3098,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
         for u, w in reg.booked.items():
             if u in leafset:
                 continue
-            for san, ch, in_sub, lv in _cands(g, u, fixed_policy):
+            for san, ch, in_sub, lv in g.our[u].cands:
                 if san == w:
                     continue
                 nv = val(reg, ch) if (in_sub and ch is not None) else lv
@@ -3328,11 +3125,10 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
             if fast:              # no stickiness here, so J is the value
                 changed = [h for h, _mv in adds] + list(dels)
                 size, value = budget_compiled.quick(
-                    compiled, reg.aux, reg.booked, reg.size, reg.value, m, changed,
-                    fixed_policy)
+                    compiled, reg.aux, reg.booked, reg.size, reg.value, m, changed)
                 new, j = (m, size, value, changed), value
             else:
-                rg = _book_region(g, m, pos, fixed_policy)
+                rg = _book_region(g, m, pos)
                 new, j = (rg, rg.size, rg.value), obj(rg)
             if new[1] <= target and j > (took[2] if took else cur) + eps:
                 if took is None:
@@ -3344,8 +3140,7 @@ def polish_book(g: Graph, moves: dict[int, str], target: int, order: list[int], 
             m, size, value, changed = took[0]
             prev = reg
             W2, T2, b2, c2, v2, aux2 = budget_compiled.advance(
-                compiled, reg.W, reg.T, reg.booked, reg.child, reg.value, reg.aux, m, changed,
-                fixed_policy)
+                compiled, reg.W, reg.T, reg.booked, reg.child, reg.value, reg.aux, m, changed)
             reg = _Region(W=W2, T=T2, booked=b2, child=c2, value=v2, aux=aux2)
             for h in aux2.tchg:
                 tchg[h] = steps + 1

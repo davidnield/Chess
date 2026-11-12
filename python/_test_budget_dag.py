@@ -20,7 +20,7 @@ most b positions. It is exponential and meant for graphs of a dozen our-nodes.
      (two replies to one position).
   E  the region evaluator behind book_result / polish_book is policy_value bit for bit
      (value, size, reach), on random books over random DAGs and case F's cycle.
-  N  price_search(dag_mode=None) is the unchanged search.
+  N  price_search(polish=False) is the price search alone: the same sweep, no polish.
   P  polish_book never exceeds the target and never lowers its starting book's value.
   R  REPORT over random DAGs (both colours to move at the root, mixed leaf values, lumpy
      chains, transpositions of both kinds: an opponent reply into a position another
@@ -31,8 +31,7 @@ most b positions. It is exponential and meant for graphs of a dozen our-nodes.
      many instances it scores below both baselines / below the better one.
   G  gates on the report (plan item 11): polish always fits, is never below both price
      and dp, and is exact on >= 99% of instances with mean gap < 1e-4; dp+polish always
-     fits, is never below dp, and is exact at least as often as dp; polish+dp is the
-     better of polish and dp+polish (to price_search's 1e-15 tie rule).
+     fits, is never below dp, and is exact at least as often as dp.
   S  stickiness (g.meta["stick"], --incumbent; polish_book's objective J = value - margin
      x reach of the changed positions). S0: no stick and margin 0 are the same polish bit
      for bit. S1: with a huge margin polish never changes a move its start kept from the
@@ -43,29 +42,23 @@ most b positions. It is exponential and meant for graphs of a dozen our-nodes.
      gated on sticky polish fitting, being J-exact on >= 98%, and churning less as the
      margin rises.
 
-Engines:
-  price         price_search with the production DAG flags (--price-seed source
-                --price-reprice max --price-rounds 4 --price-select best); the "source
-                book" is the unbudgeted best book (price_book at a vanishing price), the
-                synthetic stand-in for the Stage-3 repertoire.
-  price_dflt    price_search defaults (2 rounds, closest).
-  fixpoint, polish, fixpoint+polish
-                the production flags plus price_search(dag_mode=...), plan item 11's
-                candidates (a) and (c).
+Engines (the re-pricing rounds, reach fixed points, --leftover and extra polish starts
+these reports once compared were retired on 2026-11-12; tag archive-2026-11-11 keeps them):
+  price         price_search(polish=False) seeded like the recipe (--price-seed source);
+                the "source book" is the unbudgeted best book (price_book at a vanishing
+                price), the synthetic stand-in for the Stage-3 repertoire.
+  polish        price_search as the recipe runs it (one round, best selection, polish).
   dp            build_curves + extract_book (the curve engine, as used for Black).
-  dp_leftover   the same with --leftover.
   dp+polish     polish_book started from the dp book (build_budget_books --method dp
                 --polish).
-  polish+dp     polish with the dp book as a fourth start (price_search polish_from,
-                --polish-from).
 
 Usage:  _test_budget_dag.py [N_GRAPHS [N_STICK]]  checks + reports (default 300 graphs, 60
                                                  for the stickiness report)
         _test_budget_dag.py --scale 10000,100000 400,2000
                                                  wall-clock of each mode on big_dag
                                                  graphs of those sizes, at those targets
-                                                 [--modes polish,...: a subset of the modes,
-                                                 plus dp+polish and polish+stick]
+                                                 [--modes polish,...: a subset of polish,
+                                                 dp+polish and polish+stick]
 Exit 1 when a check fails.
 """
 from __future__ import annotations
@@ -348,6 +341,7 @@ def scale(sizes: list[int], targets: list[int], modes=None) -> None:
         for B in targets:
             base = None
             for mode in (None,) + tuple(DAG_MODES if modes is None else modes):
+                # None: the price search alone, the baseline the others are timed against
                 t0 = time.time()
                 if mode == "dp+polish":
                     # the curve engine, then polish from its book: two rows, the second
@@ -368,17 +362,15 @@ def scale(sizes: list[int], targets: list[int], modes=None) -> None:
                     # book of a perturbed copy (perturbed()); the search runs on g
                     if B not in incs:
                         h = perturbed(g, random.Random(B))
-                        incs[B] = price_search(h, B, log=quiet, rounds=4, select="best",
-                                               reprice="max", seed_reach=seed,
-                                               dag_mode="polish")[0]["booked"]
+                        incs[B] = price_search(h, B, log=quiet,
+                                               seed_reach=seed)[0]["booked"]
                         t0 = time.time()
                     g.meta = {"stick": (incs[B], 0.01)}
-                    res, _ = price_search(g, B, log=quiet, rounds=4, select="best",
-                                          reprice="max", seed_reach=seed, dag_mode="polish")
+                    res, _ = price_search(g, B, log=quiet, seed_reach=seed)
                     g.meta = {}
                 else:
-                    res, _ = price_search(g, B, log=quiet, rounds=4, select="best",
-                                          reprice="max", seed_reach=seed, dag_mode=mode)
+                    res, _ = price_search(g, B, log=quiet, seed_reach=seed,
+                                          polish=mode == "polish")
                 dt = time.time() - t0
                 base = dt if mode is None else base
                 print(f"  {len(g.our) + len(g.opp):>9,}{B:>8,}  {mode or 'price':<16}"
@@ -435,30 +427,20 @@ def source_seed(g: Graph, order: list[int]) -> dict[int, float]:
     return seed
 
 
-DAG_MODES = ("fixpoint", "polish", "fixpoint+polish")
-BASELINES = ("price", "price_dflt", "dp", "dp_leftover")
+DAG_MODES = ("polish",)
+BASELINES = ("price", "dp")
 
 
 def engines(g: Graph, order: list[int], B: int) -> dict[str, dict]:
     quiet = lambda *_: None  # noqa: E731
     out = {}
-    res, _ = price_search(g, B, log=quiet, rounds=4, select="best", reprice="max",
-                          seed_reach=source_seed(g, order))
-    out["price"] = res["booked"]
-    res, _ = price_search(g, B, log=quiet)
-    out["price_dflt"] = res["booked"]
-    for mode in DAG_MODES:
-        res, _ = price_search(g, B, log=quiet, rounds=4, select="best", reprice="max",
-                              seed_reach=source_seed(g, order), dag_mode=mode)
-        out[mode] = res["booked"]
+    seed = source_seed(g, order)
+    for name, polish in (("price", False), ("polish", True)):
+        res, _ = price_search(g, B, log=quiet, seed_reach=seed, polish=polish)
+        out[name] = res["booked"]
     curves, _ = build_curves(g, bmax=B)
     out["dp"] = extract_book(g, curves, B)["booked"]
-    out["dp_leftover"] = extract_book(g, curves, B, leftover=True)["booked"]
     out["dp+polish"] = polish_book(g, out["dp"], B, order)[0]
-    res, _ = price_search(g, B, log=quiet, rounds=4, select="best", reprice="max",
-                          seed_reach=source_seed(g, order), dag_mode="polish",
-                          polish_from=[out["dp"]])
-    out["polish+dp"] = res["booked"]
     return out
 
 
@@ -519,7 +501,6 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
     n_inst = n_transpo = 0
     worse = {m: {"both": 0, "either": 0} for m in DAG_MODES + ("dp+polish",)}
     below_dp = 0                        # dp+polish below dp
-    not_max = 0                         # polish+dp is not the better of polish, dp+polish
     for g, budgets in report_instances(n_graphs, seed, transpo):
         t0 = time.time()
         opt, _books = exact_dag(g, max(budgets))
@@ -546,7 +527,6 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
                 worse[mode]["both"] += (v < got["price"] - TOL and v < got["dp"] - TOL)
                 worse[mode]["either"] += (v < max(got["price"], got["dp"]) - TOL)
             below_dp += got["dp+polish"] < got["dp"] - TOL
-            not_max += abs(got["polish+dp"] - max(got["polish"], got["dp+polish"])) > 1e-15
     print(f"\n  {n_graphs} random DAGs ({n_transpo} with a transposition), {n_inst} "
           f"(graph, budget) instances; oracle {t_or:.1f}s, engines {t_en:.1f}s")
     print(f"  {'engine':<14}{'fits':>7}{'exact':>8}{'gap mean':>10}{'gap max':>10}"
@@ -559,10 +539,8 @@ def report(n_graphs: int = 300, seed: int = 20261028, transpo: float = 0.35
     for mode in DAG_MODES + ("dp+polish",):
         print(f"  {mode}: below BOTH price and dp on {worse[mode]['both']} instances, "
               f"below the better of the two on {worse[mode]['either']}")
-    print(f"  dp+polish: below dp on {below_dp} instances; polish+dp (polish_from=[dp]) "
-          f"differs from the better of polish and dp+polish on {not_max}")
+    print(f"  dp+polish: below dp on {below_dp} instances")
     worse["dp+polish"]["below_dp"] = below_dp
-    worse["polish+dp"] = {"not_max": not_max}
     return tallies, worse
 
 
@@ -606,13 +584,11 @@ def perturbed(g: Graph, rng: random.Random, sd: float = 0.03) -> Graph:
 
 def sticky_engines(g: Graph, order: list[int], B: int, seed: dict) -> dict[str, dict]:
     """The recipe engines under whatever g.meta["stick"] holds: the price search alone
-    and with polish (--price-seed source --price-reprice max --price-rounds 1
-    --price-select best [--price-dag-mode polish]), dp and dp+polish."""
+    and with polish (seeded like --price-seed source), dp and dp+polish."""
     quiet = lambda *_: None  # noqa: E731
     out = {}
-    for name, mode in (("price", None), ("polish", "polish")):
-        res, _ = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
-                              seed_reach=seed, dag_mode=mode)
+    for name, polish in (("price", False), ("polish", True)):
+        res, _ = price_search(g, B, log=quiet, seed_reach=seed, polish=polish)
         out[name] = res["booked"]
     curves, _ = build_curves(g, bmax=B)
     out["dp"] = extract_book(g, curves, B)["booked"]
@@ -622,7 +598,7 @@ def sticky_engines(g: Graph, order: list[int], B: int, seed: dict) -> dict[str, 
 
 def stick_checks() -> None:
     """S0: no stick, or a margin of 0, is the same polish bit for bit (polish_book and
-    price_search dag_mode='polish'). S1: with a huge margin polish never changes a move
+    price_search with polish). S1: with a huge margin polish never changes a move
     its start kept from the incumbent. S2: sticky polish fits, never lowers its start's
     J, and reports J and the changed positions as sticky() computes them."""
     quiet = lambda *_: None  # noqa: E731
@@ -638,12 +614,10 @@ def stick_checks() -> None:
         for B in (2, 5, 8):
             g.meta = {}
             ref = [polish_book(g, st, B, order) for st in starts]
-            rp, ip = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
-                                  seed_reach=seed, dag_mode="polish")
+            rp, ip = price_search(g, B, log=quiet, seed_reach=seed)
             g.meta = {"stick": (inc, 0.0)}
             got = [polish_book(g, st, B, order) for st in starts]
-            rq, iq = price_search(g, B, log=quiet, rounds=1, select="best", reprice="max",
-                                  seed_reach=seed, dag_mode="polish")
+            rq, iq = price_search(g, B, log=quiet, seed_reach=seed)
             for (ma, sa), (mb, sb) in zip(ref, got):
                 bad0 += ma != mb or {**sa, "seconds": 0} != {**sb, "seconds": 0}
             bad0 += (rp["booked"] != rq["booked"]
@@ -651,8 +625,7 @@ def stick_checks() -> None:
                      or ip["sweep"] != iq["sweep"])
             for margin in (1e9, 0.01):
                 g.meta = {"stick": (inc, margin)}
-                rs, _ = price_search(g, B, log=quiet, rounds=1, select="best",
-                                     reprice="max", seed_reach=seed)
+                rs, _ = price_search(g, B, log=quiet, seed_reach=seed, polish=False)
                 curves, _ = build_curves(g, bmax=B)
                 for st in starts + [rs["booked"], extract_book(g, curves, B)["booked"]]:
                     mv, pst = polish_book(g, st, B, order)
@@ -809,17 +782,17 @@ def main() -> int:
     check("E: book_result's value, size and reach are policy_value's, bit for bit", bad == 0,
           f"{bad} off")
 
-    # N: dag_mode=None is the unchanged search; P: polish never exceeds the target and
-    # never lowers its start's value
+    # N: polish=False is the price search alone (same sweep, no polish stats); P: polish
+    # never exceeds the target and never lowers its start's value
     bad_n = bad_p = 0
     quiet = lambda *_: None  # noqa: E731
     for g in np_graphs():
         order, _cut = topo_up(g)
         for B in (2, 5):
-            a, ia = price_search(g, B, log=quiet, rounds=3, reprice="max")
-            b, ib = price_search(g, B, log=quiet, rounds=3, reprice="max", dag_mode=None)
-            bad_n += (a["booked"] != b["booked"] or a["root_value_realized"] != b["root_value_realized"]
-                      or ia["sweep"] != ib["sweep"] or "polish" in ib)
+            a, ia = price_search(g, B, log=quiet, polish=False)
+            b, ib = price_search(g, B, log=quiet)
+            bad_n += (ia["sweep"] != ib["sweep"] or "polish" in ia or "polish" not in ib
+                      or ia["lam"] != ib["lam"])
             for start in (a["booked"], {}):
                 moves, st = polish_book(g, start, B, order)
                 v0 = book_result(g, start, order)
@@ -827,7 +800,8 @@ def main() -> int:
                 bad_p += (pv["played"] > B or pv["value"] != st["value"]
                           or (v0["spent_distinct"] <= B
                               and st["value"] < v0["root_value_realized"] - 1e-15))
-    check("N: dag_mode=None returns the unchanged search", bad_n == 0, f"{bad_n} differ")
+    check("N: polish=False is the same search without the polish", bad_n == 0,
+          f"{bad_n} differ")
     check("P: polish fits the target, never loses value, reports policy_value's value",
           bad_p == 0, f"{bad_p} off")
 
@@ -845,8 +819,6 @@ def main() -> int:
     check("G: dp+polish always fits and is never below dp",
           dpp.fit == dpp.n and worse["dp+polish"]["below_dp"] == 0,
           f"fits {dpp.fit}/{dpp.n}, below dp on {worse['dp+polish']['below_dp']}")
-    check("G: polish_from=[dp] returns the better of polish and dp+polish (to 1e-15)",
-          worse["polish+dp"]["not_max"] == 0, f"{worse['polish+dp']['not_max']} differ")
     check("G: dp+polish is at least as often exact as dp",
           dpp.exact >= tallies["dp"].exact,
           f"{dpp.exact / dpp.n:.1%} vs dp {tallies['dp'].exact / dpp.n:.1%}")

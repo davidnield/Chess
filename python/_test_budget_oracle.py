@@ -21,7 +21,7 @@ PRODUCTION PARITY (T5/T6)
 -------------------------
 A real-board fixture is valued by stage3's run_backwards_induction (imported,
 the repo's oracle convention); the same edges go through build_graph +
-fixed-policy DP at full capacity, asserting the booked set matches stage3's
+the policy-restricted DP at full capacity, asserting the booked set matches stage3's
 decisions and the root value reconciles. Gates: a candidate failing the
 absolute eval gate is never booked at any budget, cross-checked against stage3
 rejecting it.
@@ -44,6 +44,17 @@ from budget_core import (
 from stage3_backwards_induction import run_backwards_induction, zobrist_int64
 
 FAIL = 0
+
+
+def restrict(g, policy):
+    """Keep only the policy's move among each our node's candidates (in place; returns
+    g): the fixed-policy curve engine these parity checks were written against, whose
+    builder option was retired on 2026-11-12. At capacity the engine then books a
+    policy move only where it beats stopping, as Stage 3 does."""
+    for h, n in g.our.items():
+        want = policy.get(h)
+        n.cands = [c for c in n.cands if c[0] == want]
+    return g
 
 
 def check(name, ok, detail=""):
@@ -231,8 +242,8 @@ bc4_gated = all(san != "Bc4"
 check("budget gates also reject Bc4 (eval 0.10 vs floor)", bc4_gated,
       f"cands={[c[0] for c in g2.our[zobrist_int64(u_e5)].cands]}")
 
-fcurves, _ = build_curves(g2, bmax=20, fixed_policy=policy)
-rfix = extract_book(g2, fcurves, 20, fixed_policy=policy)
+fcurves, _ = build_curves(restrict(g2, policy), bmax=20)
+rfix = extract_book(g2, fcurves, 20)
 stage3_decisions = {h for h, m in policy.items() if h in g2.our}
 check("fixed-policy DP at capacity books the stage3 decision set",
       set(rfix["booked"]) == stage3_decisions,
@@ -247,8 +258,8 @@ g3 = build_graph(by_parent, sh, True, rep_moves=policy, eval_ws=eval_ws,
                  prior_strength=0.0, eval_weight=1.0,
                  robustness_floor=0.1, gate_rel_floor=0.1,
                  gate_rel_own_margin=0.02)
-fcurves3, _ = build_curves(g3, bmax=20, fixed_policy=policy)
-rfix3 = extract_book(g3, fcurves3, 20, fixed_policy=policy)
+fcurves3, _ = build_curves(restrict(g3, policy), bmax=20)
+rfix3 = extract_book(g3, fcurves3, 20)
 v_dp = rfix3["root_value_realized"]
 v_s3 = vals.get(sh)
 check("root value reconciles with stage3 (matched knobs, tight)",
@@ -324,8 +335,8 @@ g_aux = build_graph(by_parent, sh, True, rep_moves=policy_a, eval_ws=eval_ws,
                     share_floor=0.0, prior_strength=0.0, eval_weight=1.0,
                     robustness_floor=0.1, gate_rel_floor=0.1,
                     gate_rel_own_margin=0.02)
-cur_aux, _ = build_curves(g_aux, bmax=20, fixed_policy=policy_a)
-r_aux = extract_book(g_aux, cur_aux, 20, fixed_policy=policy_a)
+cur_aux, _ = build_curves(restrict(g_aux, policy_a), bmax=20)
+r_aux = extract_book(g_aux, cur_aux, 20)
 va_dp, va_s3 = r_aux["root_value_realized"], vals_a.get(sh)
 check("root value reconciles with stage3 WITH aux mass in every bucket",
       va_dp is not None and va_s3 is not None and abs(va_dp - va_s3) < 1e-9,

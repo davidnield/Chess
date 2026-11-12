@@ -66,7 +66,8 @@ from zobrist import zobrist_int64                            # noqa: E402
 
 
 # Fixed since 2026-11-12 (options retired; tag archive-2026-11-11 keeps the old paths): the price
-# search as every price recipe ran it, and the weak stop model's minimum move share.
+# search as every price recipe ran it (recorded in the meta; budget_core.price_search runs
+# exactly this), and the weak stop model's minimum move share.
 PRICE = {"rounds": 1, "select": "best", "reprice": "max", "dag_mode": "polish"}
 WEAK_MIN_SHARE = 0.01
 
@@ -170,6 +171,17 @@ def incumbent_churn(booked: dict[int, str], incumbent: dict[int, str],
             "reach_dropped": r(dropped), "reach_added": r(added)}
 
 
+def _set_frontier(con, hashes) -> None:
+    """(Re)create the temp table `frontier (h BIGINT)` holding `hashes`.
+
+    Loaded through Arrow in one statement: a row-at-a-time executemany cost
+    ~90 us per hash, 701 of a 0.60 build's 3,834 s (profile, 2026-11-12)."""
+    con.register("_frontier_in", pl.DataFrame(
+        {"h": list(hashes)}, schema={"h": pl.Int64}).to_arrow())
+    con.execute("CREATE OR REPLACE TEMP TABLE frontier AS SELECT h FROM _frontier_in")
+    con.unregister("_frontier_in")
+
+
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
                            min_games: int, admit=None, engine_moves=None, reply_overlay=None,
@@ -223,9 +235,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     lvl = 0
     reopened = 0
     while frontier:
-        con.execute("CREATE OR REPLACE TEMP TABLE frontier (h BIGINT)")
-        con.executemany("INSERT INTO frontier VALUES (?)",
-                        [(h,) for h in frontier])
+        _set_frontier(con, frontier)
         df = duck_pl(con, f"""
             SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd,
                    s.total, s.white_wins, s.draws, s.black_wins,
@@ -901,10 +911,7 @@ def main() -> int:
             continue
         price_info = None
         if a.method == "price":
-            res, price_info = bc.price_search(g, b, log=log, rounds=PRICE["rounds"],
-                                              select=PRICE["select"], seed_reach=price_seed,
-                                              reprice=PRICE["reprice"],
-                                              dag_mode=PRICE["dag_mode"],
+            res, price_info = bc.price_search(g, b, log=log, seed_reach=price_seed,
                                               engine=a.price_engine, compiled=price_cg)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")

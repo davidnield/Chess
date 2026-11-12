@@ -81,9 +81,10 @@ def edges_for(con, hashes: list[int], stats: str, min_games: int) -> pl.DataFram
     in memory, and per-node queries would be thousands of round trips. This is
     ~30 queries for a ply-30 book.
     """
-    con.execute("CREATE OR REPLACE TEMP TABLE frontier (h BIGINT)")
-    if hashes:
-        con.executemany("INSERT INTO frontier VALUES (?)", [(h,) for h in hashes])
+    con.register("_frontier_in", pl.DataFrame(
+        {"h": list(hashes)}, schema={"h": pl.Int64}).to_arrow())
+    con.execute("CREATE OR REPLACE TEMP TABLE frontier AS SELECT h FROM _frontier_in")
+    con.unregister("_frontier_in")
     return duck_pl(con, f"""
         SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd, s.ply,
                s.total, s.white_wins, s.draws, s.black_wins

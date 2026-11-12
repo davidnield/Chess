@@ -12,22 +12,18 @@ the row order of the written books).
   T  topo_up == _topo_up_dict (order and cut) on every graph below, and on random graphs
      full of repetition cycles.
   K  price_book with compiled= equals the dict walk on every key, over a lambda grid,
-     with the optimistic and a source-seeded reach, with a fixed policy, and with an
-     incumbent (stickiness bonus); policy_reach and policy_value(detail=True) on random
+     with the optimistic and a source-seeded reach, and with an incumbent (stickiness
+     bonus); policy_reach and policy_value(detail=True) on random
      books, including moves that are not candidates and positions outside the graph.
   S  price_search(engine='compiled') == price_search(engine='legacy'): the result dict and
      info (sweep, bound, nearest sizes, polish stats bar their seconds) for EVERY graph and
      budget of _test_budget_dag.py (the 300-DAG report, checks E and N/P) and EVERY graph
-     of _test_budget_price.py under the production polish build (--price-seed source
-     --price-reprice max --price-rounds 1 --price-select best --price-dag-mode polish);
-     and under every flag set those tests run (defaults; rounds 3 with reprice max; the
-     production DAG flags with --price-rounds 4 and dag_mode None / fixpoint / polish /
-     fixpoint+polish) on every graph of _test_budget_price.py, checks E and N/P, the hand
-     cases and the report's first 60 DAGs. --full runs every flag set on every graph
-     (about five minutes; the compiled engine's fixed numpy cost per solve is ~0.4 ms,
-     which on these 20-node graphs is 30x a dict solve).
-  P  polish_book(compiled=...) == polish_book() from the price book and from nothing,
-     with and without a fixed policy. Throughout S and P, budget_compiled.CHECK_ADVANCE
+     of _test_budget_price.py as the recipe searches (source seed, one round, polish);
+     and with the optimistic reach and without polish on every graph of
+     _test_budget_price.py, checks E and N/P, the hand cases and the report's first 60
+     DAGs. --full runs every flag set on every graph (the compiled engine's fixed numpy
+     cost per solve is ~0.4 ms, which on these 20-node graphs is 30x a dict solve).
+  P  polish_book(compiled=...) == polish_book() from the price book and from nothing. Throughout S and P, budget_compiled.CHECK_ADVANCE
      re-evaluates every incrementally rebuilt polish region in full and fails on any
      difference (dicts, their order, parents lists, floats).
   F  a graph the arrays cannot hold (an in-subgraph child that is not a node) compiles
@@ -35,7 +31,7 @@ the row order of the written books).
   G  price_search leaves the garbage collector as it found it, also when it raises.
 
 Usage:  _test_budget_speed.py [--full]        the checks (exit 1 on any difference)
-        _test_budget_speed.py --scale 10000,100000,1000000 400,2000 [--rounds 1]
+        _test_budget_speed.py --scale 10000,100000,1000000 400,2000
                 wall-clock, result fingerprint and peak memory of both engines with the
                 production polish flags on _test_budget_dag.big_dag graphs, each
                 (engine, size) in its own process so peaks do not mix
@@ -131,23 +127,17 @@ def price_graphs() -> list[tuple[str, Graph, list[int]]]:
     """Every graph (and its targets) _test_budget_price.py searches."""
     out = [(f"AB{t}", g, tprice.ab_targets(g)) for t, g in enumerate(tprice.ab_trees())]
     out += [(f"H{t}", g, [1, max(1, len(g.our) // 2)]) for t, g in enumerate(tprice.h_trees())]
-    out += [(f"I{t}", g, tprice.i_targets(g)) for t, g in enumerate(tprice.i_trees())]
     out += [("C", tprice.graph_c(), [3, 6]), ("D", tprice.graph_d(), [3]),
-            ("F50", tprice.graph_f(50), [3]), ("F5", tprice.graph_f(5), [3]),
-            ("E", tprice.graph_e(), [1])]
+            ("F50", tprice.graph_f(50), [3]), ("F5", tprice.graph_f(5), [3])]
     return out
 
 
 def flag_sets(g: Graph, order: list[int], every: bool) -> list[tuple[str, dict]]:
-    """The production polish build; with every=True also each flag set the two test files
-    run."""
+    """The recipe's search; with every=True also the optimistic reach and no polish."""
     seed = tdag.source_seed(g, order)
-    prod = dict(rounds=4, select="best", reprice="max", seed_reach=seed)
-    out = [("prod1+polish", dict(prod, rounds=1, dag_mode="polish"))]
+    out = [("recipe", dict(seed_reach=seed))]
     if every:
-        out += [("defaults", {}), ("rounds3-max", dict(rounds=3, reprice="max")),
-                ("prod", prod)]
-        out += [(f"prod+{m}", dict(prod, dag_mode=m)) for m in tdag.DAG_MODES]
+        out += [("optimistic", {}), ("no-polish", dict(seed_reach=seed, polish=False))]
     return out
 
 
@@ -175,8 +165,6 @@ def check_kernels(graphs) -> None:
             bad_pb += 1
             continue
         seed = tdag.source_seed(g, order)
-        fixed = {h: rng.choice(n.cands)[0] for h, n in g.our.items()
-                 if n.cands and rng.random() < 0.7}
         stick = ({h: rng.choice(n.cands)[0].rstrip("+#") for h, n in g.our.items()
                   if n.cands and rng.random() < 0.5}, 0.02)
         for meta in (None, stick):
@@ -184,11 +172,10 @@ def check_kernels(graphs) -> None:
                 g.meta["stick"] = meta
             for lam in (1e-10, 1e-5, 1e-4, 1e-3, 0.01, 0.045, 0.3):
                 for reach in (None, seed):
-                    for fp in (None, fixed):
-                        a = bc.price_book(g, lam, order, reach, fp)
-                        b = bc.price_book(g, lam, order, reach, fp, compiled=cg)
-                        n_pb += 1
-                        bad_pb += bool(diff_keys(a, b))
+                    a = bc.price_book(g, lam, order, reach)
+                    b = bc.price_book(g, lam, order, reach, compiled=cg)
+                    n_pb += 1
+                    bad_pb += bool(diff_keys(a, b))
             g.meta.pop("stick", None)
         for _ in range(4):
             moves = {h: rng.choice(n.cands)[0] for h, n in g.our.items()
@@ -233,12 +220,11 @@ def check_polish(graphs) -> None:
     for _name, g, budgets in graphs:
         order, cut = bc.topo_up(g)
         cg = compile_graph(g, order, cut)
-        fixed = {h: rng.choice(n.cands)[0] for h, n in g.our.items() if n.cands}
         for B in budgets:
-            start = bc.price_search(g, B, log=QUIET)[0]["booked"]
-            for st, fp in ((start, None), ({}, None), ({}, fixed)):
-                ma, sa = bc.polish_book(g, st, B, order, fixed_policy=fp)
-                mb, sb = bc.polish_book(g, st, B, order, fixed_policy=fp, compiled=cg)
+            start = bc.price_search(g, B, log=QUIET, polish=False)[0]["booked"]
+            for st in (start, {}):
+                ma, sa = bc.polish_book(g, st, B, order)
+                mb, sb = bc.polish_book(g, st, B, order, compiled=cg)
                 n += 1
                 sa.pop("seconds")
                 sb.pop("seconds")
@@ -250,11 +236,11 @@ def check_polish(graphs) -> None:
 def check_sticky(graphs) -> None:
     """The polish-start merge: under a stick margin polish_book runs the region evaluator
     whatever the engine (the compiled path carries no churn term), so price_search with
-    polish, polish_from and a stick must be the same on both engines; a margin of 0 is
-    the unsticky search on the compiled path too."""
+    polish and a stick must be the same on both engines; a margin of 0 is the unsticky
+    search on the compiled path too."""
     rng = random.Random(41)
     bad, n = [], 0
-    kw = dict(rounds=1, select="best", reprice="max", dag_mode="polish")
+    kw = {}
     for name, g, budgets in graphs:
         inc = {h: rng.choice(nd.cands)[0].rstrip("+#") for h, nd in g.our.items()
                if nd.cands and rng.random() < 0.7}
@@ -264,16 +250,15 @@ def check_sticky(graphs) -> None:
             zero, iz = bc.price_search(g, B, log=QUIET, engine="compiled", **kw)
             d = diff_keys(plain, zero) + diff_keys(strip_seconds(ip), strip_seconds(iz))
             g.meta["stick"] = (inc, 0.01)
-            frm = [plain["booked"]]
-            a, ia = bc.price_search(g, B, log=QUIET, engine="legacy", polish_from=frm, **kw)
-            b, ib = bc.price_search(g, B, log=QUIET, engine="compiled", polish_from=frm, **kw)
+            a, ia = bc.price_search(g, B, log=QUIET, engine="legacy", **kw)
+            b, ib = bc.price_search(g, B, log=QUIET, engine="compiled", **kw)
             g.meta.pop("stick")
             n += 1
             d += diff_keys(a, b) + [f"info.{k}" for k in
                                     diff_keys(strip_seconds(ia), strip_seconds(ib))]
             if d:
                 bad.append(f"{name} B={B}: {sorted(d)}")
-    check("St: sticky price_search + polish (+ polish_from) compiled == legacy; margin 0 "
+    check("St: sticky price_search + polish compiled == legacy; margin 0 "
           "== no stick", not bad, f"{n} instances, {len(bad)} differ"
           + (f"; first: {bad[0]}" if bad else ""))
 
@@ -305,7 +290,7 @@ def check_gc() -> None:
     bc.price_search(g, 3, log=QUIET)
     on_after = gc.isenabled()
     try:
-        bc.price_search(g, 3, log=QUIET, dag_mode="nonsense")
+        bc.price_search(g, 3, log=QUIET, engine="nonsense")
     except ValueError:
         pass
     on_after_raise = gc.isenabled()
@@ -329,7 +314,7 @@ def peak_gb() -> float:
         return psutil.Process().memory_info().peak_wset / 1e9
 
 
-def bench(engine: str, n: int, targets: list[int], rounds: int) -> None:
+def bench(engine: str, n: int, targets: list[int]) -> None:
     """One engine on one big_dag graph, every target: prints a JSON line per target."""
     g = tdag.big_dag(random.Random(n), n)
     order, _cut = bc._topo_up_dict(g)
@@ -338,9 +323,7 @@ def bench(engine: str, n: int, targets: list[int], rounds: int) -> None:
     base = peak_gb()
     for B in targets:
         t0 = time.time()
-        res, info = bc.price_search(g, B, log=QUIET, rounds=rounds, select="best",
-                                    reprice="max", seed_reach=seed, dag_mode="polish",
-                                    engine=engine)
+        res, info = bc.price_search(g, B, log=QUIET, seed_reach=seed, engine=engine)
         dt = time.time() - t0
         fp = hashlib.sha1(json.dumps([
             list(res["booked"].items()), res["root_value_realized"].hex(),
@@ -353,15 +336,15 @@ def bench(engine: str, n: int, targets: list[int], rounds: int) -> None:
                           "fp": fp, "base_gb": base, "peak_gb": peak_gb()}), flush=True)
 
 
-def scale(sizes: list[int], targets: list[int], rounds: int) -> None:
-    print(f"  production polish flags (rounds {rounds}, select best, reprice max, source seed)")
+def scale(sizes: list[int], targets: list[int]) -> None:
+    print("  the recipe's search (source seed, one round, polish)")
     print(f"  {'nodes':>9}{'target':>7}{'legacy s':>10}{'compiled s':>11}{'x':>6}"
           f"{'solves':>7}  same  {'peak GB legacy / compiled (graph alone)':>40}")
     for n in sizes:
         rows = {}
         for eng in ("legacy", "compiled"):
             out = subprocess.run([sys.executable, __file__, "--bench", eng, str(n),
-                                  ",".join(map(str, targets)), str(rounds)],
+                                  ",".join(map(str, targets))],
                                  capture_output=True, text=True, check=True).stdout
             for line in out.splitlines():
                 r = json.loads(line)
@@ -381,15 +364,14 @@ def main() -> int:
     if "--bench" in sys.argv:
         i = sys.argv.index("--bench")
         bench(sys.argv[i + 1], int(sys.argv[i + 2]),
-              [int(x) for x in sys.argv[i + 3].split(",")], int(sys.argv[i + 4]))
+              [int(x) for x in sys.argv[i + 3].split(",")])
         return 0
     if "--scale" in sys.argv:
         i = sys.argv.index("--scale")
-        rounds = int(sys.argv[sys.argv.index("--rounds") + 1]) if "--rounds" in sys.argv else 1
         targets = ([int(x) for x in sys.argv[i + 2].split(",")]
                    if len(sys.argv) > i + 2 and not sys.argv[i + 2].startswith("--")
                    else [400, 2000])
-        scale([int(x) for x in sys.argv[i + 1].split(",")], targets, rounds)
+        scale([int(x) for x in sys.argv[i + 1].split(",")], targets)
         return 0
     full = "--full" in sys.argv
     budget_compiled.CHECK_ADVANCE = True

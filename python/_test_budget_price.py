@@ -10,22 +10,21 @@ hulls, atoms or density ordering, so it is the true optimum.
      chains), every book price_book returns is the best book of its own size:
      its value equals the oracle at that size, and its penalised value equals
      max over b of (oracle(b) - lam * b).
-  B  price_search: the result is optimal for its size, and the reported upper
-     bound for the target is >= the oracle at the target.
+  B  price_search without polish: the result is optimal for its size, and the
+     reported upper bound for the target is >= the oracle at the target. With polish
+     (the recipe) the book never exceeds the target, never beats the oracle there, and
+     never scores below the unpolished book when that one fits.
   C  A lumpy chain: three 1-move items worth 0.05 each (root units) and one
      3-move chain worth 0.125 that pays only when complete. At a price between
      the two densities the items are bought and the chain is not; below it the
      chain is bought whole, never in part; each book matches the oracle.
   D  Transpositions: a position reached by two paths is charged once when priced
-     with the book's total reach (price_search's second round), not once per path.
-  E  fixed_policy restricts every node to the source move.
+     with the book's total reach, not once per path; one pricing round plus polish
+     finds that book.
   F  a repetition cycle through a main-line position does not cost the line.
   H  policy_value (the shared book evaluator) reproduces each price book's value.
   I  policy_reach sums a book's paths (D's X: 1.0 through both, 0.5 through one); a
-     price search seeded with it finds D's book in ONE round; on random trees the
-     off-default rounds=4 / select='best' books stay optimal for their size, and
-     'best' never scores below 'closest' when the closest book is within 1%; reprice='max'
-     still charges D's transposition once and stays optimal on trees.
+     price search seeded with it finds D's book without polish.
 """
 from __future__ import annotations
 
@@ -135,18 +134,9 @@ def h_trees() -> list[Graph]:
     return trees(7, 20)
 
 
-def i_trees() -> list[Graph]:
-    return trees(11, 20)
-
-
 def ab_targets(g: Graph) -> list[int]:
     size = len(g.our)
     return sorted({min(size, x) for x in (1, 3, max(1, size // 3), max(1, size // 2))})
-
-
-def i_targets(g: Graph) -> list[int]:
-    size = len(g.our)
-    return sorted({max(1, size // 3), max(1, size // 2)})
 
 
 def graph_c() -> Graph:
@@ -195,15 +185,8 @@ def graph_f(back_hash: int) -> Graph:
     return g
 
 
-def graph_e() -> Graph:
-    """E: a fixed policy's move against a better one"""
-    return Graph(root=1, our={1: OurNode(l_node=0.5, cands=[("good", None, False, 0.7),
-                                                            ("src", None, False, 0.6)])},
-                 opp={}, epd={}, ply={1: 0}, reach={1: 1.0})
-
-
 def main() -> int:
-    bad_a = bad_pen = bad_b = 0
+    bad_a = bad_pen = bad_b = bad_p = 0
     n_books = 0
     for g in ab_trees():
         size = len(g.our)
@@ -218,16 +201,24 @@ def main() -> int:
             if abs(r["root_value_penalized"] - float(np.max(opt - lam * np.arange(size + 1)))) > 1e-9:
                 bad_pen += 1
         for target in ab_targets(g):
-            res, info = price_search(g, target, log=lambda m: None)
+            res, info = price_search(g, target, log=lambda m: None, polish=False)
             nb = res["spent_distinct"]
             if (abs(res["root_value_realized"] - opt[nb]) > 1e-9
                     or info["upper_bound"] < opt[target] - 1e-9):
                 bad_b += 1
+            pol, _ = price_search(g, target, log=lambda m: None)
+            npol = pol["spent_distinct"]
+            if (npol > target or pol["root_value_realized"] > opt[target] + 1e-9
+                    or (nb <= target and pol["root_value_realized"]
+                        < res["root_value_realized"] - 1e-12)):
+                bad_p += 1
     check("A: every price book is the best book of its size", bad_a == 0,
           f"{bad_a} of {n_books} off the oracle")
     check("A: penalised value = max_b (oracle(b) - lam*b)", bad_pen == 0, f"{bad_pen} off")
     check("B: price_search is optimal for its size and its bound holds", bad_b == 0,
           f"{bad_b} failures")
+    check("B: polish fits the target, stays under the oracle and never loses value",
+          bad_p == 0, f"{bad_p} failures")
 
     # policy_value (the shared evaluator) reproduces each price book's own value
     bad_pv = 0
@@ -271,8 +262,9 @@ def main() -> int:
           once["spent_distinct"] == 3 and abs(once["root_value_realized"] - 0.6) < 1e-12,
           f"{once['booked']}, {once['root_value_realized']}")
     res, _ = price_search(g, 3, log=lambda m: None)
-    check("D: price_search's second round finds it", res["spent_distinct"] == 3,
-          f"{res['booked']}")
+    check("D: one pricing round plus polish finds it",
+          res["spent_distinct"] == 3 and abs(res["root_value_realized"] - 0.6) < 1e-12,
+          f"{res['booked']}, {res['root_value_realized']}")
 
     # I: policy_reach and the off-default search knobs
     both = policy_reach(g, {2: "a", 3: "b", 6: "x"}, order)
@@ -282,30 +274,9 @@ def main() -> int:
           f"{both} / {one}")
     seed = dict(g.reach)
     seed.update({h: r for h, r in both.items() if r > 0})
-    r1, _ = price_search(g, 3, log=lambda m: None, rounds=1, seed_reach=seed)
-    check("I: seeded with the book's reach, round 1 finds D's book", r1["spent_distinct"] == 3,
-          f"{r1['booked']}")
-    rm, _ = price_search(g, 3, log=lambda m: None, reprice="max")
-    check("I: reprice='max' still finds D's book in round 2", rm["spent_distinct"] == 3,
-          f"{rm['booked']}")
-    bad_i = worse = 0
-    for gt in i_trees():
-        size = len(gt.our)
-        opt = exact(gt, size)
-        for target in i_targets(gt):
-            cl, _ = price_search(gt, target, log=lambda m: None)
-            bs, _ = price_search(gt, target, log=lambda m: None, rounds=4, select="best")
-            mx, _ = price_search(gt, target, log=lambda m: None, rounds=3, reprice="max")
-            for r in (cl, bs, mx):
-                if abs(r["root_value_realized"] - opt[r["spent_distinct"]]) > 1e-9:
-                    bad_i += 1
-            if (abs(cl["spent_distinct"] - target) <= 0.01 * target
-                    and bs["root_value_realized"] < cl["root_value_realized"] - 1e-12):
-                worse += 1
-    check("I: rounds=4 / select='best' books are optimal for their size on trees",
-          bad_i == 0, f"{bad_i} off")
-    check("I: 'best' never scores below 'closest' within the tolerance", worse == 0,
-          f"{worse} worse")
+    r1, _ = price_search(g, 3, log=lambda m: None, seed_reach=seed, polish=False)
+    check("I: seeded with the book's reach, the price search finds D's book",
+          r1["spent_distinct"] == 3, f"{r1['booked']}")
 
     # F: a repetition cycle through a main-line position. A (our node) can play
     # "back" (to O2, whose only reply returns to A) or "good" (to O3 -> C, where
@@ -319,12 +290,6 @@ def main() -> int:
               res["booked"] == {1: "m", 10: "good", 40: "x"}
               and abs(res["root_value_realized"] - 0.9) < 1e-12,
               f"{res['booked']}, {res['root_value_realized']}")
-
-    # E: fixed policy
-    g = graph_e()
-    r = price_book(g, 0.01, topo_up(g)[0], fixed_policy={1: "src"})
-    check("E: fixed_policy books only the source move", r["booked"] == {1: "src"},
-          f"{r['booked']}")
 
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL

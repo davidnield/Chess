@@ -22,6 +22,7 @@ budget 1 — the strawman the budget DP exists to beat.
 """
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -82,95 +83,22 @@ r3 = extract_book(g, curves, 3)
 check("b=3 books the whole trap chain",
       set(r3["booked"]) == {ROOT, B1, B2}, f"got {sorted(r3['booked'])}")
 
-# the strawman: reach-truncating the UNCONSTRAINED book (which picks B).
+# the strawman: reach-truncating the UNCONSTRAINED book (which picks B). The
+# fixed-policy option left the builder on 2026-11-12; here each node keeps only
+# the fixed move, on a copy of the graph, which is what that option did.
 fixed = {ROOT: "B", B1: "b1move", B2: "b2move"}
-fcurves, _ = build_curves(g, bmax=10, fixed_policy=fixed)
-rf = extract_book(g, fcurves, 1, fixed_policy=fixed)
+gfix = copy.deepcopy(g)
+for h, n in gfix.our.items():
+    n.cands = [c for c in n.cands if c[0] == fixed.get(h)]
+fcurves, _ = build_curves(gfix, bmax=10)
+rf = extract_book(gfix, fcurves, 1)
 check("truncated unconstrained book at b=1 realizes only 0.455",
       close(rf["root_value_realized"], 0.455),
       f"got {rf['root_value_realized']}")
 check("budget DP at b=1 beats it (0.60)", True)  # asserted above; stated for the log
-rfull = extract_book(g, fcurves, 3, fixed_policy=fixed)
+rfull = extract_book(gfix, fcurves, 3)
 check("fixed policy at full budget matches DP's 0.905",
       close(rfull["root_value_realized"], 0.905))
-
-# The GREEDY comparator must be genuinely trap-blind, or Phase D cannot
-# attribute the DP's win to policy switching. Greedy follows the unconstrained
-# policy (which picks B) and books by one-step gain, so it pays for the trap
-# prefix it cannot finish: 0.455 / 0.482 against the DP's 0.600 / 0.600, with
-# both converging at b=3. If this ever ties, the comparator is worthless and
-# the experiment needs redesigning -- hence an assertion, not a note.
-from budget_core import greedy_stopping                        # noqa: E402
-
-fixed_pol = {ROOT: "B", B1: "b1move", B2: "b2move"}
-greedy_vals = {}
-greedy_spend = {}
-for b in (1, 2, 3):
-    got, _spent = greedy_stopping(g, fixed_pol, b)
-    mask = {h: fixed_pol[h] for h in got}
-    gc, _ = build_curves(g, bmax=b, fixed_policy=mask)
-    # force_booked mirrors the production call in build_budget_books: greedy's
-    # SET is greedy's to choose, and the density allocator must not re-decide
-    # it. See the extract_book docstring for the measurement that forced this.
-    r = extract_book(g, gc, b, fixed_policy=mask, force_booked=got)
-    greedy_vals[b] = r["root_value_realized"]
-    greedy_spend[b] = (len(got), r["spent_distinct"])
-
-# EQUAL FOOTPRINT is the precondition for the whole comparison: an arm that
-# books fewer moves than its budget is being measured on size, not method.
-for b in (1, 2, 3):
-    sel, bk = greedy_spend[b]
-    check(f"greedy books its whole selection at b={b} ({sel})", sel == bk,
-          f"selected {sel}, booked {bk}")
-check("greedy is trap-blind at b=1 (0.455)", close(greedy_vals[1], 0.455),
-      f"got {greedy_vals[1]}")
-check("greedy is trap-blind at b=2 (0.482)", close(greedy_vals[2], 0.482),
-      f"got {greedy_vals[2]}")
-check("greedy converges to the DP at b=3", close(greedy_vals[3], 0.905))
-dp_vals = {b: extract_book(g, curves, b)["root_value_realized"] for b in (1, 2, 3)}
-check("DP strictly beats greedy at small budgets",
-      dp_vals[1] > greedy_vals[1] + 1e-9 and dp_vals[2] > greedy_vals[2] + 1e-9,
-      f"dp={dp_vals[1]:.3f}/{dp_vals[2]:.3f} greedy={greedy_vals[1]:.3f}/{greedy_vals[2]:.3f}")
-
-
-# FORCE_BOOKED must cover the NEVER-REACHED case, not just the unfunded one.
-# extract_book's topo walk skips any node not in `reached` BEFORE it consults
-# `forced`, so exempting the value test alone is not enough: a forced node
-# behind an ancestor that declines to book is never walked to at all. The first
-# version of this fix did only the value exemption, greedy_white rebuilt to the
-# identical 3/6, 4/10, 12/20 it had before, and the test below is what was
-# missing to catch it.
-#
-# Chain: ROOT -> Oa -> M -> Ob -> D.  M's stop value (0.90) beats anything its
-# subtree can return (0.82), so unforced M never books and D is unreachable.
-FROOT, FOA, FM, FOB, FD = 31, 32, 33, 34, 35
-gforce = Graph(
-    root=FROOT,
-    our={
-        FROOT: OurNode(l_node=0.40, cands=[("r", FOA, True, 0.0)]),
-        FM:    OurNode(l_node=0.90, cands=[("m", FOB, True, 0.0)]),
-        FD:    OurNode(l_node=0.10, cands=[("d", None, False, 0.82)]),
-    },
-    opp={
-        FOA: OppNode(const_base=0.0, kids=[(1.0, FM, True, 0.0)]),
-        FOB: OppNode(const_base=0.0, kids=[(1.0, FD, True, 0.0)]),
-    },
-    epd={}, ply={FROOT: 0, FOA: 1, FM: 2, FOB: 3, FD: 4},
-    reach={FROOT: 1.0, FOA: 1.0, FM: 1.0, FOB: 1.0, FD: 1.0},
-)
-fcur, _fd = build_curves(gforce, bmax=6)
-plain = extract_book(gforce, fcur, 6)
-check("unforced: M declines and D is never reached",
-      FM not in plain["booked"] and FD not in plain["booked"],
-      f"booked={sorted(plain['booked'])}")
-want = {FROOT, FM, FD}
-forced_res = extract_book(gforce, fcur, 6, force_booked=want)
-check("force_booked books every node in the set, reached or not",
-      want <= set(forced_res["booked"]),
-      f"missing {sorted(want - set(forced_res['booked']))}")
-check("forced spend equals the forced set size",
-      forced_res["spent_distinct"] == len(want),
-      f"got {forced_res['spent_distinct']} of {len(want)}")
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

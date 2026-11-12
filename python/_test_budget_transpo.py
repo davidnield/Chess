@@ -233,14 +233,13 @@ def extract_with_fresh_order(*args, order, **kwargs):
 
 
 for graph, graph_curves in ((g, curves), (gcyc, ccur), (groot, gcur)):
-    for use_leftover in (False, True):
-        with patch.object(_bc, "topo_down", wraps=topo_down) as sorter:
-            cached = match_distinct(graph, graph_curves, 4, 10, leftover=use_leftover)
-            check("all budget probes sort the graph once", sorter.call_count == 1)
-        with patch.object(_bc, "extract_book", side_effect=extract_with_fresh_order) as probes:
-            reference = match_distinct(graph, graph_curves, 4, 10, leftover=use_leftover)
-            check("cached and repeated sorts agree on the entire extraction",
-                  probes.call_count > 1 and cached == reference)
+    with patch.object(_bc, "topo_down", wraps=topo_down) as sorter:
+        cached = match_distinct(graph, graph_curves, 4, 10)
+        check("all budget probes sort the graph once", sorter.call_count == 1)
+    with patch.object(_bc, "extract_book", side_effect=extract_with_fresh_order) as probes:
+        reference = match_distinct(graph, graph_curves, 4, 10)
+        check("cached and repeated sorts agree on the entire extraction",
+              probes.call_count > 1 and cached == reference)
 
 
 def _table_search(table, target, bmax, scan_cap=64):

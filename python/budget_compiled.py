@@ -274,7 +274,6 @@ class CompiledGraph:
         self._adj: dict[int, object] = {}
         self._bonus = None
         self._reach_cache: tuple | None = None
-        self._fixed_cache: tuple | None = None
 
     def static(self, i: int) -> float:
         """budget_core._static_value of node i, memoised (a pure function of the graph)."""
@@ -341,24 +340,6 @@ class CompiledGraph:
         self._bonus = (st, b)
         return b
 
-    def allowed(self, fixed_policy) -> np.ndarray | None:
-        """Per candidate edge: allowed by fixed_policy (its SAN is the policy's move)."""
-        if fixed_policy is None:
-            return None
-        c = self._fixed_cache
-        if c is not None and c[0] is fixed_policy:
-            return c[1]
-        a = np.zeros(self.Ec, dtype=bool)
-        for h, want in fixed_policy.items():
-            i = self.pos.get(h)
-            if i is None or not self.is_our[i]:
-                continue
-            for e in range(int(self.c_ptr[i]), int(self.c_ptr[i + 1])):
-                if self.c_san[e] == want:
-                    a[e] = True
-        self._fixed_cache = (fixed_policy, a)
-        return a
-
     def first_match(self, moves) -> np.ndarray:
         """Per node: the first candidate edge whose SAN is moves[h], else -1 (the dict
         walks' `next(c for c in cands if c[0] == want)`)."""
@@ -376,7 +357,7 @@ class CompiledGraph:
 
     # ── sweeps ─────────────────────────────────────────────────────────────────
 
-    def solve(self, lam: float, r_arr: np.ndarray, allowed=None):
+    def solve(self, lam: float, r_arr: np.ndarray):
         """price_book's bottom-up pass: (V, T, choice) with choice = the chosen edge per
         node (-1: stop)."""
         V = self.ext0.copy()
@@ -384,8 +365,6 @@ class CompiledGraph:
         choice = np.full(self.N, -1, dtype=np.int64)
         bonus = self.bonus()
         u_src, u_eid, o_src, o_p = self.u_src, self.u_eid, self.o_src, self.o_p
-        if allowed is not None:
-            allowed = allowed[u_eid]
         if bonus is not None:
             bonus = bonus[u_eid]
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -402,8 +381,7 @@ class CompiledGraph:
                     T[nodes] = accT
                 nodes = self.u_nodes[L]
                 if nodes.size:
-                    bv, bt, be, has = self._best(nodes.size, self.u_cols[L], V, T, bonus,
-                                                 allowed)
+                    bv, bt, be, has = self._best(nodes.size, self.u_cols[L], V, T, bonus)
                     r = r_arr[nodes]
                     ln = self.l_node[nodes]
                     pen = bv - lam / r
@@ -413,50 +391,36 @@ class CompiledGraph:
                     choice[nodes] = np.where(ok, be, -1)
         return V, T, choice
 
-    def _best(self, m, cols, V, T, bonus, allowed):
+    def _best(self, m, cols, V, T, bonus):
         """Per our node of one level: the candidate the dict walk keeps -- the FIRST with
-        the strictly greatest key (value + stickiness bonus) among the allowed ones --
-        as (its value, its true value, its edge, whether there was any)."""
+        the strictly greatest key (value + stickiness bonus) -- as (its value, its true
+        value, its edge, whether there was any)."""
         u_src, u_eid = self.u_src, self.u_eid
         bv = np.zeros(m)
         bt = np.zeros(m)
         be = np.full(m, -1, dtype=np.int64)
-        if allowed is None:
-            # the first candidate always sets the best; nodes past cnt0 have none, and
-            # every later column only touches nodes that have a first candidate
-            cnt0 = cols[0][0] if cols else 0
-            if cnt0:
-                _c, a, b = cols[0]
-                s = u_src[a:b]
-                bv[:cnt0] = V[s]
-                bt[:cnt0] = T[s]
-                be[:cnt0] = u_eid[a:b]
-            bk = bv if bonus is None else bv + np.concatenate((bonus[cols[0][1]:cols[0][2]],
-                                                              np.zeros(m - cnt0)))
-            for cnt, a, b in cols[1:]:
-                s = u_src[a:b]
-                v = V[s]
-                key = v if bonus is None else v + bonus[a:b]
-                upd = key > bk[:cnt]
-                if bonus is not None:
-                    np.copyto(bk[:cnt], key, where=upd)
-                np.copyto(bv[:cnt], v, where=upd)
-                np.copyto(bt[:cnt], T[s], where=upd)
-                np.copyto(be[:cnt], u_eid[a:b], where=upd)
-            has = np.arange(m) < cnt0
-            return bv, bt, be, has
-        bk = np.zeros(m)
-        has = np.zeros(m, dtype=bool)
-        for cnt, a, b in cols:
+        # the first candidate always sets the best; nodes past cnt0 have none, and
+        # every later column only touches nodes that have a first candidate
+        cnt0 = cols[0][0] if cols else 0
+        if cnt0:
+            _c, a, b = cols[0]
             s = u_src[a:b]
-            v, t = V[s], T[s]
-            key = v + bonus[a:b] if bonus is not None else v
-            upd = (~has[:cnt] | (key > bk[:cnt])) & allowed[a:b]
-            np.copyto(bk[:cnt], key, where=upd)
+            bv[:cnt0] = V[s]
+            bt[:cnt0] = T[s]
+            be[:cnt0] = u_eid[a:b]
+        bk = bv if bonus is None else bv + np.concatenate((bonus[cols[0][1]:cols[0][2]],
+                                                          np.zeros(m - cnt0)))
+        for cnt, a, b in cols[1:]:
+            s = u_src[a:b]
+            v = V[s]
+            key = v if bonus is None else v + bonus[a:b]
+            upd = key > bk[:cnt]
+            if bonus is not None:
+                np.copyto(bk[:cnt], key, where=upd)
             np.copyto(bv[:cnt], v, where=upd)
-            np.copyto(bt[:cnt], t, where=upd)
+            np.copyto(bt[:cnt], T[s], where=upd)
             np.copyto(be[:cnt], u_eid[a:b], where=upd)
-            has[:cnt] |= upd
+        has = np.arange(m) < cnt0
         return bv, bt, be, has
 
     def values(self, chosen: np.ndarray) -> np.ndarray:
@@ -574,10 +538,9 @@ def compile_graph(g, order=None, cut=None) -> CompiledGraph:
 
 # ── the dict functions' results, from the arrays ────────────────────────────
 
-def price_book(cg: CompiledGraph, lam: float, reach, fixed_policy) -> dict:
+def price_book(cg: CompiledGraph, lam: float, reach) -> dict:
     """budget_core.price_book's result dict, bit for bit."""
-    allowed = cg.allowed(fixed_policy)
-    V, T, choice = cg.solve(lam, cg.reach_array(reach), allowed)
+    V, T, choice = cg.solve(lam, cg.reach_array(reach))
     reach_edge = np.full(cg.N, -1, dtype=np.int64)
     on = choice >= 0
     reach_edge[on] = cg.c_first[choice[on]]
@@ -653,7 +616,7 @@ class RegionAux:
         self.tchg = self.bchg = None
 
 
-def region(cg: CompiledGraph, moves, fixed_policy):
+def region(cg: CompiledGraph, moves):
     """budget_core._book_region of `moves`, on indices. Returns (W, T, booked, child,
     value, aux): the first five exactly _book_region's (hash-keyed, same insertion
     orders, same floats), aux a RegionAux."""
@@ -666,7 +629,6 @@ def region(cg: CompiledGraph, moves, fixed_policy):
     child: dict = {}
     move_i: dict[int, tuple] = {}
     parents: dict[int, list[int]] = {}
-    fp = fixed_policy
     pop, push = heapq.heappop, heapq.heappush
     while heap:                        # parents first: descending order position
         i = -pop(heap)
@@ -674,7 +636,7 @@ def region(cg: CompiledGraph, moves, fixed_policy):
         if flag[i]:
             h = order[i]
             want = moves.get(h)
-            if want is None or (fp is not None and fp.get(h) != want):
+            if want is None:
                 continue
             mv = adj(i).get(want)
             if mv is None:
@@ -744,12 +706,12 @@ def region_diff(a, b) -> list[str]:
     return out
 
 
-def _move(cg: CompiledGraph, i: int, moves, fixed_policy):
+def _move(cg: CompiledGraph, i: int, moves):
     """(booked?, child index or -1, leaf value) of our node i under `moves`: the first
     candidate carrying the move, as _book_region reads it."""
     h = cg.order[i]
     want = moves.get(h)
-    if want is None or (fixed_policy is not None and fixed_policy.get(h) != want):
+    if want is None:
         return False, -1, None
     mv = cg.adj(i).get(want)
     if mv is None:
@@ -765,8 +727,8 @@ class _Delta:
     __slots__ = ("A", "newr", "new_par", "mv", "Tn", "size")
 
 
-def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves, changed,
-           fixed_policy) -> _Delta | None:
+def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves,
+           changed) -> _Delta | None:
     """quick's work (None: no reached move changes)."""
     order, pos, flag, adj = cg.order, cg.pos, cg.our_flag, cg.adj
     our_d, opp_d = cg.g.our, cg.g.opp
@@ -776,8 +738,8 @@ def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves, ch
         i = pos.get(h)
         if i is None or not flag[i] or i not in Wi:
             continue
-        nb, nc, nlv = _move(cg, i, moves, fixed_policy)
-        ob, oc, olv = _move(cg, i, booked, fixed_policy)
+        nb, nc, nlv = _move(cg, i, moves)
+        ob, oc, olv = _move(cg, i, booked)
         if nb != ob or (nb and moves.get(h) != booked.get(h)):
             D.append(i)
     if not D:
@@ -791,12 +753,12 @@ def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves, ch
         x = stack.pop()
         kids = []
         if flag[x]:
-            nb, nc, nlv = mv[x] = _move(cg, x, moves, fixed_policy)
+            nb, nc, nlv = mv[x] = _move(cg, x, moves)
             if nb and 0 <= nc < x:
                 new_par.setdefault(nc, []).append(x)
                 kids.append(nc)
             if x in Wi:
-                ob, oc, _olv = _move(cg, x, booked, fixed_policy)
+                ob, oc, _olv = _move(cg, x, booked)
                 if ob and 0 <= oc < x and oc != nc:
                     kids.append(oc)
         else:
@@ -843,7 +805,7 @@ def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves, ch
         done.add(x)
         h = order[x]
         if flag[x]:
-            nb, nc, nlv = mv[x] if x in mv else _move(cg, x, moves, fixed_policy)
+            nb, nc, nlv = mv[x] if x in mv else _move(cg, x, moves)
             if not nb:
                 t = our_d[h].l_node
             elif nc < 0:
@@ -875,7 +837,7 @@ def _delta(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, moves, ch
 
 
 def quick(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, value: float,
-          moves, changed, fixed_policy) -> tuple[int, float]:
+          moves, changed) -> tuple[int, float]:
     """(size, value) that region(cg, moves) would return, where `moves` differs from the
     region's book `booked` only at the positions in `changed`. Exact: it re-derives the
     membership of every node below a changed move (descending order position, from the
@@ -883,21 +845,21 @@ def quick(cg: CompiledGraph, aux: RegionAux, booked: dict, size: int, value: flo
     node whose inputs changed, stopping where a recomputed value is bitwise unchanged.
     Every other node keeps the region's floats, which a full evaluation would reproduce
     because its inputs are identical."""
-    d = _delta(cg, aux, booked, size, moves, changed, fixed_policy)
+    d = _delta(cg, aux, booked, size, moves, changed)
     if d is None:
         return size, value
     return d.size, (d.Tn[cg.root] if cg.root in d.Tn else aux.Ti[cg.root])
 
 
 def advance(cg: CompiledGraph, W: dict, T: dict, booked: dict, child: dict, value: float,
-            aux: RegionAux, moves, changed, fixed_policy):
-    """region(cg, moves, fixed_policy), from the region (W, T, booked, child, value, aux)
+            aux: RegionAux, moves, changed):
+    """region(cg, moves), from the region (W, T, booked, child, value, aux)
     of a book that `moves` differs from only at `changed`, by quick's delta: reach is
     re-summed (same parents, same order) for the nodes below a changed move only, values
     come from the delta, and the dicts are rebuilt in region's insertion orders (W by
     discovery: the first parent popped, then its edge order; T ascending; booked and
     child by pop order). Returns the same tuple as region()."""
-    d = _delta(cg, aux, booked, len(booked), moves, changed, fixed_policy)
+    d = _delta(cg, aux, booked, len(booked), moves, changed)
     if d is None:
         same = RegionAux(aux.Wi, aux.Ti, aux.parents, aux.booked_i)
         same.tchg, same.bchg = [], []
