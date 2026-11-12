@@ -33,3 +33,6 @@ scratch/
 target/
 # Local research output, not for this repo
 outputs/
+
+# The Rust builder extension (rust/book_builder/build.ps1 installs it); never commit a binary.
+python/*.pyd

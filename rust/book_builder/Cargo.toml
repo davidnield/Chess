@@ -1,0 +1,24 @@
+[package]
+name = "book_builder"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "GPL-3.0-or-later"
+description = "The budget-book builder's core in Rust, called from Python (book_builder_rs)"
+
+[lib]
+name = "book_builder_rs"
+# cdylib: the Python extension (book_builder_rs.pyd); rlib: cargo test links the kernels
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# On for the extension build (build.ps1); off for `cargo test`, which links libpython.
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+pyo3 = { version = "0.30", features = ["abi3-py311"] }
+numpy = "0.30"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
