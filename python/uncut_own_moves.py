@@ -9,6 +9,8 @@ including positions without a single move above the original cutoff.
 import argparse
 import hashlib
 import json
+import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -213,12 +215,70 @@ def partial(con, files, term_files, cap, target):
             copy(con, sql, path)
 
 
-def finalize(con, folder, stats, aux, colour):
-    parts = folder / "parts"
-    con.execute(f"""CREATE TEMP TABLE recovered AS SELECT parent_hash,move_san,
+RECOVERED = """SELECT parent_hash,move_san,
         min(epd_lo) AS parent_epd,max(coalesce(epd_hi,epd_lo)) AS epd_hi,
         min(ch_lo) AS child_hash,max(coalesce(ch_hi,ch_lo)) AS ch_hi,
-        {sums()} FROM {parquet(parts / "*.moves.parquet")} GROUP BY parent_hash,move_san""")
+        {sums} FROM {src} GROUP BY parent_hash,move_san"""
+
+
+def merge_job(path):
+    """One slice of the cross-month merge, in its own process (python uncut_own_moves.py --merge-job)."""
+    j = read_json(path)
+    tmp = Path(j["out"] + ".tmp")
+    with duckdb.connect() as con:
+        con.execute(f"SET threads={int(j['threads'])}; SET memory_limit={literal(j['mem'])}")
+        con.execute("SET preserve_insertion_order=false")
+        con.execute(f"SET temp_directory={literal(str(tmp) + '.spill')}")
+        sql = RECOVERED.format(sums=sums(), src=parquet(Path(j["src"]) / "*.parquet"))
+        con.execute(f"COPY ({sql}) TO {literal(tmp)} (FORMAT PARQUET, COMPRESSION ZSTD)")
+    tmp.replace(j["out"])
+
+
+def recovered_in_slices(con, parts, work, slices, workers, threads, memory):
+    """The same table as one GROUP BY, built from K disjoint parent_hash slices.
+
+    parent_hash is a column of the grouping key, so the union of the slices' results is exactly
+    the whole merge. Measured 2026-11-11 on White's 1800+ monthly parts (1.73B rows, 111M
+    groups): one GROUP BY grew past 100 GB; K slices in ONE process decayed (22 then 107 min a
+    slice, the DuckDB alloc/free degradation); split once + one fresh process per slice took
+    10 + ~6 min. Each step is resumable: an output exists only when complete."""
+    import subprocess
+    from concurrent.futures import ThreadPoolExecutor
+    assert slices & (slices - 1) == 0, "merge slices must be a power of two"
+    work.mkdir(parents=True, exist_ok=True)
+    rows = work / "rows"
+    if not rows.exists():
+        tmp = work / "rows.tmp"
+        shutil.rmtree(tmp, ignore_errors=True)
+        con.execute(f"""COPY (SELECT *, (parent_hash & {slices - 1})::INTEGER AS b
+            FROM {parquet(parts / "*.moves.parquet")}) TO {literal(tmp)}
+            (FORMAT PARQUET, PARTITION_BY (b), COMPRESSION ZSTD)""")
+        tmp.replace(rows)
+
+    def one(b):
+        out = work / f"slice-{b:03d}.parquet"
+        if not out.exists():
+            job = work / f"slice-{b:03d}.job.json"
+            atomic_json(job, {"src": str(rows / f"b={b}"), "out": str(out),
+                              "threads": threads, "mem": memory})
+            subprocess.run([sys.executable, "-X", "utf8", __file__, "--merge-job", str(job)], check=True)
+            job.unlink()
+        return out
+
+    todo = [b for b in range(slices) if (rows / f"b={b}").is_dir()]   # a slice may hold no rows
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(one, b) for b in todo]
+    made = [f.result() for f in futures]
+    con.execute(f"CREATE TEMP TABLE recovered AS SELECT * FROM {parquet(made)}")
+
+
+def finalize(con, folder, stats, aux, colour, slices=1, workers=1, threads=2, memory="6GB"):
+    parts = folder / "parts"
+    if slices > 1:
+        recovered_in_slices(con, parts, folder / "merge", slices, workers, threads, memory)
+    else:
+        con.execute("CREATE TEMP TABLE recovered AS "
+                    + RECOVERED.format(sums=sums(), src=parquet(parts / "*.moves.parquet")))
     ours = "w" if colour == "white" else "b"
     bad = con.execute(f"""SELECT parent_hash FROM recovered WHERE parent_epd IS NULL OR move_san IS NULL
         OR child_hash IS NULL OR parent_epd!=epd_hi OR child_hash!=ch_hi OR least(white_wins,draws,black_wins)<0
@@ -324,7 +384,8 @@ def finalize(con, folder, stats, aux, colour):
     )
 
 
-def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB"):
+def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB", merge_slices=1,
+            merge_workers=1, merge_threads=2, merge_memory="16GB"):
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     identity = contract(stats, aux, colour, overlay)
@@ -357,7 +418,8 @@ def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB"):
                     f"Prepared {i + 1}/{len(parts)} source parts ({time.monotonic() - t0:.0f}s)",
                     flush=True,
                 )
-        finalize(con, folder, stats, aux, colour)
+        finalize(con, folder, stats, aux, colour, merge_slices, merge_workers, merge_threads,
+                 merge_memory)
         done = {
             "contract": identity,
             "recipe_sha256": digest(manifest),
@@ -371,6 +433,9 @@ def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB"):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--merge-job":
+        merge_job(sys.argv[2])
+        sys.exit(0)
     p = argparse.ArgumentParser(description=__doc__)
     for arg in ("stats", "aux-stats", "out"):
         p.add_argument("--" + arg, type=Path, required=True)
@@ -378,6 +443,12 @@ if __name__ == "__main__":
     p.add_argument("--opponent-prior", type=Path)
     p.add_argument("--threads", type=int, default=2)
     p.add_argument("--mem", default="6GB")
+    p.add_argument("--merge-slices", type=int, default=1,
+                   help="build the cross-month merge in K parent_hash slices, one process each "
+                        "(a power of two; 1 = one query, the original). White 1800+ needs 16")
+    p.add_argument("--merge-workers", type=int, default=5, help="slices merged side by side")
+    p.add_argument("--merge-threads", type=int, default=2)
+    p.add_argument("--merge-mem", default="16GB", help="memory limit of each slice process")
     args = p.parse_args()
     prepare(
         args.stats,
@@ -387,4 +458,8 @@ if __name__ == "__main__":
         args.opponent_prior,
         args.threads,
         args.mem,
+        args.merge_slices,
+        args.merge_workers,
+        args.merge_threads,
+        args.merge_mem,
     )

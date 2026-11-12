@@ -279,6 +279,25 @@ class TestUncut(unittest.TestCase):
             ):
                 self.verify(Path(path), colour)
 
+    def test_sliced_merge_is_the_same_lookup(self):
+        # The cross-month merge built in parent_hash slices, each in its own process, must give
+        # byte-identical tables to the single GROUP BY.
+        for colour in ("white", "black"):
+            with (
+                self.subTest(colour=colour),
+                tempfile.TemporaryDirectory(dir=Path(__file__).parent) as path,
+            ):
+                folder = Path(path)
+                stats, aux, _, _ = fixture(folder, colour)
+                lookup.prepare(stats, aux, colour, folder / "one", memory="256MB")
+                lookup.prepare(stats, aux, colour, folder / "sliced", memory="256MB",
+                               merge_slices=4, merge_workers=2, merge_memory="256MB")
+                for name in ("graph.parquet", "aux.parquet"):
+                    one = pl.read_parquet(folder / "one" / name)
+                    sliced = pl.read_parquet(folder / "sliced" / name)
+                    self.assertGreater(one.height, 0)
+                    self.assertTrue(one.equals(sliced), name)
+
     def test_outcome_mismatch(self):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as path:
             folder = Path(path)
