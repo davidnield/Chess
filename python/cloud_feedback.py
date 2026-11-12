@@ -77,9 +77,11 @@ def decisions(book, meta, proposals, colour):
     with duckdb.connect() as con:
         con.execute("SET threads=4")
         con.register("wanted", parents.to_arrow())
-        edges = con.execute("""SELECT parent_hash, move_san, child_hash FROM read_parquet(?)
-            JOIN wanted ON parent_hash=position_hash WHERE total>=?""",
-            [meta["stats"], meta["min_games"]]).fetchall()
+        # the menu the builder chose from (book_graph), restored rivals included
+        from book_graph import edge_source
+        source, where = edge_source(meta, colour)
+        edges = con.execute(f"""SELECT s.parent_hash, s.move_san, s.child_hash FROM read_parquet(?) s
+            JOIN wanted ON s.parent_hash=position_hash WHERE {where}""", [source]).fetchall()
     source = pl.scan_parquet(meta["source_rep"]).filter(pl.col("position_hash").is_in(parents["position_hash"].to_list())
                 & (pl.col("side_to_move") == colour)).select("position_hash","best_move").collect()
     choices = {h:{} for h in parents["position_hash"]}

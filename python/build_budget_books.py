@@ -112,6 +112,7 @@ class GateAdmit:
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
         self.excluded = {}
+        self.rare_floor, self.verified = None, {}
 
     def prefetch(self, hashes) -> None:
         new = np.array([h for h in set(hashes) if h not in self._seen], dtype=np.int64)
@@ -129,6 +130,7 @@ class GateAdmit:
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
             require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss,
+            rare_floor=self.rare_floor, verified=self.verified,
             **self.gate_settings)
             if e.get("child_hash") is not None}
 
@@ -227,7 +229,8 @@ def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit=None, engine_moves=None, reply_overlay=None) -> pl.DataFrame:
+                           min_games: int, admit=None, engine_moves=None, reply_overlay=None,
+                           uncut_own: bool = False) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -265,6 +268,10 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     position, and the max is not an upper bound on the sum. It is used here only
     as a pruning heuristic; see the plan's note on policy-free reach.
     """
+    floor = f"s.total >= {int(min_games)}"
+    if uncut_own:
+        our_turn = "w" if our_white else "b"
+        floor += f" OR split_part(s.parent_epd, ' ', 2) = '{our_turn}'"
     frames: list[pl.DataFrame] = []
     reach: dict[int, float] = {root: 1.0}
     ply: dict[int, int] = {root: 0}
@@ -282,7 +289,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                    s.white_score_avg
             FROM read_parquet('{stats}') s
             JOIN frontier f ON f.h = s.parent_hash
-            WHERE s.total >= {min_games}
+            WHERE {floor}
         """)
         # A fixed order (2026-10-29): DuckDB's join order and polars' group_by order
         # vary run to run, and the walk below is order-dependent -- a transposition's
@@ -315,7 +322,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                 rows = list(grp.iter_rows(named=True))
                 if our_turn and engine_moves and ph in engine_moves:
                     existing = {r["child_hash"] for r in rows}
-                    rows.extend({"move_san": san, "child_hash": ch, "total": 0}
+                    rows.extend({"move_san": san, "child_hash": ch, "total": 0, "engine": True}
                                 for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
                 for row in rows:
@@ -638,6 +645,15 @@ def main() -> int:
                          "reachable at all or whether the distinct count skips "
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--rare-verification", action="store_true",
+                    help="With --uncut-own-moves: an own move with fewer than --min-games "
+                         "observations and no verified score (rare_verify.py rows in "
+                         "--engine-candidates) cannot set a gate reference. It stays a "
+                         "candidate. Writes <book>.rare.json: the decisions where such a move "
+                         "would have excluded a rival. Default off = the old rule exactly.")
+    ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
+                    help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
+                         "Give --stats and --aux-stats for its original population.")
     a = ap.parse_args()
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
@@ -690,6 +706,21 @@ def main() -> int:
             "--other-cov-blend)")
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
+    uncut = None
+    if a.uncut_own_moves:
+        from uncut_own_moves import load
+        if not aux_path:
+            ap.error("--uncut-own-moves requires the native aux sidecar")
+        uncut = load(a.uncut_own_moves, a.stats, aux_path, a.perspective, a.opponent_prior)
+    uncut_recipe = uncut["recipe_sha256"] if uncut else None
+    if a.rare_verification and not uncut:
+        ap.error("--rare-verification needs --uncut-own-moves")
+    for dest in outs.values():
+        if dest.exists() and not a.force:
+            mp = Path(str(dest) + ".meta.json")
+            old = json.loads(mp.read_text()).get("uncut_own_recipe") if mp.exists() else None
+            if old != uncut_recipe:
+                ap.error("Existing output uses another move lookup; choose a fresh output prefix")
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
     if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
@@ -743,6 +774,7 @@ def main() -> int:
     proposal_moves = None
     proposal_sha = None
     proposal_input = None
+    verified_at = {}
     excluded = {}
     verified_cp = {}
     if a.engine_candidates:
@@ -753,12 +785,18 @@ def main() -> int:
         fresh = {}
         excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
+        verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
         gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
         if gate is not None:
             gate.excluded = excluded
             gate.eval_ws.update(fresh)
             gate._seen.update(fresh)
+    rare_floor = a.min_games if a.rare_verification else None
+    if rare_floor is not None:
+        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        if gate is not None:
+            gate.rare_floor, gate.verified = rare_floor, verified_at
     reply_overlay = None
     if a.opponent_prior:
         from opponent_prior import ReplyOverlay
@@ -766,8 +804,13 @@ def main() -> int:
                                      a.perspective,a.min_games)
     elif a.opponent_pseudogames != 0:
         ap.error("--opponent-pseudogames requires --opponent-prior")
-    edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves, reply_overlay)
+    graph_stats = (a.uncut_own_moves / "graph.parquet").as_posix() if uncut else stats
+    graph_aux = str(a.uncut_own_moves / "aux.parquet") if uncut else aux_path
+    if uncut:
+        log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
+    edf = collect_subgraph_edges(con, graph_stats, root, our_white, eps,
+                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
+                                 reply_overlay, uncut_own=bool(uncut))
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -814,7 +857,7 @@ def main() -> int:
 
     aux_rows = {}
     if aux_path:
-        aux_rows = bc.load_aux_rows(aux_path, parents)
+        aux_rows = bc.load_aux_rows(graph_aux, parents)
         if reply_overlay is not None:
             for h in parents:
                 if h in reply_overlay.extra_aux:
@@ -861,6 +904,7 @@ def main() -> int:
                        strict_source=a.strict_source,
                        crack_at_parents=a.crack_at_parents,
                        engine_moves=engine_moves, excluded=excluded,
+                       rare_floor=rare_floor, verified=verified_at,
                        track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
                                             or a.dump_other_positions or a.sampled_other),
                        track_other=bool(a.dump_other_positions or a.sampled_other))
@@ -883,6 +927,7 @@ def main() -> int:
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
         other_key["engine_candidates_sha256"] = proposal_sha
+        other_key["uncut_own_recipe"] = uncut_recipe
         other_key["gate_policy"] = gate_recipe
         if reply_overlay is not None:
             other_key["opponent_prior"] = reply_overlay.recipe
@@ -955,6 +1000,7 @@ def main() -> int:
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=a.weak_min_share, stop_model=a.stop_model)
             dump_key["engine_candidates_sha256"] = proposal_sha
+            dump_key["uncut_own_recipe"] = uncut_recipe
             dump_key["gate_policy"] = gate_recipe
             if reply_overlay is not None:
                 dump_key["opponent_prior"] = reply_overlay.recipe
@@ -1289,6 +1335,13 @@ def main() -> int:
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
+            **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
+               if uncut else {}),
+            "perspective": a.perspective,
+            **({"rare_floor": rare_floor, "rare_disputes": len(g.meta.get("rare_disputes", {})),
+                "rare_disputes_booked": sum(1 for h in g.meta.get("rare_disputes", {})
+                                            if res["booked"].get(h))}
+               if rare_floor is not None else {}),
             **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
                if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
@@ -1343,6 +1396,13 @@ def main() -> int:
             "built": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
+        if rare_floor is not None:
+            # every decision where an unverified rare move would have excluded a rival had it
+            # bound, with the graph's optimistic reach: the verifier's work list
+            Path(str(out) + ".rare.json").write_text(json.dumps(
+                [{"position_hash": h, "reach": g.reach.get(h, 0.0), "ply": g.ply.get(h),
+                  "booked": res["booked"].get(h), **d}
+                 for h, d in sorted(g.meta.get("rare_disputes", {}).items())]))
         rvr, rvc = res["root_value_realized"], meta["root_value_curve"]
         log(f"b={b}: booked {res['spent_distinct']:,} distinct "
             f"({res['spent_paths']:,} path-charged), root value "

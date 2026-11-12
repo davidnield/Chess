@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -227,20 +228,35 @@ import budget_core as _bc                                       # noqa: E402
 _REAL_EXTRACT = _bc.extract_book
 
 
+def extract_with_fresh_order(*args, order, **kwargs):
+    return _REAL_EXTRACT(*args, **kwargs)
+
+
+for graph, graph_curves in ((g, curves), (gcyc, ccur), (groot, gcur)):
+    for use_leftover in (False, True):
+        with patch.object(_bc, "topo_down", wraps=topo_down) as sorter:
+            cached = match_distinct(graph, graph_curves, 4, 10, leftover=use_leftover)
+            check("all budget probes sort the graph once", sorter.call_count == 1)
+        with patch.object(_bc, "extract_book", side_effect=extract_with_fresh_order) as probes:
+            reference = match_distinct(graph, graph_curves, 4, 10, leftover=use_leftover)
+            check("cached and repeated sorts agree on the entire extraction",
+                  probes.call_count > 1 and cached == reference)
+
+
 def _table_search(table, target, bmax, scan_cap=64):
     """Run match_distinct against `table` (charged budget -> distinct count).
 
     Returns (charged, spent, hit, probed_budgets)."""
     probed = []
 
-    def stub(g_, curves_, budget, fixed_policy=None, force_booked=None):
+    def stub(g_, curves_, budget, **kwargs):
         probed.append(budget)
         return {"spent_distinct": table[budget], "booked": {}, "b": budget}
 
     _bc.extract_book = stub
     try:
         r, charged, hit, spent = _bc.match_distinct(
-            None, {}, target, bmax, scan_cap=scan_cap)
+            g, {}, target, bmax, scan_cap=scan_cap)
     finally:
         _bc.extract_book = _REAL_EXTRACT
     return charged, spent, hit, probed, r
@@ -340,7 +356,7 @@ def _which_curves(target, bmax, plain_bmax, table_plain, table_probe):
     """Returns (charged, spent, [(budget, 'plain'|'probe'), ...])."""
     used = []
 
-    def stub(g_, curves_, budget, fixed_policy=None, force_booked=None):
+    def stub(g_, curves_, budget, **kwargs):
         tag = curves_.get("which", "plain")
         used.append((budget, tag))
         tbl = table_plain if tag == "plain" else table_probe
@@ -349,7 +365,7 @@ def _which_curves(target, bmax, plain_bmax, table_plain, table_probe):
     _bc.extract_book = stub
     try:
         _r, charged, _hit, spent = _bc.match_distinct(
-            None, PLAIN, target, bmax, probe_curves=PROBE,
+            g, PLAIN, target, bmax, probe_curves=PROBE,
             plain_bmax=plain_bmax)
     finally:
         _bc.extract_book = _REAL_EXTRACT
@@ -384,14 +400,14 @@ check("the fallback still reaches a target the plain set cannot",
 _bc_used = []
 
 
-def _stub_none(g_, curves_, budget, fixed_policy=None, force_booked=None):
+def _stub_none(g_, curves_, budget, **kwargs):
     _bc_used.append(curves_.get("which", "plain"))
     return {"spent_distinct": COARSE[budget], "booked": {}, "b": budget}
 
 
 _bc.extract_book = _stub_none
 try:
-    _bc.match_distinct(None, PLAIN, 6, 32, probe_curves=PROBE)
+    _bc.match_distinct(g, PLAIN, 6, 32, probe_curves=PROBE)
 finally:
     _bc.extract_book = _REAL_EXTRACT
 check("omitting plain_bmax keeps every probe on the inflated set",
