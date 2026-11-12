@@ -44,8 +44,15 @@ all count. Five rules keep that true:
 | Rust (`src/`) | Python reference |
 |---|---|
 | `value.rs` | `cp_to_expected_score`, `ws_to_cp`, `smoothed_score`, `effective_eval_weight`, `leaf_edge_value`, `leaf_node_value`, `aux_row_buckets`, `aux_opp_mix` (horizon mode `empirical`) |
+| `gates.rs` | `passes_abs_gate`, `rel_gate_keep`, `eval_loss_keep`, `gate_candidates`, `final_candidates` (candidate cap 0). The source move's child is still resolved in Python with python-chess; only its eval enters here. |
 
-**Next:** the gates (`passes_abs_gate`, `rel_gate_keep`, `eval_loss_keep`,
-`gate_candidates`, `final_candidates`), then `optimistic_reach` and `route_plies`, then
+Moves are interned as integer codes, assigned in sorted SAN order, so comparing codes orders
+moves the way Python's string comparison does. A separate code identifies each move without
+its check suffix.
+
+The gate test has been checked against a deliberately planted error: setting `CP_EPS` to 0
+made 561 of 216,000 node solves differ.
+
+**Next:** `optimistic_reach` and `route_plies`, then
 `build_graph` itself into compressed sparse rows. Keys are a (hi, lo) pair of 64-bit
 integers, with hi 0 on today's data.

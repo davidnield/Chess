@@ -3,11 +3,15 @@
 //! reference, and python/_test_book_builder_rs.py holds every exported function to it at
 //! tolerance 0. See README.md for the build and the exactness contract.
 
+pub mod gates;
 pub mod value;
 
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyList;
+
+use gates::{Cand, GateParams, NodeIn, Ref};
 
 use value::{AuxRow, Blend};
 
@@ -134,6 +138,102 @@ fn aux_mix<'py>(py: Python<'py>, term_total: PyReadonlyArray2<'py, f64>,
     Ok((PyArray2::from_vec2(py, &buckets)?, PyArray2::from_vec2(py, &mix)?))
 }
 
+fn csr<'a>(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()> {
+    if ptr.len() != n + 1 || ptr[0] != 0 || ptr[n] as usize != len
+        || ptr.windows(2).any(|w| w[1] < w[0]) {
+        return Err(PyValueError::new_err(format!("{what}: bad CSR pointer")));
+    }
+    Ok(())
+}
+
+/// final_candidates for many our-nodes (budget_core.final_candidates, max_cands 0).
+///
+/// Nodes: own eval, source move (san/bare code, -1 = none) and the restored source move's
+/// child eval. Recorded edges e_* and engine proposals m_* in CSR (san/bare codes, child
+/// eval, total); verified (v_*) and vetoed (x_*) bare codes in CSR. SAN codes must be
+/// assigned in sorted SAN order. max_eval_loss NaN = off, rare_floor < 0 = off.
+///
+/// Returns (k_ptr, k_ref, restored, n_rej, n_eng, disputes): k_ref >= 0 is a global
+/// recorded-edge index, -(1 + j) the global engine proposal j; disputes is a list of
+/// (node, reference_cp or None, [(san, cp)], [san], fallback, unresolved).
+#[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn final_candidates_batch<'py>(
+    py: Python<'py>,
+    own: PyReadonlyArray1<'py, f64>, src_san: PyReadonlyArray1<'py, i64>,
+    src_bare: PyReadonlyArray1<'py, i64>, src_eval: PyReadonlyArray1<'py, f64>,
+    e_ptr: PyReadonlyArray1<'py, i64>, e_san: PyReadonlyArray1<'py, i64>,
+    e_bare: PyReadonlyArray1<'py, i64>, e_eval: PyReadonlyArray1<'py, f64>,
+    e_total: PyReadonlyArray1<'py, i64>,
+    m_ptr: PyReadonlyArray1<'py, i64>, m_san: PyReadonlyArray1<'py, i64>,
+    m_bare: PyReadonlyArray1<'py, i64>, m_eval: PyReadonlyArray1<'py, f64>,
+    v_ptr: PyReadonlyArray1<'py, i64>, v_bare: PyReadonlyArray1<'py, i64>,
+    x_ptr: PyReadonlyArray1<'py, i64>, x_bare: PyReadonlyArray1<'py, i64>,
+    our_white: bool, slice_prior: f64, robustness_floor: f64, gate_rel_floor: f64,
+    gate_rel_own_margin: f64, require_eval: bool, gates: bool, max_eval_loss: f64,
+    rare_floor: i64, strict_source: bool, want_disputes: bool,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<bool>>,
+               Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyList>)> {
+    let (own, ss, sb, se) = (own.as_slice()?, src_san.as_slice()?, src_bare.as_slice()?,
+                             src_eval.as_slice()?);
+    let n = own.len();
+    same_len(n, &[ss.len(), sb.len(), se.len()])?;
+    let (ep, es, eb, ee, et) = (e_ptr.as_slice()?, e_san.as_slice()?, e_bare.as_slice()?,
+                                e_eval.as_slice()?, e_total.as_slice()?);
+    same_len(es.len(), &[eb.len(), ee.len(), et.len()])?;
+    csr(ep, n, es.len(), "e_ptr")?;
+    let (mp, ms, mb, me) = (m_ptr.as_slice()?, m_san.as_slice()?, m_bare.as_slice()?,
+                            m_eval.as_slice()?);
+    same_len(ms.len(), &[mb.len(), me.len()])?;
+    csr(mp, n, ms.len(), "m_ptr")?;
+    let (vp, vb, xp, xb) = (v_ptr.as_slice()?, v_bare.as_slice()?, x_ptr.as_slice()?,
+                            x_bare.as_slice()?);
+    csr(vp, n, vb.len(), "v_ptr")?;
+    csr(xp, n, xb.len(), "x_ptr")?;
+    let p = GateParams {
+        our_white, slice_prior, robustness_floor, gate_rel_floor, gate_rel_own_margin,
+        require_eval, gates,
+        max_eval_loss: if max_eval_loss.is_nan() { None } else { Some(max_eval_loss) },
+        rare_floor: if rare_floor < 0 { None } else { Some(rare_floor) },
+        strict_source,
+    };
+    let edges: Vec<Cand> = (0..es.len()).map(|i| Cand {
+        r: Ref::Edge(i), san: es[i], bare: eb[i], eval: ee[i], total: et[i], engine: false,
+    }).collect();
+    let props: Vec<Cand> = (0..ms.len()).map(|i| Cand {
+        r: Ref::Engine(i), san: ms[i], bare: mb[i], eval: me[i], total: 0, engine: true,
+    }).collect();
+    let (mut k_ptr, mut k_ref) = (vec![0i64], Vec::new());
+    let (mut restored, mut n_rej, mut n_eng) = (Vec::with_capacity(n), Vec::with_capacity(n),
+                                                Vec::with_capacity(n));
+    let disputes = PyList::empty(py);
+    for i in 0..n {
+        let r = |p: &[i64]| p[i] as usize..p[i + 1] as usize;
+        let node = NodeIn {
+            own: own[i], src: if ss[i] < 0 { None } else { Some(ss[i]) }, src_bare: sb[i],
+            src_eval: se[i], recorded: &edges[r(ep)], engine: &props[r(mp)],
+            verified: &vb[r(vp)], veto: &xb[r(xp)],
+        };
+        let o = gates::final_candidates(&node, &p, want_disputes);
+        for k in &o.kept {
+            k_ref.push(match *k {
+                Ref::Edge(j) => j as i64,
+                Ref::Engine(j) => -(1 + j as i64),
+            });
+        }
+        k_ptr.push(k_ref.len() as i64);
+        restored.push(o.restored);
+        n_rej.push(o.n_rej);
+        n_eng.push(o.n_eng);
+        if let Some(d) = o.dispute {
+            disputes.append((i, d.reference_cp, d.threats, d.at_risk, d.fallback, d.unresolved))?;
+        }
+    }
+    Ok((PyArray1::from_vec(py, k_ptr), PyArray1::from_vec(py, k_ref),
+        PyArray1::from_vec(py, restored), PyArray1::from_vec(py, n_rej),
+        PyArray1::from_vec(py, n_eng), disputes))
+}
+
 #[pymodule]
 fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cp_to_expected_score, m)?)?;
@@ -141,6 +241,7 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(leaf_edge_values, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_node_values, m)?)?;
     m.add_function(wrap_pyfunction!(aux_mix, m)?)?;
+    m.add_function(wrap_pyfunction!(final_candidates_batch, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
