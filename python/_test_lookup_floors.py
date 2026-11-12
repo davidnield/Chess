@@ -4,6 +4,8 @@ floor:   games conserved position by position, opponent rows untouched, and at o
          sidecar is exactly what rebucket_pool.py writes for the same rows (one definition of the
          other bucket's arithmetic).
 addback: with every our-turn position chosen, the result is the full lookup again, row for row.
+allow:   only the listed own moves stay (check marks ignored), games conserved, an unlisted position
+         keeps none, and a rerun with another table into the same output is refused.
 """
 import json
 import sys
@@ -80,8 +82,27 @@ class TestLookupFloors(unittest.TestCase):
         bx = pl.read_parquet(folder / "back" / "aux.parquet").sort("position_hash")
         self.assertTrue(bg.equals(g.sort("parent_hash", "move_san")))
         self.assertTrue(bx.equals(fx.sort("position_hash")))
+        # allow: one listed move at all but one of our positions (that one keeps no own move)
+        parents = sorted(own["parent_hash"].unique().to_list())
+        listed = own.filter(pl.col("parent_hash").is_in(parents[1:])).sort("parent_hash", "move_san")             .group_by("parent_hash", maintain_order=True).first()
+        table = folder / "allowed.parquet"
+        pl.DataFrame({"position_hash": listed["parent_hash"],
+                      "move_san": listed["move_san"] + "+"}).write_parquet(table)   # check marks ignored
+        with patch.object(lf, "open_eval_arrays", return_value=()),                 patch.object(lf, "lookup_evals", side_effect=fake_evals):
+            lf.allow(full, colour, lf.load_allowed(table, colour), folder / "allowed", {"allowed_moves": "t"},
+                     threads=1, memory="256MB")
+        ag = pl.read_parquet(folder / "allowed" / "graph.parquet")
+        ax = pl.read_parquet(folder / "allowed" / "aux.parquet")
+        a_own = ag.filter(pl.col("parent_epd").str.split(" ").list.get(1) == ours)
+        self.assertEqual(sorted(zip(a_own["parent_hash"], a_own["move_san"])),
+                         sorted(zip(listed["parent_hash"], listed["move_san"])))
+        self.assertTrue(mass(g, fx).equals(mass(ag, ax)))
+        self.assertTrue(theirs(g).equals(theirs(ag)))
+        with self.assertRaisesRegex(ValueError, "another allowed-moves table"):
+            lf.allow(full, colour, lf.load_allowed(table, colour).head(1), folder / "allowed",
+                     {"allowed_moves": "t"})
         # both results load like any lookup
-        for d in ("floored", "back"):
+        for d in ("floored", "back", "allowed"):
             r = lookup.read_json(folder / d / "ready.json")
             self.assertEqual(r["recipe_sha256"], lookup.digest(folder / d / "recipe.json"))
 

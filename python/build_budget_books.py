@@ -7,12 +7,15 @@ AND which move to book at each — the budget is inside the selection, so a
 book (which can afford deep traps). Method: per-node value-vs-budget curves
 (budget_core.py, where the algorithm and its documented approximations live).
 
-The four comparable methods Phase D evaluates:
-  reach-truncation   build_baseline_books.py --rule from-book   (existing)
-  greedy             --method greedy: myopic one-step gains, no chain atoms
-  fixed-policy DP    --method dp --fixed-policy: optimal stopping, source moves
-  full DP            --method dp: joint stopping + policy choice
-                     (--polish: then budget_core.polish_book from the DP book)
+Two optimisers (2026-11-12; the greedy, fixed-policy and price-variant paths were retired and
+live in tag archive-2026-11-11):
+  --method price     price search, one repricing round at max(book, optimistic) reach from the
+                     source book's seed, best solve, then DAG polish (every White recipe)
+  --method dp        the curve engine, joint stopping + policy choice; Black recipes add
+                     --match-distinct --match-inflate 1.5 --polish
+Out-of-book positions are always valued by the weak-player stop model (--weak-pool), optionally
+replaced by sampled tables (--sampled-stop / --sampled-other); strict source and crack at parents
+are always on.
 
 Outputs one book per --budget from a single curve build. Books are
 replay_holdout/score_repertoire-compatible; `value` on booked rows is the
@@ -29,7 +32,8 @@ Usage:
         --rep E:/chess/repertoire/_sweep/baseline_white.parquet \\
         --stats E:/chess/position-stats/position_stats_pooled_ge1800_2013_2024_brc.parquet \\
         --perspective white --out-prefix E:/chess/repertoire/_budget/dp_white \\
-        --budget 400 --budget 4000 --budget 40000 --method dp
+        --weak-pool E:/chess/position-stats/weak_edges_b1000_1800_on_ge1800.parquet \
+        --budget 2000 --method price
 
 Defaults for --aux-stats / --reply-shrink are read from the source rep's
 .meta.json sidecar; explicit flags override.
@@ -59,6 +63,12 @@ import budget_core as bc                                    # noqa: E402
 from duck_compat import duck_pl                             # noqa: E402
 from stage3_backwards_induction import cp_to_expected_score  # noqa: E402
 from zobrist import zobrist_int64                            # noqa: E402
+
+
+# Fixed since 2026-11-12 (options retired; tag archive-2026-11-11 keeps the old paths): the price
+# search as every price recipe ran it, and the weak stop model's minimum move share.
+PRICE = {"rounds": 1, "select": "best", "reprice": "max", "dag_mode": "polish"}
+WEAK_MIN_SHARE = 0.01
 
 
 def log(msg: str) -> None:
@@ -141,12 +151,6 @@ def load_incumbent_moves(path: str, perspective: str) -> dict[int, str]:
     return {h: m.rstrip("+#") for h, s, m in d.iter_rows() if s == perspective and m}
 
 
-def load_book_moves(path: str, perspective: str) -> dict[int, str]:
-    """A book's moves at our turn, as the book writes them (--polish-from)."""
-    d = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
-    return {h: m for h, s, m in d.iter_rows() if s == perspective and m}
-
-
 def incumbent_churn(booked: dict[int, str], incumbent: dict[int, str],
                     reach: dict[int, float]) -> dict:
     """How far the new book moved from the incumbent: decisions kept, changed (same position,
@@ -164,67 +168,6 @@ def incumbent_churn(booked: dict[int, str], incumbent: dict[int, str],
             "dropped": len(dropped), "added": len(added),
             "reach_kept": r(set(both) - set(changed)), "reach_changed": r(changed),
             "reach_dropped": r(dropped), "reach_added": r(added)}
-
-
-def load_allowed_moves(path: str, perspective: str, min_score: float = 0.0,
-                       courses: list[str] | None = None,
-                       book_only: bool = False) -> dict[int, set[str]]:
-    """--allowed-moves: position -> the SANs (check marks stripped) our book may
-    play there. A course_books course_moves.parquet (parent_hash, move_san, score,
-    course_id, rep_side) keeps the repertoire side's moves scoring above
-    `min_score` (0 = any recommendation; a move the course marks ? scores 0),
-    optionally from some courses only, and with `book_only` only each course
-    book's own choice there (in_book) rather than every move its analysis
-    recommends. Any other parquet needs position_hash or parent_hash, and move_san."""
-    d = pl.read_parquet(path)
-    if "parent_hash" not in d.columns:
-        d = d.rename({"position_hash": "parent_hash"})
-    if "rep_side" in d.columns:
-        d = d.filter(pl.col("rep_side") == perspective)
-    if "score" in d.columns:
-        d = d.filter(pl.col("score") > min_score)
-    if courses:
-        d = d.filter(pl.col("course_id").is_in(courses))
-    if book_only and "in_book" in d.columns:
-        d = d.filter(pl.col("in_book"))
-    out: dict[int, set[str]] = {}
-    for h, m in d.select("parent_hash", "move_san").unique().iter_rows():
-        out.setdefault(h, set()).add(m.rstrip("+#"))
-    return out
-
-
-class AllowedAdmit:
-    """--allowed-moves for the collector: at our nodes expand only the allowed
-    moves (and, under --gated-reach, only those the gates also admit)."""
-
-    def __init__(self, allowed: dict[int, set[str]], inner: GateAdmit | None = None):
-        self.allowed, self.inner = allowed, inner
-
-    def prefetch(self, hashes) -> None:
-        if self.inner is not None:
-            self.inner.prefetch(hashes)
-
-    def __call__(self, ph: int, rows: list[dict]) -> set[int]:
-        ok = self.allowed.get(ph)
-        if not ok:
-            return set()
-        kids = {r["child_hash"] for r in rows if r.get("child_hash") is not None
-                and r["move_san"].rstrip("+#") in ok}
-        return kids & self.inner(ph, rows) if (kids and self.inner is not None) else kids
-
-
-def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
-    """Drop every our-node candidate --allowed-moves does not list. A node left with
-    none can only stop (its stop value), so the book ends there."""
-    dropped = emptied = 0
-    for h, n in g.our.items():
-        ok = allowed.get(h, ())
-        keep = [c for c in n.cands if c[0].rstrip("+#") in ok]
-        dropped += len(n.cands) - len(keep)
-        if n.cands and not keep:
-            emptied += 1
-        n.cands = keep
-    return {"cands_dropped": dropped, "nodes_emptied": emptied}
 
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
@@ -362,45 +305,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
-def evaluate_books(g, specs: list[str], perspective: str, log, what: str = "",
-                   compiled=None) -> None:
-    """In-model value of FOLLOWING each LABEL=PATH book on graph g
-    (budget_core.policy_value), then, for two or more books, where they differ: every
-    shallow position (ply <= 6) some book reaches in >= 1% of games, with each book's
-    reach and value there. compiled: g's budget_compiled.CompiledGraph, if one is built
-    (the same values from array sweeps)."""
-    order = compiled.order if compiled is not None else bc.topo_up(g)[0]
-    log(f"evaluating {len(specs)} book(s) on this graph ({what})")
-    evals = {}
-    for spec in specs:
-        label, path = spec.split("=", 1)
-        bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
-        mv = {h: m for h, sd, m in bd.iter_rows() if sd == perspective and m}
-        r = bc.policy_value(g, mv, order, detail=True, compiled=compiled)
-        evals[label] = r
-        log(f"  {label:<28} {len(mv):>7,} moves  value {r['value']:.5f} (our side)  "
-            f"played {r['played']:,}  not candidates {r['missing']:,}")
-    if len(evals) < 2:
-        return
-    from repertoire_stats import opening_names
-    names = opening_names()
-    labels = list(evals)
-    cand = [h for h in set().union(*(e["W"] for e in evals.values()))
-            if g.ply.get(h, 99) <= 6
-            and max(e["W"].get(h, 0.0) for e in evals.values()) >= 0.01]
-    cand.sort(key=lambda h: -max(e["W"].get(h, 0.0) for e in evals.values()))
-    log("  breakdown (ply <= 6, reach >= 1%): reach / value per book")
-    log("    " + f"{'ply':>3} " + "".join(f"{lb[:17]:>18}" for lb in labels) + "  opening")
-    for h in cand[:40]:
-        cells = ""
-        for lb in labels:
-            w, t = evals[lb]["W"].get(h, 0.0), evals[lb]["T"].get(h)
-            cells += f"{w * 100:7.2f}% {t:.4f} " if (w > 0 and t is not None) \
-                else f"{'':>18}"
-        nm = names.get(h, ("", ""))[1][:48]
-        log(f"    {g.ply.get(h, -1):>3} {cells} {nm or g.epd.get(h, '')[:48]}")
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -412,15 +316,12 @@ def main() -> int:
     ap.add_argument("--out-prefix", required=True,
                     help="Books land at <prefix>_b<N>.parquet (+ .meta.json).")
     ap.add_argument("--budget", type=int, action="append", required=True)
-    ap.add_argument("--method", choices=["greedy", "dp", "price"], default="dp",
+    ap.add_argument("--method", choices=["dp", "price"], default="dp",
                     help="dp: the curve engine. price: price per move "
                          "(budget_core.price_search) -- exact for its own book size "
                          "on a tree, no curves, so --grid-cap/--match-*/--leftover do "
                          "not apply; the book lands on the reachable size nearest "
                          "--budget and the meta records the bound on the rest.")
-    ap.add_argument("--fixed-policy", action="store_true",
-                    help="Restrict candidates to the source rep's best_move "
-                         "(optimal stopping; the B-prime comparator).")
     ap.add_argument("--epsilon", type=float, default=None,
                     help="Optimistic-reach floor. Default min(1e-3, 8/max(budget)).")
     ap.add_argument("--max-ply", type=int, default=40)
@@ -433,17 +334,6 @@ def main() -> int:
                          "the pool's floor), so the survivors are renormalised over a smaller "
                          "denominator: the Black lifetime book lost its 20-49-game replies "
                          "that way. Warned about, recorded in the meta.")
-    ap.add_argument("--strict-source", action=argparse.BooleanOptionalAction, default=True,
-                    help="Do not restore a source-book move the gates rejected (it used to "
-                         "come back as an 'engine-augmented' candidate, so --max-eval-loss "
-                         "never bound it); an unrecorded source move must pass "
-                         "--max-eval-loss. DEFAULT ON since 2026-10-31; --no-strict-source "
-                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
-    ap.add_argument("--crack-at-parents", action=argparse.BooleanOptionalAction, default=True,
-                    help="Credit opponent collapses at our-turn arrivals whether we stop "
-                         "or book (taken out at the parent edge), instead of in the stop "
-                         "value only. DEFAULT ON since 2026-10-31; --no-crack-at-parents "
-                         "rebuilds the old graph exactly (c865f9b). See build_graph.")
     ap.add_argument("--dump-stop-positions", default=None, metavar="PARQUET",
                     help="write every stop position of the graph (ply, reach, weak-stop value) "
                          "and stop: the input of sampled_stop.py (2026-10-31)")
@@ -463,18 +353,6 @@ def main() -> int:
     ap.add_argument("--engine-candidates", default=None, metavar="PARQUET",
                     help="engine-proposed moves to judge alongside the recorded ones "
                          "(engine_candidates.py; follow-up review R5). Default off.")
-    ap.add_argument("--max-cands", type=int, default=0,
-                    help="Cap on candidates per our-node. DEFAULT 0 (uncapped) "
-                         "as of 2026-08-29: the gates are the pruner. This "
-                         "narrows the CHOICE SET only -- it does NOT shrink the "
-                         "subgraph, because collect_subgraph_edges expands "
-                         "before build_graph caps, so a cap buys no memory and "
-                         "costs value. Measured: gates alone leave a mean of "
-                         "2.66 candidates/node (62%% of our-nodes have exactly "
-                         "1); --max-cands 3 binds on 19.5%% of nodes and lost "
-                         "0.0043 at b=6 on the <=2024 white pool. When set, "
-                         "keeps the source book's move, the top-K by child "
-                         "eval, and the single most forcing candidate.")
     ap.add_argument("--match-distinct", action="store_true",
                     help="Spend a LARGER path-charged budget until the book "
                          "holds --budget DISTINCT decisions. The curves charge "
@@ -507,53 +385,12 @@ def main() -> int:
                     help="Beta-binomial pseudocount pulling thin empirical "
                          "scores toward the slice prior (default 500). 0 = raw "
                          "observed scores, unsmoothed.")
-    ap.add_argument("--stop-model", choices=["pool", "weak", "empirical"], default="pool",
-                    help="How a position out of book is valued. 'pool' (default): the "
-                         "pool's own results from there (we play on like the pool). "
-                         "'weak': we play one move like --weak-pool's population, the "
-                         "opponent replies like the pool, then the engine "
-                         "(python/weak_stop.py); applied to every out-of-book position "
-                         "so the DP compares like with like. 'empirical': as 'weak', then "
-                         "every position --stop-table holds takes its value played out to "
-                         "the pool's ply cap with real moves (python/empirical_stop.py); "
-                         "positions the table lacks keep the weak value.")
-    ap.add_argument("--stop-table", default=None,
-                    help="empirical_stop.py output for this pool and colour "
-                         "(--stop-model empirical).")
-    ap.add_argument("--weak-pool", default=None,
+    ap.add_argument("--weak-pool", required=True,
                     help="Pool parquet whose move frequencies stand for OUR play out of "
                          "book under --stop-model weak (e.g. the 1000-1800 pool).")
     ap.add_argument("--weak-min-games", type=float, default=20.0,
                     help="Below this many weak-pool games at a position, our move "
                          "frequencies fall back to the main pool's (default 20).")
-    ap.add_argument("--price-rounds", type=int, default=2,
-                    help="--method price: reach re-pricing rounds (default 2).")
-    ap.add_argument("--price-select", choices=["closest", "best"], default="closest",
-                    help="--method price: the last round's book nearest the target "
-                         "(default), or the best realized value of every solve within "
-                         "1%% of the target.")
-    ap.add_argument("--price-seed", choices=["optimistic", "source"], default="optimistic",
-                    help="--method price: price with the optimistic reach (default) or, "
-                         "in every round, with max(optimistic, the source rep's policy reach).")
-    ap.add_argument("--evaluate-after", action="append", default=[], metavar="LABEL=PATH",
-                    help="After building the books, evaluate them in-model on the same graph "
-                         "next to these books (as --evaluate does, without a second graph build).")
-    ap.add_argument("--price-reprice", choices=["replace", "max"], default="replace",
-                    help="--method price: after round 1, price a node at its book's reach "
-                         "(replace, default) or at max(book reach, optimistic reach).")
-    ap.add_argument("--price-dag-mode", choices=["fixpoint", "polish", "fixpoint+polish"],
-                    default=None,
-                    help="--method price: a DAG candidate of plan item 11 "
-                         "(budget_core.price_search dag_mode; measured against an exact "
-                         "oracle in _test_budget_dag.py). polish: coordinate ascent after the "
-                         "search, never over the budget; under --incumbent it maximises "
-                         "value minus the margin on every changed move (budget_core.polish_book). "
-                         "Default off.")
-    ap.add_argument("--polish-from", action="append", default=[], metavar="BOOK",
-                    help="--price-dag-mode polish: polish also from this book of the colour "
-                         "(e.g. a --method dp book), so the result is never below it polished; "
-                         "repeatable. Moves that are not candidates on this graph are dropped. "
-                         "Default: the price search's own starts only.")
     ap.add_argument("--polish", action="store_true",
                     help="--method dp: polish the curve engine's book to the same budget "
                          "(budget_core.polish_book, the coordinate ascent of --price-dag-mode "
@@ -566,43 +403,6 @@ def main() -> int:
                          "nodes, the dict walks below; legacy: the dict walks throughout, the "
                          "reference. Every engine writes the same books bit for bit "
                          "(_test_budget_speed.py); legacy exists to check that on real graphs.")
-    ap.add_argument("--price-diagnose", action="store_true",
-                    help="DIAGNOSTIC: run a fixed set of price-search variants on this "
-                         "graph and log each one's size and in-model value (plus any "
-                         "--evaluate books); writes no books.")
-    ap.add_argument("--allowed-moves", default=None, metavar="PATH",
-                    help="Mix and match: our book may play only the moves this parquet "
-                         "lists for a position (course_books' course_moves.parquet, or "
-                         "any position_hash/parent_hash + move_san table). Elsewhere the "
-                         "book can only stop. Default off.")
-    ap.add_argument("--allowed-min-score", type=float, default=0.0,
-                    help="course_moves only: keep moves scoring above this "
-                         "(default 0: any recommendation, never a '?' move).")
-    ap.add_argument("--allowed-book-only", action="store_true",
-                    help="course_moves only: keep each course book's own choice at a "
-                         "position (in_book), not every move its analysis recommends.")
-    ap.add_argument("--allowed-courses", default=None,
-                    help="course_moves only: comma-separated course_ids to draw from "
-                         "(default: every course of the book's side).")
-    ap.add_argument("--weak-eval-curve", default=None, metavar="PATH",
-                    help="Under --stop-model weak, turn evals into expected scores with "
-                         "the curves fit_eval_curve.py fitted per rating pairing "
-                         "(eval_curves_pooled.parquet) instead of the uniform Lichess "
-                         "curve. Default off.")
-    ap.add_argument("--weak-curve-cells",
-                    default="stm1000-1799_vs_opp1800+,stm1800+_vs_opp1000-1799",
-                    help="US_CELL,THEM_CELL of --weak-eval-curve: the curve where we are "
-                         "to move, and where they are.")
-    ap.add_argument("--weak-min-share", type=float, default=0.01,
-                    help="Drop moves/replies under this share and renormalise.")
-    ap.add_argument("--evaluate", action="append", default=[], metavar="LABEL=PATH",
-                    help="DIAGNOSTIC: build the graph exactly as for a book, then print the "
-                         "in-model value of FOLLOWING each given book on it "
-                         "(budget_core.policy_value) and exit without writing books.")
-    ap.add_argument("--leftover", action="store_true",
-                    help="Extraction: give an opponent node's unspendable budget to the "
-                         "closed child with the densest blocking atom instead of "
-                         "dropping it (budget_core.extract_book). Default off.")
     ap.add_argument("--gated-reach", action="store_true",
                     help="Expand the subgraph (and compute optimistic reach) only "
                          "through moves the gates admit at our nodes, instead of "
@@ -631,19 +431,9 @@ def main() -> int:
                          "the source book's move included (budget_core.eval_loss_keep). "
                          "The Stage-3 gates work in expected score and admit e.g. the "
                          "Blackmar-Diemer (-0.64) at the root. Default off.")
-    ap.add_argument("--no-gates", action="store_true",
-                    help="Drop require-eval and both refutation gates, so every "
-                         "recorded move is a candidate. Diagnostic only.")
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--mem", default="24GB")
     ap.add_argument("--tmp-dir", default="D:/chess_duckdb_tmp")
-    ap.add_argument("--scan-distinct", default="",
-                    help="DIAGNOSTIC 'LO:HI'. Build the curves, then print the "
-                         "distinct decision count for every charged budget in "
-                         "[LO, HI] and exit WITHOUT writing books. This is the "
-                         "measurement that says whether a footprint target is "
-                         "reachable at all or whether the distinct count skips "
-                         "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--rare-verification", action="store_true",
                     help="With --uncut-own-moves: an own move with fewer than --min-games "
@@ -658,17 +448,15 @@ def main() -> int:
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
         ap.error("gate tolerances must be between 0 and 1 expected-score units")
-    gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=not a.no_gates,
-                       gated_reach=a.gated_reach, strict_source=a.strict_source)
+    # sampled tables record this; gates and strict_source are fixed True since 2026-11-12
+    gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=True,
+                       gated_reach=a.gated_reach, strict_source=True)
     if a.dump_engine_targets and a.max_eval_loss is None:
         ap.error("--dump-engine-targets requires --max-eval-loss")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
-    if a.polish_from and not (a.method == "price" and a.price_dag_mode
-                              and "polish" in a.price_dag_mode):
-        ap.error("--polish-from needs --method price --price-dag-mode polish")
     if a.polish and a.method != "dp":
-        ap.error("--polish is for --method dp (--method price has --price-dag-mode polish)")
+        ap.error("--polish is for --method dp (--method price always polishes)")
     if a.incumbent and a.stick_margin is None:
         a.stick_margin = 0.01
 
@@ -740,28 +528,16 @@ def main() -> int:
             FROM read_parquet('{stats}') WHERE parent_hash = {root}
         """).fetchone()[0] or 0.5
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
-        f"method {a.method}{' fixed-policy' if a.fixed_policy else ''}")
+        f"method {a.method}")
 
     admit = None
     if a.gated_reach:
-        if a.no_gates:
-            log("FATAL: --gated-reach with --no-gates is a no-op; refusing")
-            return 1
         from stage3_backwards_induction import load_incumbent
         _sl0 = (pl.scan_parquet(a.rep).select(["event", "elo_band"]).unique().collect())
         src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
                                  _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
         admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss, **gate_settings)
-    allowed = None
-    if a.allowed_moves:
-        allowed = load_allowed_moves(
-            a.allowed_moves, a.perspective, a.allowed_min_score,
-            a.allowed_courses.split(",") if a.allowed_courses else None,
-            a.allowed_book_only)
-        log(f"allowed moves: {sum(map(len, allowed.values())):,} moves at "
-            f"{len(allowed):,} positions from {a.allowed_moves}")
-        admit = AllowedAdmit(allowed, admit)
     pool_floor = _pool_min_games(stats)
     if a.min_games is None:
         a.min_games = pool_floor if pool_floor is not None else 50
@@ -787,14 +563,14 @@ def main() -> int:
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
         verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
-        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        gate = admit
         if gate is not None:
             gate.excluded = excluded
             gate.eval_ws.update(fresh)
             gate._seen.update(fresh)
     rare_floor = a.min_games if a.rare_verification else None
     if rare_floor is not None:
-        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        gate = admit
         if gate is not None:
             gate.rare_floor, gate.verified = rare_floor, verified_at
     reply_overlay = None
@@ -895,14 +671,13 @@ def main() -> int:
                        eval_ws=eval_ws,
                        aux_rows=aux_rows, slice_prior=slice_prior,
                        eps=eps, max_ply=a.max_ply, share_floor=a.share_floor,
-                       max_cands=a.max_cands, eval_weight=a.eval_weight,
+                       eval_weight=a.eval_weight,
                        prior_strength=a.prior_strength,
-                       require_eval=not a.no_gates, gates=not a.no_gates,
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach,
                        max_eval_loss=a.max_eval_loss, **gate_settings,
-                       strict_source=a.strict_source,
-                       crack_at_parents=a.crack_at_parents,
+                       strict_source=True,
+                       crack_at_parents=True,
                        engine_moves=engine_moves, excluded=excluded,
                        rare_floor=rare_floor, verified=verified_at,
                        track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
@@ -956,49 +731,27 @@ def main() -> int:
         on_graph = sum(1 for h in incumbent if h in g.our)
         log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
             f"stick margin {a.stick_margin}")
-    allowed_counts = None
-    if allowed is not None:
-        allowed_counts = restrict_candidates(g, allowed)
-        log(f"  allowed moves: {allowed_counts}")
-        del allowed
     # nothing below reads the edge lists, the eval cache or the gate's source moves
     del by_parent, eval_ws, want, admit
     import gc
     gc.collect()
     stop_counts = None
     sampled_fit = None
-    if (a.sampled_stop or a.dump_stop_positions) and a.stop_model not in ("weak", "empirical"):
-        log("FATAL: --sampled-stop / --dump-stop-positions need --stop-model weak (or empirical)")
-        return 1
-    if a.stop_model in ("weak", "empirical"):
-        if a.stop_model == "empirical" and not (a.stop_table and Path(a.stop_table).exists()):
-            log(f"FATAL: --stop-model empirical needs --stop-table (got {a.stop_table})")
+    if True:     # the weak-player stop model (the only stop model since 2026-11-12)
+        if not Path(a.weak_pool).exists():
+            log(f"FATAL: --weak-pool {a.weak_pool} does not exist")
             return 1
-        if not a.weak_pool or not Path(a.weak_pool).exists():
-            log(f"FATAL: --stop-model weak needs --weak-pool (got {a.weak_pool})")
-            return 1
-        from weak_stop import EvalSource, load_curves, weak_stop_values
-        curves = None
-        if a.weak_eval_curve:
-            curves = load_curves(a.weak_eval_curve, *a.weak_curve_cells.split(","))
-            log(f"  weak stop model: fitted eval curves {curves}")
+        from weak_stop import EvalSource, weak_stop_values
         xs, ys = bc.stop_model_positions(g)
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white, curves=curves, overrides=verified_cp),
+                                    evals=EvalSource(our_white, overrides=verified_cp),
                                     min_weak=a.weak_min_games,
-                                    min_share=a.weak_min_share, log=log)
-        if a.stop_model == "empirical":
-            from empirical_stop import stop_overrides
-            We, Re, ec = stop_overrides(a.stop_table, xs, ys, colour=a.perspective, pool=stats)
-            W.update(We)
-            R.update(Re)
-            wc = {**dict(wc), **{f"empirical_{k}": v for k, v in ec.items()}}
-            log(f"  empirical stop values: {ec}")
+                                    min_share=WEAK_MIN_SHARE, log=log)
         if a.dump_stop_positions or a.sampled_stop:
             info = ss.stop_positions(g)
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
-                                     weak_min_share=a.weak_min_share, stop_model=a.stop_model)
+                                     weak_min_share=WEAK_MIN_SHARE, stop_model="weak")
             dump_key["engine_candidates_sha256"] = proposal_sha
             dump_key["uncut_own_recipe"] = uncut_recipe
             dump_key["gate_policy"] = gate_recipe
@@ -1076,39 +829,11 @@ def main() -> int:
         log(f"  sampled other buckets: {other_report}")
     g.other = {}
 
-    if a.price_diagnose:
-        order, _cut = bc.topo_up(g)
-        src_reach = dict(g.reach)
-        src_reach.update({h: max(r, src_reach.get(h, 0.0))
-                          for h, r in bc.policy_reach(g, rep_moves, order).items() if r > 0})
-        target = budgets[0]
-        log(f"price diagnose at {target}: after each round, the closest book and the "
-            f"best within 1% of the target so far")
-        for seed, rp in (("optimistic", "replace"), ("source", "replace"),
-                         ("optimistic", "max")):
-            t1 = time.time()
-
-            def show(rnd, cl, best, seed=f"{seed}/{rp}", t1=t1):
-                b_ = (f"{best['spent_distinct']:,} at {best['root_value_realized']:.5f}"
-                      if best else "none")
-                log(f"  seed {seed:<18} round {rnd}: closest {cl['spent_distinct']:,} at "
-                    f"{cl['root_value_realized']:.5f}; best {b_}  ({time.time() - t1:,.0f}s)")
-            bc.price_search(g, target, log=lambda *_: None, rounds=4, select="best",
-                            seed_reach=src_reach if seed == "source" else None,
-                            on_round=show, reprice=rp)
-    if a.evaluate:
-        evaluate_books(g, a.evaluate, a.perspective, log,
-                       f"stop model {a.stop_model}, eps {eps:g}"
-                       f"{', gated' if a.gated_reach else ''}")
-    if a.evaluate or a.price_diagnose:
-        return 0
-    fixed = rep_moves if (a.fixed_policy or a.method == "greedy") else None
     if a.method == "price":
         curves, diag = {}, {"stranded_cycle_nodes": None}
     else:
         log("building curves...")
-        curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap,
-                                       fixed_policy=fixed)
+        curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap)
         log(f"  stranded cycle nodes {diag['stranded_cycle_nodes']:,}  "
             f"({time.time()-t0:,.0f}s)")
 
@@ -1135,8 +860,7 @@ def main() -> int:
     if a.match_distinct and curve_bmax > bmax and a.method != "price":
         log(f"building probe curves (bmax {curve_bmax}) for --match-distinct...")
         probe_curves, _ = bc.build_curves(g, bmax=curve_bmax,
-                                          k_atoms=a.grid_cap,
-                                          fixed_policy=fixed)
+                                          k_atoms=a.grid_cap)
         log(f"  probe curves ready  ({time.time()-t0:,.0f}s)")
 
     # Diagnostics read the WIDEST set: both are trimmed at their own bmax, so
@@ -1147,32 +871,7 @@ def main() -> int:
     if a.method != "price":
         log(f"  root capacity {cap:,} (path-sum)")
 
-    # Diagnostic: the distinct-vs-charged curve itself. --match-distinct's
-    # search assumes it can find a charged budget landing exactly on a target,
-    # and when it cannot the honest question is whether the count SKIPS that
-    # target or the search merely failed to look. Guessing at that from the
-    # outside cost two wrong hypotheses on 2026-09-08; this prints the answer.
-    # Writes nothing and returns before the book loop.
-    if a.scan_distinct:
-        lo_s, hi_s = (int(x) for x in a.scan_distinct.split(":"))
-        log(f"scan-distinct {lo_s}..{hi_s} on {'plain' if hi_s <= bmax else 'plain+probe'} curves")
-        log(f"  {'charged':>9}{'distinct':>10}{'paths':>8}{'root value':>14}  curves")
-        prev = None
-        for bb in range(lo_s, hi_s + 1):
-            cs = curves if bb <= bmax else widest
-            r = bc.extract_book(g, cs, bb, fixed_policy=fixed, leftover=a.leftover)
-            d = r["spent_distinct"]
-            mark = "" if prev is None or d == prev else f"   <- +{d - prev}"
-            log(f"  {bb:>9}{d:>10}{r['spent_paths']:>8}"
-                f"{r['root_value_realized']:>14.6f}  "
-                f"{'plain' if bb <= bmax else 'probe'}{mark}")
-            prev = d
-        return 0
-
     polish_order = None
-    polish_from = [load_book_moves(p, a.perspective) for p in a.polish_from]
-    for p, mv in zip(a.polish_from, polish_from):
-        log(f"polish from {p}: {len(mv):,} moves")
 
     # --method price: compile the (final) graph once for every budget, and the source seed
     # once (it does not depend on the budget)
@@ -1185,7 +884,7 @@ def main() -> int:
             t1 = time.time()
             price_cg = budget_compiled.compile_graph(g)
             log(f"  graph compiled for the price search ({time.time()-t1:,.0f}s)")
-        if a.price_seed == "source":
+        if True:
             # never dearer than the optimistic reach; the source book's policy reach
             # (summed over its paths) where that is larger
             order = (price_cg.order if price_cg is not None else
@@ -1202,34 +901,17 @@ def main() -> int:
             continue
         price_info = None
         if a.method == "price":
-            res, price_info = bc.price_search(g, b, fixed_policy=fixed, log=log,
-                                              rounds=a.price_rounds,
-                                              select=a.price_select, seed_reach=price_seed,
-                                              reprice=a.price_reprice,
-                                              dag_mode=a.price_dag_mode,
-                                              polish_from=polish_from or None,
+            res, price_info = bc.price_search(g, b, log=log, rounds=PRICE["rounds"],
+                                              select=PRICE["select"], seed_reach=price_seed,
+                                              reprice=PRICE["reprice"],
+                                              dag_mode=PRICE["dag_mode"],
                                               engine=a.price_engine, compiled=price_cg)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
-        elif a.method == "greedy":
-            # Myopic one-step greedy picks the booked SET; the masked curves
-            # then supply the VALUES only -- force_booked stops the density
-            # allocator re-deciding the set. Without it (pre-2026-08-29) greedy
-            # selected 6 nodes of positive one-step gain and only 3 were booked,
-            # every miss from receiving alloc 0 and none from a value test: a
-            # 14-move book answering a 20-move budget, which measures size
-            # rather than method and voids the equal-footprint comparison.
-            booked, _spent = bc.greedy_stopping(g, rep_moves, b)
-            mask = {h: rep_moves[h] for h in booked}
-            gcurves, _ = bc.build_curves(g, bmax=b, k_atoms=a.grid_cap,
-                                         fixed_policy=mask)
-            res = bc.extract_book(g, gcurves, b, fixed_policy=mask,
-                                  force_booked=booked)
-            charged, matched = b, res["spent_distinct"] >= b
         elif a.match_distinct:
             res, charged, matched, spent = bc.match_distinct(
-                g, curves, b, curve_bmax, fixed_policy=fixed,
-                probe_curves=probe_curves, plain_bmax=bmax, leftover=a.leftover)
+                g, curves, b, curve_bmax,
+                probe_curves=probe_curves, plain_bmax=bmax)
             # matched is `spent >= b`; the equal-footprint comparison needs
             # `spent == b`, and the two came apart in the wild (fixdp_white_b20
             # booked 21 for a target of 20 and reported success). Say which.
@@ -1241,8 +923,7 @@ def main() -> int:
                    else f"  (OVERSHOT by {spent - b}: the distinct count skips "
                         f"{b}; footprint audits at tol 0 will reject this)"))
         else:
-            res = bc.extract_book(g, curves, b, fixed_policy=fixed,
-                                  leftover=a.leftover)
+            res = bc.extract_book(g, curves, b)
             charged, matched = b, res["spent_distinct"] >= b
         polish_info = None
         if a.polish:
@@ -1250,9 +931,8 @@ def main() -> int:
             # (book_result), not the curves', and its rows carry no allocation
             if polish_order is None:
                 polish_order = bc.topo_up(g)[0]
-            moves, polish_info = bc.polish_book(g, res["booked"], b, polish_order,
-                                                fixed_policy=fixed)
-            res = bc.book_result(g, moves, polish_order, fixed)
+            moves, polish_info = bc.polish_book(g, res["booked"], b, polish_order)
+            res = bc.book_result(g, moves, polish_order)
             log(f"  dp polish: {polish_info['start_size']:,} -> {polish_info['size']:,} "
                 f"positions, {polish_info['start_value']:.5f} -> {polish_info['value']:.5f} "
                 f"({polish_info['accepted']} moves, {polish_info['seconds']:.1f}s)")
@@ -1268,9 +948,7 @@ def main() -> int:
                    "realized": {**res["realized"], g.root: (1.0 - ra) + ra * res["realized"][g.root]}
                    if g.root in res["realized"] else res["realized"]}
         rows = []
-        # only with --strict-source: the legacy restore can book a move the limit
-        # rejected, which no exception label describes
-        lexc = g.meta.get("loss_exceptions") if a.strict_source else None
+        lexc = g.meta.get("loss_exceptions")
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
                                                 else 1.0 - v)
         for h in (res["visited"] or []):
@@ -1314,7 +992,7 @@ def main() -> int:
             "budget_requested": b,
             "spent_paths": res["spent_paths"],
             "spent_distinct": res["spent_distinct"],
-            "method": a.method + ("+fixed" if a.fixed_policy else ""),
+            "method": a.method,
             "epsilon": eps, "max_ply": a.max_ply,
             "share_floor": a.share_floor, "grid_cap": a.grid_cap,
             "match_distinct": bool(a.match_distinct),
@@ -1331,8 +1009,8 @@ def main() -> int:
             "root_capacity_paths": cap,
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
-            "prior_strength": a.prior_strength, "gates": not a.no_gates,
-            "max_cands": a.max_cands, "gated_reach": a.gated_reach,
+            "prior_strength": a.prior_strength, "gates": True,
+            "max_cands": 0, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
             **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
@@ -1346,48 +1024,36 @@ def main() -> int:
                if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
             # means both off (the old defaults)
-            "strict_source": a.strict_source,
-            **({"src_rejected": g.meta.get("src_rejected", 0)} if a.strict_source else {}),
+            "strict_source": True,
+            "src_rejected": g.meta.get("src_rejected", 0),
             **({"loss_exceptions_booked": {
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
                 for k in ("fallback", "unknown")}} if lexc is not None else {}),
-            "crack_at_parents": a.crack_at_parents,
+            "crack_at_parents": True,
             **({"engine_candidates": a.engine_candidates, "engine_candidates_sha256": proposal_sha,
                 "engine_cands_added": g.meta.get("engine_cands", 0),
                 "engine_eval_conflicts": engine_conflicts}
                if a.engine_candidates else {}),
-            **({"crack_edges": g.meta.get("crack_edges", 0)} if a.crack_at_parents else {}),
+            "crack_edges": g.meta.get("crack_edges", 0),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
-            "leftover": a.leftover,
-            "stop_model": a.stop_model,
+            "leftover": False,
+            "stop_model": "weak",
             **({"sampled_stop": a.sampled_stop, "sampled_fit": sampled_fit,
                 "sampled_config": json.loads(Path(a.sampled_stop + ".meta.json").read_text(encoding="utf-8"))
                 if Path(a.sampled_stop + ".meta.json").exists() else None}
                if a.sampled_stop else {}),
             **({"sampled_other": a.sampled_other, "sampled_other_fit": other_report}
                if a.sampled_other else {}),
-            **({"price_rounds": a.price_rounds, "price_select": a.price_select,
-                "price_seed": a.price_seed, "price_reprice": a.price_reprice,
-                **({"price_dag_mode": a.price_dag_mode} if a.price_dag_mode else {}),
-                **({"polish_from": a.polish_from} if a.polish_from else {}),
-                "price_engine": a.price_engine}
+            **({"price_rounds": PRICE["rounds"], "price_select": PRICE["select"],
+                "price_seed": "source", "price_reprice": PRICE["reprice"],
+                "price_dag_mode": PRICE["dag_mode"], "price_engine": a.price_engine}
                if a.method == "price" else {}),
-            **({"allowed_moves": a.allowed_moves, "allowed_min_score": a.allowed_min_score,
-                "allowed_courses": a.allowed_courses,
-                "allowed_book_only": a.allowed_book_only, "allowed_counts": allowed_counts}
-               if a.allowed_moves else {}),
             **({"price": price_info} if price_info is not None else {}),
             **({"polish": polish_info} if polish_info is not None else {}),
-            **({"weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
-                "weak_min_share": a.weak_min_share, "weak_counts": stop_counts,
-                **({"weak_eval_curve": a.weak_eval_curve,
-                    "weak_curve_cells": a.weak_curve_cells,
-                    "weak_curves": curves}
-                   if a.weak_eval_curve else {})}
-               if a.stop_model in ("weak", "empirical") else {}),
-            **({"stop_table": a.stop_table} if a.stop_model == "empirical" else {}),
+            "weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
+            "weak_min_share": WEAK_MIN_SHARE, "weak_counts": stop_counts,
             "source_rep": str(a.rep), "source_meta": src_meta,
             "stats": str(a.stats), "aux_stats": aux_path,
             "subgraph_nodes": len(g.our) + len(g.opp),
@@ -1415,11 +1081,6 @@ def main() -> int:
             log("       WARNING: nothing booked — stopping beat every "
                 "candidate at every node (check L_node vs continuation)")
 
-    if a.evaluate_after:
-        evaluate_books(g, [f"this_b{b}={outs[b]}" for b in budgets if outs[b].exists()]
-                       + a.evaluate_after, a.perspective, log,
-                       f"stop model {a.stop_model}, eps {eps:g}"
-                       f"{', gated' if a.gated_reach else ''}", compiled=price_cg)
     pk = peak_commit_gb()
     log(f"\ndone in {time.time()-t0:,.0f}s"
         + (f"; peak commit {pk:,.1f} GB" if pk is not None else ""))

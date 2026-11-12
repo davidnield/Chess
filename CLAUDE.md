@@ -126,10 +126,8 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 # Holdout policy value of every course book (and ours) from an explorer month of held-out games
 # (explorer-extract month); position-keyed, minutes instead of a lockstep replay's hours
 .venv\Scripts\python.exe python\explorer_policy_value.py --explorer <month dir> --courses [--book L=C=P]
-# Mix and match: a budget book restricted to course-recommended moves
-.venv\Scripts\python.exe python\build_budget_books.py ... --method price --allowed-moves E:\chess\courses\course_moves.parquet
 
-# Eval-to-score curves by rating pairing (feeds build_budget_books --weak-eval-curve)
+# Eval-to-score curves by rating pairing (the referee's "fitted" score)
 .venv\Scripts\python.exe python\fit_eval_curve.py
 
 # The referee: simulate each book to ply 30 (our side as 1000-1799 players, theirs as 1800+),

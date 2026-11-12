@@ -49,7 +49,7 @@ import polars as pl
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import convertibility_eval as cv  # noqa: E402
 from eval_arrays import lookup_evals, open_eval_arrays  # noqa: E402
-from weak_stop import EvalSource, load_curves, weak_stop_values  # noqa: E402
+from weak_stop import EvalSource, weak_stop_values  # noqa: E402
 
 
 def per_start(leaves, n_starts, lookup, sf, curves, our_white):
@@ -186,21 +186,16 @@ def main():
         maia.close()
         sf.close()
     xs = np.array([h for (h, _), _ in top], dtype=np.int64)
-    fitted = None
-    if meta.get("weak_eval_curve"):       # the recipe's own curves, or W is not the builder's W
-        cells = meta.get("weak_curve_cells") or "stm1000-1799_vs_opp1800+,stm1800+_vs_opp1000-1799"
-        cells = cells.split(",") if isinstance(cells, str) else cells
-        fitted = load_curves(meta["weak_eval_curve"], *cells)
+    if meta.get("weak_eval_curve") or meta.get("stop_table"):
+        # fitted curves and the empirical stop model were retired 2026-11-12: W would not be the
+        # builder's W. Check out tag archive-2026-11-11 to align such a book.
+        raise SystemExit("this book was built with a retired stop model; see tag archive-2026-11-11")
     W, _, wc = weak_stop_values(con, xs, [], pool=meta["stats"], weak_pool=meta["weak_pool"],
-                                evals=EvalSource(our_white, curves=fitted),
+                                evals=EvalSource(our_white),
                                 min_weak=meta.get("weak_min_games", 20.0),
                                 min_share=meta.get("weak_min_share", 0.01), log=print)
     w = np.array([W.get(int(h), np.nan) for h in xs])
     emp = np.full(len(xs), np.nan)
-    if meta.get("stop_table"):
-        from empirical_stop import stop_overrides
-        E, _, _ = stop_overrides(meta["stop_table"], xs.tolist(), [], colour=colour, pool=meta["stats"])
-        emp = np.array([E.get(int(h), np.nan) for h in xs])
     noise = float(np.sqrt(np.nansum(mass * se0 ** 2) / mass.sum()))
     d_re = vb - v0
     ok_re = ~np.isnan(d_re)

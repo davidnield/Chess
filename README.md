@@ -190,20 +190,20 @@ approximations each one makes. The choices that matter:
 - **Engine.** `--method dp` is the value-per-budget tables above. `--method price`
   puts a price on each move learned and searches for the price that lands the book
   on the budget. It needs no tables, and it counts a transposed position once.
-  `--price-dag-mode polish` then improves that book by local moves (book a line,
-  switch a move, trade cheap leaves for a better line) without going over the budget.
-- **After the book ends.** By default you play on like the pool you were fitted to.
-  `--stop-model weak` assumes you play one move like a weaker population and then
-  values the position by engine eval (`weak_stop.py`). `--weak-eval-curve` converts
-  that eval with curves fitted per rating pairing (`fit_eval_curve.py`).
-  `--stop-model empirical` plays the line out with real moves (`empirical_stop.py`).
+  It then improves that book by local moves (book a line, switch a move, trade
+  cheap leaves for a better line) without going over the budget.
+- **After the book ends.** You play one move like a weaker population and then the
+  position is valued by engine eval (`weak_stop.py`, `--weak-pool`). `--sampled-stop`
+  and `--sampled-other` replace those values with ones sampled by playing the game
+  out to ply 30, as the referee does.
 - **Soundness.** `--max-eval-loss CP` books only moves within CP centipawns of the
   engine's best, on top of the gates above.
 - **Rebuilds.** `--incumbent BOOK` keeps the move you already learned at each
   position unless another beats it by `--stick-margin`, and the meta records the
   churn.
-- **Mix and match.** `--allowed-moves` limits the book to moves that opening
-  courses recommend.
+- **Which of our moves exist.** The book chooses among the moves in its move lookup.
+  `lookup_floors.py` reshapes one: a minimum game count, the floor lifted again where a
+  book is, or only the moves opening courses recommend (`allow`).
 
 ## Measuring a book
 
@@ -279,7 +279,7 @@ python/
   budget_core.py                   budget books: DP, price search, polish
   budget_compiled.py               ... its price search as array sweeps
   build_budget_books.py            ... and its CLI
-  weak_stop.py, empirical_stop.py  out-of-book value models for the budget books
+  weak_stop.py, sampled_stop.py   out-of-book value models for the budget books
   build_weak_edges.py              weak-population move counts they read
   fit_eval_curve.py                eval-to-score curves by rating pairing
   build_baseline_books.py          simple-rule baseline books

@@ -8,6 +8,12 @@ gates fit in memory. The dropped rows' games and evaluation coverage go into the
 other_* bucket with exactly rebucket_pool.py's arithmetic (held equal by _test_lookup_floors.py),
 so every position's continuing population is unchanged. Opponent rows are untouched.
 
+`allow`: keep only the own moves an allowed-moves table lists (course_books' course_moves.parquet,
+or any table of position_hash/parent_hash and move_san); the rest fold into other as in `floor`.
+A position the table does not list keeps no own move, so a book can only stop there. Replaces
+build_budget_books --allowed-moves (retired 2026-11-12), with one difference: a move the courses
+do not recommend can no longer be the loss gate's reference for the ones they do.
+
 `addback`: from the full lookup, restore our below-floor moves at every our-turn position a
 closed run's final book prescribes, and every position its verification passes searched; at those
 positions the rows and the sidecar row become the full lookup's exactly. A few thousand positions,
@@ -18,6 +24,8 @@ in the layout uncut_own_moves.load() reads; the recipe records the source lookup
 recipe hash every book meta carries identifies the transform.
 
     python python/lookup_floors.py floor --source <full lookup> --colour black --min-games 5 --out <dir>
+    python python/lookup_floors.py allow --source <lookup> --colour black \
+        --allowed E:/chess/courses/course_moves.parquet [--min-score 0] [--courses A,B] [--book-only] --out <dir>
     python python/lookup_floors.py addback --full <full lookup> --floor <floored lookup> \\
         --run <closed run_rare_book.py dir> [--run ...] --colour black --out <dir>
 """
@@ -87,6 +95,52 @@ def register_eval(con) -> None:
 
 
 def floor(source: Path, colour: str, min_games: int, out: Path, threads=4, memory="24GB") -> dict:
+    ours = "w" if colour == "white" else "b"
+    return fold(source, colour, f"split_part(parent_epd,' ',2)='{ours}' AND total<{int(min_games)}",
+                out, {"own_min_games": int(min_games)}, threads, memory)
+
+
+def load_allowed(path, perspective: str, min_score: float = 0.0, courses=None,
+                 book_only: bool = False) -> pl.DataFrame:
+    """(parent_hash, move) the book may play: course_books' course_moves.parquet (rep_side,
+    score, course_id, in_book) filtered to the repertoire side, score above min_score, optionally
+    some courses only and with book_only each course book's own choice; any other table needs
+    position_hash or parent_hash, and move_san. Moves are compared without check marks."""
+    d = pl.read_parquet(path)
+    if "parent_hash" not in d.columns:
+        d = d.rename({"position_hash": "parent_hash"})
+    if "rep_side" in d.columns:
+        d = d.filter(pl.col("rep_side") == perspective)
+    if "score" in d.columns:
+        d = d.filter(pl.col("score") > min_score)
+    if courses:
+        d = d.filter(pl.col("course_id").is_in(list(courses)))
+    if book_only and "in_book" in d.columns:
+        d = d.filter(pl.col("in_book"))
+    return (d.select(pl.col("parent_hash").cast(pl.Int64),
+                     pl.col("move_san").str.strip_chars_end("+#").alias("move")).unique())
+
+
+def allow(source: Path, colour: str, allowed: pl.DataFrame, out: Path, recipe: dict,
+          threads=4, memory="24GB") -> dict:
+    ours = "w" if colour == "white" else "b"
+    out.mkdir(parents=True, exist_ok=True)
+    if (out / "ready.json").exists():
+        done = ready(out)
+        made = lookup.read_json(out / "recipe.json")
+        if made.get("allowed_rows") != allowed.height or {k: made.get(k) for k in recipe} != recipe:
+            raise ValueError(f"{out} was built from another allowed-moves table; use a fresh --out")
+        return done
+    allowed.write_parquet(out / "allowed.parquet")
+    recipe = {**recipe, "allowed_sha256": lookup.digest(out / "allowed.parquet"), "allowed_rows": allowed.height}
+    drop = (f"split_part(parent_epd,' ',2)='{ours}' AND (parent_hash, rtrim(move_san,'+#')) NOT IN "
+            f"(SELECT parent_hash, move FROM {lookup.parquet(out / 'allowed.parquet')})")
+    return fold(source, colour, drop, out, recipe, threads, memory)
+
+
+def fold(source: Path, colour: str, drop: str, out: Path, recipe: dict, threads=4,
+         memory="24GB") -> dict:
+    """Move our rows matching `drop` (SQL over the lookup's graph rows) into the other bucket."""
     src = ready(source)
     if src["contract"]["colour"] != colour:
         raise ValueError("source lookup is for the other colour")
@@ -95,7 +149,8 @@ def floor(source: Path, colour: str, min_games: int, out: Path, threads=4, memor
         return ready(out)
     ours = "w" if colour == "white" else "b"
     g, x = lookup.parquet(source / "graph.parquet"), lookup.parquet(source / "aux.parquet")
-    drop = f"split_part(parent_epd,' ',2)='{ours}' AND total<{int(min_games)}"
+    if f"split_part(parent_epd,' ',2)='{ours}'" not in drop:
+        raise ValueError("only our own moves may be folded")
     with connect(out, threads, memory) as con:
         register_eval(con)
         con.execute(f"""CREATE TEMP TABLE removed AS WITH e AS MATERIALIZED
@@ -137,11 +192,11 @@ def floor(source: Path, colour: str, min_games: int, out: Path, threads=4, memor
         rows, kept, gone = con.execute(f"""SELECT (SELECT count(*) FROM {g}), (SELECT count(*) FROM {ng}),
             (SELECT coalesce(sum(cnt),0) FROM removed)""").fetchone()
         if bad or any(opp) or kept + gone != rows:
-            raise ValueError(f"floor checks failed: {bad} positions not conserved, opponent rows "
+            raise ValueError(f"fold checks failed: {bad} positions not conserved, opponent rows "
                              f"changed {opp}, rows {kept}+{gone}!={rows}")
     return finish(out, src["contract"], {
         "derived_from": {"lookup": str(source.resolve()), "recipe_sha256": src["recipe_sha256"]},
-        "own_min_games": int(min_games), "producer": lookup.digest(__file__),
+        **recipe, "producer": lookup.digest(__file__),
         "rows": {"source": rows, "kept": kept, "dropped": gone}}, source / "aux.parquet.meta.json")
 
 
@@ -214,19 +269,33 @@ def main() -> int:
     f.add_argument("--colour", required=True, choices=["white", "black"])
     f.add_argument("--min-games", type=int, required=True)
     f.add_argument("--out", type=Path, required=True)
+    w = sub.add_parser("allow")
+    w.add_argument("--source", type=Path, required=True)
+    w.add_argument("--colour", required=True, choices=["white", "black"])
+    w.add_argument("--allowed", type=Path, required=True)
+    w.add_argument("--min-score", type=float, default=0.0)
+    w.add_argument("--courses", default=None, help="comma-separated course ids (default: all)")
+    w.add_argument("--book-only", action="store_true")
+    w.add_argument("--out", type=Path, required=True)
     b = sub.add_parser("addback")
     b.add_argument("--full", type=Path, required=True)
     b.add_argument("--floor", type=Path, required=True)
     b.add_argument("--run", type=Path, action="append", required=True)
     b.add_argument("--colour", required=True, choices=["white", "black"])
     b.add_argument("--out", type=Path, required=True)
-    for p in (f, b):
+    for p in (f, w, b):
         p.add_argument("--threads", type=int, default=4)
         p.add_argument("--mem", default="16GB")
     a = ap.parse_args()
     t0 = time.monotonic()
     if a.cmd == "floor":
         done = floor(a.source, a.colour, a.min_games, a.out, a.threads, a.mem)
+    elif a.cmd == "allow":
+        courses = a.courses.split(",") if a.courses else None
+        table = load_allowed(a.allowed, a.colour, a.min_score, courses, a.book_only)
+        done = allow(a.source, a.colour, table, a.out, {
+            "allowed_moves": str(a.allowed.resolve()), "allowed_min_score": a.min_score,
+            "allowed_courses": courses, "allowed_book_only": a.book_only}, a.threads, a.mem)
     else:
         done = addback(a.full, a.floor, a.run, a.colour, a.out, a.threads, a.mem)
     print(f"ready {done['recipe_sha256'][:16]} ({time.monotonic() - t0:.0f}s)", flush=True)

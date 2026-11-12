@@ -249,8 +249,6 @@ class TestUncut(unittest.TestCase):
             ".0005",
             "--max-ply",
             "5",
-            "--max-cands",
-            "0",
             "--tmp-dir",
             str(folder / "temp"),
             "--gated-reach",
@@ -258,6 +256,10 @@ class TestUncut(unittest.TestCase):
             "30",
             "--threads",
             "1",
+            # the weak-player stop model is the only one since 2026-11-12; any table of
+            # parent_hash, child_hash and total serves the miniature graph
+            "--weak-pool",
+            str(stats),
         ]
         with (
             patch.object(sys, "argv", args),
