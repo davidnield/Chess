@@ -79,6 +79,8 @@ Outputs are under `outputs/rebuild-2026-11-06/expanded-opponent-comparison`.
 
 ### November 9 root-based search pilot
 
+> Retired 2026-11-11: the code for this section was moved out of `python/`. Check out tag `archive-2026-11-11` to rerun it.
+
 The pilot starts from the initial board and takes two sets of six first moves by
 historical frequency rank. The main set uses ranks 1, 2, 3, 5, 7 and 10. The
 second uses 4, 6, 8, 9, 11 and 13. It follows popular and lower-ranked routes
@@ -160,6 +162,8 @@ $python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 ```
 
 ### November 9 shared-budget Black slices
+
+> Retired 2026-11-11: the code for this section was moved out of `python/`. Check out tag `archive-2026-11-11` to rerun it.
 
 The slice starts from the initial board. Until the specified starting ply, Black
 plays the lowest White-perspective cached evaluation among admissible moves,
@@ -258,6 +262,8 @@ $python = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 ```
 
 ### November 9 multi-depth test with 2,000 Black positions
+
+> Retired 2026-11-11: the code for this section was moved out of `python/`. Check out tag `archive-2026-11-11` to rerun it.
 
 The four decision plies are 7, 9, 11 and 13. A root-led prefix plays the
 engine-preferred admissible Black move until ply 7, with historical White

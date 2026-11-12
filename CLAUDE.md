@@ -13,13 +13,9 @@ here last days, and a compaction that drops them turns a status check into a re-
 
 ## Project purpose
 
-The uncut gate sweep replays successful control receipts with
-`python/run_uncut_sweep.py --baseline <cutoff-screen> --out <uncut-root>`.
-It publishes a book directory after validating the budget, legal prescriptions,
-cache identity and gate settings. Its separate `python/score_uncut_sweep.py`
-coordinator takes the same arguments and consumes published receipts. The
-construction and referee coordinators keep separate status and cache files.
-The resume commands and experiment order are in `docs/lifetime-repertoire-plan.md`.
+The experiment order is in `docs/lifetime-repertoire-plan.md`. Tag `archive-2026-11-11` holds
+every driver and search prototype retired on that date (the uncut sweep coordinators, the
+multi-depth / root-search / shared-budget prototypes); check it out to rerun one.
 
 Rare-move verification (`build_budget_books.py --rare-verification` with an uncut own-move lookup)
 lets a move with fewer than `--min-games` games be booked but never set a gate reference until it
