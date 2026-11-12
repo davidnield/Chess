@@ -362,15 +362,22 @@ def passes_abs_gate(child_eval_ws: float | None, slice_prior: float,
 def rel_gate_keep(cand_evals_ws: list[float | None], own_eval_ws: float | None,
                   our_white: bool,
                   gate_rel_floor: float = GATE_REL_FLOOR,
-                  gate_rel_own_margin: float = GATE_REL_OWN_MARGIN
+                  gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
+                  binding: list[bool] | None = None
                   ) -> list[bool]:
     """Stage 3's relative refutation gate (L1208-1263), own-eval baseline.
-    Returns a keep-mask; uncovered candidates (None) are exempt (kept)."""
+    Returns a keep-mask; uncovered candidates (None) are exempt (kept).
+    binding (rare-move verification, 2026-11-10): which candidates may set the
+    reference; None = all (the old rule). See gate_candidates."""
     if gate_rel_floor >= 1.0 or not cand_evals_ws:
         return [True] * len(cand_evals_ws)
     elig = [e for e in cand_evals_ws if e is not None]
     if not elig:
         return [True] * len(cand_evals_ws)
+    if binding is not None:
+        bound = [e for e, b in zip(cand_evals_ws, binding) if e is not None and b]
+        # with no trusted sibling and no own eval there is nothing better to measure from
+        elig = bound if (bound or own_eval_ws is not None) else elig
     base_rv = None
     if own_eval_ws is not None:
         base_rv = (own_eval_ws - gate_rel_own_margin if our_white
@@ -378,12 +385,12 @@ def rel_gate_keep(cand_evals_ws: list[float | None], own_eval_ws: float | None,
     if base_rv is None and len(cand_evals_ws) < 2:
         return [True] * len(cand_evals_ws)
     if our_white:
-        best = max(elig)
+        best = max(elig) if elig else base_rv
         if base_rv is not None:
             best = max(best, base_rv)
         return [e is None or e >= best - gate_rel_floor
                 for e in cand_evals_ws]
-    best = min(elig)
+    best = min(elig) if elig else base_rv
     if base_rv is not None:
         best = min(best, base_rv)
     return [e is None or e <= best + gate_rel_floor for e in cand_evals_ws]
@@ -396,8 +403,16 @@ def ws_to_cp(ws: float, our_white: bool) -> float:
     return cp if our_white else -cp
 
 
+# Evals are whole centipawns, but a gate sees them after cp -> expected score -> cp, which is off
+# by ~1e-14: a loss of exactly 30 read 30.00000000000003 for one colour and 29.99999999999997 for
+# the other. With rare-move verification the limit is inclusive to within this tolerance, the same
+# as the verifier's integer `verified_loss_cp > limit`. The old rule is left bit for bit.
+CP_EPS = 1e-6
+
+
 def eval_loss_keep(cand_es: list[tuple[dict, float | None]], own_eval_ws: float | None,
-                   our_white: bool, max_loss_cp: float
+                   our_white: bool, max_loss_cp: float,
+                   binding: list[bool] | None = None, dispute: dict | None = None
                    ) -> list[tuple[dict, float | None]]:
     """--max-eval-loss (2026-10-22): keep only candidates whose engine eval is within
     `max_loss_cp` centipawns of the best play there -- the best evaluated candidate,
@@ -408,10 +423,43 @@ def eval_loss_keep(cand_es: list[tuple[dict, float | None]], own_eval_ws: float 
     scored = [(pair, ws_to_cp(pair[1], our_white)) for pair in cand_es if pair[1] is not None]
     if not scored:
         return cand_es
-    best = max(c for _, c in scored)
+    if binding is None:
+        best = max(c for _, c in scored)
+        if own_eval_ws is not None:
+            best = max(best, ws_to_cp(own_eval_ws, our_white))
+        keep = [pair for pair, c in scored if c >= best - max_loss_cp]
+        return keep or [max(scored, key=lambda t: t[1])[0]]
+    # Rare-move verification: an unverified rare move's stored eval may not set the
+    # reference. It stays eligible when it is within the limit of the reference, or above it.
+    binds = {id(pair) for pair, b in zip(cand_es, binding) if b}
+    refs = [c for pair, c in scored if id(pair) in binds]
     if own_eval_ws is not None:
-        best = max(best, ws_to_cp(own_eval_ws, our_white))
-    keep = [pair for pair, c in scored if c >= best - max_loss_cp]
+        refs.append(ws_to_cp(own_eval_ws, our_white))
+    best = max(refs) if refs else max(c for _, c in scored)
+    cut = max_loss_cp + CP_EPS
+    keep = [pair for pair, c in scored if c >= best - cut]
+    if dispute is not None and refs:
+        threats = [(pair[0]["move_san"], c) for pair, c in scored
+                   if id(pair) not in binds and c > best + CP_EPS]
+        if threats:
+            top = max(c for _, c in threats)
+            risk = [pair[0]["move_san"] for pair, c in scored
+                    if best - cut <= c < top - cut]
+            dispute.update(reference_cp=best, threats=threats, at_risk=risk)
+    # The position's own stored eval can itself sit above every trusted move (it often agrees
+    # with the inflated rare child). On the old menu the least-losing trusted move then stayed
+    # as the fallback; an unverified rare move inside the limit must not take that away, or
+    # the sound line is pruned before anything is searched. Keep it, and record the dispute.
+    trusted = [(pair, c) for pair, c in scored if id(pair) in binds]
+    if trusted and not any(id(pair) in binds for pair in keep):
+        fallback, fc = max(trusted, key=lambda t: t[1])
+        # nothing inside the limit at all: the rare moves stored above the fallback stay too
+        rare = keep or [pair for pair, c in scored if id(pair) not in binds and c > fc + CP_EPS]
+        if dispute is not None and rare:
+            cps = {id(pair): c for pair, c in scored}
+            dispute.update(reference_cp=best, fallback=True, at_risk=[fallback[0]["move_san"]],
+                           threats=[(pair[0]["move_san"], cps[id(pair)]) for pair in rare])
+        keep = rare + [fallback]
     return keep or [max(scored, key=lambda t: t[1])[0]]
 
 
@@ -422,14 +470,35 @@ def gate_candidates(h: int, es: list[dict], src: str | None,
                     gate_rel_floor: float = GATE_REL_FLOOR,
                     gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
                     require_eval: bool = True, gates: bool = True,
-                    max_eval_loss: float | None = None
+                    max_eval_loss: float | None = None,
+                    rare_floor: int | None = None,
+                    verified: dict | None = None, disputes: dict | None = None
                     ) -> list[tuple[dict, float | None]]:
     """The recorded moves at our node `h` that may be booked: the source book's
     move always, then those passing require-eval and both refutation gates. One
     definition for build_graph (the choice set) and for the subgraph collector's
     --gated-reach expansion, so the two can never disagree on what is reachable.
     max_eval_loss (cp, default None = off) then filters all of them, the source
-    move included: see eval_loss_keep."""
+    move included: see eval_loss_keep.
+
+    rare_floor (rare-move verification, 2026-11-10; None = off, the exact old rule): with a
+    complete own-move menu, a move observed fewer than rare_floor times whose score has not
+    been verified (verified[h] holds the bare SANs searched afresh at this parent) cannot set
+    a gate reference. Its stored eval is a selected maximum over many thin candidates, and
+    read about 88 cp high where it displaced a commoner move. It stays a candidate. Where it
+    would have excluded a rival had it bound, disputes[h] records the threat, so a caller can
+    verify the node once the book depends on it.
+
+    With no trusted reference at all (no eval for the position itself and no trusted or verified
+    scored move) both relative filters are deferred: every candidate that passed the other gates
+    stays, and disputes[h] is marked 'unresolved' with the moves the old rule would have cut."""
+    binds = None
+    if rare_floor is not None:
+        ok = verified.get(h, ()) if verified else ()
+
+        def binds(e):
+            return bool(e.get("engine") or e.get("total", 0) >= rare_floor
+                        or e["move_san"].rstrip("+#") in ok)
     cand_es = []
     for e in es:
         ch = e.get("child_hash")
@@ -445,13 +514,36 @@ def gate_candidates(h: int, es: list[dict], src: str | None,
         if not passes_abs_gate(cev, slice_prior, our_white, robustness_floor):
             continue
         cand_es.append((e, cev))
+    if binds is not None and cand_es and eval_ws.get(h) is None             and not any(cv is not None and binds(e) for e, cv in cand_es):
+        # Nothing trusted to measure from: the best stored score here is itself an unverified
+        # rare move's. Decide nothing on it.
+        naive = cand_es
+        if gates:
+            keep = rel_gate_keep([cv for _, cv in naive], None, our_white,
+                                 gate_rel_floor, gate_rel_own_margin)
+            naive = [(e, cv) for (e, cv), k in zip(naive, keep) if k or e["move_san"] == src]
+        if max_eval_loss is not None:
+            naive = eval_loss_keep(naive, None, our_white, max_eval_loss)
+        stay = {id(e) for e, _ in naive}
+        risk = [e["move_san"] for e, cv in cand_es if cv is not None and id(e) not in stay]
+        if risk and disputes is not None:
+            disputes[h] = dict(
+                reference_cp=None, unresolved=True, at_risk=risk,
+                threats=sorted(((e["move_san"], ws_to_cp(cv, our_white)) for e, cv in naive
+                                if cv is not None), key=lambda t: (-t[1], t[0])))
+        return cand_es
     if gates and cand_es:
         keep = rel_gate_keep([cv for _, cv in cand_es], eval_ws.get(h), our_white,
-                             gate_rel_floor, gate_rel_own_margin)
+                             gate_rel_floor, gate_rel_own_margin,
+                             None if binds is None else [binds(e) for e, _ in cand_es])
         cand_es = [(e, cv) for (e, cv), k in zip(cand_es, keep)
                    if k or e["move_san"] == src]
     if max_eval_loss is not None and cand_es:
-        cand_es = eval_loss_keep(cand_es, eval_ws.get(h), our_white, max_eval_loss)
+        d = {} if (binds is not None and disputes is not None) else None
+        cand_es = eval_loss_keep(cand_es, eval_ws.get(h), our_white, max_eval_loss,
+                                 None if binds is None else [binds(e) for e, _ in cand_es], d)
+        if d:
+            disputes[h] = d
     return cand_es
 
 
@@ -592,7 +684,8 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
                      strict_source: bool = False,
                      engine_moves: dict[int, list[tuple[str, int]]] | None = None,
                      edges_by_parent: dict | None = None, epd: str | None = None,
-                     excluded: dict | None = None):
+                     excluded: dict | None = None, rare_floor: int | None = None,
+                     verified: dict | None = None, disputes: dict | None = None):
     """The moves an our-node may book: one definition for build_graph and validate_book, so the
     book and its checker cannot disagree. Engine proposals join the recorded moves before the
     gates; the gates and --max-eval-loss run over that set; then the candidate cap; then the
@@ -617,7 +710,8 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
     cand_es = gate_candidates(h, es_g, src, eval_ws, our_white,
                               slice_prior, robustness_floor,
                               gate_rel_floor, gate_rel_own_margin,
-                              require_eval, gates, max_eval_loss)
+                              require_eval, gates, max_eval_loss,
+                              rare_floor, verified, disputes)
     # Candidate cap.
     #
     # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py
@@ -678,9 +772,13 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
             ch = child_of(epd, src)
         if strict_source and max_eval_loss is not None:
             cev = eval_ws.get(ch) if ch is not None else None
+            ok = verified.get(h, ()) if verified else ()
+            pairs = cand_es + [({"move_san": src}, cev)]
             kept = None if cev is None else eval_loss_keep(
-                cand_es + [({"move_san": src}, cev)], eval_ws.get(h),
-                our_white, max_eval_loss)
+                pairs, eval_ws.get(h), our_white, max_eval_loss,
+                None if rare_floor is None else [
+                    bool(e.get("engine") or e.get("total", rare_floor) >= rare_floor
+                         or e["move_san"].rstrip("+#") in ok) for e, _ in pairs])
             if kept is None or not any(e["move_san"] == src for e, _ in kept):
                 return cand_es, None, 1, n_eng
             # One loss rule over the COMPLETE set (follow-up review R1): a
@@ -693,7 +791,7 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
 
 
 def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
-                max_loss_cp: float) -> str | None:
+                max_loss_cp: float, eps: float = 0.0) -> str | None:
     """Could --max-eval-loss bind on this final candidate set? 'fallback': no candidate is within
     the limit of the position's own eval, so the least-losing one stayed (the owner's rule,
     2026-10-08). 'unknown': no candidate has an eval. None: every candidate is within it."""
@@ -701,7 +799,7 @@ def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
            if ch is not None and ch in eval_ws]
     if not cps:
         return "unknown"
-    if h in eval_ws and ws_to_cp(eval_ws[h], our_white) - max(cps) > max_loss_cp:
+    if h in eval_ws and ws_to_cp(eval_ws[h], our_white) - max(cps) > max_loss_cp + eps:
         return "fallback"
     return None
 
@@ -768,6 +866,18 @@ def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflic
                 reported.add(ch)
     eval_ws.update({h: cp_to_expected_score(cp) for h, cp in resolved.items()})
     return moves, conflicts
+
+
+def verified_moves(frame) -> dict:
+    """{parent hash: bare SANs searched afresh at that parent} from a proposal overlay."""
+    import polars as pl
+    if frame is None or "verification_nodes" not in frame.columns:
+        return {}
+    out: dict = {}
+    for h, san in frame.filter(pl.col("verification_nodes").is_not_null()).select(
+            "position_hash", "move_san").iter_rows():
+        out.setdefault(h, set()).add(san.rstrip("+#"))
+    return out
 
 
 def verified_exclusions(proposals, limit):
@@ -863,7 +973,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 crack_at_parents: bool = False,
                 engine_moves: dict[int, list[tuple[str, int]]] | None = None,
                 track_route_ply: bool = False, track_other: bool = False,
-                excluded: dict | None = None) -> Graph:
+                excluded: dict | None = None, rare_floor: int | None = None,
+                verified: dict | None = None) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -932,12 +1043,13 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                     gates=gates, max_eval_loss=max_eval_loss, strict_source=strict_source,
                     engine_moves=engine_moves, edges_by_parent=edges_by_parent,
-                    epd=es[0].get("parent_epd"), excluded=excluded)[0]
+                    epd=es[0].get("parent_epd"), excluded=excluded,
+                    rare_floor=rare_floor, verified=verified)[0]
             else:
                 cs = gate_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor, gate_rel_floor, gate_rel_own_margin,
-                    require_eval, gates, max_eval_loss)
+                    require_eval, gates, max_eval_loss, rare_floor, verified)
             admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
     # Search below an unplayed nominated move when its child has pool replies.
     # Zero observations keep it out of empirical frequencies and stop estimates.
@@ -1004,7 +1116,9 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                 gates=gates, max_eval_loss=max_eval_loss, max_cands=max_cands,
                 strict_source=strict_source, engine_moves=engine_moves,
-                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"), excluded=excluded)
+                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"), excluded=excluded,
+                rare_floor=rare_floor, verified=verified,
+                disputes=g.meta.setdefault("rare_disputes", {}) if rare_floor is not None else None)
             if n_eng:
                 g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + n_eng
             if n_rej:
@@ -1116,12 +1230,13 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
         if ro is not None and ro.crack:
             g.meta["root_crack"] = ro.crack      # no parent edge: build_budget_books reports it
     if max_eval_loss is not None:
-        g.meta["loss_exceptions"] = loss_exceptions(g, eval_ws, our_white, max_eval_loss)
+        g.meta["loss_exceptions"] = loss_exceptions(g, eval_ws, our_white, max_eval_loss,
+                                                    0.0 if rare_floor is None else CP_EPS)
     return g
 
 
 def loss_exceptions(g: Graph, eval_ws: dict[int, float], our_white: bool,
-                    max_loss_cp: float) -> dict[int, str]:
+                    max_loss_cp: float, eps: float = 0.0) -> dict[int, str]:
     """Our-nodes whose FINAL candidate set the --max-eval-loss rule could not enforce
     (follow-up review R1/R5): 'fallback' -- no candidate is within the limit of the
     position's own eval, so eval_loss_keep kept the least-losing one (the owner's rule,
@@ -1132,7 +1247,7 @@ def loss_exceptions(g: Graph, eval_ws: dict[int, float], our_white: bool,
     for h, n in g.our.items():
         if not n.cands:
             continue
-        st = loss_status([c[1] for c in n.cands], h, eval_ws, our_white, max_loss_cp)
+        st = loss_status([c[1] for c in n.cands], h, eval_ws, our_white, max_loss_cp, eps)
         if st:
             out[h] = st
     return out

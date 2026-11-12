@@ -21,6 +21,14 @@ coordinator takes the same arguments and consumes published receipts. The
 construction and referee coordinators keep separate status and cache files.
 The resume commands and experiment order are in `docs/lifetime-repertoire-plan.md`.
 
+Rare-move verification (`build_budget_books.py --rare-verification` with an uncut own-move lookup)
+lets a move with fewer than `--min-games` games be booked but never set a gate reference until it
+has a fresh search. `python/run_rare_book.py` drives it: build, `rare_verify.py` searches the
+moves whose ordering matters (5M nodes, 20M within 10 cp of the limit, never shallower than an
+earlier verdict at that position), feed the overlay back, repeat until a pass requests nothing.
+Every stage has a receipt and runs from a code snapshot; position searches are cached by
+(position, move, budget) and reused across books. Contract in each script's header.
+
 Chess opening repertoire builder. Ingests Lichess monthly PGN dumps, extracts position-move edges
 from millions of games, aggregates them into per-position move statistics, then runs backwards
 induction on the position DAG to produce an empirical "best move at each position" repertoire.

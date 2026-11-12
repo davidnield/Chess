@@ -72,7 +72,8 @@ def board(epd: str) -> chess.Board:
 
 
 def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dict, our_white: bool,
-             meta: dict, engine_moves: dict | None, epd: str, excluded=None) -> str:
+             meta: dict, engine_moves: dict | None, epd: str, excluded=None,
+             rare_floor: int | None = None, verified: dict | None = None) -> str:
     """A base row's status, by the builder's own candidate rule (budget_core.final_candidates)
     under the recipe's gates and limit, always with the strict source rule: the audit holds a
     book to what is promised, including a book built before that rule existed."""
@@ -82,7 +83,8 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
         h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
         max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
         **{k: meta[k] for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin") if k in meta},
-        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded)
+        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded,
+        rare_floor=rare_floor, verified=verified)
     pairs = [(e["move_san"], e.get("child_hash")) for e, _ in cand]
     if restored is not None:
         pairs.append(restored)
@@ -90,7 +92,8 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
         return "outside_set"
     if limit is None:
         return "in_set"
-    return bc.loss_status([c for _, c in pairs], h, ev, our_white, limit) or "in_set"
+    return bc.loss_status([c for _, c in pairs], h, ev, our_white, limit,
+                          0.0 if rare_floor is None else bc.CP_EPS) or "in_set"
 
 
 def fresh_verdict(eng, b: chess.Board, move: str, nodes: int, limit: float, our_white: bool) -> dict:
@@ -160,12 +163,10 @@ def main():
             c = bc_child(epd, m)
             if c is not None:
                 pos.add(c)
-        con.register("keys", pl.DataFrame({"h": sorted(pos)}, schema={"h": pl.Int64}).to_arrow())
-        e = duck_pl(con, f"""SELECT parent_hash, move_san, child_hash, total, white_score_avg
-            FROM read_parquet('{meta['stats'].replace(chr(92), '/')}') s
-            SEMI JOIN keys k ON k.h = s.parent_hash WHERE total >= {min_games}""")
-        for h, g in e.group_by("parent_hash"):
-            edges[h[0]] = g.to_dicts()
+        # the builder's own menu (book_graph): the uncut lookup at our decisions when the book
+        # was built from one, the floored pool otherwise and at the opponent's positions
+        from book_graph import edges_at
+        edges = edges_at(con, meta, a.colour, pos)
     # legality and the hashes to evaluate
     rows, keys = [], set()
     for r in ours.iter_rows(named=True):
@@ -199,6 +200,9 @@ def main():
     cloud_moves = set()
     checked_moves = {}
     excluded = bc.verified_exclusions(proposal_input, limit)
+    from book_graph import rare_policy
+    rare_floor, verified_at = rare_policy(
+        meta, pl.read_parquet(proposal_input) if proposal_input is not None else None)
     if proposal_input is not None:
         proposals = pl.read_parquet(proposal_input)
         if "engine" in proposals.columns:
@@ -226,7 +230,8 @@ def main():
             rec["status"] = "no_recipe"
         else:
             rec["status"] = classify(h, rec["move"], edges.get(h, []), rec["source_move"], ev,
-                                     our_white, meta, engine_moves, rec["epd"], excluded)
+                                     our_white, meta, engine_moves, rec["epd"], excluded,
+                                     rare_floor, verified_at)
         rec["flagged"] = rec["legal"] and limit is not None and (
             rec["cached_loss"] is None or rec["cached_loss"] > limit)
     # fresh searches of the flagged rows

@@ -112,6 +112,7 @@ class GateAdmit:
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
         self.excluded = {}
+        self.rare_floor, self.verified = None, {}
 
     def prefetch(self, hashes) -> None:
         new = np.array([h for h in set(hashes) if h not in self._seen], dtype=np.int64)
@@ -129,6 +130,7 @@ class GateAdmit:
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
             require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss,
+            rare_floor=self.rare_floor, verified=self.verified,
             **self.gate_settings)
             if e.get("child_hash") is not None}
 
@@ -320,7 +322,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                 rows = list(grp.iter_rows(named=True))
                 if our_turn and engine_moves and ph in engine_moves:
                     existing = {r["child_hash"] for r in rows}
-                    rows.extend({"move_san": san, "child_hash": ch, "total": 0}
+                    rows.extend({"move_san": san, "child_hash": ch, "total": 0, "engine": True}
                                 for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
                 for row in rows:
@@ -643,6 +645,12 @@ def main() -> int:
                          "reachable at all or whether the distinct count skips "
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--rare-verification", action="store_true",
+                    help="With --uncut-own-moves: an own move with fewer than --min-games "
+                         "observations and no verified score (rare_verify.py rows in "
+                         "--engine-candidates) cannot set a gate reference. It stays a "
+                         "candidate. Writes <book>.rare.json: the decisions where such a move "
+                         "would have excluded a rival. Default off = the old rule exactly.")
     ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
@@ -705,6 +713,8 @@ def main() -> int:
             ap.error("--uncut-own-moves requires the native aux sidecar")
         uncut = load(a.uncut_own_moves, a.stats, aux_path, a.perspective, a.opponent_prior)
     uncut_recipe = uncut["recipe_sha256"] if uncut else None
+    if a.rare_verification and not uncut:
+        ap.error("--rare-verification needs --uncut-own-moves")
     for dest in outs.values():
         if dest.exists() and not a.force:
             mp = Path(str(dest) + ".meta.json")
@@ -764,6 +774,7 @@ def main() -> int:
     proposal_moves = None
     proposal_sha = None
     proposal_input = None
+    verified_at = {}
     excluded = {}
     verified_cp = {}
     if a.engine_candidates:
@@ -774,12 +785,18 @@ def main() -> int:
         fresh = {}
         excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
+        verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
         gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
         if gate is not None:
             gate.excluded = excluded
             gate.eval_ws.update(fresh)
             gate._seen.update(fresh)
+    rare_floor = a.min_games if a.rare_verification else None
+    if rare_floor is not None:
+        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        if gate is not None:
+            gate.rare_floor, gate.verified = rare_floor, verified_at
     reply_overlay = None
     if a.opponent_prior:
         from opponent_prior import ReplyOverlay
@@ -887,6 +904,7 @@ def main() -> int:
                        strict_source=a.strict_source,
                        crack_at_parents=a.crack_at_parents,
                        engine_moves=engine_moves, excluded=excluded,
+                       rare_floor=rare_floor, verified=verified_at,
                        track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
                                             or a.dump_other_positions or a.sampled_other),
                        track_other=bool(a.dump_other_positions or a.sampled_other))
@@ -1319,6 +1337,11 @@ def main() -> int:
             "min_games": a.min_games, "pool_min_games": pool_floor,
             **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
                if uncut else {}),
+            "perspective": a.perspective,
+            **({"rare_floor": rare_floor, "rare_disputes": len(g.meta.get("rare_disputes", {})),
+                "rare_disputes_booked": sum(1 for h in g.meta.get("rare_disputes", {})
+                                            if res["booked"].get(h))}
+               if rare_floor is not None else {}),
             **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
                if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
@@ -1373,6 +1396,13 @@ def main() -> int:
             "built": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
+        if rare_floor is not None:
+            # every decision where an unverified rare move would have excluded a rival had it
+            # bound, with the graph's optimistic reach: the verifier's work list
+            Path(str(out) + ".rare.json").write_text(json.dumps(
+                [{"position_hash": h, "reach": g.reach.get(h, 0.0), "ply": g.ply.get(h),
+                  "booked": res["booked"].get(h), **d}
+                 for h, d in sorted(g.meta.get("rare_disputes", {}).items())]))
         rvr, rvc = res["root_value_realized"], meta["root_value_curve"]
         log(f"b={b}: booked {res['spent_distinct']:,} distinct "
             f"({res['spent_paths']:,} path-charged), root value "
