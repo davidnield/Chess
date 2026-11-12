@@ -4,6 +4,8 @@
 //! tolerance 0. See README.md for the build and the exactness contract.
 
 pub mod gates;
+pub mod graph;
+mod py_graph;
 pub mod reach;
 pub mod value;
 
@@ -16,12 +18,12 @@ use gates::{Cand, GateParams, NodeIn, Ref};
 
 use value::{AuxRow, Blend};
 
-fn blend(slice_prior: f64, our_white: bool, prior_strength: f64, eval_weight: f64,
+pub(crate) fn blend(slice_prior: f64, our_white: bool, prior_strength: f64, eval_weight: f64,
          eval_weight_min: f64, eval_weight_k: f64) -> Blend {
     Blend { slice_prior, our_white, prior_strength, eval_weight, eval_weight_min, eval_weight_k }
 }
 
-fn same_len(n: usize, others: &[usize]) -> PyResult<()> {
+pub(crate) fn same_len(n: usize, others: &[usize]) -> PyResult<()> {
     if others.iter().any(|&m| m != n) {
         return Err(PyValueError::new_err("arrays differ in length"));
     }
@@ -139,7 +141,7 @@ fn aux_mix<'py>(py: Python<'py>, term_total: PyReadonlyArray2<'py, f64>,
     Ok((PyArray2::from_vec2(py, &buckets)?, PyArray2::from_vec2(py, &mix)?))
 }
 
-fn csr<'a>(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()> {
+pub(crate) fn csr(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()> {
     if ptr.len() != n + 1 || ptr[0] != 0 || ptr[n] as usize != len
         || ptr.windows(2).any(|w| w[1] < w[0]) {
         return Err(PyValueError::new_err(format!("{what}: bad CSR pointer")));
@@ -236,11 +238,11 @@ fn final_candidates_batch<'py>(
 }
 
 /// A 64-bit position key from Python (zobrist_int64) as the crate's Key (high half 0).
-fn key(lo: i64) -> reach::Key {
+pub(crate) fn key(lo: i64) -> reach::Key {
     lo as u64 as reach::Key
 }
 
-fn lo(k: reach::Key) -> i64 {
+pub(crate) fn lo(k: reach::Key) -> i64 {
     k as u64 as i64
 }
 
@@ -301,6 +303,7 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(aux_mix, m)?)?;
     m.add_function(wrap_pyfunction!(final_candidates_batch, m)?)?;
     m.add_function(wrap_pyfunction!(reach_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(py_graph::build_graph_csr, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

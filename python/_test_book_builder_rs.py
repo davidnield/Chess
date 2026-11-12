@@ -20,6 +20,11 @@ all count.
   R  optimistic_reach and route_plies on random graphs with transpositions, repetition
      cycles, childless edges, overlay reach shares and gated admission: both dicts in
      insertion order (it fixes the graph's node order), reach by bits.
+  B  build_graph assembled in Rust and read back as a Graph (budget_rs.build_graph_rs), on
+     random DAGs with every input kind (aux rows, overlay rows, source moves, engine
+     proposals, vetoes, verified moves) and random flags: every node, candidate, kid and
+     floor entry by bits and in order, the reach/ply/route dicts, the meta (disputes, crack
+     edges, loss exceptions, overlay counts) and the 'other' bucket table.
 """
 from __future__ import annotations
 
@@ -470,6 +475,184 @@ def check_reach() -> None:
           f"other than the legacy ply), {bad} differ")
 
 
+# ── B: the whole graph (build_graph) ────────────────────────────────────────
+
+def fbits(x) -> int:
+    return int(np.float64(x).view(np.int64))
+
+
+def deep_same(a, b) -> bool:
+    """Equal structure, floats by bits, dicts in the same insertion order."""
+    if isinstance(a, float) or isinstance(b, float):
+        return (isinstance(a, (float, int)) and isinstance(b, (float, int))
+                and not isinstance(a, bool) and not isinstance(b, bool)
+                and fbits(a) == fbits(b))
+    if isinstance(a, dict):
+        return (isinstance(b, dict) and list(a) == list(b)
+                and all(deep_same(a[k], b[k]) for k in a))
+    if isinstance(a, (list, tuple)):
+        return (isinstance(b, (list, tuple)) and len(a) == len(b)
+                and all(deep_same(x, y) for x, y in zip(a, b)))
+    return a == b and type(a) is type(b)
+
+
+def graph_diff(a, b) -> str | None:
+    for name in ("reach", "ply", "route_ply", "epd", "other"):
+        if not deep_same(getattr(a, name), getattr(b, name)):
+            return name
+    if list(a.our) != list(b.our):
+        return "our order"
+    for h in a.our:
+        x, y = a.our[h], b.our[h]
+        if not deep_same((x.l_node, x.cands, x.crack), (y.l_node, y.cands, y.crack)):
+            return f"our {h}: {(x.l_node, x.cands, x.crack)} vs {(y.l_node, y.cands, y.crack)}"
+    if list(a.opp) != list(b.opp):
+        return "opp order"
+    for h in a.opp:
+        x, y = a.opp[h], b.opp[h]
+        if not deep_same((x.const_base, x.kids, x.floor), (y.const_base, y.kids, y.floor)):
+            return f"opp {h}: {(x.const_base, x.kids, x.floor)} vs {(y.const_base, y.kids, y.floor)}"
+    ma = dict(a.meta)
+    mb = dict(b.meta)
+    da, db = ma.pop("rare_disputes", None), mb.pop("rare_disputes", None)
+    if (da is None) != (db is None) or (da is not None and (
+            list(da) != list(db) or any(not deep_same(dict(sorted(da[h].items())),
+                                                      dict(sorted(db[h].items()))) for h in da))):
+        return f"disputes: {da} vs {db}"
+    if not deep_same(dict(sorted(ma.items())), dict(sorted(mb.items()))):
+        return f"meta: {ma} vs {mb}"
+    return None
+
+
+def random_build_inputs(rng: random.Random, n: int, our_white: bool):
+    """build_graph's inputs on a random DAG with transpositions and cycles."""
+    keys = [rng.randrange(-2 ** 63, 2 ** 63) for _ in range(3 * n)]
+    pos = keys[:n]
+    root = pos[0]
+    ebp = {}
+    for i, h in enumerate(pos):
+        if rng.random() < 0.1:
+            continue
+        overlay = rng.random() < 0.06
+        es, seen = [], set()
+        for s in rng.sample(SANS, rng.randrange(1, 6)):
+            if bare(s) in seen:
+                continue
+            seen.add(bare(s))
+            r = rng.random()
+            if r < 0.04:
+                ch = None
+            elif r < 0.12:
+                ch = pos[rng.randrange(0, i + 1)]                    # cycle / transposition
+            elif r < 0.2:
+                ch = keys[n + rng.randrange(0, 2 * n)]               # a leaf position
+            else:
+                ch = pos[rng.randrange(i + 1, min(n, i + 11))] if i + 1 < n else None
+            e = {"move_san": s, "child_hash": ch,
+                 "total": rng.choice([1, 2, 3, 5, 8, 20, 50, 400, rng.randrange(1, 3000)]),
+                 "white_score_avg": rng.choice([0.5, 1.0, 0.0, rng.random()])}
+            if not es:
+                e["parent_epd"] = f"epd{i}"
+            if overlay:
+                e.update(reply_mass=rng.choice([float(e["total"]), rng.random() * 30]),
+                         reach_share=rng.choice([None, rng.random()]),
+                         additional_reply=rng.choice([True, False]))
+                if e["reach_share"] is None:
+                    del e["reach_share"]
+            es.append(e)
+        ebp[h] = es
+    side = 1 if our_white else -1
+    eval_ws = {}
+    for k in keys:
+        if rng.random() < 0.8:
+            cp = side * rng.choice([0, 30, -30, 29, 31, 60, 100, -150, 300, rng.randrange(-500, 500)])
+            eval_ws[k] = rng.choice([cp_to_expected_score(cp), rng.random()])
+    aux = {}
+    for h in ebp:
+        if rng.random() < 0.6:
+            r = {}
+            for gname in GROUPS:
+                for c in ("total", "white_wins", "black_wins", "draws"):
+                    r[f"{gname}_{c}"] = rng.choice([None, 0, rng.randrange(0, 40)])
+            for c in ("other_total", "other_white_wins", "other_draws", "horizon_total",
+                      "horizon_white_wins", "horizon_draws"):
+                r[c] = rng.choice([None, 0, rng.randrange(0, 500)])
+            r["other_eval_cov"] = rng.choice([0.0, 1.0, rng.random()])
+            r["other_eval_mean"] = rng.choice([None, rng.random()])
+            aux[h] = r
+    rep = {h: rng.choice([es[0]["move_san"], rng.choice(SANS)]) for h, es in ebp.items()
+           if rng.random() < 0.5}
+    eng = {}
+    for h in ebp:
+        if rng.random() < 0.1:
+            eng[h] = [(s, rng.choice(keys)) for s in rng.sample(SANS, rng.randrange(1, 3))]
+    verified = {h: {bare(s) for s in SANS if rng.random() < 0.2} for h in ebp if rng.random() < 0.2}
+    excluded = {h: {bare(rng.choice(SANS))} for h in ebp if rng.random() < 0.05}
+    child = {(f"epd{i}", s): rng.choice(keys + [None]) for i in range(n) for s in SANS}
+    return ebp, root, eval_ws, aux, rep, eng, verified, excluded, child
+
+
+def check_graph() -> None:
+    import budget_rs
+    import build_baseline_books as bbb
+    rng = random.Random(6)
+    bad = n = nodes = 0
+    seen = dict(disputes=0, crack_edges=0, named=0, engine=0, rejected=0, other=0,
+                loss_exceptions=0, floors=0, restored=0)
+    first = None
+    real = bbb.child_of
+    try:
+        for t in range(1000):
+            our_white = t % 2 == 0
+            ebp, root, eval_ws, aux, rep, eng, verified, excluded, child = random_build_inputs(
+                rng, rng.choice([15, 40, 120, 400]), our_white)
+            bbb.child_of = lambda epd, san: child[(epd, san)]
+            kw = dict(rep_moves=rep, eval_ws=eval_ws,
+                      aux_rows=aux if t % 5 else {},
+                      slice_prior=rng.choice([0.5196, 0.48]),
+                      eps=rng.choice([1e-6, 1e-4, 1e-3]), max_ply=rng.choice([4, 9, 29]),
+                      share_floor=rng.choice([0.0, 0.002, 0.03]),
+                      eval_weight=rng.choice([0.75, 0.5, 0.0]),
+                      prior_strength=rng.choice([500.0, 100.0]),
+                      other_cov_blend=rng.random() < 0.5, gated_reach=rng.random() < 0.7,
+                      max_eval_loss=rng.choice([None, 30.0, 60.0]),
+                      strict_source=rng.random() < 0.7, crack_at_parents=rng.random() < 0.7,
+                      engine_moves=eng if rng.random() < 0.5 else None,
+                      excluded=excluded if rng.random() < 0.5 else None,
+                      rare_floor=rng.choice([None, 5]),
+                      verified=verified if rng.random() < 0.7 else None,
+                      track_route_ply=rng.random() < 0.5, track_other=rng.random() < 0.5)
+            a = bc.build_graph(ebp, root, our_white, **kw)
+            b = budget_rs.build_graph_rs(ebp, root, our_white, **kw)
+            d = graph_diff(a, b)
+            n += 1
+            nodes += len(a.our) + len(a.opp)
+            m = a.meta
+            seen["disputes"] += len(m.get("rare_disputes", {}))
+            seen["crack_edges"] += m.get("crack_edges", 0)
+            seen["named"] += m.get("named_opponent_replies", {}).get("positions", 0)
+            seen["engine"] += m.get("engine_cands", 0)
+            seen["rejected"] += m.get("src_rejected", 0)
+            seen["other"] += len(a.other)
+            seen["loss_exceptions"] += len(m.get("loss_exceptions", {}))
+            seen["floors"] += sum(len(x.floor) for x in a.opp.values())
+            seen["restored"] += sum(1 for h, x in a.our.items() for c in x.cands
+                                    if rep.get(h) == c[0] and not any(
+                                        e["move_san"] == c[0] for e in ebp[h]))
+            if d is not None:
+                bad += 1
+                if first is None:
+                    first = (t, d[:600])
+    finally:
+        bbb.child_of = real
+    check("B: build_graph (Rust CSR, back as a Graph) = budget_core's: nodes, candidates, "
+          "kids, floors, reach/ply/route orders, meta, disputes, other",
+          bad == 0, f"{n} graphs, {nodes:,} nodes, {bad} differ; exercised: "
+          + ", ".join(f"{k} {v:,}" for k, v in seen.items()))
+    if first is not None:
+        print("    first difference:", first)
+
+
 def main() -> int:
     if rs is None:
         print("  SKIP  no book_builder_rs extension (build it: rust/book_builder/build.ps1)")
@@ -479,6 +662,7 @@ def main() -> int:
     check_aux()
     check_gates()
     check_reach()
+    check_graph()
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 
