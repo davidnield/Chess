@@ -50,9 +50,11 @@ Moves are interned as integer codes, assigned in sorted SAN order, so comparing 
 moves the way Python's string comparison does. A separate code identifies each move without
 its check suffix.
 
-The gate test has been checked against a deliberately planted error: setting `CP_EPS` to 0
-made 561 of 216,000 node solves differ.
+| `reach.rs` | `optimistic_reach` and `route_plies`. Both return their dicts in Python's insertion order, which fixes the order of every node built from them. The heap pops by (reach, push counter), exactly as `heapq` does. |
 
-**Next:** `optimistic_reach` and `route_plies`, then
-`build_graph` itself into compressed sparse rows. Keys are a (hi, lo) pair of 64-bit
+Both tests have been checked against deliberately planted errors:
+- the gate test: setting `CP_EPS` to 0 made 561 of 216,000 node solves differ;
+- the reach test: reversing the heap's tie-break made 381 of 800 graphs differ.
+
+**Next:** `build_graph` itself, assembled into compressed sparse rows. Keys are a (hi, lo) pair of 64-bit
 integers, with hi 0 on today's data.

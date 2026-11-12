@@ -17,6 +17,9 @@ all count.
      kept moves in order, restored and rejected source moves, engine proposals and the
      rare-verification disputes, for every combination of the gates, require-eval, the
      loss limit, rare verification and strict source, both colours.
+  R  optimistic_reach and route_plies on random graphs with transpositions, repetition
+     cycles, childless edges, overlay reach shares and gated admission: both dicts in
+     insertion order (it fixes the graph's node order), reach by bits.
 """
 from __future__ import annotations
 
@@ -382,6 +385,91 @@ def check_gates() -> None:
         print("    first difference:", first)
 
 
+# ── R: reach and route plies ────────────────────────────────────────────────
+
+def random_edges(rng: random.Random, n: int):
+    """edges_by_parent over positions 1..n (root 1): transpositions, back edges (repetition
+    cycles), edges with no child, overlay rows carrying reach_share, tied shares."""
+    ebp = {}
+    for h in range(1, n + 1):
+        if rng.random() < 0.15:
+            continue                                   # a leaf: no recorded edges
+        k = rng.randrange(0, 6)
+        es = []
+        overlay = rng.random() < 0.1
+        for _ in range(k):
+            r = rng.random()
+            if r < 0.05:
+                ch = None
+            elif r < 0.15:
+                ch = rng.randrange(1, h + 1)            # back edge: a cycle
+            elif r < 0.2:
+                ch = rng.randrange(1, n + 1) + n        # outside the parents (a leaf child)
+            else:
+                ch = rng.randrange(h + 1, min(n, h + 12) + 1) if h < n else None
+            tot = rng.choice([1, 1, 2, 5, 10, 100, rng.randrange(0, 1000)])
+            e = {"child_hash": ch, "total": tot, "move_san": f"m{len(es)}"}
+            if overlay:
+                e["reach_share"] = rng.choice([0.5, 0.25, rng.random()])
+            es.append(e)
+        ebp[h] = es
+    return ebp
+
+
+def reach_case(ebp, root_our, eps, max_ply, share_floor, admitted, track):
+    parents = list(ebp)
+    ptr, ch, has, tot, share = [0], [], [], [], []
+    for h in parents:
+        for e in ebp[h]:
+            ch.append(0 if e["child_hash"] is None else e["child_hash"])
+            has.append(e["child_hash"] is not None)
+            tot.append(e["total"])
+            share.append(e.get("reach_share", math.nan))
+        ptr.append(len(ch))
+    ap, ac = [], []
+    if admitted is not None:
+        ap = [0]
+        for h in parents:
+            ac += sorted(admitted.get(h, ()))
+            ap.append(len(ac))
+    i64 = np.int64
+    got = rs.reach_batch(np.array(parents, i64), np.array(ptr, i64), np.array(ch, i64),
+                         np.array(has, bool), np.array(tot, i64), np.array(share, np.float64),
+                         np.array(ap, i64), np.array(ac, i64), 1, root_our, eps, max_ply,
+                         share_floor, track)
+    reach, ply = bc.optimistic_reach(ebp, 1, root_our, eps, max_ply, share_floor, admitted)
+    route = bc.route_plies(ebp, 1, root_our, reach, ply, max_ply, share_floor,
+                           admitted) if track else {}
+    rk, rv, pk, pv, qk, qv = got
+    ok = (list(reach) == rk.tolist() and same(list(reach.values()), rv) == 0
+          and list(ply) == pk.tolist() and list(ply.values()) == pv.tolist()
+          and list(route) == qk.tolist() and list(route.values()) == qv.tolist())
+    return ok, len(reach), sum(1 for h in route if route[h] != ply[h])
+
+
+def check_reach() -> None:
+    rng = random.Random(5)
+    bad = n = nodes = moved = 0
+    for t in range(400):
+        ebp = random_edges(rng, rng.choice([20, 60, 200, 1000]))
+        adm = None
+        if t % 2:
+            adm = {h: {e["child_hash"] for e in es if e["child_hash"] is not None
+                       and rng.random() < 0.7} for h, es in ebp.items() if rng.random() < 0.9}
+        for root_our in (True, False):
+            eps = rng.choice([1e-9, 1e-4, 0.01])
+            max_ply = rng.choice([3, 8, 29, 60])
+            sf = rng.choice([0.0, 0.002, 0.05])
+            ok, k, m = reach_case(ebp, root_our, eps, max_ply, sf, adm, True)
+            n += 1
+            nodes += k
+            moved += m
+            bad += not ok
+    check("R: optimistic_reach and route_plies = budget_core's (orders, reach bits, plies)",
+          bad == 0, f"{n} graphs, {nodes:,} reached positions ({moved:,} with a route ply "
+          f"other than the legacy ply), {bad} differ")
+
+
 def main() -> int:
     if rs is None:
         print("  SKIP  no book_builder_rs extension (build it: rust/book_builder/build.ps1)")
@@ -390,6 +478,7 @@ def main() -> int:
     check_leaves()
     check_aux()
     check_gates()
+    check_reach()
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 

@@ -4,6 +4,7 @@
 //! tolerance 0. See README.md for the build and the exactness contract.
 
 pub mod gates;
+pub mod reach;
 pub mod value;
 
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -234,6 +235,63 @@ fn final_candidates_batch<'py>(
         PyArray1::from_vec(py, n_eng), disputes))
 }
 
+/// A 64-bit position key from Python (zobrist_int64) as the crate's Key (high half 0).
+fn key(lo: i64) -> reach::Key {
+    lo as u64 as reach::Key
+}
+
+fn lo(k: reach::Key) -> i64 {
+    k as u64 as i64
+}
+
+/// optimistic_reach, then (optionally) route_plies. Edges in CSR over `parents`
+/// (edges_by_parent's keys and edge orders); e_has_child 0 = child_hash None; e_share NaN =
+/// no reach_share. adm_ptr empty = admitted None. Returns (reach keys, reach values, ply
+/// keys, ply values, route keys, route plies), each in Python's dict insertion order (route
+/// empty unless track_route_ply).
+#[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+fn reach_batch<'py>(
+    py: Python<'py>, parents: PyReadonlyArray1<'py, i64>, e_ptr: PyReadonlyArray1<'py, i64>,
+    e_child: PyReadonlyArray1<'py, i64>, e_has_child: PyReadonlyArray1<'py, bool>,
+    e_total: PyReadonlyArray1<'py, i64>, e_share: PyReadonlyArray1<'py, f64>,
+    adm_ptr: PyReadonlyArray1<'py, i64>, adm_child: PyReadonlyArray1<'py, i64>,
+    root: i64, root_our: bool, eps: f64, max_ply: i64, share_floor: f64,
+    track_route_ply: bool,
+) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<i64>>,
+               Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
+    let par: Vec<reach::Key> = parents.as_slice()?.iter().map(|&h| key(h)).collect();
+    let (ep, ec, eh, et, es) = (e_ptr.as_slice()?, e_child.as_slice()?, e_has_child.as_slice()?,
+                                e_total.as_slice()?, e_share.as_slice()?);
+    same_len(ec.len(), &[eh.len(), et.len(), es.len()])?;
+    csr(ep, par.len(), ec.len(), "e_ptr")?;
+    let child: Vec<Option<reach::Key>> = ec.iter().zip(eh)
+        .map(|(&c, &has)| if has { Some(key(c)) } else { None }).collect();
+    let (ap, ac) = (adm_ptr.as_slice()?, adm_child.as_slice()?);
+    let adm_keys: Vec<reach::Key> = ac.iter().map(|&c| key(c)).collect();
+    let admitted = if ap.is_empty() {
+        None
+    } else {
+        csr(ap, par.len(), ac.len(), "adm_ptr")?;
+        Some((ap, adm_keys.as_slice()))
+    };
+    let g = reach::Edges { parents: &par, ptr: ep, child: &child, total: et, share: es, admitted };
+    let rows = g.row_of();
+    if rows.len() != par.len() {
+        return Err(PyValueError::new_err("parents must be distinct"));
+    }
+    let (r, p) = reach::optimistic_reach(&g, &rows, key(root), root_our, eps, max_ply, share_floor);
+    let route = if track_route_ply {
+        reach::route_plies(&g, &rows, key(root), root_our, &r, &p, max_ply, share_floor)
+    } else {
+        reach::OrderedMap::default()
+    };
+    let ks = |m: &[reach::Key]| m.iter().map(|&k| lo(k)).collect::<Vec<i64>>();
+    Ok((PyArray1::from_vec(py, ks(&r.keys)), PyArray1::from_vec(py, r.vals),
+        PyArray1::from_vec(py, ks(&p.keys)), PyArray1::from_vec(py, p.vals),
+        PyArray1::from_vec(py, ks(&route.keys)), PyArray1::from_vec(py, route.vals)))
+}
+
 #[pymodule]
 fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cp_to_expected_score, m)?)?;
@@ -242,6 +300,7 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(leaf_node_values, m)?)?;
     m.add_function(wrap_pyfunction!(aux_mix, m)?)?;
     m.add_function(wrap_pyfunction!(final_candidates_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(reach_batch, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
