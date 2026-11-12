@@ -148,6 +148,12 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 .venv\Scripts\python.exe python\build_budget_books.py <recipe> --dump-other-positions <other.parquet>
 .venv\Scripts\python.exe python\sampled_other.py --dump <other.parquet> --colour white --our-moves <dir> --opp-moves <dir> --out <other_table.parquet>
 .venv\Scripts\python.exe python\build_budget_books.py <recipe> --sampled-stop <table.parquet> --sampled-other <other_table.parquet>
+# Every observed own move: an uncut lookup (White 1800+ needs --merge-slices 16), optionally
+# floored or with the floor lifted again where a closed book is; then verified rare-move rounds
+.venv\Scripts\python.exe python\uncut_own_moves.py --stats <pool> --aux-stats <aux> --perspective black --out <lookup>
+.venv\Scripts\python.exe python\lookup_floors.py floor --source <lookup> --colour black --min-games 5 --out <lookup-5>
+.venv\Scripts\python.exe python\lookup_floors.py addback --full <lookup> --floor <lookup-5> --run <closed run> --colour black --out <lookup-ab>
+.venv\Scripts\python.exe python\run_rare_book.py --colour black --cap 30 --baseline <cutoff screen> --lookup <lookup> --out <run> --searches <cache>
 # Check the exact files a person will learn
 .venv\Scripts\python.exe python\validate_book.py --book <file> --colour white [--nodes N] [--best-defence]
 
