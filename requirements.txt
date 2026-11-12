@@ -22,6 +22,7 @@ duckdb>=1.5,<2          # out-of-core GROUP BYs over the multi-billion-row merge
                         # The fetch API 2.0 removed is already ported (duck_compat.py).
                         # docs/maintenance-report.md (2026-10-29).
 numpy>=2.4              # CSR graph + value arrays in the backwards induction
+scipy>=1.17.1           # shared-budget slice reference optimizer
 psutil>=7               # memory profiling / worker priority on long runs
 requests>=2.31          # Lichess API (eval DB fetch, game import)
 

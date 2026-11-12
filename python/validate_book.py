@@ -35,6 +35,7 @@ cached edge evals keep their uncertainty. --incumbent PATH adds churn against an
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -71,7 +72,7 @@ def board(epd: str) -> chess.Board:
 
 
 def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dict, our_white: bool,
-             meta: dict, engine_moves: dict | None, epd: str) -> str:
+             meta: dict, engine_moves: dict | None, epd: str, excluded=None) -> str:
     """A base row's status, by the builder's own candidate rule (budget_core.final_candidates)
     under the recipe's gates and limit, always with the strict source rule: the audit holds a
     book to what is promised, including a book built before that rule existed."""
@@ -80,7 +81,8 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
     cand, restored, _rej, _eng = bc.final_candidates(
         h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
         max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
-        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd)
+        **{k: meta[k] for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin") if k in meta},
+        engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded)
     pairs = [(e["move_san"], e.get("child_hash")) for e, _ in cand]
     if restored is not None:
         pairs.append(restored)
@@ -129,6 +131,12 @@ def main():
     sign = 1 if our_white else -1
     meta_p = Path(a.meta) if a.meta else base_meta(Path(a.book))
     meta = json.loads(meta_p.read_text(encoding="utf-8")) if meta_p.exists() else {}
+    proposal_input = None
+    if meta.get("engine_candidates"):
+        proposal_input = Path(meta["engine_candidates"]).read_bytes()
+        expected = meta.get("engine_candidates_sha256")
+        if expected and hashlib.sha256(proposal_input).hexdigest() != expected:
+            raise SystemExit("Engine proposals differ from this book's recorded input")
     limit = meta.get("max_eval_loss")
     min_games = meta.get("min_games", 50)          # pre-2026-10-31 metas: the old default
     d = pl.read_parquet(a.book)
@@ -186,10 +194,25 @@ def main():
     cps = {int(h): int(c) for h, c in zip(hs, lookup_evals(hs, *mm)) if c != MISSING}
     ev = {h: cp_to_expected_score(c) for h, c in cps.items()}
     engine_moves, conflicts = None, []
-    if meta.get("engine_candidates"):
-        engine_moves, conflicts = bc.load_engine_candidates(meta["engine_candidates"], ev)
+    if proposal_input is not None:
+        engine_moves, conflicts = bc.load_engine_candidates(proposal_input, ev)
+    cloud_moves = set()
+    checked_moves = {}
+    excluded = bc.verified_exclusions(proposal_input, limit)
+    if proposal_input is not None:
+        proposals = pl.read_parquet(proposal_input)
+        if "engine" in proposals.columns:
+            origin = pl.col("cloud_origin") if "cloud_origin" in proposals.columns else pl.col("engine") == "Lichess cloud PV"
+            cloud_moves = set(proposals.filter(origin).select(
+                "position_hash", "position_epd", "child_hash").iter_rows())
+        if "verification_nodes" in proposals.columns and a.nodes:
+            engine_sha = hashlib.sha256(Path(SF).read_bytes()).hexdigest()
+            for row in proposals.filter((pl.col("verification_nodes") >= a.nodes)
+                    & (pl.col("verification_engine_sha256") == engine_sha)).iter_rows(named=True):
+                checked_moves[row["position_hash"], row["position_epd"], row["child_hash"]] = row
     for rec in rows:
         h = rec["position_hash"]
+        rec["selected_cloud"] = (h, rec["epd"], rec["child_hash"]) in cloud_moves
         rec["parent_cp_us"] = sign * cps[h] if h in cps else None
         ch = rec["child_hash"]
         rec["child_cp_us"] = sign * cps[ch] if ch in cps else None
@@ -203,21 +226,34 @@ def main():
             rec["status"] = "no_recipe"
         else:
             rec["status"] = classify(h, rec["move"], edges.get(h, []), rec["source_move"], ev,
-                                     our_white, meta, engine_moves, rec["epd"])
+                                     our_white, meta, engine_moves, rec["epd"], excluded)
         rec["flagged"] = rec["legal"] and limit is not None and (
             rec["cached_loss"] is None or rec["cached_loss"] > limit)
     # fresh searches of the flagged rows
     if a.nodes and limit is not None:
-        eng = chess.engine.SimpleEngine.popen_uci(SF)
-        eng.configure({"Threads": 8, "Hash": 1024})
+        eng = None
         try:
-            for rec in (r for r in rows if r["flagged"]):
+            for rec in (r for r in rows if r["flagged"] or r["selected_cloud"]):
+                checked = checked_moves.get((rec["position_hash"], rec["epd"], rec["child_hash"]))
+                if checked:
+                    loss = checked["verified_loss_cp"]
+                    same = checked["verification_best"] == rec["move"]
+                    rec.update(sf_best=checked["verification_best"], sf_best_cp=sign*checked["parent_cp_white"],
+                               sf_move_cp=sign*checked["child_cp_white"], sf_nodes=checked["verification_nodes"],
+                               sf_loss=loss, fresh="confirmed" if loss > limit else ("same_move" if same else "cleared"),
+                               unstable=checked["verification_unstable"], verification_source="selection search")
+                    continue
+                if eng is None:
+                    eng = chess.engine.SimpleEngine.popen_uci(SF)
+                    eng.configure({"Threads": 8, "Hash": 1024})
                 rec.update(fresh_verdict(eng, board(rec["epd"]), rec["move"], a.nodes, limit,
                                          our_white))
         finally:
-            eng.quit()
+            if eng:
+                eng.quit()
     out = pl.DataFrame(rows, infer_schema_length=None)
     summ = {"book": a.book, "colour": a.colour, "meta": str(meta_p) if meta else None,
+            "book_sha256": hashlib.sha256(Path(a.book).read_bytes()).hexdigest(),
             "max_eval_loss": limit, "min_games": min_games, "decisions": len(rows),
             "extension_rows": int(out["extension"].sum()),
             "status": dict(out.group_by("status").len().iter_rows()),
@@ -226,6 +262,13 @@ def main():
             "engine_eval_conflicts": conflicts}
     if "fresh" in out.columns:
         summ["fresh"] = dict(out.filter(pl.col("fresh").is_not_null()).group_by("fresh").len().iter_rows())
+    selected = [r for r in rows if r["selected_cloud"]]
+    checked = [r for r in selected if r.get("fresh")]
+    summ["cloud_verification"] = {"selected": len(selected), "checked": len(checked),
+                                  "over_limit": sum(r["fresh"] == "confirmed" for r in checked),
+                                  "unstable": sum(r["unstable"] for r in checked), "nodes": a.nodes}
+    if a.nodes and len(checked) != len(selected):
+        raise ValueError("Missing an independent verdict for a selected cloud move")
     if a.incumbent:
         inc = pl.read_parquet(a.incumbent).filter((pl.col("side_to_move") == a.colour)
                                                   & pl.col("best_move").is_not_null())

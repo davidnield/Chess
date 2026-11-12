@@ -67,6 +67,23 @@ failing.
 
 ## Running things
 
+For practical book comparisons see [practical repertoire experiments](docs/practical-repertoire.md).
+Engine nominations are zero-observation edges on our turns. The collector may follow them to real
+pool replies. In the hybrid rebuild, nomination stays on its original source snapshot. Selection
+and verification use a separate snapshot and one score per transposed position. Before the graph
+consumes a cumulative or corrected overlay, `transposition_search.py` checks material disagreements
+from the shared child. Preserve the original incoming scores and edge-specific verification losses.
+Recall is an independent probability on each visit, and a failed recall follows the
+human move distribution. First-exit partitions record the first unaided decision, including a
+missed recall. Keep comparison populations explicit and keep the blind deck's key separate from
+the participant's materials.
+
+Use `python/run_nomination_comparison.py` to resume the broad-versus-targeted experiment.
+It takes over the frozen Black checkpoints and controls White's search method. Targeted requests
+are persisted before reading raw local nominations. Keep its calibration, verification and
+stage records separate from the broad arm. The development tuning commands and decision
+criteria are in `docs/practical-repertoire.md`.
+
 All commands use `.venv/Scripts/python.exe` (uv-managed, Python 3.11) from
 `C:/Users/David/Documents/Chess`. Every pipeline script carries an authoritative header docstring
 with its exact CLI — **read it before running; don't trust remembered flags.**

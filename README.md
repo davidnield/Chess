@@ -390,6 +390,10 @@ need the local datasets skip when those aren't present, and the tests of the
 Rust extract skip when they find no built `explorer-extract` (set
 `EXPLORER_EXTRACT_EXE`). The crate has its own `cargo test`.
 
+## Practical repertoire experiments
+
+The [practical repertoire workflow](docs/practical-repertoire.md) covers Stockfish nominations before selection, recall and exit difficulty, paired comparisons across player populations and time controls, and blind practice from book exits.
+
 ## License
 
 No license has been chosen yet, so default copyright applies.

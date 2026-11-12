@@ -39,6 +39,7 @@ aux + reply_shrink 0) — the build refuses rather than silently diverging.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import sys
@@ -100,15 +101,17 @@ class GateAdmit:
     the eval_ws the graph is built from afterwards."""
 
     def __init__(self, rep_moves, our_white: bool, slice_prior: float,
-                 gates: bool = True, max_eval_loss: float | None = None):
+                 gates: bool = True, max_eval_loss: float | None = None, **gate_settings):
         from eval_arrays import MISSING, lookup_evals, open_eval_arrays
         self._lookup, self._missing = lookup_evals, MISSING
         self._mm = open_eval_arrays()
         self.rep_moves, self.our_white = rep_moves, our_white
         self.slice_prior, self.gates = slice_prior, gates
         self.max_eval_loss = max_eval_loss
+        self.gate_settings = gate_settings
         self.eval_ws: dict[int, float] = {}
         self._seen: set[int] = set()
+        self.excluded = {}
 
     def prefetch(self, hashes) -> None:
         new = np.array([h for h in set(hashes) if h not in self._seen], dtype=np.int64)
@@ -121,9 +124,12 @@ class GateAdmit:
 
     def __call__(self, ph: int, rows: list[dict]) -> set[int]:
         src = self.rep_moves.get(ph)
+        if ph in self.excluded:
+            rows = [r for r in rows if r["move_san"].rstrip("+#") not in self.excluded[ph]]
         return {e["child_hash"] for e, _ in bc.gate_candidates(
             ph, rows, src, self.eval_ws, self.our_white, self.slice_prior,
-            require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss)
+            require_eval=self.gates, gates=self.gates, max_eval_loss=self.max_eval_loss,
+            **self.gate_settings)
             if e.get("child_hash") is not None}
 
 
@@ -221,7 +227,7 @@ def restrict_candidates(g: "bc.Graph", allowed: dict[int, set[str]]) -> dict:
 
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
-                           min_games: int, admit=None) -> pl.DataFrame:
+                           min_games: int, admit=None, engine_moves=None, reply_overlay=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -283,6 +289,8 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         # depth is set by whichever parent first gives it its best reach, and depth
         # drives the max_ply cut and the turn parity -- so two builds of one input
         # differed by a few positions. Rows also reach build_graph in this order.
+        if reply_overlay is not None:
+            df = reply_overlay.attach(df, frontier)
         df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = {h for h in frontier if h not in fetched}
         if df.height and fresh:
@@ -305,6 +313,10 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                 tot = int(grp["total"].sum())
                 our_turn = (p_ply % 2 == 0) == our_white
                 rows = list(grp.iter_rows(named=True))
+                if our_turn and engine_moves and ph in engine_moves:
+                    existing = {r["child_hash"] for r in rows}
+                    rows.extend({"move_san": san, "child_hash": ch, "total": 0}
+                                for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
                 for row in rows:
                     ch = row["child_hash"]
@@ -315,7 +327,7 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                             continue
                         cr = r
                     else:
-                        share = row["total"] / tot if tot else 0.0
+                        share = bc.reply_share(row,tot)
                         if share < share_floor:
                             continue
                         cr = r * share
@@ -387,6 +399,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rep", required=True, help="Unconstrained source rep parquet.")
     ap.add_argument("--stats", required=True)
+    ap.add_argument("--opponent-prior", help="Frozen named replies and Maia probabilities at opponent positions")
+    ap.add_argument("--opponent-pseudogames", type=float, default=0.0)
     ap.add_argument("--perspective", choices=["white", "black"], required=True)
     ap.add_argument("--out-prefix", required=True,
                     help="Books land at <prefix>_b<N>.parquet (+ .meta.json).")
@@ -436,6 +450,9 @@ def main() -> int:
     ap.add_argument("--sampled-other", default=None, metavar="PARQUET",
                     help="put the other bucket on the referee's scale, sampled and calibrated by "
                          "sampled_other.py (2026-11-02). Default off.")
+    ap.add_argument("--dump-engine-targets", metavar="PARQUET",
+                    help="export reachable unsound, empty or unevaluated decisions for "
+                         "engine_candidates.py before spending the learning budget")
     ap.add_argument("--engine-candidates", default=None, metavar="PARQUET",
                     help="engine-proposed moves to judge alongside the recorded ones "
                          "(engine_candidates.py; follow-up review R5). Default off.")
@@ -594,6 +611,12 @@ def main() -> int:
     ap.add_argument("--stick-margin", type=float, default=None,
                     help="Expected-score advantage a new move needs to replace the incumbent's "
                          "(default 0.01 with --incumbent; 0 = no stickiness, churn report only).")
+    ap.add_argument("--robustness-floor", type=float, default=bc.ROBUSTNESS_FLOOR,
+                    help="Absolute gate tolerance in expected-score units")
+    ap.add_argument("--gate-rel-floor", type=float, default=bc.GATE_REL_FLOOR,
+                    help="Relative gate tolerance in expected-score units")
+    ap.add_argument("--gate-rel-own-margin", type=float, default=bc.GATE_REL_OWN_MARGIN,
+                    help="Discount on the position's own eval for the relative gate")
     ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
                     help="Soundness gate: at our nodes book only moves whose engine eval "
                          "is within CP centipawns of the best play there (the best "
@@ -616,6 +639,13 @@ def main() -> int:
                          "it, and the one that sizes match_distinct's scan_cap.")
     ap.add_argument("--force", action="store_true")
     a = ap.parse_args()
+    gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
+    if any(not 0 <= v <= 1 for v in gate_settings.values()):
+        ap.error("gate tolerances must be between 0 and 1 expected-score units")
+    gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=not a.no_gates,
+                       gated_reach=a.gated_reach, strict_source=a.strict_source)
+    if a.dump_engine_targets and a.max_eval_loss is None:
+        ap.error("--dump-engine-targets requires --max-eval-loss")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
     if a.polish_from and not (a.method == "price" and a.price_dag_mode
@@ -661,7 +691,7 @@ def main() -> int:
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
-    if not todo:
+    if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
         return 0
     outs[budgets[0]].parent.mkdir(parents=True, exist_ok=True)
@@ -691,7 +721,7 @@ def main() -> int:
         src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
                                  _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
-        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss)
+        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss, **gate_settings)
     allowed = None
     if a.allowed_moves:
         allowed = load_allowed_moves(
@@ -710,8 +740,34 @@ def main() -> int:
             f"edges with {pool_floor}-{a.min_games - 1} games leave both the reply mix "
             f"and the aux sidecar")
     log("collecting subgraph edges...")
+    proposal_moves = None
+    proposal_sha = None
+    proposal_input = None
+    excluded = {}
+    verified_cp = {}
+    if a.engine_candidates:
+        # A resumed engine job can replace its parquet while the collector runs.
+        # Pin both graph passes and the output provenance to exactly one snapshot.
+        proposal_input = Path(a.engine_candidates).read_bytes()
+        proposal_sha = hashlib.sha256(proposal_input).hexdigest()
+        fresh = {}
+        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
+        verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
+        proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
+        gate = admit.inner if isinstance(admit, AllowedAdmit) else admit
+        if gate is not None:
+            gate.excluded = excluded
+            gate.eval_ws.update(fresh)
+            gate._seen.update(fresh)
+    reply_overlay = None
+    if a.opponent_prior:
+        from opponent_prior import ReplyOverlay
+        reply_overlay = ReplyOverlay(a.opponent_prior,a.opponent_pseudogames,stats,aux_path,
+                                     a.perspective,a.min_games)
+    elif a.opponent_pseudogames != 0:
+        ap.error("--opponent-pseudogames requires --opponent-prior")
     edf = collect_subgraph_edges(con, stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit)
+                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves, reply_overlay)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -759,14 +815,21 @@ def main() -> int:
     aux_rows = {}
     if aux_path:
         aux_rows = bc.load_aux_rows(aux_path, parents)
+        if reply_overlay is not None:
+            for h in parents:
+                if h in reply_overlay.extra_aux:
+                    if h in aux_rows:
+                        raise ValueError(f"Duplicate termination data for expanded parent {h}")
+                    aux_rows[h] = reply_overlay.extra_aux[h]
         log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
 
     # Only the fields build_graph reads, and the EPD on a parent's first row only:
     # a full row dict per edge was most of the peak at a few million edges.
     by_parent: dict[int, list[dict]] = {}
-    for ph, ms, ch, tot, ws, epd in edf.select(
-            ["parent_hash", "move_san", "child_hash", "total", "white_score_avg",
-             "parent_epd"]).iter_rows():
+    cols = ["parent_hash","move_san","child_hash","total","white_score_avg","parent_epd"]
+    if reply_overlay is not None:
+        cols.extend(["reply_mass","reach_share","additional_reply"])
+    for ph, ms, ch, tot, ws, epd, *weights in edf.select(cols).iter_rows():
         lst = by_parent.get(ph)
         if lst is None:
             by_parent[ph] = [{"move_san": ms, "child_hash": ch, "total": tot,
@@ -774,11 +837,13 @@ def main() -> int:
         else:
             lst.append({"move_san": ms, "child_hash": ch, "total": tot,
                         "white_score_avg": ws})
+        if weights and weights[0] is not None:
+            by_parent[ph][-1].update(reply_mass=weights[0], reach_share=weights[1], additional_reply=weights[2])
     del edf
 
     engine_moves, engine_conflicts = None, []
-    if a.engine_candidates:
-        engine_moves, engine_conflicts = bc.load_engine_candidates(a.engine_candidates, eval_ws)
+    if proposal_input is not None:
+        engine_moves, engine_conflicts = bc.load_engine_candidates(proposal_input, eval_ws)
         log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
             f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
 
@@ -792,14 +857,24 @@ def main() -> int:
                        require_eval=not a.no_gates, gates=not a.no_gates,
                        other_cov_blend=other_cov_blend,
                        gated_reach=a.gated_reach,
-                       max_eval_loss=a.max_eval_loss,
+                       max_eval_loss=a.max_eval_loss, **gate_settings,
                        strict_source=a.strict_source,
                        crack_at_parents=a.crack_at_parents,
-                       engine_moves=engine_moves,
+                       engine_moves=engine_moves, excluded=excluded,
                        track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
                                             or a.dump_other_positions or a.sampled_other),
                        track_other=bool(a.dump_other_positions or a.sampled_other))
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes")
+    if a.dump_engine_targets:
+        from engine_candidates import target_rows
+        targets = target_rows(g, a.perspective)
+        target_path = Path(a.dump_engine_targets)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = Path(str(target_path) + ".tmp")
+        targets.write_parquet(tmp)
+        tmp.replace(target_path)
+        log(f"{targets.height:,} pre-selection targets -> {target_path}")
+        return 0
     other_report = None
     if a.dump_other_positions or a.sampled_other:
         import sampled_other as so
@@ -807,6 +882,10 @@ def main() -> int:
         other_key = recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
+        other_key["engine_candidates_sha256"] = proposal_sha
+        other_key["gate_policy"] = gate_recipe
+        if reply_overlay is not None:
+            other_key["opponent_prior"] = reply_overlay.recipe
         if not g.other:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
@@ -860,7 +939,7 @@ def main() -> int:
             log(f"  weak stop model: fitted eval curves {curves}")
         xs, ys = bc.stop_model_positions(g)
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white, curves=curves),
+                                    evals=EvalSource(our_white, curves=curves, overrides=verified_cp),
                                     min_weak=a.weak_min_games,
                                     min_share=a.weak_min_share, log=log)
         if a.stop_model == "empirical":
@@ -875,6 +954,10 @@ def main() -> int:
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=a.weak_min_share, stop_model=a.stop_model)
+            dump_key["engine_candidates_sha256"] = proposal_sha
+            dump_key["gate_policy"] = gate_recipe
+            if reply_overlay is not None:
+                dump_key["opponent_prior"] = reply_overlay.recipe
         if a.dump_stop_positions:
             dump = info.with_columns(
                 pl.struct("side", "hash").map_elements(
@@ -916,7 +999,8 @@ def main() -> int:
             fills = dict(pl.read_parquet(bp).select("hash", "cp").iter_rows())
             W, R, sampled_report = ss.apply(W, R, info, pl.read_parquet(a.sampled_stop),
                                             horizon=a.max_ply + 1, terminal=terminal,
-                                            evals=EvalSource(our_white, boundary=True, fills=fills))
+                                            evals=EvalSource(our_white, boundary=True, fills=fills,
+                                                             overrides=verified_cp))
             sampled_fit = {k: sampled_report.get(k) for k in
                            ("model", "cross_ply_refused", "multi_ply_reach_share", "terminal",
                             "horizon", "horizon_no_eval")}
@@ -1203,8 +1287,10 @@ def main() -> int:
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": not a.no_gates,
             "max_cands": a.max_cands, "gated_reach": a.gated_reach,
-            "max_eval_loss": a.max_eval_loss,
+            "max_eval_loss": a.max_eval_loss, **gate_settings,
             "min_games": a.min_games, "pool_min_games": pool_floor,
+            **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
+               if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
             # means both off (the old defaults)
             "strict_source": a.strict_source,
@@ -1213,7 +1299,7 @@ def main() -> int:
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
                 for k in ("fallback", "unknown")}} if lexc is not None else {}),
             "crack_at_parents": a.crack_at_parents,
-            **({"engine_candidates": a.engine_candidates,
+            **({"engine_candidates": a.engine_candidates, "engine_candidates_sha256": proposal_sha,
                 "engine_cands_added": g.meta.get("engine_cands", 0),
                 "engine_eval_conflicts": engine_conflicts}
                if a.engine_candidates else {}),

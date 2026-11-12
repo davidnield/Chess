@@ -405,6 +405,15 @@ def table_problems(meta: dict, key: dict) -> dict:
     """{field: (table, build)} where a table's meta does not match this build's recipe; empty if
     it does. A table without the record cannot be trusted and must be re-sampled."""
     bad = {k: (meta.get("dump", {}).get(k), v) for k, v in key.items() if meta.get("dump", {}).get(k) != v}
+    # Before configurable score gates, every builder used these three constants.
+    # Preserve the historical recipe contract for default-gate callers. New dumps
+    # also distinguish the loss limit, gated reach and source restoration policy.
+    if "gate_policy" in bad and "gate_policy" not in meta.get("dump", {}):
+        from budget_core import ROBUSTNESS_FLOOR, GATE_REL_FLOOR, GATE_REL_OWN_MARGIN
+        settings = key["gate_policy"]
+        if (settings["robustness_floor"], settings["gate_rel_floor"], settings["gate_rel_own_margin"]) == (
+                ROBUSTNESS_FLOOR, GATE_REL_FLOOR, GATE_REL_OWN_MARGIN):
+            bad.pop("gate_policy")
     if "sim" not in meta:
         bad["sim"] = ("not recorded", "re-sample with this code")
     return bad

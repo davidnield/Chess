@@ -520,6 +520,13 @@ def _bonus(san: str, im: str | None, margin: float) -> float:
     return margin if im is not None and san.rstrip("+#") == im else 0.0
 
 
+def reply_share(edge, recorded_total):
+    share = edge.get("reach_share")
+    if share is not None:
+        return share
+    return edge["total"] / recorded_total if recorded_total else 0.0
+
+
 def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      root_our: bool, eps: float, max_ply: int,
                      share_floor: float,
@@ -562,7 +569,7 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                     continue
                 cr = r
             else:
-                share = e["total"] / tot if tot else 0.0
+                share = reply_share(e,tot)
                 if share < share_floor:
                     continue
                 cr = r * share
@@ -584,7 +591,8 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
                      max_eval_loss: float | None = None, max_cands: int = 0,
                      strict_source: bool = False,
                      engine_moves: dict[int, list[tuple[str, int]]] | None = None,
-                     edges_by_parent: dict | None = None, epd: str | None = None):
+                     edges_by_parent: dict | None = None, epd: str | None = None,
+                     excluded: dict | None = None):
     """The moves an our-node may book: one definition for build_graph and validate_book, so the
     book and its checker cannot disagree. Engine proposals join the recorded moves before the
     gates; the gates and --max-eval-loss run over that set; then the candidate cap; then the
@@ -592,12 +600,17 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
     (edge, child eval) pairs, restored = (source move, child hash) or None, rejected source
     moves, engine moves added)."""
     edges_by_parent = edges_by_parent if edges_by_parent is not None else {}
+    veto = excluded.get(h, ()) if excluded else ()
+    if veto:
+        es = [e for e in es if e["move_san"].rstrip("+#") not in veto]
+        if src and src.rstrip("+#") in veto:
+            src = None
     es_g, n_eng = es, 0
     if engine_moves and h in engine_moves:
         have = {e["move_san"].rstrip("+#") for e in es}
         extra = [{"move_san": san, "child_hash": ch, "total": 0,
                   "white_score_avg": slice_prior, "engine": True}
-                 for san, ch in engine_moves[h] if san.rstrip("+#") not in have]
+                 for san, ch in engine_moves[h] if san.rstrip("+#") not in have and san.rstrip("+#") not in veto]
         if extra:
             n_eng = len(extra)
             es_g = es + extra
@@ -693,29 +706,81 @@ def loss_status(children, h: int, eval_ws: dict[int, float], our_white: bool,
     return None
 
 
-def load_engine_candidates(path: str, eval_ws: dict[int, float], conflict_cp: float = 25.0):
-    """engine_candidates.py's table -> (engine_moves, conflicts). A proposal's child takes the
-    proposal's own fresh eval: it was searched on purpose, deeper than the cached one. Where a
-    cached eval exists and differs by more than conflict_cp (white view) it is replaced and
-    recorded, as a conflict the caller reports, never silently kept or dropped."""
+def verified_cp_overrides(frame):
+    """Local positional overrides. Keep each edge's verified loss separate."""
+    import polars as pl
+    direct = {}
+    if "transposition_cp_white" in frame.columns:
+        rows = frame.select("child_hash", "transposition_cp_white").drop_nulls().unique()
+        direct = dict(rows.iter_rows())
+        if len(direct) != rows.height:
+            raise ValueError("Conflicting direct searches for a transposition")
+    if "parent_cp_white" not in frame.columns:
+        return direct
+    verified = frame.filter(pl.col("parent_cp_white").is_not_null())
+    parents = verified.select("position_hash", "parent_cp_white").unique()
+    if parents["position_hash"].n_unique() != parents.height:
+        raise ValueError("Conflicting reference scores for a single verified root")
+    child = verified.group_by("child_hash").agg(pl.col("child_cp_white").cast(pl.Int32).median().round().cast(pl.Int32))
+    return dict(child.drop_nulls().iter_rows()) | direct | dict(parents.iter_rows())
+
+
+def proposal_cp(frame):
+    """Resolve incoming PV scores once per position, independent of parquet row order."""
+    import polars as pl
+    from hybrid_candidates import CLOUD
+    # Old nomination files may have only the four graph columns. Equal-quality
+    # estimates use their median; a missing field ranks below a known one.
+    best = frame.filter(pl.col("child_cp_white").is_not_null())
+    if "engine" in best.columns:
+        best = best.with_columns((pl.col("engine") != CLOUD).fill_null(False).alias("local"))
+    for key in ("local", "depth", "nodes"):
+        if key in best.columns:
+            quality = pl.col(key).cast(pl.Int64).fill_null(-1)
+            best = best.filter(quality == quality.max().over("child_hash"))
+    values = best.group_by("child_hash").agg(pl.col("child_cp_white").cast(pl.Int32).median().round().cast(pl.Int32))
+    return dict(values.iter_rows()) | verified_cp_overrides(frame)
+
+
+def load_engine_candidates(path: str | bytes, eval_ws: dict[int, float], conflict_cp: float = 25.0):
+    """Load candidate edges and overlay the resolved White-view position scores.
+
+    Report each child whose new score differs materially from the original cache.
+    """
     import polars as pl
     from stage3_backwards_induction import cp_to_expected_score
     moves: dict[int, list[tuple[str, int]]] = {}
     conflicts = []
-    cols = ["position_hash", "move_san", "child_hash", "child_cp_white"]
-    for h, san, ch, cp in pl.read_parquet(path).select(cols).iter_rows():
+    frame = pl.read_parquet(path)
+    resolved = proposal_cp(frame)
+    edges = frame.select("position_hash", "move_san", "child_hash").unique().sort(
+        "position_hash", pl.col("move_san").str.to_lowercase(), "move_san", "child_hash")
+    reported = set()
+    for h, san, ch in edges.iter_rows():
         moves.setdefault(h, []).append((san, ch))
-        if cp is None:
-            continue
-        fresh = cp_to_expected_score(int(cp))
         old = eval_ws.get(ch)
-        if old is not None:
+        cp = resolved.get(ch)
+        if old is not None and cp is not None and ch not in reported:
             old_cp = ws_to_cp(old, True)
             if abs(old_cp - cp) > conflict_cp:
                 conflicts.append({"position_hash": h, "move": san, "child_hash": ch,
-                                  "cached_cp_white": old_cp, "fresh_cp_white": int(cp)})
-        eval_ws[ch] = fresh
+                                  "cached_cp_white": old_cp, "fresh_cp_white": cp})
+                reported.add(ch)
+    eval_ws.update({h: cp_to_expected_score(cp) for h, cp in resolved.items()})
     return moves, conflicts
+
+
+def verified_exclusions(proposals, limit):
+    """Edge-local vetoes also apply to recorded moves, restored source moves and fallbacks."""
+    import polars as pl
+    if proposals is None or limit is None:
+        return {}
+    frame = pl.read_parquet(proposals)
+    excluded = {}
+    if "verified_loss_cp" in frame.columns:
+        for h, san in frame.filter(pl.col("verified_loss_cp") > limit).select("position_hash", "move_san").iter_rows():
+            excluded.setdefault(h, set()).add(san.rstrip("+#"))
+    return excluded
 
 
 def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: bool,
@@ -758,7 +823,7 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
                         continue
                     cr = r
                 else:
-                    share = e["total"] / tot if tot else 0.0
+                    share = reply_share(e,tot)
                     if share < share_floor:
                         continue
                     cr = r * share
@@ -797,7 +862,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 strict_source: bool = False,
                 crack_at_parents: bool = False,
                 engine_moves: dict[int, list[tuple[str, int]]] | None = None,
-                track_route_ply: bool = False, track_other: bool = False) -> Graph:
+                track_route_ply: bool = False, track_other: bool = False,
+                excluded: dict | None = None) -> Graph:
     """Assemble the budget DP's subgraph from in-memory edges.
 
     edges_by_parent: parent_hash -> list of dicts with keys move_san,
@@ -829,7 +895,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     joins the node's moves as a zero-game edge BEFORE the gates and --max-eval-loss, so it is
     judged in the complete set like any recorded move (follow-up review R1/R5); its value is
     its eval through leaf_edge_value (eval_ws must hold the child's eval). Unless an engine
-    move transposes into the subgraph it is a leaf: nothing below it is prepared.
+    move leads to an expanded pool node it is valued as a leaf.
 
     crack_at_parents (--crack-at-parents, 2026-10-31): games that end at
     an our-turn arrival because the OPPONENT resigned or was mated (the `crack` mass)
@@ -856,6 +922,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
         # consults it at our-turn nodes.
         admitted = {}
         for h, es in edges_by_parent.items():
+            if es and "reply_mass" in es[0]:
+                continue  # the overlay contains only opponent-to-move positions
             if strict_source or engine_moves:
                 # reach flows only through what the node can finally book
                 cs = final_candidates(
@@ -864,14 +932,24 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                     gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                     gates=gates, max_eval_loss=max_eval_loss, strict_source=strict_source,
                     engine_moves=engine_moves, edges_by_parent=edges_by_parent,
-                    epd=es[0].get("parent_epd"))[0]
+                    epd=es[0].get("parent_epd"), excluded=excluded)[0]
             else:
                 cs = gate_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor, gate_rel_floor, gate_rel_own_margin,
                     require_eval, gates, max_eval_loss)
             admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
-    reach, ply = optimistic_reach(edges_by_parent, root, our_white, eps,
+    # Search below an unplayed nominated move when its child has pool replies.
+    # Zero observations keep it out of empirical frequencies and stop estimates.
+    reach_edges = edges_by_parent
+    if engine_moves:
+        reach_edges = dict(edges_by_parent)
+        for h, moves in engine_moves.items():
+            if h in edges_by_parent:
+                existing = {e.get("child_hash") for e in edges_by_parent[h]}
+                reach_edges[h] = edges_by_parent[h] + [
+                    {"child_hash": ch, "total": 0} for _, ch in moves if ch not in existing]
+    reach, ply = optimistic_reach(reach_edges, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
     def is_our(h: int) -> bool:
@@ -883,7 +961,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             return None
         return e if our_white else 1.0 - e
 
-    route = (route_plies(edges_by_parent, root, our_white, reach, ply, max_ply, share_floor,
+    route = (route_plies(reach_edges, root, our_white, reach, ply, max_ply, share_floor,
                          admitted) if track_route_ply else {})
     g = Graph(root=root, our={}, opp={}, epd={}, ply=dict(ply), route_ply=route,
               reach=dict(reach), meta={
@@ -926,7 +1004,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                 gates=gates, max_eval_loss=max_eval_loss, max_cands=max_cands,
                 strict_source=strict_source, engine_moves=engine_moves,
-                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"))
+                edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"), excluded=excluded)
             if n_eng:
                 g.meta["engine_cands"] = g.meta.get("engine_cands", 0) + n_eng
             if n_rej:
@@ -953,7 +1031,15 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 node.cands.append((src, ch, in_sub, lv))
             g.our[h] = node
         else:
-            tot = sum(e["total"] for e in es)
+            named = "reply_mass" in es[0]
+            tot = sum(e.get("reply_mass",e["total"]) for e in es)
+            if named:
+                metrics = g.meta.setdefault("named_opponent_replies", {
+                    "positions":0, "additional_edges":0, "additional_edges_without_cached_eval":0})
+                metrics["positions"] += 1
+                metrics["additional_edges"] += sum(e.get("additional_reply",e["total"]==0) for e in es)
+                metrics["additional_edges_without_cached_eval"] += sum(
+                    e.get("additional_reply",e["total"]==0) and e.get("child_hash") not in eval_ws for e in es)
             # The OTHER bucket used to enter raw here while Stage 3 blended
             # other_eval_mean into it at a coverage-weighted eval weight -- the
             # second half of the objective drift. aux_opp_mix owns all three
@@ -967,6 +1053,10 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             if aux_rows:
                 (t_tot, t_sum, _crack, o_tot, o_sum, o_eval, o_cov,
                  hr_tot, hr_sum) = aux_row_buckets(aux_rows.get(h), our_white)
+                if named:
+                    # Every observed rare reply is now explicit. Terminal and
+                    # horizon outcomes still retain their original weight.
+                    o_tot, o_sum, o_eval, o_cov = 0.0, 0.0, float("nan"), 0.0
                 w_num, aux_den = aux_opp_mix(
                     t_tot, t_sum, o_tot, o_sum, o_eval, o_cov,
                     hr_tot, hr_sum, eval_ws.get(h),
@@ -989,8 +1079,8 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             node = OppNode(const_base=(aux_num / denom) if denom else 0.0)
             for e in es:
                 ch = e.get("child_hash")
-                p = (e["total"] / denom) if denom else 0.0
-                share = (e["total"] / tot) if tot else 0.0
+                p = (e.get("reply_mass",e["total"]) / denom) if denom else 0.0
+                share = reply_share(e,tot)
                 lv = leaf_edge_value(e["white_score_avg"], e["total"],
                                      eval_ws.get(ch) if ch is not None else None,
                                      slice_prior, our_white,
