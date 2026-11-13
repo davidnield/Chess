@@ -638,7 +638,16 @@ class GraphView:
         self.opp = ArrayMap(nk[~no], np.zeros(int((~no).sum())))
         self.reach = ArrayMap(out["reach_keys"], out["reach_vals"])
         self.ply = ArrayMap(out["ply_keys"], out["ply_vals"])
-        self.epd = ArrayMap(parents, list(epd))
+        self.route_ply = ArrayMap(out["route_keys"], out["route_vals"])
+        # the EPDs of the graph's nodes (a Graph keeps no other parent's)
+        on = np.isin(np.asarray(parents, np.int64), nk)
+        self.epd = ArrayMap(np.asarray(parents, np.int64)[on], [e for e, k in zip(epd, on.tolist()) if k])
+        # the opponent nodes' children, for sampled_other.other_positions_view
+        ok = nk[~no]
+        self._opp_row = ArrayMap(ok, np.arange(len(ok)))
+        self._k = (out["k_ptr"], out["k_child"], out["k_has_child"])
+        self._f = (out["f_ptr"], out["f_child"])
+        self._out_plies = (out["ply_keys"], out["ply_vals"], out["route_keys"], out["route_vals"])
         self.meta = {"eps": eps, "max_ply": max_ply, "share_floor": share_floor,
                      "slice_prior": slice_prior, "our_white": our_white}
         meta_from_csr(out, san_list, self.meta, strict_source=strict_source,
@@ -667,3 +676,13 @@ def rs_graph_from_out(out: dict, san_list, root, *, crack_at_parents, stick=None
         r.set_stick(np.fromiter(moves.keys(), np.int64, len(moves)),
                     np.array([bcode.get(x, -1) for x in moves.values()], np.int64), margin)
     return r, san_list
+
+
+def opp_children(view: "GraphView", h: int) -> list:
+    """An opponent node's reply children (kids with a child, then the floor), as
+    sampled_other.other_positions lists them"""
+    i = view._opp_row[h]
+    kp, kc, kh = view._k
+    fp, fc = view._f
+    kids = [c for c, has in zip(kc[kp[i]:kp[i + 1]].tolist(), kh[kp[i]:kp[i + 1]].tolist()) if has]
+    return kids + fc[fp[i]:fp[i + 1]].tolist()

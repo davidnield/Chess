@@ -22,7 +22,8 @@ impl RsRollouts {
     fn new(h: PyReadonlyArray1<i64>, epd: Vec<String>, pr: PyReadonlyArray1<f64>,
            ply: PyReadonlyArray1<i64>, cp: PyReadonlyArray1<i64>, ws: PyReadonlyArray1<f64>,
            f: PyReadonlyArray1<f64>, our_white: bool, k_games: usize, max_ply: i64, seed: i64,
-           recall: f64, book_keys: Vec<i64>, book_sans: Vec<String>, want_exits: bool)
+           recall: f64, book_keys: Vec<i64>, book_sans: Vec<String>, want_exits: bool,
+           want_weak: bool)
            -> PyResult<Self> {
         let (h, pr, ply, cp, ws, f) = (h.as_slice()?, pr.as_slice()?, ply.as_slice()?,
                                        cp.as_slice()?, ws.as_slice()?, f.as_slice()?);
@@ -32,7 +33,8 @@ impl RsRollouts {
             h: h[i], epd: &epd[i], pr: pr[i], ply: ply[i], cp: cp[i], ws: ws[i], f: f[i],
         }).collect();
         let book: HashMap<i64, String> = book_keys.into_iter().zip(book_sans).collect();
-        let r = Rollouts::new(&starts, our_white, k_games, max_ply, seed, recall, book, want_exits)
+        let r = Rollouts::new(&starts, our_white, k_games, max_ply, seed, recall, book, want_exits,
+                              want_weak)
             .map_err(PyValueError::new_err)?;
         Ok(RsRollouts { r })
     }
@@ -89,4 +91,35 @@ impl RsRollouts {
         }
         Ok((out, self.r.book_mass, ex))
     }
+
+    /// weak_edges' records: (start, k, hash, EPD before, hash after, EPD after)
+    fn weak_edges<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for w in self.r.weak.drain(..) {
+            out.append(w)?;
+        }
+        Ok(out)
+    }
+}
+
+/// sampled_stop.terminal_outcomes on the collector's columns: (child keys, results)
+#[pyfunction]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn terminal_outcomes<'py>(py: Python<'py>, parents: PyReadonlyArray1<i64>, epds: Vec<Option<String>>,
+                              ptr: PyReadonlyArray1<i64>, child: PyReadonlyArray1<i64>,
+                              has_child: PyReadonlyArray1<bool>, san: PyReadonlyArray1<i64>,
+                              sans: Vec<String>, our_white: bool)
+                              -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<f64>>)> {
+    let (p, pt, c, hc, s) = (parents.as_slice()?, ptr.as_slice()?, child.as_slice()?,
+                             has_child.as_slice()?, san.as_slice()?);
+    crate::same_len(p.len(), &[epds.len()])?;
+    crate::csr(pt, p.len(), c.len(), "ptr")?;
+    crate::same_len(c.len(), &[hc.len(), s.len()])?;
+    if s.iter().any(|&x| x < 0 || x as usize >= sans.len()) {
+        return Err(PyValueError::new_err("a SAN code outside the table"));
+    }
+    let ch: Vec<Option<i64>> = c.iter().zip(hc).map(|(&x, &h)| if h { Some(x) } else { None }).collect();
+    let out = py.detach(|| crate::rollout::terminal_outcomes(p, &epds, pt, &ch, s, &sans, our_white));
+    Ok((PyArray1::from_vec(py, out.iter().map(|x| x.0).collect()),
+        PyArray1::from_vec(py, out.iter().map(|x| x.1).collect())))
 }

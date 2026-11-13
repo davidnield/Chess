@@ -521,19 +521,8 @@ def main() -> int:
                          "polish, started from the DP book): never below the DP book in-model, "
                          "never over the budget. Default off.")
     ap.add_argument("--rs-core", action="store_true",
-                    help="Run the ported stages in Rust (book_builder_rs, rust/book_builder): "
-                         "graph assembly, the stop values, the curves, match-distinct, "
-                         "extraction, polish and the book's values. The same book bit for bit "
-                         "(python/_test_book_builder_rs.py; the real-graph checks in the crate "
-                         "README). Not with the sampled tables until those are ported. "
-                         "Default off.")
-    ap.add_argument("--price-engine", choices=["auto", "compiled", "legacy"], default="auto",
-                    help="--method price: how the search computes (budget_core.price_search "
-                         "engine). auto (default): array sweeps on a graph compiled once per "
-                         "run (budget_compiled.py) from budget_core.PRICE_COMPILED_MIN_NODES "
-                         "nodes, the dict walks below; legacy: the dict walks throughout, the "
-                         "reference. Every engine writes the same books bit for bit "
-                         "(_test_budget_speed.py); legacy exists to check that on real graphs.")
+                    help="Accepted for older commands: the builder always runs on its Rust core "
+                         "(book_builder_rs, rust/book_builder) since 2026-11-12.")
     ap.add_argument("--gated-reach", action="store_true",
                     help="Expand the subgraph (and compute optimistic reach) only "
                          "through moves the gates admit at our nodes, instead of "
@@ -576,20 +565,16 @@ def main() -> int:
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
     a = ap.parse_args()
-    if a.rs_core:
-        import budget_rs
-        if not budget_rs.available():
-            print("FATAL: --rs-core needs the book_builder_rs extension (rust/book_builder/build.ps1)")
-            return 1
-        unported = [f for f, on in (("--opponent-prior", a.opponent_prior),
-                                    ("--dump-engine-targets", a.dump_engine_targets),
-                                    ("--dump-stop-positions", a.dump_stop_positions),
-                                    ("--sampled-stop", a.sampled_stop),
-                                    ("--dump-other-positions", a.dump_other_positions),
-                                    ("--sampled-other", a.sampled_other)) if on]
-        if unported:
-            print(f"FATAL: --rs-core does not support {', '.join(unported)} yet")
-            return 1
+    # the builder runs on its Rust core (2026-11-12); budget_core.py is the tests' reference
+    import budget_rs
+    if not budget_rs.available():
+        print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
+        return 1
+    unported = [f for f, on in (("--opponent-prior", a.opponent_prior),
+                                ("--dump-engine-targets", a.dump_engine_targets)) if on]
+    if unported:
+        print(f"FATAL: not ported to the Rust core yet: {', '.join(unported)}")
+        return 1
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
         ap.error("gate tolerances must be between 0 and 1 expected-score units")
@@ -729,8 +714,7 @@ def main() -> int:
     graph_aux = str(a.uncut_own_moves / "aux.parquet") if uncut else aux_path
     if uncut:
         log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
-    edf = (collect_subgraph_edges_rs if a.rs_core else collect_subgraph_edges)(
-                                 con, graph_stats, root, our_white, eps,
+    edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
                                  reply_overlay, uncut_own=bool(uncut))
     if not edf.height:
@@ -741,14 +725,10 @@ def main() -> int:
         f"({time.time()-t0:,.0f}s)")
 
     log("loading source rep (subgraph slice)...")
-    if a.rs_core:
-        # the columnar path: positions as one sorted array, no Python set
-        want = None
-        want_np = np.unique(np.concatenate([
-            edf["parent_hash"].cast(pl.Int64).to_numpy(),
-            edf["child_hash"].drop_nulls().cast(pl.Int64).to_numpy()]))
-    else:
-        want = set(parents) | set(edf["child_hash"].drop_nulls().to_list())
+    # positions as one sorted array (no Python set)
+    want_np = np.unique(np.concatenate([
+        edf["parent_hash"].cast(pl.Int64).to_numpy(),
+        edf["child_hash"].drop_nulls().cast(pl.Int64).to_numpy()]))
     # Slice identity travels from the source rep. A rep spans exactly one
     # (event, elo_band) in every current build; if that ever stops being true
     # the book would need per-row slices, so fail rather than pick one.
@@ -763,30 +743,20 @@ def main() -> int:
     log(f"slice: event={src_event!r} elo_band={src_elo_band}")
 
     rep = (pl.scan_parquet(a.rep)
-           .filter(pl.col("position_hash").is_in(pl.Series(want_np).implode() if a.rs_core else list(want)))
+           .filter(pl.col("position_hash").is_in(pl.Series(want_np).implode()))
            .select(["position_hash", "side_to_move", "value", "best_move",
                     "value_robust", "value_worst", "eval_score"])
            .collect())
-    rep_moves, rep_rows = {}, {}
-    if a.rs_core:
-        # the same dict (the last qualifying row of a position wins); the rows stay in `rep`
-        # and the output reads only the visited positions' (src_rows_for)
-        mv = (rep.filter((pl.col("side_to_move") == a.perspective)
-                         & pl.col("best_move").is_not_null() & (pl.col("best_move") != ""))
-              .unique("position_hash", keep="last", maintain_order=True))
-        rep_moves = dict(zip(mv["position_hash"].to_list(), mv["best_move"].to_list()))
-        del mv
-    else:
-        for r in rep.iter_rows(named=True):
-            h = r["position_hash"]
-            rep_rows[h] = r
-            if r["side_to_move"] == a.perspective and r["best_move"]:
-                rep_moves[h] = r["best_move"]
+    # the source book's moves (the last qualifying row of a position wins); its rows stay in
+    # `rep`, and the output reads only the visited positions' (src_rows_for)
+    mv = (rep.filter((pl.col("side_to_move") == a.perspective)
+                     & pl.col("best_move").is_not_null() & (pl.col("best_move") != ""))
+          .unique("position_hash", keep="last", maintain_order=True))
+    rep_moves = dict(zip(mv["position_hash"].to_list(), mv["best_move"].to_list()))
+    del mv
 
     def src_rows_for(visited):
-        """the source rep's rows of the visited positions, as rep_rows holds them"""
-        if not a.rs_core:
-            return rep_rows
+        """the source rep's rows of the visited positions (the last row of a position wins)"""
         sel = (rep.filter(pl.col("position_hash").is_in(pl.Series(list(visited), dtype=pl.Int64).implode()))
                .unique("position_hash", keep="last", maintain_order=True))
         return {r["position_hash"]: r for r in sel.iter_rows(named=True)}
@@ -795,63 +765,24 @@ def main() -> int:
     log("evals (mmap)...")
     from eval_arrays import MISSING, lookup_evals, open_eval_arrays
     mm_hash, mm_cp = open_eval_arrays()
-    if a.rs_core:
-        import book_builder_rs
-        cps = lookup_evals(want_np, mm_hash, mm_cp)
-        hit = cps != MISSING
-        ek = want_np[hit]
-        ev = book_builder_rs.cp_to_expected_score(cps[hit].astype(np.float64))
-        eval_ws = None
-        log(f"  {len(ek):,} of {len(want_np):,} positions eval-covered")
-        del cps, hit
-    else:
-        keys = np.array(sorted(want), dtype=np.int64)
-        cps = lookup_evals(keys, mm_hash, mm_cp)
-        eval_ws = {int(h): cp_to_expected_score(int(c))
-                   for h, c in zip(keys, cps) if c != MISSING}
-        log(f"  {len(eval_ws):,} of {len(want):,} positions eval-covered")
+    import book_builder_rs
+    cps = lookup_evals(want_np, mm_hash, mm_cp)
+    hit = cps != MISSING
+    ek = want_np[hit]
+    ev = book_builder_rs.cp_to_expected_score(cps[hit].astype(np.float64))
+    log(f"  {len(ek):,} of {len(want_np):,} positions eval-covered")
+    del cps, hit
 
-    aux_rows = {}
     aux_frame = None
-    if aux_path and a.rs_core:
+    if aux_path:
         bc.check_aux_term_flags(graph_aux, True)
         aux_frame = (pl.scan_parquet(graph_aux)
                      .filter(pl.col("position_hash").is_in(pl.Series(parents, dtype=pl.Int64).implode()))
                      .collect())
         log(f"  aux rows for {aux_frame['position_hash'].n_unique():,} subgraph nodes")
-    elif aux_path:
-        aux_rows = bc.load_aux_rows(graph_aux, parents)
-        if reply_overlay is not None:
-            for h in parents:
-                if h in reply_overlay.extra_aux:
-                    if h in aux_rows:
-                        raise ValueError(f"Duplicate termination data for expanded parent {h}")
-                    aux_rows[h] = reply_overlay.extra_aux[h]
-        log(f"  aux rows for {len(aux_rows):,} subgraph nodes")
-
-    # Only the fields build_graph reads, and the EPD on a parent's first row only:
-    # a full row dict per edge was most of the peak at a few million edges.
-    by_parent: dict[int, list[dict]] = {}
-    cols = ["parent_hash","move_san","child_hash","total","white_score_avg","parent_epd"]
-    if a.rs_core:
-        cols = cols[:0]        # the columnar path reads the frame itself (frame_inputs)
-    if reply_overlay is not None:
-        cols.extend(["reply_mass","reach_share","additional_reply"])
-    for ph, ms, ch, tot, ws, epd, *weights in (edf.select(cols).iter_rows() if cols else ()):
-        lst = by_parent.get(ph)
-        if lst is None:
-            by_parent[ph] = [{"move_san": ms, "child_hash": ch, "total": tot,
-                              "white_score_avg": ws, "parent_epd": epd}]
-        else:
-            lst.append({"move_san": ms, "child_hash": ch, "total": tot,
-                        "white_score_avg": ws})
-        if weights and weights[0] is not None:
-            by_parent[ph][-1].update(reply_mass=weights[0], reach_share=weights[1], additional_reply=weights[2])
-    if not a.rs_core:
-        del edf
 
     engine_moves, engine_conflicts = None, []
-    if proposal_input is not None and a.rs_core:
+    if proposal_input is not None:
         # load_engine_candidates on the proposals' children only (all it reads), then its
         # updates (the resolved evals) merged into the arrays
         pch = pl.read_parquet(proposal_input)["child_hash"].drop_nulls().unique().cast(pl.Int64).to_numpy()
@@ -866,59 +797,43 @@ def main() -> int:
         keep = ~np.isin(ek, upd_k)
         ek, ev = np.concatenate([ek[keep], upd_k]), np.concatenate([ev[keep], upd_v])
         del o, sk, sv, i, has, sub_ws, keep
-    elif proposal_input is not None:
-        engine_moves, engine_conflicts = bc.load_engine_candidates(proposal_input, eval_ws)
     if proposal_input is not None:
         log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
             f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
 
-    log("building graph..." + (" (Rust)" if a.rs_core else ""))
-    rs_out = None
-    if a.rs_core:
-        t1 = time.time()
-        fi = budget_rs.frame_inputs(edf, rep_moves=rep_moves, engine_moves=engine_moves,
-                                    excluded=excluded, verified=verified_at, strict_source=True,
-                                    aux_frame=aux_frame)
-        del edf, aux_frame
-        t2 = time.time()
-        rs_out = budget_rs.run_csr(
-            fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
-            slice_prior=slice_prior, prior_strength=a.prior_strength, eval_weight=a.eval_weight,
-            eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K, eps=eps,
-            max_ply=a.max_ply, share_floor=a.share_floor, **gate_settings, require_eval=True,
-            gates=True, max_eval_loss=a.max_eval_loss, rare_floor=rare_floor,
-            strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach,
-            crack_at_parents=True, engine_moves_given=bool(engine_moves),
-            track_route_ply=False, track_other=False)
-        t3 = time.time()
-        rs_sans = fi["san_list"]
-        g = budget_rs.GraphView(rs_out, rs_sans, root, fi["parents"], fi["epd"], eps=eps,
-                                max_ply=a.max_ply, share_floor=a.share_floor,
-                                slice_prior=slice_prior, our_white=our_white,
-                                strict_source=True, crack_at_parents=True)
-        del fi, ek, ev
-        budget_rs.LAST_TIMING.update(convert_in=t2 - t1, rust=t3 - t2,
-                                     convert_out=time.time() - t3)
-    else:
-      g = bc.build_graph(
-                       by_parent, root, our_white, rep_moves=rep_moves,
-                       eval_ws=eval_ws,
-                       aux_rows=aux_rows, slice_prior=slice_prior,
-                       eps=eps, max_ply=a.max_ply, share_floor=a.share_floor,
-                       eval_weight=a.eval_weight,
-                       prior_strength=a.prior_strength,
-                       other_cov_blend=other_cov_blend,
-                       gated_reach=a.gated_reach,
-                       max_eval_loss=a.max_eval_loss, **gate_settings,
-                       strict_source=True,
-                       crack_at_parents=True,
-                       engine_moves=engine_moves, excluded=excluded,
-                       rare_floor=rare_floor, verified=verified_at,
-                       track_route_ply=bool(a.dump_stop_positions or a.sampled_stop
-                                            or a.dump_other_positions or a.sampled_other),
-                       track_other=bool(a.dump_other_positions or a.sampled_other))
-    log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes"
-        + (f" (Rust: {budget_rs.LAST_TIMING})" if a.rs_core else ""))
+    log("building graph...")
+    track_route = bool(a.dump_stop_positions or a.sampled_stop or a.dump_other_positions
+                       or a.sampled_other)
+    t1 = time.time()
+    fi = budget_rs.frame_inputs(edf, rep_moves=rep_moves, engine_moves=engine_moves,
+                                excluded=excluded, verified=verified_at, strict_source=True,
+                                aux_frame=aux_frame)
+    del edf, aux_frame
+    terminal = None
+    if a.dump_stop_positions or a.sampled_stop:
+        import sampled_stop as ss
+        terminal = ss.terminal_outcomes_rs(fi, our_white)
+        log(f"  {len(terminal):,} recorded moves end the game")
+    t2 = time.time()
+    rs_out = budget_rs.run_csr(
+        fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
+        slice_prior=slice_prior, prior_strength=a.prior_strength, eval_weight=a.eval_weight,
+        eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K, eps=eps,
+        max_ply=a.max_ply, share_floor=a.share_floor, **gate_settings, require_eval=True,
+        gates=True, max_eval_loss=a.max_eval_loss, rare_floor=rare_floor,
+        strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach,
+        crack_at_parents=True, engine_moves_given=bool(engine_moves),
+        track_route_ply=track_route, track_other=bool(a.dump_other_positions or a.sampled_other))
+    t3 = time.time()
+    rs_sans = fi["san_list"]
+    g = budget_rs.GraphView(rs_out, rs_sans, root, fi["parents"], fi["epd"], eps=eps,
+                            max_ply=a.max_ply, share_floor=a.share_floor,
+                            slice_prior=slice_prior, our_white=our_white,
+                            strict_source=True, crack_at_parents=True)
+    del fi, ek, ev
+    budget_rs.LAST_TIMING.update(convert_in=t2 - t1, rust=t3 - t2, convert_out=time.time() - t3)
+    log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes "
+        f"(seconds: {budget_rs.LAST_TIMING})")
     if a.dump_engine_targets:
         from engine_candidates import target_rows
         targets = target_rows(g, a.perspective)
@@ -945,7 +860,7 @@ def main() -> int:
             log("FATAL: no other buckets on this graph (--aux-stats?)")
             return 1
     if a.dump_other_positions:
-        dump = so.other_positions(g)
+        dump = so.other_positions_view(g)
         tmp = Path(a.dump_other_positions + ".tmp")
         dump.write_parquet(tmp)
         tmp.replace(a.dump_other_positions)
@@ -954,11 +869,6 @@ def main() -> int:
         log(f"other buckets: {dump.height:,} nodes -> {a.dump_other_positions}; stopping (sample "
             f"them with sampled_other.py)")
         return 0
-    terminal = None
-    if a.dump_stop_positions or a.sampled_stop:
-        import sampled_stop as ss
-        terminal = ss.terminal_outcomes(by_parent, our_white)
-        log(f"  {len(terminal):,} recorded moves end the game")
     incumbent = None
     if a.incumbent:
         incumbent = load_incumbent_moves(a.incumbent, a.perspective)
@@ -967,16 +877,14 @@ def main() -> int:
         log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
             f"stick margin {a.stick_margin}")
     # nothing below reads the edge lists, the eval cache or the gate's source moves
-    del by_parent, eval_ws, want, admit
+    del admit
     import gc
     gc.collect()
-    rsg = None
-    if a.rs_core:
-        # the graph, owned by Rust from here: every stage below runs on it (g keeps the meta,
-        # plies and EPDs the output rows read)
-        rsg, rs_sans = budget_rs.rs_graph_from_out(rs_out, rs_sans, root, crack_at_parents=True,
-                                                   stick=g.meta.get("stick"))
-        del rs_out
+    # the graph, owned by Rust from here: every stage below runs on it (g keeps the meta,
+    # plies and EPDs the output rows read)
+    rsg, rs_sans = budget_rs.rs_graph_from_out(rs_out, rs_sans, root, crack_at_parents=True,
+                                               stick=g.meta.get("stick"))
+    del rs_out
     stop_counts = None
     sampled_fit = None
     if True:     # the weak-player stop model (the only stop model since 2026-11-12)
@@ -984,13 +892,13 @@ def main() -> int:
             log(f"FATAL: --weak-pool {a.weak_pool} does not exist")
             return 1
         from weak_stop import EvalSource, weak_stop_values
-        xs, ys = rsg.stop_positions() if rsg is not None else bc.stop_model_positions(g)
+        xs, ys = rsg.stop_positions()
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
                                     evals=EvalSource(our_white, overrides=verified_cp),
                                     min_weak=a.weak_min_games,
                                     min_share=WEAK_MIN_SHARE, log=log)
         if a.dump_stop_positions or a.sampled_stop:
-            info = ss.stop_positions(g)
+            info = ss.stop_positions_rs(rsg, g)
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=WEAK_MIN_SHARE, stop_model="weak")
@@ -1054,12 +962,9 @@ def main() -> int:
             wc = {**dict(wc), **{f"sampled_{k}": v for k, v in sampled_report["sampled"].items()},
                   **{f"predicted_{k}": v for k, v in sampled_report["predicted"].items()}}
             del info
-        if rsg is not None:
-            ac = dict(rsg.apply_stop_values(
-                np.fromiter(W.keys(), np.int64, len(W)), np.fromiter(W.values(), np.float64, len(W)),
-                np.fromiter(R.keys(), np.int64, len(R)), np.fromiter(R.values(), np.float64, len(R))))
-        else:
-            ac = bc.apply_stop_values(g, W, R)
+        ac = dict(rsg.apply_stop_values(
+            np.fromiter(W.keys(), np.int64, len(W)), np.fromiter(W.values(), np.float64, len(W)),
+            np.fromiter(R.keys(), np.int64, len(R)), np.fromiter(R.values(), np.float64, len(R))))
         stop_counts = {**dict(wc), **{f"applied_{k}": v for k, v in ac.items()}}
         log(f"  weak stop model: {stop_counts}  ({time.time()-t0:,.0f}s)")
         del W, R
@@ -1072,7 +977,7 @@ def main() -> int:
             log(f"FATAL: --sampled-other {a.sampled_other} does not match this build (table, "
                 f"build): {bad}")
             return 1
-        other_report = so.apply(g, pl.read_parquet(a.sampled_other))
+        other_report = so.apply_rs(g, rsg, pl.read_parquet(a.sampled_other))
         log(f"  sampled other buckets: {other_report}")
     g.other = {}
 
@@ -1080,11 +985,8 @@ def main() -> int:
         curves, diag = {}, {"stranded_cycle_nodes": None}
     else:
         log("building curves...")
-        if rsg is not None:
-            curves, stranded = rsg.build_curves(bmax, a.grid_cap)      # a curve set id
-            diag = {"stranded_cycle_nodes": stranded}
-        else:
-            curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=a.grid_cap)
+        curves, stranded = rsg.build_curves(bmax, a.grid_cap)      # a curve set id
+        diag = {"stranded_cycle_nodes": stranded}
         log(f"  stranded cycle nodes {diag['stranded_cycle_nodes']:,}  "
             f"({time.time()-t0:,.0f}s)")
 
@@ -1110,49 +1012,28 @@ def main() -> int:
     probe_curves = None
     if a.match_distinct and curve_bmax > bmax and a.method != "price":
         log(f"building probe curves (bmax {curve_bmax}) for --match-distinct...")
-        probe_curves, _ = rsg.build_curves(curve_bmax, a.grid_cap) if rsg is not None else bc.build_curves(g, bmax=curve_bmax,
-                                          k_atoms=a.grid_cap)
+        probe_curves, _ = rsg.build_curves(curve_bmax, a.grid_cap)
         log(f"  probe curves ready  ({time.time()-t0:,.0f}s)")
 
     # Diagnostics read the WIDEST set: both are trimmed at their own bmax, so
     # taking capacity or a value-at-charged off the plain curves would silently
     # report the cap rather than the quantity.
     widest = probe_curves if probe_curves is not None else curves
-    if rsg is not None:
-        # the root's curve as a budget_core.Curve (its cumulative sums are numpy's, the same
-        # sequential folds as Rust's)
-        rc_ = rsg.curve(widest, g.root) if a.method != "price" else None
-        widest = {} if rc_ is None else {g.root: bc.Curve(*rc_)}
+    # the root's curve as a budget_core.Curve (its cumulative sums are numpy's, the same
+    # sequential folds as Rust's)
+    rc_ = rsg.curve(widest, g.root) if a.method != "price" else None
+    widest = {} if rc_ is None else {g.root: bc.Curve(*rc_)}
     cap = widest[g.root].capacity if g.root in widest else 0
     if a.method != "price":
         log(f"  root capacity {cap:,} (path-sum)")
 
-    polish_order = None
-
-    # --method price: compile the (final) graph once for every budget, and the source seed
-    # once (it does not depend on the budget)
-    price_cg = price_seed = None
-    if a.method == "price" and todo and rsg is not None:
+    # --method price: the source seed, once (it does not depend on the budget): never dearer than
+    # the optimistic reach; the source book's policy reach (summed over its paths) where larger
+    price_seed = None
+    if a.method == "price" and todo:
         price_seed = dict(g.reach.items())
         price_seed.update({h: max(r, price_seed.get(h, 0.0)) for h, r in budget_rs.policy_reach_rs(
             rsg, rs_sans, rep_moves).items() if r > 0})
-    elif a.method == "price" and todo:
-        if a.price_engine == "compiled" or (
-                a.price_engine == "auto"
-                and len(g.our) + len(g.opp) >= bc.PRICE_COMPILED_MIN_NODES):
-            import budget_compiled
-            t1 = time.time()
-            price_cg = budget_compiled.compile_graph(g)
-            log(f"  graph compiled for the price search ({time.time()-t1:,.0f}s)")
-        if True:
-            # never dearer than the optimistic reach; the source book's policy reach
-            # (summed over its paths) where that is larger
-            order = (price_cg.order if price_cg is not None else
-                     (bc._topo_up_dict if a.price_engine == "legacy" else bc.topo_up)(g)[0])
-            price_seed = dict(g.reach)
-            price_seed.update({h: max(r, price_seed.get(h, 0.0)) for h, r in bc.policy_reach(
-                g, rep_moves, order, compiled=price_cg).items() if r > 0})
-            del order
 
     for b in budgets:
         out = outs[b]
@@ -1161,23 +1042,14 @@ def main() -> int:
             continue
         price_info = None
         if a.method == "price":
-            if rsg is not None:
-                res, price_info = budget_rs.price_search_rs(rsg, rs_sans, b, log=log,
-                                                            seed_reach=price_seed)
-            else:
-                res, price_info = bc.price_search(g, b, log=log, seed_reach=price_seed,
-                                                  engine=a.price_engine, compiled=price_cg)
+            res, price_info = budget_rs.price_search_rs(rsg, rs_sans, b, log=log,
+                                                        seed_reach=price_seed)
             charged, matched = b, res["spent_distinct"] >= b
             log(f"  ({time.time()-t0:,.0f}s)")
         elif a.match_distinct:
-            if rsg is not None:
-                res, charged, matched, spent = rsg.match_distinct(
-                    curves, b, curve_bmax, probe_set=probe_curves, plain_bmax=bmax)
-                res = budget_rs.book_from_rs(res, rs_sans)
-            else:
-                res, charged, matched, spent = bc.match_distinct(
-                    g, curves, b, curve_bmax,
-                    probe_curves=probe_curves, plain_bmax=bmax)
+            res, charged, matched, spent = rsg.match_distinct(
+                curves, b, curve_bmax, probe_set=probe_curves, plain_bmax=bmax)
+            res = budget_rs.book_from_rs(res, rs_sans)
             # matched is `spent >= b`; the equal-footprint comparison needs
             # `spent == b`, and the two came apart in the wild (fixdp_white_b20
             # booked 21 for a target of 20 and reported success). Say which.
@@ -1189,21 +1061,14 @@ def main() -> int:
                    else f"  (OVERSHOT by {spent - b}: the distinct count skips "
                         f"{b}; footprint audits at tol 0 will reject this)"))
         else:
-            res = (budget_rs.book_from_rs(rsg.extract_book(curves, b), rs_sans) if rsg is not None
-                   else bc.extract_book(g, curves, b))
+            res = budget_rs.book_from_rs(rsg.extract_book(curves, b), rs_sans)
             charged, matched = b, res["spent_distinct"] >= b
         polish_info = None
         if a.polish:
             # the DP book is the start; the polished book's values are policy_value's
             # (book_result), not the curves', and its rows carry no allocation
-            if rsg is not None:
-                moves, polish_info = budget_rs.polish_rs(rsg, rs_sans, res["booked"], b)
-                res = budget_rs.book_result_rs(rsg, rs_sans, moves)
-            else:
-                if polish_order is None:
-                    polish_order = bc.topo_up(g)[0]
-                moves, polish_info = bc.polish_book(g, res["booked"], b, polish_order)
-                res = bc.book_result(g, moves, polish_order)
+            moves, polish_info = budget_rs.polish_rs(rsg, rs_sans, res["booked"], b)
+            res = budget_rs.book_result_rs(rsg, rs_sans, moves)
             log(f"  dp polish: {polish_info['start_size']:,} -> {polish_info['size']:,} "
                 f"positions, {polish_info['start_value']:.5f} -> {polish_info['value']:.5f} "
                 f"({polish_info['accepted']} moves, {polish_info['seconds']:.1f}s)")
@@ -1297,6 +1162,7 @@ def main() -> int:
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
             # means both off (the old defaults)
             "strict_source": True,
+            "core": "rust",
             "src_rejected": g.meta.get("src_rejected", 0),
             **({"loss_exceptions_booked": {
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
@@ -1320,7 +1186,7 @@ def main() -> int:
                if a.sampled_other else {}),
             **({"price_rounds": PRICE["rounds"], "price_select": PRICE["select"],
                 "price_seed": "source", "price_reprice": PRICE["reprice"],
-                "price_dag_mode": PRICE["dag_mode"], "price_engine": a.price_engine}
+                "price_dag_mode": PRICE["dag_mode"], "price_engine": "rust"}
                if a.method == "price" else {}),
             **({"price": price_info} if price_info is not None else {}),
             **({"polish": polish_info} if polish_info is not None else {}),

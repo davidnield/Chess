@@ -18,7 +18,8 @@ R2/R3/R6 fixes, on mock move tables, a mock Maia and a mock eval lookup.
      --seed list is not; an incomplete table is refused; leaves cover the score table. A missing
      book is refused before any engine starts, and a refusal after they start releases them (an
      open engine keeps the process alive, stalling whatever waits on it).
-  R2 rollouts_rust (the games played in Rust) reproduces rollouts' games on these fixtures.
+  R2 rollouts (the games played in Rust) reproduces rollouts_py's (python-chess) games here.
+     Every check above runs on the Rust games (rollouts) since 2026-11-12.
   X  the speed-ups give the same numbers: the move index (move_index.py) returns Counts' DuckDB
      counts and is ignored once its table changes; the Maia cache returns the server's answers
      float for float in their key order, keeps the first of two, refuses another model's
@@ -368,7 +369,7 @@ with tempfile.TemporaryDirectory() as td:
     class FakeMaia(MockMaia):
         def __init__(self, *a, **k):
             closed.append("maia started")
-            super().__init__(*a, **k)
+            super().__init__()                # the Maia cache argument is not the mock's
 
         def close(self):
             closed.append("maia")
@@ -587,7 +588,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdx:  # the inde
     finally:
         cv.identity = saved_ident
 
-# ── R2: the games played in Rust (rollouts_rust) ──────────────────────────────────────────
+# ── R2: the games played in Rust (rollouts) ───────────────────────────────────────────────
 try:
     import book_builder_rs as _brs  # noqa: F401
 except ImportError:
@@ -595,10 +596,14 @@ except ImportError:
 if _brs is None:
     print("  SKIP  R2: no book_builder_rs extension")
 else:
+    weak_bad = [0]
+
     def both(starts, book, our_white, a, seed, maia, lk, exits=False):
         e1, e2 = ({}, {}) if exits else (None, None)
-        r1 = cv.rollouts(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e1)
-        r2 = cv.rollouts_rust(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e2)
+        w1, w2 = [], []
+        r1 = cv.rollouts_py(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e1, w1)
+        r2 = cv.rollouts(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e2, w2)
+        weak_bad[0] += w1 != w2
         return r1, r2, e1, e2
 
     bad = n = 0
@@ -621,9 +626,11 @@ else:
         if l1 != l2 or m1 != m2:
             bad += 1
             first = first or ("cycle", seed, len(l1), len(l2))
-    check("R2: rollouts_rust plays the games rollouts plays: the same leaves (weights, hashes, "
+    check("R2: rollouts (Rust) plays the games rollouts_py (python-chess) plays: the same leaves (weights, hashes, "
           "evals, plies, results, EPDs), book mass and exits, both colours, with and without a "
-          "book, on the knight round-trip cycle too", bad == 0, f"{n} runs, {bad} differ {first}")
+          "book, on the knight round-trip cycle too, and their weak_edges records",
+          bad == 0 and weak_bad[0] == 0,
+          f"{n} runs, {bad} differ {first}, weak_edges differ in {weak_bad[0]}")
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

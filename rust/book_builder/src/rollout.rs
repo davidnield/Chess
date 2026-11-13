@@ -91,11 +91,15 @@ pub struct Rollouts {
     start_ply: Vec<i64>,
     book: HashMap<i64, String>,
     want_exits: bool,
+    want_weak: bool,
     games: Vec<Game>,
     pub leaves: Vec<Leaf>,
     pub book_mass: f64,
     /// exits: (hash, ply, w * f, epd) in the order the Python loop adds them
     pub exits: Vec<(i64, i64, f64, String)>,
+    /// weak_edges: (start, k, hash, EPD before, hash after, EPD after) of every move of ours out
+    /// of book, in the order the Python loop records them
+    pub weak: Vec<(usize, i64, i64, String, i64, String)>,
     dists: HashMap<(i64, bool), Vec<(String, f64)>>,
 }
 
@@ -112,10 +116,12 @@ pub struct Start<'a> {
 impl Rollouts {
     #[allow(clippy::too_many_arguments)]
     pub fn new(starts: &[Start], our_white: bool, k_games: usize, max_ply: i64, seed: i64,
-               recall: f64, book: HashMap<i64, String>, want_exits: bool) -> Result<Rollouts, String> {
+               recall: f64, book: HashMap<i64, String>, want_exits: bool, want_weak: bool)
+               -> Result<Rollouts, String> {
         let kf = k_games as f64;
         let mut r = Rollouts {
-            our_white, max_ply, seed, recall, book, want_exits, games: Vec::new(),
+            our_white, max_ply, seed, recall, book, want_exits, want_weak, games: Vec::new(),
+            weak: Vec::new(),
             start_h: starts.iter().map(|s| s.h).collect(),
             start_ply: starts.iter().map(|s| s.ply).collect(),
             leaves: Vec::new(), book_mass: 0.0, exits: Vec::new(), dists: HashMap::new(),
@@ -234,9 +240,13 @@ impl Rollouts {
             if g.remembered {
                 self.book_mass += g.w;
             }
+            let before = if self.want_weak && us && !g.remembered { Some((g.h, epd(&g.pos))) } else { None };
             g.pos.play_unchecked(mv);
             g.ply += 1;
             g.h = hash(&g.pos);
+            if let Some((h0, e0)) = before {
+                self.weak.push((g.si, g.k, h0, e0, g.h, epd(&g.pos)));
+            }
             g.seen.push(g.h);
             let rep5 = g.seen.iter().filter(|&&x| x == g.h).count() >= 5;
             let over = g.pos.is_game_over() || rep5 || g.pos.halfmoves() >= 150;
@@ -258,4 +268,39 @@ impl Rollouts {
         self.leaves.push(Leaf { w: g.w, h: g.h, cp: g.cp, us, exact, epd: epd(pos), ply: g.ply,
                                 wk: g.wk, si: g.si, k: g.k });
     }
+}
+
+/// sampled_stop.terminal_outcomes: the children (not themselves parents) where a recorded move
+/// ends the game -> the result, our view, in the order Python finds them
+pub fn terminal_outcomes(parents: &[i64], epds: &[Option<String>], ptr: &[i64],
+                         child: &[Option<i64>], san: &[i64], sans: &[String], our_white: bool)
+                         -> Vec<(i64, f64)> {
+    let is_parent: HashSet<i64> = parents.iter().copied().collect();
+    let mut seen: HashSet<i64> = HashSet::new();
+    let mut out = Vec::new();
+    for (i, e) in epds.iter().enumerate() {
+        let Some(e) = e else { continue };
+        let Ok(b0) = from_epd(e) else { continue };
+        for j in ptr[i] as usize..ptr[i + 1] as usize {
+            let Some(ch) = child[j] else { continue };
+            if is_parent.contains(&ch) || seen.contains(&ch) {
+                continue;
+            }
+            let s = &sans[san[j] as usize];
+            if s.ends_with('#') {
+                seen.insert(ch);
+                out.push((ch, if (b0.turn() == Color::White) == our_white { 1.0 } else { 0.0 }));
+                continue;
+            }
+            let Some(mv) = SanPlus::from_ascii(s.as_bytes()).ok().and_then(|x| x.san.to_move(&b0).ok())
+            else { continue };
+            let mut b = b0.clone();
+            b.play_unchecked(mv);
+            if b.is_game_over() {
+                seen.insert(ch);
+                out.push((ch, outcome(&b, our_white)));
+            }
+        }
+    }
+    out
 }

@@ -72,6 +72,20 @@ MAIA_PY = "D:/chess/maia/.venv/Scripts/python.exe"
 MAIA_HF = "D:/chess/maia/hf_cache"      # snapshot directory names are the weights' commit hashes
 
 
+# The default --maia-cache (2026-11-12): one cache for every referee and sampler run on this
+# machine, refused by a run with another Maia setup.
+MAIA_CACHE = "D:/chess/maia/answer_cache"
+
+
+def rs_rollouts_available() -> bool:
+    """Whether rollouts can run (the book_builder_rs extension is built)"""
+    try:
+        import book_builder_rs
+        return hasattr(book_builder_rs, "RsRollouts")
+    except ImportError:
+        return False
+
+
 class MaiaCache:
     """Maia's answers kept across runs (--maia-cache DIR, 2026-11-12): (position hash, self Elo,
     opponent Elo) -> the probabilities, in the order the server returned them (blend sums them in
@@ -522,9 +536,10 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
     return leaves, starts, book_mass, nodes
 
 
-def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
-             exits=None, weak_edges=None):
-    """Continue every branch the exhaustive walk left under --tau by sampling: --rollouts K
+def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
+                exits=None, weak_edges=None):
+    """The reference implementation of rollouts (python-chess), kept for the tests: the games
+    are played in Rust (rollouts) since 2026-11-12. Continue every branch the exhaustive walk left under --tau by sampling: --rollouts K
     games each from its position to --max-ply (or game over), moving exactly as the walk does
     (the book where it has a move, else the blended move shares). Each sampled game carries
     prob/K. Returns (leaves, book_mass), leaves in enumerate_book's format with start_id =
@@ -640,16 +655,16 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
 
 
 
-def rollouts_rust(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
-                  exits=None, weak_edges=None):
-    """rollouts with each game's moves in Rust (book_builder_rs.RsRollouts, rust/book_builder/
-    src/rollout.rs): the same games conceptually, not bit for bit (user, 2026-11-12). The draws
-    are the same u01; the board work is shakmaty's instead of python-chess's. Each ply's batch
-    work stays here: the move counts, Maia and blend. weak_edges is not ported (the Python
-    rollouts runs)."""
-    if weak_edges is not None:
-        return rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia,
-                        lookup, exits, weak_edges)
+def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
+             exits=None, weak_edges=None):
+    """Continue every branch the exhaustive walk left under --tau by sampling --rollouts K games
+    from it to --max-ply (or game over); see rollouts_py, the reference, for the streams, exits
+    and leaves. The games are played in Rust (book_builder_rs.RsRollouts, rust/book_builder/src/
+    rollout.rs; user, 2026-11-12: always Rust, conceptually the same games, not required bit for
+    bit; on the tests' fixtures they are). Each ply's batch work stays here: the move counts,
+    Maia and blend."""
+    if not rs_rollouts_available():
+        raise ImportError("the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
     import book_builder_rs as brs
     i64, f64 = np.int64, np.float64
     st = brs.RsRollouts(
@@ -658,7 +673,7 @@ def rollouts_rust(starts, book, our_white, rep, a, seed, our_counts, opp_counts,
         np.array([MISSING if s[4] is None else int(s[4]) for s in starts], i64),
         np.array([s[5] for s in starts], f64), np.array([s[6] for s in starts], f64),
         bool(our_white), int(a.rollouts), int(a.max_ply), int(seed), float(getattr(a, "recall", 1.0)),
-        list(book.keys()), list(book.values()), exits is not None)
+        list(book.keys()), list(book.values()), exits is not None, weak_edges is not None)
     while st.alive():
         st.set_cp(np.asarray(lookup(st.hashes()), dtype=i64))
         oh, oe, th, te = st.needed()
@@ -676,6 +691,8 @@ def rollouts_rust(starts, book, our_white, rep, a, seed, our_counts, opp_counts,
     if exits is not None:
         for h, ply, v, epd in ex:
             exits.setdefault((h, ply), [0.0, epd])[0] += v
+    if weak_edges is not None:
+        weak_edges.extend(st.weak_edges())
     return leaves, book_mass
 
 def value_leaves(leaves, our_white, lookup, sf_fill, curves):
@@ -897,11 +914,11 @@ def main():
     ap.add_argument("--compare-to", default=None, metavar="LABEL",
                     help="print every book minus this one, per seed, with the SE over seeds")
     ap.add_argument("--sf-procs", type=int, default=4, help="Stockfish processes for missing evals")
-    ap.add_argument("--maia-cache", default=None, metavar="DIR",
-                    help="keep Maia's answers across runs in DIR (MaiaCache). Default off.")
-    ap.add_argument("--rs-rollouts", action="store_true",
-                    help="play the sampled games' moves in Rust (rollouts_rust): the same games "
-                         "conceptually, faster. Default off.")
+    ap.add_argument("--maia-cache", default=MAIA_CACHE, metavar="DIR",
+                    help=f"keep Maia's answers across runs in DIR (MaiaCache; default {MAIA_CACHE})")
+    ap.add_argument("--no-maia-cache", dest="maia_cache", action="store_const", const=None,
+                    default=argparse.SUPPRESS, help="ask Maia afresh in every run")
+
     ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache.parquet",
                     help="persistent (hash, depth) -> cp cache for --stockfish-depth leaves")
     ap.add_argument("--max-ply", type=int, default=30)
@@ -1027,7 +1044,7 @@ def main():
                 exits = {k: list(v) for k, v in exact_exits.items()} if exact_exits is not None else None
                 leaves, ro_book = list(ex_leaves), 0.0
                 if starts:
-                    rl, ro_book = (rollouts_rust if a.rs_rollouts else rollouts)(
+                    rl, ro_book = rollouts(
                         starts, book, our_white, rep, a, seed,
                                            our_counts, opp_counts, maia, lookup, exits)
                     leaves += rl

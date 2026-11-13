@@ -393,7 +393,7 @@ def simulation(a, cv, our_white: bool) -> dict:
             "opp_moves": movers(a.opp_moves.format(colour="black" if our_white else "white")),
             "k": a.k, "min_p": a.min_p, "horizon": a.max_ply, "our_elo": a.our_elo, "opp_elo": a.opp_elo,
             "sf_depth": 10, "sf_path": cv.SF_PATH, "identity": cv.identity(),
-            **({"rollouts": "rust"} if getattr(a, "rs_rollouts", False) else {})}
+            "rollouts": "rust"}
 
 
 def sampler_code(cv) -> dict:
@@ -449,12 +449,10 @@ def main():
     ap.add_argument("--opp-elo", type=int, default=2000)
     ap.add_argument("--sf-cache", default=None)
     ap.add_argument("--sf-procs", type=int, default=3)
-    ap.add_argument("--rs-rollouts", action="store_true",
-                    help="play the sampled games' moves in Rust (convertibility_eval.rollouts_rust). "
-                         "Default off.")
-    ap.add_argument("--maia-cache", default=None, metavar="DIR",
-                    help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache). "
-                         "Default off.")
+    ap.add_argument("--maia-cache", default="D:/chess/maia/answer_cache", metavar="DIR",
+                    help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache)")
+    ap.add_argument("--no-maia-cache", dest="maia_cache", action="store_const", const=None,
+                    default=argparse.SUPPRESS, help="ask Maia afresh in every run")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     t0 = time.time()
@@ -539,7 +537,7 @@ def main():
                 continue
             ch = pick.slice(ci, a.chunk)
             st = [(h, e, 1.0, p, None, 0.0, 0.0) for h, e, p in ch.select("hash", "epd", "ply").iter_rows()]
-            lv, _ = (cv.rollouts_rust if a.rs_rollouts else cv.rollouts)(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
+            lv, _ = cv.rollouts(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
             v0, se = per_start(lv, len(st), lookup, sf, curves, our_white)
             res = ch.select("side", "hash", "ply", "reach", "stop").with_columns(
                 pl.Series("v0", v0), pl.Series("se", se), pl.lit(a.games).alias("games"))
@@ -563,3 +561,29 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def stop_positions_rs(rsg, view) -> pl.DataFrame:
+    """stop_positions on the Rust graph (book_builder_rs.RsGraph and its budget_rs.GraphView): the
+    same rows, in the same order (_test_book_builder_rs.py check T)."""
+    if not len(view.route_ply):
+        raise ValueError("stop_positions needs the graph built with track_route_ply")
+    horizon = view.meta["max_ply"] + 1
+    pk, pv, rk, rv = view._out_plies
+    x, h, ply, reach, par, has, n = rsg.stop_dump(pk, pv, rk, rv, horizon)
+    hs, ps = h.tolist(), [p if f else None for p, f in zip(par.tolist(), has.tolist())]
+    df = pl.DataFrame({"side": ["x" if v else "y" for v in x.tolist()], "hash": hs,
+                       "ply": ply.tolist(), "reach": reach.tolist(), "stop": [None] * len(hs),
+                       "epd": [view.epd.get(v) for v in hs], "parent_hash": ps,
+                       "parent_epd": [None if v is None else view.epd.get(v) for v in ps]},
+                      schema=DUMP_SCHEMA)
+    return df.with_columns(pl.Series("n_plies", n.tolist(), dtype=pl.Int32))
+
+
+def terminal_outcomes_rs(fi: dict, our_white: bool) -> dict[int, float]:
+    """terminal_outcomes on budget_rs.frame_inputs' arrays (the collector's frame)"""
+    import book_builder_rs as rs
+    e = fi["edges"]
+    k, v = rs.terminal_outcomes(e["parents"], list(fi["epd"]), e["ptr"], e["child"], e["has_child"],
+                                e["san"], list(fi["san_list"]), our_white)
+    return dict(zip(k.tolist(), v.tolist()))

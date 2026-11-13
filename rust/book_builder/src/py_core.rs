@@ -246,6 +246,40 @@ impl RsGraph {
         region_dict(py, g, &reg, &pos)
     }
 
+    /// sampled_stop.stop_positions' rows (EPDs attached by the caller): (our turn?, hash, ply,
+    /// reach, parent hash, has parent, n_plies)
+    #[allow(clippy::type_complexity)]
+    fn stop_dump<'py>(&self, py: Python<'py>, ply_keys: PyReadonlyArray1<i64>, ply_vals: PyReadonlyArray1<i64>,
+                      route_keys: PyReadonlyArray1<i64>, route_vals: PyReadonlyArray1<i64>, horizon: i64)
+                      -> PyResult<(Bound<'py, PyArray1<bool>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>,
+                                   Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<bool>>,
+                                   Bound<'py, PyArray1<i64>>)> {
+        let m = |k: &[i64], v: &[i64]| -> PyResult<HashMap<_, i64>> {
+            crate::same_len(k.len(), &[v.len()])?;
+            Ok(k.iter().zip(v).map(|(&k, &v)| (key(k), v)).collect())
+        };
+        let ply = m(ply_keys.as_slice()?, ply_vals.as_slice()?)?;
+        let route = m(route_keys.as_slice()?, route_vals.as_slice()?)?;
+        let rows = self.core.stop_dump(&ply, &route, horizon).map_err(PyValueError::new_err)?;
+        Ok((PyArray1::from_vec(py, rows.iter().map(|r| r.x).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| pk(r.h)).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| r.ply).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| r.reach).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| r.parent.map_or(0, pk)).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| r.parent.is_some()).collect()),
+            PyArray1::from_vec(py, rows.iter().map(|r| r.plies.count_ones() as i64).collect())))
+    }
+
+    /// const_base += delta at the given opponent nodes (sampled_other.apply's change)
+    fn add_const_base(&mut self, keys: PyReadonlyArray1<i64>, deltas: PyReadonlyArray1<f64>) -> PyResult<()> {
+        let (k, d) = (keys.as_slice()?, deltas.as_slice()?);
+        crate::same_len(k.len(), &[d.len()])?;
+        let ks: Vec<_> = k.iter().map(|&x| key(x)).collect();
+        self.core.add_const_base(&ks, d).map_err(PyValueError::new_err)?;
+        self.curves.clear();
+        Ok(())
+    }
+
     /// policy_reach(g, moves, topo_up order): (keys, values) in insertion order
     fn policy_reach<'py>(&self, py: Python<'py>, keys: PyReadonlyArray1<i64>, sans: PyReadonlyArray1<i64>)
                          -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<f64>>)> {

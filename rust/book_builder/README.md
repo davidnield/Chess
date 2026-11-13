@@ -3,7 +3,8 @@
 Phase 3 of `docs/builder-port-and-128bit-plan-2026-11-12.md` (local, untracked). The Python
 builder (`python/budget_core.py`, `budget_compiled.py`, `build_budget_books.py`) stays the
 reference. This crate replaces it stage by stage, and each stage must give the same floats.
-`build_budget_books.py --rs-core` runs every ported stage here.
+Since 2026-11-12 `build_budget_books.py` runs only on this crate (no Python fallback); the
+Python stages stay as the tests' reference.
 
 ## Build
 
@@ -66,13 +67,14 @@ separate code without its check suffix (its bare code).
 | `price.rs` | `price_book`, `policy_reach`, `price_search` (one pricing round, the selection rule, polish from three starts) |
 | `collect.rs` | `collect_subgraph_edges`' walk and `GateAdmit`. DuckDB still scans the pool. The gates' eval cache follows `GateAdmit`: a hash is known once a level's prefetch has looked it up, or once the engine candidates gave it a fresh eval. |
 
-| `rollout.rs` | `convertibility_eval.rollouts`' games, for the referee and the stop/other samplers (`--rs-rollouts`). This one is NOT held to Python bit for bit (user, 2026-11-12: sampler work need only replicate the tool conceptually). Still, `_test_convertibility_eval.py` R2 gets identical games on the referee's fixtures. On real data, 500 positions of Black's stop dump gave the Python sampler's table bit for bit, in 63 s against Python's 606 s (225 s with a warm Maia cache). |
+| `rollout.rs` | `convertibility_eval.rollouts`' games, for the referee and the stop/other samplers (always; `rollouts_py` is the Python reference). This one is NOT held to Python bit for bit (user, 2026-11-12: sampler work need only replicate the tool conceptually). Still, `_test_convertibility_eval.py` R2 gets identical games on the referee's fixtures. On real data, 500 positions of Black's stop dump gave the Python sampler's table bit for bit, in 63 s against Python's 606 s (225 s with a warm Maia cache). |
 
 The Python side lives in `python/budget_rs.py`. The columnar path (`frame_inputs`, `run_csr`,
 `GraphView`, `rs_graph_from_out`) builds the graph's input arrays straight from the collector's
 frame. The graph then lives in Rust, and no `edges_by_parent`, eval, aux or source-row dict is
-built. Not ported yet: `--opponent-prior`, the sampled stop and other tables, and
-`--dump-engine-targets`. `--rs-core` refuses them.
+built. The sampled stop and other tables run on the `RsGraph` (`stop_dump`, `add_const_base`,
+`terminal_outcomes`). Not ported yet: `--opponent-prior` and `--dump-engine-targets`; the
+builder stops with an error on them.
 
 ## Checks
 

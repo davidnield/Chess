@@ -316,6 +316,7 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<py_core::RsGraph>()?;
     m.add_class::<py_collect::RsCollector>()?;
     m.add_class::<py_rollout::RsRollouts>()?;
+    m.add_function(wrap_pyfunction!(py_rollout::terminal_outcomes, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

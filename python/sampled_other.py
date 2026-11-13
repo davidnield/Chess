@@ -218,12 +218,10 @@ def main():
     ap.add_argument("--opp-elo", type=int, default=2000)
     ap.add_argument("--sf-cache", default=None)
     ap.add_argument("--sf-procs", type=int, default=3)
-    ap.add_argument("--rs-rollouts", action="store_true",
-                    help="play the sampled games' moves in Rust (convertibility_eval.rollouts_rust). "
-                         "Default off.")
-    ap.add_argument("--maia-cache", default=None, metavar="DIR",
-                    help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache). "
-                         "Default off.")
+    ap.add_argument("--maia-cache", default="D:/chess/maia/answer_cache", metavar="DIR",
+                    help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache)")
+    ap.add_argument("--no-maia-cache", dest="maia_cache", action="store_const", const=None,
+                    default=argparse.SUPPRESS, help="ask Maia afresh in every run")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     t0 = time.time()
@@ -302,7 +300,7 @@ def main():
                 st = [(h, e, 1.0, plies[i] + 1, None, 0.0, 0.0) for i, _p, h, e in rows]
                 ro = SimpleNamespace(tau=0.0, rollouts=K, max_ply=a.max_ply, k=a.k, min_p=a.min_p,
                                      our_elo=a.our_elo, opp_elo=a.opp_elo)
-                lv, _ = (cv.rollouts_rust if a.rs_rollouts else cv.rollouts)(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
+                lv, _ = cv.rollouts(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
                 v0, se = per_start(lv, len(st), lookup, sf, curves, our_white)
                 for (i, p, _h, _e), v, s_ in zip(rows, v0.tolist(), se.tolist()):
                     if v == v:
@@ -332,3 +330,53 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def other_positions_view(view) -> pl.DataFrame:
+    """other_positions on the Rust graph's view (budget_rs.GraphView): the same rows"""
+    import budget_rs
+    if not len(view.route_ply):
+        raise ValueError("other_positions needs the graph built with track_route_ply")
+    rows = []
+    for h, (share, value, engine) in view.other.items():
+        rows.append((h, view.route_ply.get(h, view.ply.get(h, 0)), view.reach.get(h, 0.0), share,
+                     value, engine, view.epd.get(h), budget_rs.opp_children(view, h)))
+    df = pl.DataFrame(rows, schema=DUMP_SCHEMA, orient="row")
+    return df.with_columns((pl.col("reach") * pl.col("share")).alias("weight"))
+
+
+def apply_rs(view, rsg, tab: pl.DataFrame) -> dict:
+    """apply on the Rust graph: the same calibration and blend, and each node's
+    const_base += share * (v - old) applied in Rust (RsGraph.add_const_base)"""
+    ply_of = {h: view.route_ply.get(h, view.ply.get(h, 0)) for h in view.other}
+    keyed = tab.filter(pl.col("hash").is_in(list(ply_of)))
+    keep = [ply_of[h] == p for h, p in zip(keyed["hash"].to_list(), keyed["ply"].to_list())]
+    refused = len(keep) - sum(keep)
+    keyed = keyed.filter(pl.Series(keep, dtype=pl.Boolean)) if keyed.height else keyed
+    m = fit(keyed)
+    if m is None:
+        raise ValueError(f"--sampled-other: {keyed.height} sampled nodes on this graph, too few to "
+                         f"calibrate")
+    hs = list(view.other)
+    vals = np.array([view.other[h][1] for h in hs])
+    eng = np.array([np.nan if view.other[h][2] is None else view.other[h][2] for h in hs])
+    pred = predict(m, np.array([ply_of[h] for h in hs]), vals, eng)
+    new = dict(zip(hs, pred.tolist()))
+    n_s = 0
+    for h, v0, se in keyed.select("hash", "v0", "se").iter_rows():
+        if v0 is not None and v0 == v0:
+            lam = m["tau2"] / (m["tau2"] + (se or 0.0) ** 2)
+            new[h] = float(np.clip(new[h] + lam * (v0 - new[h]), 0.0, 1.0))
+            n_s += 1
+    mass = shift = 0.0
+    keys, deltas = [], []
+    for h, v in new.items():
+        share, old, _e = view.other[h]
+        keys.append(h)
+        deltas.append(share * (v - old))
+        r = view.reach.get(h, 0.0) * share
+        mass += r
+        shift += r * (v - old)
+    rsg.add_const_base(np.array(keys, np.int64), np.array(deltas, np.float64))
+    return {"model": m, "sampled": n_s, "predicted": len(new) - n_s, "cross_ply_refused": refused,
+            "mean_shift": shift / mass if mass else 0.0}

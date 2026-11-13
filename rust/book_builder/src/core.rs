@@ -460,3 +460,114 @@ impl Core {
             .all(|((&i, k), &c)| !(i && k.is_some()) || c != NONE)
     }
 }
+
+/// One row of sampled_stop.stop_positions (its EPDs are attached in Python)
+pub struct DumpRow {
+    pub x: bool,
+    pub h: Key,
+    pub ply: i64,
+    pub reach: f64,
+    pub parent: Option<Key>,
+    pub plies: u64,          // the plies <= the horizon it is reached at (n_plies = popcount)
+}
+
+impl Core {
+    /// sampled_stop.ply_sets: the plies (<= horizon) at which each position is reached, walking
+    /// the subgraph level by level from the root, as a bitmask
+    fn ply_sets(&self, horizon: i64) -> HashMap<Key, u64> {
+        let mut out: HashMap<Key, u64> = HashMap::new();
+        let mut level: std::collections::HashSet<Key> = std::collections::HashSet::new();
+        level.insert(self.root);
+        let mut t = 0i64;
+        while !level.is_empty() && t <= horizon {
+            let mut nxt = std::collections::HashSet::new();
+            for &h in &level {
+                *out.entry(h).or_insert(0) |= 1u64 << t;
+                if let Some(&i) = self.id.get(&h) {
+                    for (k, _c) in self.children(i as usize) {
+                        nxt.insert(k);
+                    }
+                }
+            }
+            level = nxt;
+            t += 1;
+        }
+        out
+    }
+
+    /// sampled_stop.stop_positions: every stop position, (side, hash) once, with the ply and
+    /// reach of its most likely route and the plies it is reached at
+    pub fn stop_dump(&self, ply: &HashMap<Key, i64>, route: &HashMap<Key, i64>, horizon: i64)
+                     -> Result<Vec<DumpRow>, String> {
+        if !(0..63).contains(&horizon) {
+            return Err(format!("horizon {horizon} out of range"));
+        }
+        let plies = self.ply_sets(horizon);
+        let keep = (1u64 << (horizon + 1)) - 1;
+        let bit = |p: i64| if (0..64).contains(&p) { 1u64 << p } else { 0 };
+        let mut rows: Vec<DumpRow> = Vec::new();
+        let mut at: HashMap<(bool, Key), usize> = HashMap::new();
+        let mut add = |x: bool, h: Key, p: i64, reach: f64, parent: Option<Key>, seen: u64| {
+            match at.get(&(x, h)) {
+                None => {
+                    at.insert((x, h), rows.len());
+                    rows.push(DumpRow { x, h, ply: p, reach, parent, plies: seen & keep });
+                }
+                Some(&i) => {
+                    let r = &mut rows[i];
+                    r.plies |= seen & keep;
+                    if reach > r.reach || (reach == r.reach && p < r.ply) {
+                        r.ply = p;
+                        r.reach = reach;
+                        r.parent = parent;
+                    }
+                }
+            }
+        };
+        let p0_of = |h: Key| route.get(&h).copied().unwrap_or_else(|| ply.get(&h).copied().unwrap_or(0));
+        for u in 0..self.n_our {
+            let h = self.keys[u];
+            let p0 = p0_of(h);
+            let ph = plies.get(&h).copied().unwrap_or(bit(p0));
+            let r0 = self.node_reach[u];
+            add(true, h, p0, r0, None, ph);
+            for j in self.cands(u) {
+                if let (Some(ch), false) = (self.c_key[j], self.c_in[j]) {
+                    add(false, ch, p0 + 1, r0, Some(h), ph << 1);
+                }
+            }
+        }
+        for i in self.n_our..self.n() {
+            let h = self.keys[i];
+            let p0 = p0_of(h);
+            let r0 = self.node_reach[i];
+            let nxt = plies.get(&h).copied().unwrap_or(bit(p0)) << 1;
+            for j in self.kids(i) {
+                if let (Some(ch), false) = (self.k_key[j], self.k_in[j]) {
+                    add(true, ch, p0 + 1, r0 * self.k_p[j], Some(h), nxt);
+                }
+            }
+            for j in self.floors(i) {
+                add(true, self.f_key[j], p0 + 1, r0 * self.f_p[j], Some(h), nxt);
+            }
+        }
+        let late: Vec<i64> = rows.iter().filter(|r| r.ply > horizon).map(|r| r.ply).collect();
+        if !late.is_empty() {
+            return Err(format!("{} stop positions past the horizon {horizon}, up to ply {}",
+                               late.len(), late.iter().max().unwrap()));
+        }
+        Ok(rows)
+    }
+
+    /// sampled_other.apply's change: const_base += delta at the given opponent nodes
+    pub fn add_const_base(&mut self, keys: &[Key], deltas: &[f64]) -> Result<(), String> {
+        for (k, d) in keys.iter().zip(deltas) {
+            let i = *self.id.get(k).ok_or("not a node")? as usize;
+            if i < self.n_our {
+                return Err("not an opponent node".into());
+            }
+            self.const_base[i - self.n_our] += d;
+        }
+        Ok(())
+    }
+}

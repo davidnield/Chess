@@ -41,6 +41,8 @@ all count.
   C  the columnar path on random build inputs: build_graph_csr's input arrays made from
      the collector's frame equal the dict path's, and the graph view and the RsGraph made
      straight from the Rust output behave as the Graph and its RsGraph do.
+  T  the sampled tables on the Rust graph: the stop dump, the other dump, the other table's
+     application and the finished-game outcomes equal sampled_stop's / sampled_other's.
 """
 from __future__ import annotations
 
@@ -1133,6 +1135,154 @@ def check_columns() -> None:
         print(f"    first {k} difference: {v}")
 
 
+# ── T: the sampled tables on the Rust graph ───────────────────────────────────────────────
+
+def check_sampled() -> None:
+    import copy
+    import budget_rs
+    import build_baseline_books as bbb
+    import sampled_other as so
+    import sampled_stop as ss
+    rng = random.Random(53)
+    bad = {"stop dump": 0, "other dump": 0, "other apply": 0, "terminal": 0}
+    first: dict = {}
+    n = n_rows = n_other = n_applied = 0
+    real = bbb.child_of
+    fit0 = so.fit
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+    try:
+        for t in range(150):
+            our_white = t % 2 == 0
+            ebp, root, eval_ws, aux, rep, eng, verified, excluded, child = random_build_inputs(
+                rng, rng.choice([120, 400, 1500]), our_white)
+            for es in ebp.values():
+                for e in es:
+                    for k in ("reply_mass", "reach_share", "additional_reply"):
+                        e.pop(k, None)
+            ebp = {h: es for h, es in ebp.items() if es}
+            if root not in ebp:
+                continue
+            bbb.child_of = lambda epd, san: child[(epd, san)]
+            kw = dict(rep_moves=rep, eval_ws=eval_ws, aux_rows=aux, slice_prior=0.5196,
+                      eps=1e-6, max_ply=rng.choice([9, 29]), share_floor=rng.choice([0.0, 0.03]),
+                      gated_reach=True, max_eval_loss=30.0, strict_source=True,
+                      crack_at_parents=True, engine_moves=eng if t % 3 else None,
+                      track_route_ply=True, track_other=True)
+            g = bc.build_graph(ebp, root, our_white, **kw)
+            if not g.our:
+                continue
+            af = pl.DataFrame([{"position_hash": h, **r} for h, r in aux.items()],
+                              infer_schema_length=None)
+            fi = budget_rs.frame_inputs(frame_of(ebp), rep_moves=rep, engine_moves=kw["engine_moves"],
+                                        strict_source=True, aux_frame=af)
+            ek = np.fromiter(eval_ws.keys(), np.int64, len(eval_ws))
+            ev = np.fromiter(eval_ws.values(), np.float64, len(eval_ws))
+            out = budget_rs.run_csr(
+                fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white, slice_prior=0.5196,
+                prior_strength=bc.PRIOR_STRENGTH, eval_weight=bc.EVAL_WEIGHT,
+                eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K, eps=1e-6,
+                max_ply=kw["max_ply"], share_floor=kw["share_floor"],
+                robustness_floor=bc.ROBUSTNESS_FLOOR, gate_rel_floor=bc.GATE_REL_FLOOR,
+                gate_rel_own_margin=bc.GATE_REL_OWN_MARGIN, require_eval=True, gates=True,
+                max_eval_loss=30.0, rare_floor=None, strict_source=True, other_cov_blend=False,
+                gated_reach=True, crack_at_parents=True, engine_moves_given=bool(kw["engine_moves"]),
+                track_route_ply=True, track_other=True)
+            view = budget_rs.GraphView(out, fi["san_list"], root, fi["parents"], fi["epd"],
+                                       eps=1e-6, max_ply=kw["max_ply"],
+                                       share_floor=kw["share_floor"], slice_prior=0.5196,
+                                       our_white=our_white, strict_source=True,
+                                       crack_at_parents=True)
+            rsg, _sans = budget_rs.rs_graph_from_out(out, fi["san_list"], root, crack_at_parents=True)
+            n += 1
+            try:
+                want = ss.stop_positions(g)
+            except ValueError as e:
+                want = str(e)
+            try:
+                got = ss.stop_positions_rs(rsg, view)
+            except ValueError as e:
+                got = str(e)
+            if isinstance(want, str) or isinstance(got, str):
+                if not (isinstance(want, str) and isinstance(got, str)):
+                    fail("stop dump", (t, want if isinstance(want, str) else "ok",
+                                       got if isinstance(got, str) else "ok"))
+            elif not want.equals(got):
+                fail("stop dump", (t, want.height, got.height))
+            else:
+                n_rows += want.height
+            if g.other:
+                n_other += 1
+                a_, b_ = so.other_positions(g), so.other_positions_view(view)
+                if not a_.equals(b_):
+                    fail("other dump", t)
+                # a sampled table as sampled_other writes it: the dump's rows, V0 and its SE,
+                # a tenth of them sampled at another ply (refused)
+                tab = a_.with_columns(
+                    pl.Series("v0", [rng.random() for _ in range(a_.height)]),
+                    pl.Series("se", [rng.random() * 0.1 for _ in range(a_.height)]),
+                    pl.Series("ply", [p + (rng.random() < 0.1) for p in a_["ply"].to_list()],
+                              dtype=pl.Int32))
+                g2 = copy.deepcopy(g)
+                if t % 2:
+                    # these graphs carry fewer than the 50 buckets a calibration needs: repeat the
+                    # rows (the same least-squares solution) so the application runs too
+                    so.fit = lambda tb, _f=fit0: _f(pl.concat([tb] * (50 // max(tb.height, 1) + 1)))
+                else:
+                    so.fit = fit0
+                try:
+                    ra = so.apply(g2, tab)
+                except ValueError as e:
+                    ra = str(e)
+                try:
+                    rb = so.apply_rs(view, rsg, tab)
+                except ValueError as e:
+                    rb = str(e)
+                if isinstance(ra, str) != isinstance(rb, str) or (
+                        not isinstance(ra, str) and (not deep_same(dict(sorted(ra.items())), dict(sorted(rb.items())))
+                                                     or bits(budget_rs.graph_to_csr(g2)[0]["const_base"]).tolist()
+                                                     != bits(rsg.values()["const_base"]).tolist())):
+                    fail("other apply", (t, ra if isinstance(ra, str) else "ok", rb if isinstance(rb, str) else "ok"))
+                elif not isinstance(ra, str):
+                    n_applied += 1
+    finally:
+        bbb.child_of = real
+        so.fit = fit0
+    # terminal outcomes on real positions: a mate with and without its '#', a stalemate,
+    # insufficient material, an ordinary move, an illegal move, a child that is a parent
+    import chess
+    fools = chess.Board()
+    for m in ("f3", "e5", "g4"):
+        fools.push_san(m)
+    stale = chess.Board("7k/5K2/8/6Q1/8/8/8/8 w - - 0 1")    # Qg6 stalemates
+    bare = chess.Board("8/8/8/8/8/6k1/1r6/K7 w - - 0 1")
+    ebp2 = {101: [{"move_san": "Qh4#", "child_hash": 1, "total": 3, "white_score_avg": 0.0,
+                   "parent_epd": fools.epd()},
+                  {"move_san": "Nc6", "child_hash": 2, "total": 3, "white_score_avg": 0.5}],
+            102: [{"move_san": "Qh4", "child_hash": 3, "total": 3, "white_score_avg": 0.0,
+                   "parent_epd": fools.epd()},
+                  {"move_san": "Zz9", "child_hash": 4, "total": 1, "white_score_avg": 0.5}],
+            103: [{"move_san": "Qg6", "child_hash": 5, "total": 2, "white_score_avg": 0.5,
+                   "parent_epd": stale.epd()},
+                  {"move_san": "Qd8+", "child_hash": 101, "total": 2, "white_score_avg": 0.5}],
+            104: [{"move_san": "Kxb2", "child_hash": 6, "total": 2, "white_score_avg": 0.5,
+                   "parent_epd": bare.epd()}]}
+    for ow in (True, False):
+        fi2 = budget_rs.frame_inputs(frame_of(ebp2))
+        if ss.terminal_outcomes(ebp2, ow) != ss.terminal_outcomes_rs(fi2, ow):
+            fail("terminal", (ow, ss.terminal_outcomes(ebp2, ow), ss.terminal_outcomes_rs(fi2, ow)))
+    check("T: the sampled tables on the Rust graph = sampled_stop / sampled_other on the Graph: "
+          "the stop dump (rows, order, plies, refusals past the horizon), the other dump, the "
+          "other table's application (report and every const_base), finished-game outcomes",
+          not any(bad.values()),
+          f"{n} graphs, {n_rows:,} stop rows, {n_other} with other buckets, {n_applied} "
+          f"calibrated; differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {str(v)[:800]}")
+
+
 def main() -> int:
     if rs is None:
         print("  SKIP  no book_builder_rs extension (build it: rust/book_builder/build.ps1)")
@@ -1147,6 +1297,7 @@ def main() -> int:
     check_polish()
     check_price()
     check_columns()
+    check_sampled()
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 
