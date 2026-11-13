@@ -514,6 +514,50 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdx:  # the inde
             for x, y in zip(a_, b_))
         check(f"X: the move index gives the DuckDB query's counts ({spec.count(',') + 1} root(s), "
               f"check-marked SANs merged, absent positions empty)", same)
+    # one half of the game folds (fold % 2): the half index = the DuckDB query = the rows'
+    # own sums; the two halves add up to the whole; replicates weigh the kept folds only
+    for r in (ra, rb):
+        (Path(r) / "_explorer_params.json").write_text(json.dumps(
+            {"folds": 64, "fold_rule": "f", "sample_rule": "s"}))
+        for h_ in (0, 1):
+            mi.build(r, mem="1GB", threads=1, log=lambda *_a: None, half=h_)
+    spec = f"{ra},{rb}"
+    whole = cv.Counts(con, spec, "t").get(hs)
+    halves, same = [], True
+    for h_ in (0, 1):
+        c_ix = cv.Counts(con, spec, "t", fold_half=h_)
+        c_db = cv.Counts(con, spec, "t", fold_half=h_)
+        c_db.index = None
+        a_, b_ = c_ix.get(hs), c_db.get(hs)
+        same &= c_ix.index is not None and c_ix.index[0].half == h_ and all(
+            x == y for x, y in zip(a_, b_))
+        want_: dict = {}
+        for (h, san, f, n_, _m) in rows[:2500] + rows[1500:]:
+            if f % 2 == h_:
+                d_ = want_.setdefault(h, {})
+                d_[san.rstrip("+#")] = d_.get(san.rstrip("+#"), 0.0) + n_
+        same &= all(x == want_.get(h, {}) for x, h in zip(a_, hs))
+        halves.append(a_)
+    same &= all({k: x.get(k, 0.0) + y.get(k, 0.0) for k in set(x) | set(y)} == w_
+                for x, y, w_ in zip(halves[0], halves[1], whole))
+    check("X: --fold-half: the half's index = the DuckDB query = the rows' own sums over that "
+          "half's folds, and the two halves add up to the whole table", same)
+    c_h = cv.Counts(con, spec, "t", seed=3, fold_half=1)
+    got_ = c_h.get(hs, rep=2)
+    w_ = np.zeros(64)
+    w_[1::2] = cv.fold_weights(2, 32, 3, "normalized")
+    per: dict = {}
+    for (h, san, f, n_, _m) in rows[:2500] + rows[1500:]:
+        per.setdefault(h, {}).setdefault(san.rstrip("+#"), np.zeros(64))[f] += n_
+    exp_ = [{m_: float(x_) for m_, v_ in per.get(h, {}).items() if (x_ := v_ @ w_) > 0} for h in hs]
+    check("X: --fold-half replicates weigh the kept folds only (32 weights on the odd folds)",
+          all(set(x) == set(y) and all(abs(x[k] - y[k]) <= 1e-9 * max(1.0, abs(y[k])) for k in x)
+              for x, y in zip(got_, exp_)) and any(got_))
+    try:
+        cv.Counts(con, mtable("mc", rows[:50]), "t", fold_half=0)
+        check("X: --fold-half is refused on tables without the fold contract", False)
+    except SystemExit:
+        check("X: --fold-half is refused on tables without the fold contract", True)
     # a table changed under its index: the index is ignored
     p0 = Path(ra) / "month=2026_8" / "bkt=0" / "part-0000.parquet"
     import os as _os

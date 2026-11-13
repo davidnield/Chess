@@ -302,10 +302,13 @@ class Counts:
     """Move counts by position from explorer month dirs, fetched a frontier at a time."""
 
     def __init__(self, con, roots, name, seed: int = 1, use_folds: int | None = None,
-                 weights: str = "normalized"):
+                 weights: str = "normalized", fold_half: int | None = None):
         """roots: one explorer dir, or several comma-separated (their counts are summed).
         use_folds G: bootstrap over G folds, fold % G (G must divide the tables' F; folds
-        nest when F is a power of two). Default F."""
+        nest when F is a power of two). Default F.
+        fold_half H (0 or 1): only the games in folds with fold % 2 == H, everywhere (counts,
+        replicates). A game sits in one fold in every table, so tables sampled on one half
+        and a score on the other share no game. Needs the fold contract with F and G even."""
         globs = [f"{r}/month=*/bkt=*/*.parquet" for r in roots.split(",")]
         self.con, self.glob, self.name = con, "[" + ", ".join(f"'{g}'" for g in globs) + "]", name
         self.roots, self.seed, self.weights = roots, seed, weights
@@ -314,7 +317,7 @@ class Counts:
         self.fcache: dict[int, dict] = {}
         # move_index.py's index of every root, if all are current (else the DuckDB query)
         from move_index import MoveIndex
-        idx = [MoveIndex.open(r) for r in roots.split(",")]
+        idx = [MoveIndex.open(r, fold_half) for r in roots.split(",")]
         self.index = idx if all(x is not None for x in idx) else None
         params = [table_params(r) for r in roots.split(",")]
         self.contract = None
@@ -330,6 +333,12 @@ class Counts:
             if F % G or G < 2:
                 raise SystemExit(f"{roots}: --use-folds {G} must divide the tables' {F} folds and be >= 2")
             self.table_folds, self.folds = F, G
+        self.fold_half = fold_half
+        self._half = "" if fold_half is None else f" AND fold % 2 = {int(fold_half)}"
+        if fold_half is not None and (fold_half not in (0, 1) or not self.folds
+                                      or self.table_folds % 2 or self.folds % 2):
+            raise SystemExit(f"{roots}: --fold-half needs tables with an even number of game "
+                             f"folds (side_explorer --folds F) and an even --use-folds")
 
     def bootstrap_problem(self) -> str | None:
         """Why these tables cannot be bootstrapped (None = they can)."""
@@ -353,14 +362,22 @@ class Counts:
             self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
             df = duck_pl(self.con, f"""SELECT parent_hash, move_san, fold % {self.folds} f,
                 SUM(total)::DOUBLE n FROM read_parquet({self.glob})
-                WHERE parent_hash IN (SELECT h FROM need) GROUP BY 1, 2, 3""")
+                WHERE parent_hash IN (SELECT h FROM need){self._half} GROUP BY 1, 2, 3""")
             self.con.unregister("need")
             for h in need:
                 self.fcache[h] = {}
             for h, m, f, n in df.iter_rows():
                 v = self.fcache[h].setdefault(m.rstrip("+#"), np.zeros(self.folds))
                 v[f] += n
-        w = fold_weights(rep, self.folds, self.seed, self.weights)
+        if self.fold_half is None:
+            w = fold_weights(rep, self.folds, self.seed, self.weights)
+        else:
+            # the replicate's weights on the kept folds only (fold % G keeps a fold's parity,
+            # G being even); the other half's folds hold no counts here
+            if self.folds < 4:
+                raise SystemExit(f"{self.roots}: no bootstrap: --fold-half leaves one fold")
+            w = np.zeros(self.folds)
+            w[self.fold_half::2] = fold_weights(rep, self.folds // 2, self.seed, self.weights)
         out = []
         for h in hashes:
             d = self.rcache.get((h, rep))
@@ -393,7 +410,7 @@ class Counts:
         if need:
             self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
             df = duck_pl(self.con, f"""SELECT parent_hash, move_san, SUM(total)::DOUBLE n
-                FROM read_parquet({self.glob}) WHERE parent_hash IN (SELECT h FROM need)
+                FROM read_parquet({self.glob}) WHERE parent_hash IN (SELECT h FROM need){self._half}
                 GROUP BY 1, 2""")
             self.con.unregister("need")
             for h in need:
@@ -813,6 +830,8 @@ def config_key(a, books, tables, engine: str | None = None) -> str:
                                         "opp_elo", "stockfish_depth", "our_moves", "opp_moves",
                                         "use_folds", "fold_weights", "boot_seed")}
     opts["recall"] = getattr(a, "recall", 1.0)
+    if getattr(a, "fold_half", None) is not None:      # absent = every fold: older keys stand
+        opts["fold_half"] = a.fold_half
     bks = []
     for spec in books:
         label, colour, path = spec.split("=", 2)
@@ -942,6 +961,9 @@ def main():
                     help="bootstrap over G folds (fold %% G; G divides the tables' F)")
     ap.add_argument("--fold-weights", choices=["normalized", "raw"], default="normalized",
                     help="see fold_weights; raw only for the validation study")
+    ap.add_argument("--fold-half", type=int, choices=[0, 1], default=None,
+                    help="score on the games in folds with fold %% 2 == H only (Counts): the "
+                         "other half is free for sampling tables (sampled_stop/other --fold-half)")
     ap.add_argument("--leaves-out", default=None, help="write every book's valued leaves (prob, cp_us, ...) here")
     ap.add_argument("--stockfish-depth", type=int, default=10,
                     help="evaluate leaves missing from the eval arrays with Stockfish (0 = use the "
@@ -973,7 +995,8 @@ def main():
         for r, nm in ((a.our_moves.format(colour=colour), "ours"),
                       (a.opp_moves.format(colour="black" if colour == "white" else "white"), "opp")):
             if r not in tables:
-                tables[r] = Counts(con, r, nm, a.boot_seed, a.use_folds, a.fold_weights)
+                tables[r] = Counts(con, r, nm, a.boot_seed, a.use_folds, a.fold_weights,
+                                   a.fold_half)
     if a.replicates:
         # every problem up front, not after hours of replicate 0 (follow-up review R2a)
         bad = {r: c.bootstrap_problem() for r, c in tables.items() if c.bootstrap_problem()}

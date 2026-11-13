@@ -393,7 +393,9 @@ def simulation(a, cv, our_white: bool) -> dict:
             "opp_moves": movers(a.opp_moves.format(colour="black" if our_white else "white")),
             "k": a.k, "min_p": a.min_p, "horizon": a.max_ply, "our_elo": a.our_elo, "opp_elo": a.opp_elo,
             "sf_depth": 10, "sf_path": cv.SF_PATH, "identity": cv.identity(),
-            "rollouts": "rust"}
+            "rollouts": "rust",
+            # absent = every fold (tables made before 2026-11-13 stay comparable)
+            **({} if getattr(a, "fold_half", None) is None else {"fold_half": a.fold_half})}
 
 
 def sampler_code(cv) -> dict:
@@ -453,6 +455,10 @@ def main():
                     help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache)")
     ap.add_argument("--no-maia-cache", dest="maia_cache", action="store_const", const=None,
                     default=argparse.SUPPRESS, help="ask Maia afresh in every run")
+    ap.add_argument("--fold-half", type=int, choices=[0, 1], default=None,
+                    help="sample from the games in folds with fold %% 2 == H only "
+                         "(convertibility_eval.Counts): a book built on the table can then be "
+                         "scored on the other half (convertibility_eval --fold-half 1-H)")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     t0 = time.time()
@@ -504,8 +510,9 @@ def main():
                          our_elo=a.our_elo, opp_elo=a.opp_elo)
     con = duckdb.connect()
     con.execute("SET threads=8; SET memory_limit='16GB'")
-    ours = cv.Counts(con, a.our_moves.format(colour=a.colour), "ours")
-    opp = cv.Counts(con, a.opp_moves.format(colour="black" if our_white else "white"), "opp")
+    ours = cv.Counts(con, a.our_moves.format(colour=a.colour), "ours", fold_half=a.fold_half)
+    opp = cv.Counts(con, a.opp_moves.format(colour="black" if our_white else "white"), "opp",
+                    fold_half=a.fold_half)
     mm = open_eval_arrays()
 
     def lookup(hs):
