@@ -114,3 +114,19 @@ Whole books with `--rs-core` (`D:/chess/scope-checks/run_rs_core_check.bat`, aga
 Python builder's books): Black 0.30 DP, Black 0.30 price and Black 0.30 floor-5 rare round 0
 are identical, `rare.json` and meta included (timings aside). The columnar path, end to end
 at epsilon 0.01 with engine candidates (`run_rs_small.bat`), is identical for DP and price.
+
+All of it at full size (`run_rs_core_check2.bat`: the columnar path, the Rust collector,
+everything after; quiet machine). Six books are identical to the Python builder's, `rare.json`
+and meta included (timings aside). Python's times are from the simplify check and the profile.
+
+| book | edges | Python: time, peak commit | `--rs-core`: time, peak commit |
+|---|---|---|---|
+| Black 0.30 DP | 4.27M | 628 s, 24.1 GB | 332 s, 10.1 GB |
+| Black 0.30 price | 4.27M | | 352 s, 8.8 GB |
+| Black 0.30 floor-5 rare round 0 | 6.48M | | 434 s, 10.5 GB |
+| the same, round 1 (engine candidates) | 6.48M | | 476 s, 10.2 GB |
+| Black 0.60 floor-5 rare round 0 | 15.48M | 3,834 s, 63.7 GB (profiled) | 790 s, 24.9 GB |
+| White 0.30 full-menu rare round 0 | 19.76M | 1,607 s, 67.8 GB | 1,024 s, 25.7 GB |
+
+What is left is mostly the collector's DuckDB scans (122-437 s) and the weak-player stop
+model's DuckDB joins.
