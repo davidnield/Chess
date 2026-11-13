@@ -44,6 +44,8 @@ pub struct Level<'a> {
     pub total: &'a [i64],
     pub san: &'a [i64],
     pub bare: &'a [i64],
+    /// the opponent prior's reach_share per row (NaN = none: total / the parent's total)
+    pub share: Option<&'a [f64]>,
 }
 
 impl Collector {
@@ -147,7 +149,7 @@ impl Collector {
                 (Some(gt), true) => Some(Self::admit(gt, ph, &rows)),
                 _ => None,
             };
-            for row in &rows {
+            for (k, row) in rows.iter().enumerate() {
                 let Some(ch) = row.0 else { continue };
                 let cr = if our_turn {
                     if let Some(al) = &allowed {
@@ -157,7 +159,11 @@ impl Collector {
                     }
                     r
                 } else {
-                    let share = if tot != 0 { row.3 as f64 / tot as f64 } else { 0.0 };
+                    // reply_share(row, tot); engine rows are only added at our turns, so
+                    // row k here is the level's row a + k
+                    let given = lv.share.map_or(f64::NAN, |s| s[a + k]);
+                    let share = if !given.is_nan() { given }
+                                else if tot != 0 { row.3 as f64 / tot as f64 } else { 0.0 };
                     if share < self.share_floor {
                         continue;
                     }

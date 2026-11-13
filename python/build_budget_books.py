@@ -345,11 +345,10 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                               min_games: int, admit=None, engine_moves=None, reply_overlay=None,
                               uncut_own: bool = False) -> pl.DataFrame:
     """collect_subgraph_edges with the walk and the gates in Rust (book_builder_rs.RsCollector):
-    the same DuckDB scans, the same sorted rows, the same frames returned. Not with an
-    opponent prior (reply_overlay) until that is ported."""
+    the same DuckDB scans, the same sorted rows, the same frames returned. With an opponent
+    prior (reply_overlay) each level's rows are replaced as in collect_subgraph_edges, and the
+    walk reads their reach_share."""
     import book_builder_rs as rs
-    if reply_overlay is not None:
-        raise ValueError("collect_subgraph_edges_rs: --opponent-prior is not ported")
     floor = f"s.total >= {int(min_games)}"
     if uncut_own:
         our_turn = "w" if our_white else "b"
@@ -399,6 +398,8 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             JOIN frontier f ON f.h = s.parent_hash
             WHERE {floor}
         """)
+        if reply_overlay is not None:
+            df = reply_overlay.attach(df, frontier.tolist())
         df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = col.begin_level()
         if df.height and len(fresh):
@@ -414,7 +415,9 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                 new = col.unseen(par, ch, has)
                 col.store(new, np.asarray(lookup_evals(new, *admit._mm), np.int16))
             col.walk(par, ch, has, df["total"].cast(pl.Int64).to_numpy(),
-                     coder.sans(df["move_san"]), coder.bares(df["move_san"]))
+                     coder.sans(df["move_san"]), coder.bares(df["move_san"]),
+                     None if reply_overlay is None else
+                     df["reach_share"].cast(pl.Float64).fill_null(math.nan).to_numpy())
         else:
             col.walk(empty_i, empty_i, empty_b, empty_i, empty_i, empty_i)
         lvl += 1
@@ -569,11 +572,6 @@ def main() -> int:
     import budget_rs
     if not budget_rs.available():
         print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
-        return 1
-    unported = [f for f, on in (("--opponent-prior", a.opponent_prior),
-                                ("--dump-engine-targets", a.dump_engine_targets)) if on]
-    if unported:
-        print(f"FATAL: not ported to the Rust core yet: {', '.join(unported)}")
         return 1
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
@@ -779,6 +777,8 @@ def main() -> int:
         aux_frame = (pl.scan_parquet(graph_aux)
                      .filter(pl.col("position_hash").is_in(pl.Series(parents, dtype=pl.Int64).implode()))
                      .collect())
+        if reply_overlay is not None:
+            aux_frame = reply_overlay.extend_aux(aux_frame, parents)
         log(f"  aux rows for {aux_frame['position_hash'].n_unique():,} subgraph nodes")
 
     engine_moves, engine_conflicts = None, []

@@ -43,6 +43,9 @@ all count.
      straight from the Rust output behave as the Graph and its RsGraph do.
   T  the sampled tables on the Rust graph: the stop dump, the other dump, the other table's
      application and the finished-game outcomes equal sampled_stop's / sampled_other's.
+  W  the collector's walk (RsCollector) on random pool files, with floors, uncut own moves,
+     engine proposals and an opponent prior: the frame collect_subgraph_edges returns; that
+     frame's input arrays; the engine-target rows from the graph view.
 """
 from __future__ import annotations
 
@@ -991,17 +994,23 @@ def check_price() -> None:
 # ── C: the columnar path (the collector's frame straight to Rust) ──────────────────────────
 
 def frame_of(ebp: dict):
-    """edges_by_parent as the collector's frame (no opponent-prior columns)"""
+    """edges_by_parent as the collector's frame; the opponent-prior columns when any edge
+    has them (null elsewhere, as ReplyOverlay.attach leaves them)"""
     rows = []
+    prior = any("reply_mass" in e for es in ebp.values() for e in es)
     for h, es in ebp.items():
         for i, e in enumerate(es):
             rows.append({"parent_hash": h, "move_san": e["move_san"],
                          "child_hash": e.get("child_hash"),
                          "parent_epd": e.get("parent_epd") if i == 0 else None,
-                         "total": e["total"], "white_score_avg": e.get("white_score_avg")})
+                         "total": e["total"], "white_score_avg": e.get("white_score_avg"),
+                         **({"reply_mass": e.get("reply_mass"), "reach_share": e.get("reach_share"),
+                             "additional_reply": e.get("additional_reply")} if prior else {})})
     return pl.DataFrame(rows, schema={"parent_hash": pl.Int64, "move_san": pl.String,
                                       "child_hash": pl.Int64, "parent_epd": pl.String,
-                                      "total": pl.Int64, "white_score_avg": pl.Float64})
+                                      "total": pl.Int64, "white_score_avg": pl.Float64,
+                                      **({"reply_mass": pl.Float64, "reach_share": pl.Float64,
+                                          "additional_reply": pl.Boolean} if prior else {})})
 
 
 def arrays_same(a, b) -> bool:
@@ -1040,10 +1049,11 @@ def check_columns() -> None:
             our_white = t % 2 == 0
             ebp, root, eval_ws, aux, rep, eng, verified, excluded, child = random_build_inputs(
                 rng, rng.choice([15, 40, 120, 400]), our_white)
-            for es in ebp.values():               # no opponent-prior rows on this path
-                for e in es:
-                    for k in ("reply_mass", "reach_share", "additional_reply"):
-                        e.pop(k, None)
+            if t % 4 < 2:                         # half without opponent-prior rows
+                for es in ebp.values():
+                    for e in es:
+                        for k in ("reply_mass", "reach_share", "additional_reply"):
+                            e.pop(k, None)
             ebp = {h: es for h, es in ebp.items() if es}
             if root not in ebp:
                 continue
@@ -1283,6 +1293,169 @@ def check_sampled() -> None:
         print(f"    first {k} difference: {str(v)[:800]}")
 
 
+# ── W: the collector's walk, with and without an opponent prior ────────────────────────────
+
+def check_collector() -> None:
+    import tempfile
+    import duckdb
+    import budget_rs
+    import build_budget_books as bbb_
+    from engine_candidates import target_rows
+    from opponent_prior import ReplyOverlay
+    rng = random.Random(67)
+    bad = {"frame": 0, "inputs": 0, "targets": 0}
+    first: dict = {}
+    n = n_prior = rows_total = 0
+    real_log = bbb_.log
+    bbb_.log = lambda *_a, **_k: None
+    schema = {"parent_hash": pl.Int64, "move_san": pl.String, "child_hash": pl.Int64,
+              "parent_epd": pl.String, "total": pl.Int64, "white_wins": pl.Int64,
+              "draws": pl.Int64, "black_wins": pl.Int64, "white_score_avg": pl.Float64}
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            for t in range(120):
+                our_white = t % 2 == 0
+                npos = rng.choice([8, 30, 120])
+                keys = rng.sample(range(-10**9, 10**9), 3 * npos)
+                rows = []
+                for i in range(npos):
+                    stm = "w" if i % 2 == 0 else "b"         # the start position is White's
+                    for j in range(rng.randrange(0, 6)):
+                        r = rng.random()
+                        ch = (None if r < 0.04 else keys[rng.randrange(0, npos)] if r < 0.2
+                              else keys[rng.randrange(npos, 3 * npos)] if r < 0.3
+                              else keys[min(npos - 1, i + 1 + 2 * rng.randrange(0, 4))])
+                        tot = rng.choice([1, 2, 5, 20, 50, 400, rng.randrange(1, 3000)])
+                        w = rng.randrange(0, tot + 1)
+                        d = rng.randrange(0, tot - w + 1)
+                        rows.append({"parent_hash": keys[i],
+                                     "move_san": f"m{j}{rng.choice(['', '+', '#'])}",
+                                     "child_hash": ch, "parent_epd": f"p{i} {stm} - -",
+                                     "total": tot, "white_wins": w, "draws": d,
+                                     "black_wins": tot - w - d,
+                                     "white_score_avg": (w + 0.5 * d) / tot})
+                if not any(r["parent_hash"] == keys[0] for r in rows):
+                    continue
+                pool = Path(tmp) / f"pool{t}.parquet"
+                (pl.DataFrame(rows, schema=schema).sample(fraction=1.0, shuffle=True, seed=t)
+                 .write_parquet(pool))
+                overlay = None
+                if t % 3:
+                    # a frozen prior at some opponent parents: the recorded replies, replies
+                    # the pool does not have, and zero-mass rows (attach drops those)
+                    orows = []
+                    for i in range(npos):
+                        if (i % 2 == 0) == our_white or rng.random() < 0.5:
+                            continue
+                        mine = [r for r in rows if r["parent_hash"] == keys[i]]
+                        extra = [{"parent_hash": keys[i], "move_san": f"x{j}",
+                                  "child_hash": keys[rng.randrange(0, 3 * npos)],
+                                  "parent_epd": f"p{i} {'w' if i % 2 == 0 else 'b'} - -",
+                                  "total": 0, "white_wins": 0, "draws": 0, "black_wins": 0,
+                                  "white_score_avg": 0.5}
+                                 for j in range(rng.randrange(0, 3))]
+                        nonmove = rng.choice([0.0, 2.0])
+                        for r in mine + extra:
+                            orows.append({**r, "reply_observed": float(r["total"]),
+                                          "maia_p": rng.choice([0.0, rng.random()]),
+                                          "nonmove": nonmove})
+                    if orows:
+                        k = rng.choice([0.0, 30.0])
+                        o = pl.DataFrame(orows, schema={**schema, "reply_observed": pl.Float64,
+                                                        "maia_p": pl.Float64, "nonmove": pl.Float64})
+                        o = o.with_columns((pl.col("reply_observed") + k * pl.col("maia_p"))
+                                           .alias("reply_mass"))
+                        o = o.with_columns(
+                            (pl.col("reply_mass") / (pl.col("reply_mass").sum().over("parent_hash")
+                                                     + pl.col("nonmove"))).fill_nan(0.0)
+                            .alias("reach_share"))
+                        overlay = object.__new__(ReplyOverlay)
+                        overlay.rows, overlay.extra_aux = o, {}
+                        overlay.keys = o.select("parent_hash").unique()
+                eng = None
+                if rng.random() < 0.4:
+                    eng = {keys[i]: [(f"e{j}", rng.choice([None, keys[rng.randrange(0, 3 * npos)]]))
+                                     for j in range(rng.randrange(1, 3))]
+                           for i in range(npos) if rng.random() < 0.2}
+                kw = dict(eps=rng.choice([0.0, 1e-4, 0.01]), max_ply=rng.choice([3, 8, 29]),
+                          share_floor=rng.choice([0.0, 0.03]), min_games=rng.choice([1, 5, 20]),
+                          engine_moves=eng, reply_overlay=overlay, uncut_own=rng.random() < 0.3)
+                with duckdb.connect() as con:
+                    a_ = bbb_.collect_subgraph_edges(con, pool.as_posix(), keys[0], our_white, **kw)
+                with duckdb.connect() as con:
+                    b_ = bbb_.collect_subgraph_edges_rs(con, pool.as_posix(), keys[0], our_white, **kw)
+                n += 1
+                n_prior += overlay is not None
+                rows_total += a_.height
+                if a_.columns != b_.columns or not a_.equals(b_, null_equal=True):
+                    fail("frame", (t, a_.shape, b_.shape))
+                    continue
+                if not a_.height:
+                    continue
+                # the frame through frame_inputs = the dicts the Python builder made of it
+                ebp: dict = {}
+                for r in a_.iter_rows(named=True):
+                    e = {"move_san": r["move_san"], "child_hash": r["child_hash"],
+                         "total": r["total"], "white_score_avg": r["white_score_avg"]}
+                    if r["parent_hash"] not in ebp:
+                        e["parent_epd"] = r["parent_epd"]
+                    if r.get("reply_mass") is not None:
+                        e.update(reply_mass=r["reply_mass"], reach_share=r["reach_share"],
+                                 additional_reply=r["additional_reply"])
+                    ebp.setdefault(r["parent_hash"], []).append(e)
+                budget_rs.KEEP_INPUTS = True
+                try:
+                    g = budget_rs.build_graph_rs(ebp, keys[0], our_white, eps=kw["eps"],
+                                                 max_ply=kw["max_ply"],
+                                                 share_floor=kw["share_floor"], gates=False,
+                                                 require_eval=False, eval_ws={},
+                                                 slice_prior=0.5196)
+                    want = dict(budget_rs.LAST_INPUTS)
+                finally:
+                    budget_rs.KEEP_INPUTS = False
+                got = budget_rs.frame_inputs(a_)
+                if not arrays_same(got["edges"], want["edges"]) or not arrays_same(got["rows"], want["rows"]):
+                    fail("inputs", (t, [k for k in ("edges", "rows")
+                                        if not arrays_same(got[k], want[k])]))
+                    continue
+                # the engine-target rows from the view = from the Graph
+                out = budget_rs.run_csr(
+                    got["edges"], got["rows"], got["aux"], want["ek"], want["ev"], keys[0], our_white,
+                    slice_prior=0.5196, prior_strength=bc.PRIOR_STRENGTH, eval_weight=bc.EVAL_WEIGHT,
+                    eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K,
+                    eps=kw["eps"], max_ply=kw["max_ply"], share_floor=kw["share_floor"],
+                    robustness_floor=bc.ROBUSTNESS_FLOOR, gate_rel_floor=bc.GATE_REL_FLOOR,
+                    gate_rel_own_margin=bc.GATE_REL_OWN_MARGIN, require_eval=False, gates=False,
+                    max_eval_loss=None, rare_floor=None, strict_source=False, other_cov_blend=False,
+                    gated_reach=False, crack_at_parents=False, engine_moves_given=False,
+                    track_route_ply=False, track_other=False)
+                v = budget_rs.GraphView(out, got["san_list"], keys[0], got["parents"], got["epd"],
+                                        eps=kw["eps"], max_ply=kw["max_ply"],
+                                        share_floor=kw["share_floor"], slice_prior=0.5196,
+                                        our_white=our_white, strict_source=False,
+                                        crack_at_parents=False)
+                # some loss exceptions, as a build with --max-eval-loss records them
+                exc = {h: "loss" for h in list(g.our)[::3]}
+                g.meta = dict(g.meta, loss_exceptions=exc)
+                v.meta["loss_exceptions"] = exc
+                if not target_rows(g, "white").equals(target_rows(v, "white")):
+                    fail("targets", t)
+    finally:
+        bbb_.log = real_log
+    check("W: the collector's walk in Rust = collect_subgraph_edges on random pools (floors, "
+          "uncut own moves, engine proposals, an opponent prior's replaced replies): the same "
+          "frame; that frame through frame_inputs = the builder's dicts through graph_to_csr; "
+          "the engine-target rows from the graph view = from the Graph",
+          not any(bad.values()),
+          f"{n} pools ({n_prior} with a prior), {rows_total:,} rows; differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {str(v)[:800]}")
+
+
 def main() -> int:
     if rs is None:
         print("  SKIP  no book_builder_rs extension (build it: rust/book_builder/build.ps1)")
@@ -1298,6 +1471,7 @@ def main() -> int:
     check_price()
     check_columns()
     check_sampled()
+    check_collector()
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 

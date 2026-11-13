@@ -45,7 +45,9 @@ def target_rows(graph, colour):
     exceptions = graph.meta.get("loss_exceptions", {})
     rows = []
     for h, node in graph.our.items():
-        reason = exceptions.get(h) if node.cands else "empty"
+        # a Graph's OurNode, or a budget_rs.GraphView's candidate count
+        has_cands = node.cands if hasattr(node, "cands") else node
+        reason = exceptions.get(h) if has_cands else "empty"
         if reason and graph.epd.get(h):
             rows.append((h, graph.epd[h], colour, reason, graph.reach[h], graph.ply[h]))
     schema = {"position_hash": pl.Int64, "epd": pl.String, "colour": pl.String,

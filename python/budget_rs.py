@@ -458,8 +458,10 @@ def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verif
     """build_graph_rs's input arrays straight from the collector's frame (parent_hash,
     move_san, child_hash, parent_epd, total, white_score_avg; each parent's edges contiguous,
     parents in first-appearance order, as the collector returns them): the same arrays bit for
-    bit (_test_book_builder_rs.py check C). aux_frame: the aux sidecar's rows (polars), the
-    rows load_aux_rows reads. Returns {edges, rows, aux, san_list, parents, epd}."""
+    bit (_test_book_builder_rs.py check C). With an opponent prior the frame also carries
+    reply_mass, reach_share and additional_reply (null on the rows the prior left alone); a
+    parent is "named" when its first row has a reply_mass. aux_frame: the aux sidecar's rows
+    (polars), the rows load_aux_rows reads. Returns {edges, rows, aux, san_list, parents, epd}."""
     import polars as pl
     import build_baseline_books
     i64, f64 = np.int64, np.float64
@@ -467,10 +469,20 @@ def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verif
     engine_moves = engine_moves or {}
     excluded = excluded or {}
     verified = verified or {}
-    if "reply_mass" in edf.columns:
-        raise ValueError("frame_inputs: opponent-prior rows are not supported")
     par = edf["parent_hash"].cast(pl.Int64).to_numpy()
     m = len(par)
+    prior = "reply_mass" in edf.columns
+    if prior:
+        e_mass = edf["reply_mass"].cast(pl.Float64).fill_null(math.nan).to_numpy()
+        e_share = edf["reach_share"].cast(pl.Float64).fill_null(math.nan).to_numpy()
+        has_mass = edf["reply_mass"].is_not_null().to_numpy()
+        # attach() stamps additional_reply=False on the rows it left alone: the builder
+        # reads the three fields only where a reply_mass is present
+        e_share = np.where(has_mass, e_share, math.nan)
+        e_add = np.where(has_mass, edf["additional_reply"].cast(pl.Int64).fill_null(-1).to_numpy(), -1)
+    else:
+        e_mass = e_share = np.full(m, math.nan, f64)
+        e_add = np.full(m, -1, i64)
     if m:
         starts = np.flatnonzero(np.concatenate([[True], par[1:] != par[:-1]]))
     else:
@@ -499,12 +511,11 @@ def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verif
                  child=chs.fill_null(0).to_numpy().astype(i64),
                  has_child=chs.is_not_null().to_numpy(),
                  total=edf["total"].cast(pl.Int64).to_numpy(),
-                 share=np.full(m, math.nan, f64),
+                 share=e_share,
                  san=sans_col.replace_strict(code, return_dtype=pl.Int64).to_numpy(),
                  bare=sans_col.str.strip_chars_end("+#").replace_strict(
                      bcode, return_dtype=pl.Int64).to_numpy(),
-                 ws=ws.to_numpy(), reply_mass=np.full(m, math.nan, f64),
-                 additional=np.full(m, -1, i64))
+                 ws=ws.to_numpy(), reply_mass=e_mass, additional=e_add)
     epd = edf["parent_epd"].gather(starts).to_list() if m else []
     # the source move, unless vetoed, and whether it is among the recorded (unvetoed) moves
     src_eff = []
@@ -549,7 +560,8 @@ def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verif
     n = len(pl_)
     rows = dict(src_san=np.array(ss, i64), src_bare=np.array(sb, i64),
                 src_child=np.array(sc, i64), src_has_child=np.array(sh, bool),
-                named=np.zeros(n, bool), m_ptr=np.array(m_ptr, i64),
+                named=has_mass[starts] if prior else np.zeros(n, bool),
+                m_ptr=np.array(m_ptr, i64),
                 m_san=np.array(m_san, i64), m_bare=np.array(m_bare, i64),
                 m_child=np.array(m_child, i64), m_has_child=np.array(m_has, bool),
                 v_ptr=np.array(v_ptr, i64), v_bare=np.array(v_bare, i64),
@@ -634,7 +646,8 @@ class GraphView:
                  slice_prior, our_white, strict_source, crack_at_parents):
         self.root = root
         nk, no = out["node_keys"], out["node_our"]
-        self.our = ArrayMap(nk[no], np.zeros(int(no.sum())))
+        # our nodes -> their number of candidates (engine_candidates.target_rows reads it)
+        self.our = ArrayMap(nk[no], np.diff(out["c_ptr"]))
         self.opp = ArrayMap(nk[~no], np.zeros(int((~no).sum())))
         self.reach = ArrayMap(out["reach_keys"], out["reach_vals"])
         self.ply = ArrayMap(out["ply_keys"], out["ply_vals"])

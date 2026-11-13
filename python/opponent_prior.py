@@ -38,6 +38,18 @@ class ReplyOverlay:
                     raise ValueError("Expanded reply termination data changed")
             self.extra_aux = {r["position_hash"]: r for r in pl.read_parquet(extra).to_dicts()}
 
+    def extend_aux(self, aux_frame, parents):
+        """The aux sidecar's rows plus the expanded parents' real termination mass (the
+        prior's .aux.parquet), for the parents in the graph. A parent may not have both."""
+        extra = [self.extra_aux[h] for h in parents if h in self.extra_aux]
+        if not extra:
+            return aux_frame
+        ex = pl.DataFrame(extra, infer_schema_length=None)
+        dup = ex.join(aux_frame.select("position_hash"), on="position_hash", how="semi")
+        if dup.height:
+            raise ValueError(f"Duplicate termination data for expanded parent {dup['position_hash'][0]}")
+        return pl.concat([aux_frame, ex], how="diagonal_relaxed")
+
     def attach(self, frame, frontier):
         # Replace only parents actually reached by this frontier, and only
         # within the frozen support. Our candidate rows keep their true counts.

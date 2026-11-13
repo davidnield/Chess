@@ -64,12 +64,12 @@ skips when the extension is missing. The crate README lists the exactness rules 
 `sum()` order; `exp`/`ln` from the same C runtime; Python's dict and set orders) and what is
 ported so far. Since 2026-11-12 `build_budget_books.py` runs only in Rust (user: no Python
 fallback): the collector's walk, graph assembly from the collector's frame, the stop values and
-the sampled stop/other tables, the curve engine, the price search and polish. It stops with an
-error when the extension is not built, and on the options not ported yet (`--opponent-prior`,
-`--dump-engine-targets`); `--rs-core` is accepted and does nothing. The Python stages stay as
-the tests' reference. The referee and the samplers always play their sampled games in Rust
-(`convertibility_eval.rollouts`; `rollouts_py` is the reference) and keep Maia's answers in
-`D:/chess/maia/answer_cache` by default (`--no-maia-cache` to opt out).
+the sampled stop/other tables, the opponent prior, the curve engine, the price search and
+polish. It stops with an error when the extension is not built; `--rs-core` is accepted and
+does nothing. The Python stages stay as the tests' reference. The referee and the samplers
+always play their sampled games in Rust (`convertibility_eval.rollouts`; `rollouts_py` is the
+reference) and keep Maia's answers in `D:/chess/maia/answer_cache` by default
+(`--no-maia-cache` to opt out).
 
 ## Data paths — critical
 

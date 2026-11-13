@@ -102,7 +102,7 @@ impl RsCollector {
                    has_child: PyReadonlyArray1<bool>) -> PyResult<Bound<'py, PyArray1<i64>>> {
         let p = keys_of(parent.as_slice()?);
         let c = opt_keys(child.as_slice()?, has_child.as_slice()?);
-        let lv = Level { parent: &p, child: &c, total: &[], san: &[], bare: &[] };
+        let lv = Level { parent: &p, child: &c, total: &[], san: &[], bare: &[], share: None };
         Ok(PyArray1::from_vec(py, self.c.unseen(&lv).into_iter().map(lo).collect()))
     }
 
@@ -113,20 +113,30 @@ impl RsCollector {
         Ok(())
     }
 
-    /// one level's walk over its sorted rows: the next frontier
+    /// one level's walk over its sorted rows: the next frontier. share: the opponent
+    /// prior's reach_share per row (NaN = none), or None without a prior.
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (parent, child, has_child, total, san, bare, share=None))]
     fn walk<'py>(&mut self, py: Python<'py>, parent: PyReadonlyArray1<i64>, child: PyReadonlyArray1<i64>,
                  has_child: PyReadonlyArray1<bool>, total: PyReadonlyArray1<i64>,
-                 san: PyReadonlyArray1<i64>, bare: PyReadonlyArray1<i64>)
+                 san: PyReadonlyArray1<i64>, bare: PyReadonlyArray1<i64>,
+                 share: Option<PyReadonlyArray1<f64>>)
                  -> PyResult<Bound<'py, PyArray1<i64>>> {
         let p = keys_of(parent.as_slice()?);
         let c = opt_keys(child.as_slice()?, has_child.as_slice()?);
         let (t, s, b) = (total.as_slice()?, san.as_slice()?, bare.as_slice()?);
         crate::same_len(p.len(), &[c.len(), t.len(), s.len(), b.len()])?;
+        let sh = match &share {
+            Some(x) => Some(x.as_slice()?),
+            None => None,
+        };
+        if let Some(x) = sh {
+            crate::same_len(p.len(), &[x.len()])?;
+        }
         if p.windows(2).any(|w| crate::core::pk(w[1]) < crate::core::pk(w[0])) {
             return Err(PyValueError::new_err("rows must be sorted by parent"));
         }
-        let lv = Level { parent: &p, child: &c, total: t, san: s, bare: b };
+        let lv = Level { parent: &p, child: &c, total: t, san: s, bare: b, share: sh };
         let c = &mut self.c;
         let nxt = py.detach(|| c.walk(&lv));
         Ok(PyArray1::from_vec(py, nxt.into_iter().map(lo).collect()))

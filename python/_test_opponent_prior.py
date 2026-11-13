@@ -8,7 +8,8 @@ from tempfile import TemporaryDirectory
 import duckdb
 import polars as pl
 import budget_core as bc
-from build_budget_books import collect_subgraph_edges
+import budget_rs
+from build_budget_books import collect_subgraph_edges, collect_subgraph_edges_rs
 from opponent_prior import ReplyOverlay
 
 
@@ -49,6 +50,36 @@ def all_subfloor_parent():
             assert math.isclose(g.opp[1].const_base,2/8)
             assert math.isclose(sum(p for p,*_ in g.opp[1].kids),6/8)
             assert {2,3} <= g.our.keys()
+            if not budget_rs.available():
+                continue
+            # the Rust builder's path: its collector, the frame straight to the graph, the
+            # prior's termination rows appended to the sidecar's
+            with duckdb.connect() as con:
+                frame = collect_subgraph_edges_rs(con,str(pool),1,False,.001,2,.01,20,reply_overlay=overlay)
+            assert frame.equals(result, null_equal=True)
+            side = pl.DataFrame({"position_hash":[2],"term_normal_total":[1],"term_normal_white_wins":[1]})
+            parents = frame["parent_hash"].unique(maintain_order=True).to_list()
+            fi = budget_rs.frame_inputs(frame, aux_frame=overlay.extend_aux(side, parents))
+            ref = bc.build_graph(edges,1,False,eps=.001,max_ply=2,share_floor=.01,gates=False,
+                                 require_eval=False,aux_rows={**overlay.extra_aux,**{r["position_hash"]:r for r in side.to_dicts()}})
+            import numpy as np
+            out = budget_rs.run_csr(fi["edges"],fi["rows"],fi["aux"],np.zeros(0,np.int64),np.zeros(0),1,False,
+                slice_prior=.5,prior_strength=bc.PRIOR_STRENGTH,eval_weight=bc.EVAL_WEIGHT,
+                eval_weight_min=bc.EVAL_WEIGHT_MIN,eval_weight_k=bc.EVAL_WEIGHT_K,eps=.001,max_ply=2,
+                share_floor=.01,robustness_floor=bc.ROBUSTNESS_FLOOR,gate_rel_floor=bc.GATE_REL_FLOOR,
+                gate_rel_own_margin=bc.GATE_REL_OWN_MARGIN,require_eval=False,gates=False,max_eval_loss=None,
+                rare_floor=None,strict_source=False,other_cov_blend=False,gated_reach=False,
+                crack_at_parents=False,engine_moves_given=False,track_route_ply=False,track_other=False)
+            nk, no = out["node_keys"].tolist(), out["node_our"].tolist()
+            opp = [h for h, o in zip(nk, no) if not o]
+            assert opp == list(ref.opp)
+            assert out["const_base"].tolist() == [ref.opp[h].const_base for h in opp]
+            assert math.isclose(out["const_base"][opp.index(1)], 2/8)
+            try:
+                overlay.extend_aux(pl.DataFrame({"position_hash":[1],"term_normal_total":[1]}), parents)
+                raise AssertionError("a parent with both sidecar and prior termination rows was accepted")
+            except ValueError:
+                pass
 
 
 def run():

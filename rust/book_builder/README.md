@@ -65,7 +65,7 @@ separate code without its check suffix (its bare code).
 | `dp.rs` | the curve engine: `Curve`, `curve_from_points`, `cap_curve`, `merge_weighted`, `build_curves`, `extract_book`, `match_distinct` |
 | `polish.rs` | `_book_region`, `book_result`, `polish_book`: the dict path's semantics, stickiness included, and the compiled path's loop bounds, held to both |
 | `price.rs` | `price_book`, `policy_reach`, `price_search` (one pricing round, the selection rule, polish from three starts) |
-| `collect.rs` | `collect_subgraph_edges`' walk and `GateAdmit`. DuckDB still scans the pool. The gates' eval cache follows `GateAdmit`: a hash is known once a level's prefetch has looked it up, or once the engine candidates gave it a fresh eval. |
+| `collect.rs` | `collect_subgraph_edges`' walk and `GateAdmit`, with an opponent prior's reach shares when one is given. DuckDB still scans the pool. The gates' eval cache follows `GateAdmit`: a hash is known once a level's prefetch has looked it up, or once the engine candidates gave it a fresh eval. |
 
 | `rollout.rs` | `convertibility_eval.rollouts`' games, for the referee and the stop/other samplers (always; `rollouts_py` is the Python reference). This one is NOT held to Python bit for bit (user, 2026-11-12: sampler work need only replicate the tool conceptually). Still, `_test_convertibility_eval.py` R2 gets identical games on the referee's fixtures. On real data, 500 positions of Black's stop dump gave the Python sampler's table bit for bit, in 63 s against Python's 606 s (225 s with a warm Maia cache). |
 
@@ -73,8 +73,9 @@ The Python side lives in `python/budget_rs.py`. The columnar path (`frame_inputs
 `GraphView`, `rs_graph_from_out`) builds the graph's input arrays straight from the collector's
 frame. The graph then lives in Rust, and no `edges_by_parent`, eval, aux or source-row dict is
 built. The sampled stop and other tables run on the `RsGraph` (`stop_dump`, `add_const_base`,
-`terminal_outcomes`). Not ported yet: `--opponent-prior` and `--dump-engine-targets`; the
-builder stops with an error on them.
+`terminal_outcomes`). The opponent prior (`--opponent-prior`) reaches the walk as each row's
+`reach_share` and the graph as the frame's `reply_mass` / `additional_reply` columns;
+`--dump-engine-targets` reads the graph view. Every builder option now runs here.
 
 ## Checks
 
@@ -88,7 +89,9 @@ The synthetic checks in `python/_test_book_builder_rs.py`:
 | D | 436 graphs from the DP, price and speed tests, plus cyclic graphs, big DAGs and assembled graphs (4,604 extractions, 136 with cycles cut, 174 sticky) | equal; with extraction's `>` planted as `>=`, 348 extractions and 923 matches differ |
 | P | 2,820 polishes (183 trimmed, 915 improved, 438 sticky), 2,382 also on Python's compiled path | equal; with rebook's length limit tightened, 111 differ |
 | S | 4,740 price searches on 494 graphs | equal |
-| C | 269 graphs: columnar inputs, graph view, the `RsGraph` from the Rust output | equal |
+| C | 277 graphs, half with opponent-prior rows: columnar inputs, graph view, the `RsGraph` from the Rust output | equal |
+| T | 120 graphs: the stop and other dumps, the other table's application, finished-game outcomes | equal |
+| W | 100 random pool files (65 with an opponent prior): the collector's frame, its input arrays, the engine-target rows | equal |
 
 Two planted errors went undetected, because the random graphs never tie exactly:
 - a hull merge on equal densities;
