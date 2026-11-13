@@ -46,6 +46,7 @@ Exe: $EXPLORER_EXTRACT_EXE, else D:/rust-target/explorer_extract/release/explore
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -64,6 +65,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from stage1_extract_positions import iter_san_moves  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
+from zobrist128 import zobrist128  # noqa: E402
 EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE",
                           "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
 YEAR, MONTH = 2099, 1
@@ -213,10 +215,10 @@ def py_game(movetext, ws, term, me, wt, bt) -> tuple[dict, list[tuple]]:
     toks = list(iter_san_moves(movetext)) if movetext else []
     g = {"drop": drop, "n_tokens": min(len(toks), MAX_PLY + 1), "outcome": "done",
          "failed_ply": None, "failed_token": None, "term_hash": None, "term_kind": None,
-         "reason": _REASON.get(term, 3)}
+         "reason": _REASON.get(term, 3), "term_hash_hi": None}
     plies: list[tuple] = []
     board = chess.Board()
-    ph = zobrist_int64(board)
+    ph, ph_hi = zobrist128(board)
     maxply = min(MAX_PLY, len(toks))
     for ply in range(1, maxply + 1):
         tok = toks[ply - 1]
@@ -230,10 +232,11 @@ def py_game(movetext, ws, term, me, wt, bt) -> tuple[dict, list[tuple]]:
             g.update(outcome="null_in_check", failed_ply=ply, failed_token=tok)
             return g, plies
         board.push(mv)
-        ch = zobrist_int64(board)
-        plies.append((ply, tok, ph, ch, epd))
-        ph = ch
+        ch, ch_hi = zobrist128(board)
+        plies.append((ply, tok, ph, ch, epd, ph_hi, ch_hi))
+        ph, ph_hi = ch, ch_hi
     g["term_hash"] = ph
+    g["term_hash_hi"] = ph_hi
     g["term_kind"] = 0 if maxply >= len(toks) else 1
     return g, plies
 
@@ -246,12 +249,13 @@ def _check_file(task: tuple) -> tuple[int, int, int, list[str]]:
     rows = games["row"]
     sub = t.take(pa.array(rows, pa.int64())).to_pylist()
     by_row: dict[int, list[tuple]] = {}
-    for r, ply, tok, ph, ch, epd in zip(plies["row"], plies["ply"], plies["token"],
-                                        plies["parent_hash"], plies["child_hash"], plies["epd"]):
-        by_row.setdefault(r, []).append((ply, tok, ph, ch, epd))
+    for r, ply, tok, ph, ch, epd, ph_hi, ch_hi in zip(
+            plies["row"], plies["ply"], plies["token"], plies["parent_hash"],
+            plies["child_hash"], plies["epd"], plies["parent_hash_hi"], plies["child_hash_hi"]):
+        by_row.setdefault(r, []).append((ply, tok, ph, ch, epd, ph_hi, ch_hi))
     n_plies, bad, ex = 0, 0, []
     keys = ("drop", "n_tokens", "outcome", "failed_ply", "failed_token", "term_hash",
-            "term_kind", "reason")
+            "term_kind", "reason", "term_hash_hi")
     for i, r in enumerate(rows):
         s = sub[i]
         want_g, want_p = py_game(s["movetext"], s["white_score"], s["termination"],
@@ -655,16 +659,102 @@ def main() -> None:
         check(rp.returncode == 0, f"dump-plies runs (rc {rp.returncode})")
         n, p, bad, ex = check_plies(base, root)
         check(n > 300 and p > 3000 and bad == 0,
-              f"every ply and every game outcome agrees: {n:,} games, {p:,} plies, "
-              f"{bad} differing games")
+              f"every ply and every game outcome agrees, both halves of the 128-bit key "
+              f"included: {n:,} games, {p:,} plies, {bad} differing games")
         for e in ex:
             print("    " + e)
+        key128_checks(root, tmp, base)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
     n_fail = sum(1 for ok, _ in _checks if not ok)
     print(f"\n{'ALL PASS' if n_fail == 0 else f'{n_fail} FAILURES'} ({len(_checks)} checks)")
     sys.exit(0 if n_fail == 0 else 1)
+
+
+def key128_checks(root: Path, tmp: Path, dump_base: Path) -> None:
+    """month --key128 against the 64-bit month of the same games and against python-chess."""
+    import duckdb
+    print("\nmonth --key128")
+    tag = f"{YEAR}_{MONTH}"
+    sp = lambda x: str(x).replace("\\", "/")                                # noqa: E731
+    n64, w1, w4 = tmp / "k64", tmp / "k128_1", tmp / "k128_4"
+    runs = [rust_month(root, n64, "--ply-key", "--passes", "1", "--threads", "2"),
+            rust_month(root, w1, "--ply-key", "--key128", "--passes", "1", "--threads", "2"),
+            rust_month(root, w4, "--ply-key", "--key128", "--passes", "4", "--threads", "12")]
+    check(all(r.returncode == 0 for r in runs),
+          f"the 64-bit month and --key128 at two thread / pass counts run "
+          f"(rc {[r.returncode for r in runs]}) "
+          f"{next((r.stderr[-300:] for r in runs if r.returncode), '')}")
+    con = duckdb.connect()
+    files = lambda d: sorted(p.relative_to(d).as_posix() for p in d.rglob("*.parquet")     # noqa: E731
+                             if "_manifest" not in p.parts)
+    same = files(w1) == files(w4) and all(
+        (w1 / f).read_bytes() == (w4 / f).read_bytes() for f in files(w1))
+    check(same and len(files(w1)) > 10,
+          f"--key128 is byte-identical across thread and pass counts ({len(files(w1))} files)")
+
+    def month(d: Path) -> str:
+        return (f"read_parquet('{sp(d)}/month={tag}/bkt=*/*.parquet', hive_partitioning=false, "
+                f"filename=true)")
+
+    term = f"year={YEAR}_month={MONTH}.term.parquet"
+    cols = [r[0] for r in con.execute(f"DESCRIBE SELECT * FROM {month(w1)}").fetchall()]
+    tcols = [r[0] for r in con.execute(
+        f"DESCRIBE SELECT * FROM read_parquet('{sp(w1 / '_term' / term)}')").fetchall()]
+    check(cols[:-1] == [c.strip() for c in PS_COLS.split(",")] + ["parent_hash_hi", "child_hash_hi"]
+          and tcols[-1] == "position_hash_hi" and tcols[0] == "position_hash",
+          "the high halves are the last columns: PS_COLS + parent_hash_hi, child_hash_hi; "
+          "the term table + position_hash_hi")
+    # the 64-bit columns: the same rows, in the same order, file by file
+    n = con.execute(f"SELECT COUNT(*) FROM {month(w1)}").fetchone()[0]
+    order = all(
+        pq.read_table(w1 / f).drop_columns(["parent_hash_hi", "child_hash_hi"]).equals(
+            pq.read_table(n64 / f))
+        for f in files(w1) if f.startswith("month="))
+    check(n > 400 and order,
+          f"without its high halves a --key128 month IS the 64-bit month: {n:,} rows, every "
+          f"bucket file equal row for row")
+    tw = pq.read_table(w1 / "_term" / term)
+    check(tw.drop_columns(["position_hash_hi"]).equals(pq.read_table(n64 / "_term" / term)),
+          f"and its term table likewise ({tw.num_rows:,} rows)")
+    # the high halves: python-chess's, through the dump that was just held to it
+    con.execute(f"""
+        CREATE TABLE hi AS
+        SELECT lo, MIN(hi) AS hi, COUNT(DISTINCT hi) AS n FROM (
+            SELECT parent_hash AS lo, parent_hash_hi AS hi FROM read_parquet('{sp(dump_base)}.plies.parquet')
+            UNION ALL SELECT child_hash, child_hash_hi FROM read_parquet('{sp(dump_base)}.plies.parquet')
+        ) GROUP BY lo""")
+    amb = con.execute("SELECT COUNT(*) FROM hi WHERE n > 1").fetchone()[0]
+    known, bad = con.execute(f"""
+        SELECT COUNT(*) FILTER (WHERE p.lo IS NOT NULL AND c.lo IS NOT NULL),
+               COUNT(*) FILTER (WHERE (p.lo IS NOT NULL AND p.hi <> m.parent_hash_hi)
+                                   OR (c.lo IS NOT NULL AND c.hi <> m.child_hash_hi)
+                                   OR m.parent_hash_hi IS NULL OR m.child_hash_hi IS NULL)
+        FROM {month(w1)} m LEFT JOIN hi p ON p.lo = m.parent_hash
+                           LEFT JOIN hi c ON c.lo = m.child_hash""").fetchone()
+    tknown, tbad = con.execute(f"""
+        SELECT COUNT(*) FILTER (WHERE h.lo IS NOT NULL),
+               COUNT(*) FILTER (WHERE (h.lo IS NOT NULL AND h.hi <> t.position_hash_hi)
+                                   OR t.position_hash_hi IS NULL)
+        FROM read_parquet('{sp(w1 / '_term' / term)}') t LEFT JOIN hi h ON h.lo = t.position_hash
+        """).fetchone()
+    check(amb == 0 and known > 300 and bad == 0 and tknown > 10 and tbad == 0,
+          f"every high half is python-chess's: {known:,} month rows and {tknown:,} term rows "
+          f"whose positions the dump covers, {bad} + {tbad} differ, none NULL")
+    start = con.execute(f"SELECT DISTINCT parent_hash_hi FROM {month(w1)} "
+                        f"WHERE parent_hash = {zobrist_int64(chess.Board())}").fetchall()
+    check(start == [(zobrist128(chess.Board())[1],)],
+          "the start position carries zobrist128's high half")
+    params = json.loads((w1 / "_extract_params.json").read_text())
+    p64 = json.loads((n64 / "_extract_params.json").read_text())
+    prov = json.loads((w1 / "_provenance" / f"month={tag}.json").read_text())
+    check(params.get("key_bits") == 128 and "key_bits" not in p64 and prov["key_bits"] == 128,
+          "the month dir's lock records key_bits 128 (a 64-bit dir's lock is unchanged)")
+    (n64 / f"_month={tag}.DONE").unlink()
+    r = rust_month(root, n64, "--ply-key", "--key128", "--passes", "1", "--threads", "2")
+    check(r.returncode != 0 and "_extract_params.json" in r.stderr,
+          "--key128 into a 64-bit month dir is refused by the lock")
 
 
 def plies_cli() -> None:

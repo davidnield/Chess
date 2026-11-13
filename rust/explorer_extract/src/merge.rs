@@ -644,6 +644,12 @@ fn preflight(cfg: &Config) -> Result<Plan> {
     if params["buckets"] != json!(BUCKETS) {
         bad.push(format!("buckets is {}, not {BUCKETS}", params["buckets"]));
     }
+    if !params["key_bits"].is_null() {
+        bad.push(format!(
+            "key_bits is {}: these are 128-bit months (month --key128), and this merge writes the              64-bit book-v1, which would drop the keys' high halves",
+            params["key_bits"]
+        ));
+    }
     if params["events"] != Value::Array(want_events) {
         bad.push(format!("events is {}, not the six speeds {EVENTS:?}", params["events"]));
     }

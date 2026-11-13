@@ -4,6 +4,11 @@
 //!   PseudoLegal is polyglot's rule (the ep file counts whenever a pawn of the
 //!   side to move could capture pseudo-legally); `Legal` would differ on a
 //!   pinned en-passant capture.
+//! * 128-bit key (`Key`, month --key128): shakmaty's `Zobrist128` under the same
+//!   ep rule. Its low half IS the polyglot hash (the selftest holds all 781 low
+//!   halves to the 64-bit table), so `lo` joins every 64-bit table and buckets
+//!   the same way; `hi` is the other half. python/zobrist128.py computes the
+//!   same pair with python-chess.
 //! * EPD: `board.epd()` -- 4 fields, ep printed only when the capture is LEGAL.
 //!   Stored as a 34-byte `Packed` position and rendered only when written, so
 //!   a month's worth of keys costs 34 bytes each instead of a ~60-byte string.
@@ -11,16 +16,58 @@
 //!   python-chess's `board.epd()` (the fixtures and the per-ply diff).
 
 use shakmaty::{
-    zobrist::Zobrist64,
+    zobrist::{Zobrist128, Zobrist64},
     CastlingSide, Chess, Color, EnPassantMode, Position, Role,
 };
 
 pub const START_HASH: i64 = 5_060_803_636_482_931_868;
 
+/// The high half of the start position's 128-bit key.
+pub const START_HASH_HI: i64 = 4_427_599_749_834_255_219;
+
 #[inline]
 pub fn hash(pos: &Chess) -> i64 {
     let z: Zobrist64 = pos.zobrist_hash(EnPassantMode::PseudoLegal);
     z.0 as i64
+}
+
+/// A 128-bit position key. Ord is (lo, hi): the 64-bit sort order, with `hi`
+/// splitting what used to be collision twins.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+pub struct Key {
+    pub lo: i64,
+    pub hi: i64,
+}
+
+pub const START_KEY: Key = Key { lo: START_HASH, hi: START_HASH_HI };
+
+#[inline]
+pub fn key128(pos: &Chess) -> Key {
+    let z: Zobrist128 = pos.zobrist_hash(EnPassantMode::PseudoLegal);
+    Key { lo: z.0 as u64 as i64, hi: (z.0 >> 64) as u64 as i64 }
+}
+
+/// What the game walk hashes a position to: `i64` in the modes held to the
+/// Python extract, `Key` where 128-bit keys can be asked for.
+pub trait PosKey: Copy {
+    const START: Self;
+    fn of(pos: &Chess) -> Self;
+}
+
+impl PosKey for i64 {
+    const START: i64 = START_HASH;
+    #[inline]
+    fn of(pos: &Chess) -> i64 {
+        hash(pos)
+    }
+}
+
+impl PosKey for Key {
+    const START: Key = START_KEY;
+    #[inline]
+    fn of(pos: &Chess) -> Key {
+        key128(pos)
+    }
 }
 
 /// A position reduced to what its EPD shows.

@@ -695,6 +695,11 @@ fn preflight_refusals() {
         p["ply_key"] = json!(false);
         write_params(&t.root(), &p);
     }, &[], "ply_key");
+    run("key_bits", &|t| {
+        let mut p = params();
+        p["key_bits"] = json!(128);
+        write_params(&t.root(), &p);
+    }, &[], "key_bits");
     run("file_count", &|t| {
         let mut m = base_months().remove(1);
         m.man_files_delta = 1;

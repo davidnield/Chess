@@ -7,7 +7,8 @@ Python side of the contract, then `cargo test`.
 
 Writes to rust/explorer_extract/tests/fixtures/ (or --out):
 
-  polyglot_keys.json  the 781 POLYGLOT_RANDOM_ARRAY keys and the start hash
+  polyglot_keys.json  the 781 POLYGLOT_RANDOM_ARRAY keys and the start hash, and the 128-bit
+                      key's high halves (zobrist128.HI_KEYS) with the start position's
   pyunicode.json      the code points str.split() splits on, and re's \\d class
   san_table.json      hand cases, every row of the spec's 2f table and more:
                       a setup (FEN + UCI moves), a token, and parse_san's verdict
@@ -92,9 +93,12 @@ def verdict(board: chess.Board, san: str, with_epd: bool = True) -> dict:
 def gen_keys(out: Path) -> None:
     keys = list(chess.polyglot.POLYGLOT_RANDOM_ARRAY)
     assert len(keys) == 781
+    import zobrist128
     dump(out / "polyglot_keys.json",
          {"keys": keys, "start_hash": zobrist_int64(chess.Board()),
-          "start_epd": chess.Board().epd()})
+          "start_epd": chess.Board().epd(),
+          "keys_hi": list(zobrist128.HI_KEYS),
+          "start_hash_hi": zobrist128.zobrist_hi_int64(chess.Board())})
 
 
 def _ranges(cps: list[int]) -> list[list[int]]:

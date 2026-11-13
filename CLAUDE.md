@@ -226,6 +226,11 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
   at C = ps rows at ply C by child_hash minus ENDED with end_ply = C. A derived HORIZON row has no
   reason (ps rows carry none); `merge_aux_stats` sums horizon over reason anyway. The month dir's
   `_extract_params.json` records max_ply and ply_key, so the two kinds never share a book dir.
+- **`month --key128` writes 128-bit position keys** as two BIGINT columns: the existing hash
+  columns keep their names and values (the polyglot hash is the key's low half, so 64-bit tables
+  still join and buckets do not move) and the high halves follow as the last columns
+  (`parent_hash_hi`, `child_hash_hi`, `position_hash_hi`). `python/zobrist128.py` is the Python
+  side. A key with two EPDs fails the month; `merge` (64-bit book-v1) refuses these months.
 - **The all-time book is `explorer-extract merge`** over ply-keyed Rust months (book-v1:
   `ps/event=E/elo_band=B/bkt<iii>.parquet` plus pooled `term/`). Its settings lock refuses any other
   build, month set or writer settings, so a book is continued only by the exe that began it — delete

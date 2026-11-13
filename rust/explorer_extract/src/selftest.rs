@@ -7,10 +7,10 @@
 use serde_json::Value;
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
-use shakmaty::zobrist::{Zobrist64, ZobristValue};
+use shakmaty::zobrist::{Zobrist128, Zobrist64, ZobristValue};
 use shakmaty::{CastlingMode, CastlingSide, Chess, Color, File, Piece, Position, Role, Square};
 
-use crate::chesspos::{hash, pack, shakmaty_epd, START_HASH};
+use crate::chesspos::{hash, key128, pack, shakmaty_epd, START_HASH, START_KEY};
 use crate::game::Filters;
 use crate::keys::{san_str, BANDS};
 use crate::partials::ChunkAgg;
@@ -29,12 +29,16 @@ fn parse(json: &str) -> Value {
     serde_json::from_str(json).expect("embedded fixture parses")
 }
 
-/// The 781 polyglot keys, by polyglot index, against shakmaty's Zobrist64.
+/// The 781 polyglot keys, by polyglot index, against shakmaty's Zobrist64, and
+/// shakmaty's Zobrist128 against (polyglot key, python/zobrist128.py's high
+/// half): the 128-bit key's low half must BE the polyglot hash.
 pub fn check_keys(json: &str) -> Check {
     let v = parse(json);
     let keys: Vec<u64> = v["keys"].as_array().unwrap().iter().map(|k| k.as_u64().unwrap()).collect();
-    if keys.len() != 781 {
-        return Err(format!("{} keys, want 781", keys.len()));
+    let keys_hi: Vec<u64> =
+        v["keys_hi"].as_array().unwrap().iter().map(|k| k.as_u64().unwrap()).collect();
+    if keys.len() != 781 || keys_hi.len() != 781 {
+        return Err(format!("{} keys and {} high halves, want 781", keys.len(), keys_hi.len()));
     }
     let roles = [Role::Pawn, Role::Knight, Role::Bishop, Role::Rook, Role::Queen, Role::King];
     for (i, &want) in keys.iter().enumerate() {
@@ -55,6 +59,24 @@ pub fn check_keys(json: &str) -> Check {
         if got.0 != want {
             return Err(format!("key {i}: shakmaty {:#x}, polyglot {want:#x}", got.0));
         }
+        let wide = match i {
+            0..=767 => {
+                let kind = i / 64;
+                let color = if kind % 2 == 1 { Color::White } else { Color::Black };
+                let piece = Piece { color, role: roles[kind / 2] };
+                Zobrist128::zobrist_for_piece(Square::new((i % 64) as u32), piece)
+            }
+            768 => Zobrist128::zobrist_for_castling_right(Color::White, CastlingSide::KingSide),
+            769 => Zobrist128::zobrist_for_castling_right(Color::White, CastlingSide::QueenSide),
+            770 => Zobrist128::zobrist_for_castling_right(Color::Black, CastlingSide::KingSide),
+            771 => Zobrist128::zobrist_for_castling_right(Color::Black, CastlingSide::QueenSide),
+            772..=779 => Zobrist128::zobrist_for_en_passant_file(File::new((i - 772) as u32)),
+            _ => Zobrist128::zobrist_for_white_turn(),
+        };
+        let want128 = (u128::from(keys_hi[i]) << 64) | u128::from(want);
+        if wide.0 != want128 {
+            return Err(format!("128-bit key {i}: shakmaty {:#x}, want {want128:#x}", wide.0));
+        }
     }
     let start = Chess::default();
     let sh = v["start_hash"].as_i64().unwrap();
@@ -65,7 +87,12 @@ pub fn check_keys(json: &str) -> Check {
     if pack(&start).render() != se || shakmaty_epd(&start) != se {
         return Err(format!("start EPD {:?}, want {se:?}", pack(&start).render()));
     }
-    Ok(format!("781 polyglot keys; start hash {sh}; start EPD"))
+    let sh_hi = v["start_hash_hi"].as_i64().unwrap();
+    let k = key128(&start);
+    if k != START_KEY || k.lo != sh || k.hi != sh_hi {
+        return Err(format!("start 128-bit key {k:?} / const {START_KEY:?}, want ({sh}, {sh_hi})"));
+    }
+    Ok(format!("781 polyglot keys and their 128-bit high halves; start key ({sh}, {sh_hi}); start EPD"))
 }
 
 /// Python's whitespace and \d sets, over every code point.

@@ -3,10 +3,14 @@
 //! Every selected game is walked -- dropped ones too, with the reason recorded,
 //! so the filters are compared as well -- and two files are written:
 //!   <out>.plies.parquet  file, row, ply, token, parent_hash, child_hash, epd
-//!                        (the EPD of the position BEFORE the move, always)
+//!                        (the EPD of the position BEFORE the move, always),
+//!                        parent_hash_hi, child_hash_hi
 //!   <out>.games.parquet  file, row, drop, n_tokens (capped at max_ply + 1),
 //!                        outcome (done / failed / null_in_check), failed_ply,
-//!                        failed_token, term_hash, term_kind, reason
+//!                        failed_token, term_hash, term_kind, reason,
+//!                        term_hash_hi
+//! The hashes are the 128-bit key's two halves: `*_hash` the polyglot hash,
+//! `*_hash_hi` the high half (chesspos::Key).
 //! Rows: the first --games-per-file of each file, plus with --special every row
 //! whose movetext contains `{`, `(`, `$` or a non-ASCII character.
 
@@ -19,7 +23,7 @@ use arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use rayon::prelude::*;
 use shakmaty::Chess;
 
-use crate::chesspos::pack;
+use crate::chesspos::{pack, Key};
 use crate::game::{term_reason, walk, Drop, Filters, NullInCheck, WalkEnd, Walker};
 use crate::keys::write_parquet;
 use crate::pyre::Tokens;
@@ -42,6 +46,8 @@ struct Plies {
     parent: Int64Builder,
     child: Int64Builder,
     epd: StringBuilder,
+    parent_hi: Int64Builder,
+    child_hi: Int64Builder,
 }
 
 #[derive(Default)]
@@ -56,30 +62,35 @@ struct Games {
     term_hash: Int64Builder,
     term_kind: Int32Builder,
     reason: Int32Builder,
+    term_hash_hi: Int64Builder,
 }
 
 struct DumpWalker<'a> {
     p: &'a mut Plies,
     file: &'a str,
     row: i64,
-    term: Option<(i64, i32)>,
+    term: Option<(Key, i32)>,
     buf: String,
 }
 
 impl Walker for DumpWalker<'_> {
-    fn row(&mut self, ply: u32, pos: &Chess, ph: i64, san: &str, ch: i64) {
+    type K = Key;
+
+    fn row(&mut self, ply: u32, pos: &Chess, ph: Key, san: &str, ch: Key) {
         self.buf.clear();
         pack(pos).render_into(&mut self.buf);
         self.p.file.append_value(self.file);
         self.p.row.append_value(self.row);
         self.p.ply.append_value(ply as i32);
         self.p.token.append_value(san);
-        self.p.parent.append_value(ph);
-        self.p.child.append_value(ch);
+        self.p.parent.append_value(ph.lo);
+        self.p.child.append_value(ch.lo);
         self.p.epd.append_value(&self.buf);
+        self.p.parent_hi.append_value(ph.hi);
+        self.p.child_hi.append_value(ch.hi);
     }
 
-    fn term(&mut self, hash: i64, kind: i32, _end_ply: u32) {
+    fn term(&mut self, hash: Key, kind: i32, _end_ply: u32) {
         self.term = Some((hash, kind));
     }
 }
@@ -140,9 +151,10 @@ fn dump_file(cfg: &Config, root: &Path, f: &SourceFile) -> Result<(Plies, Games)
                             g.failed_token.append_value(toks.get(ply as usize - 1));
                         }
                     }
-                    g.term_hash.append_option(term.map(|t| t.0));
+                    g.term_hash.append_option(term.map(|t| t.0.lo));
                     g.term_kind.append_option(term.map(|t| t.1));
                     g.reason.append_value(term_reason(gr.termination));
+                    g.term_hash_hi.append_option(term.map(|t| t.0.hi));
                 }
                 row += 1;
             }
@@ -165,12 +177,14 @@ pub fn run(cfg: &Config, root: &Path, files: &[SourceFile]) -> Result<(u64, u64)
         ("file", DataType::Utf8), ("row", DataType::Int64), ("ply", DataType::Int32),
         ("token", DataType::Utf8), ("parent_hash", DataType::Int64),
         ("child_hash", DataType::Int64), ("epd", DataType::Utf8),
+        ("parent_hash_hi", DataType::Int64), ("child_hash_hi", DataType::Int64),
     ]);
     let gs = schema(&[
         ("file", DataType::Utf8), ("row", DataType::Int64), ("drop", DataType::Utf8),
         ("n_tokens", DataType::Int32), ("outcome", DataType::Utf8),
         ("failed_ply", DataType::Int32), ("failed_token", DataType::Utf8),
         ("term_hash", DataType::Int64), ("term_kind", DataType::Int32), ("reason", DataType::Int32),
+        ("term_hash_hi", DataType::Int64),
     ]);
     let (mut pb, mut gb) = (Vec::new(), Vec::new());
     let (mut np, mut ng) = (0u64, 0u64);
@@ -178,14 +192,15 @@ pub fn run(cfg: &Config, root: &Path, files: &[SourceFile]) -> Result<(u64, u64)
         let pc: Vec<ArrayRef> = vec![
             Arc::new(p.file.finish()), Arc::new(p.row.finish()), Arc::new(p.ply.finish()),
             Arc::new(p.token.finish()), Arc::new(p.parent.finish()), Arc::new(p.child.finish()),
-            Arc::new(p.epd.finish()),
+            Arc::new(p.epd.finish()), Arc::new(p.parent_hi.finish()),
+            Arc::new(p.child_hi.finish()),
         ];
         let gc: Vec<ArrayRef> = vec![
             Arc::new(g.file.finish()), Arc::new(g.row.finish()), Arc::new(g.drop.finish()),
             Arc::new(g.n_tokens.finish()), Arc::new(g.outcome.finish()),
             Arc::new(g.failed_ply.finish()), Arc::new(g.failed_token.finish()),
             Arc::new(g.term_hash.finish()), Arc::new(g.term_kind.finish()),
-            Arc::new(g.reason.finish()),
+            Arc::new(g.reason.finish()), Arc::new(g.term_hash_hi.finish()),
         ];
         let pbatch = RecordBatch::try_new(ps.clone(), pc)?;
         let gbatch = RecordBatch::try_new(gs.clone(), gc)?;

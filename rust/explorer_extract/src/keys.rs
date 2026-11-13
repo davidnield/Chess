@@ -45,11 +45,13 @@ pub fn san_str(s: &San) -> &str {
 }
 
 /// (parent_hash, move_san, event, elo_band), plus `ply` in month mode's
-/// --ply-key (0 everywhere else, so it never splits a key). Ord is the output
-/// sort order. Still 24 bytes: ply fits the padding.
+/// --ply-key and `hash_hi`, the key's high half, in month mode's --key128 (both
+/// 0 everywhere else, so they never split a key). Ord is the output sort
+/// order. 32 bytes: ply fits the padding.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct PsKey {
     pub hash: i64,
+    pub hash_hi: i64,
     pub san: San,
     pub event: u8,
     pub band: u8,
@@ -62,7 +64,8 @@ impl Hash for PsKey {
         let lo = u64::from_le_bytes(self.san[..8].try_into().unwrap());
         st.write_u64(self.hash as u64);
         st.write_u64(
-            lo ^ (u64::from(self.san[8]) << 7)
+            lo ^ (self.hash_hi as u64).rotate_left(23)
+                ^ (u64::from(self.san[8]) << 7)
                 ^ (u64::from(self.event) << 59)
                 ^ (u64::from(self.band) << 52)
                 ^ (u64::from(self.ply) << 40),
@@ -71,10 +74,12 @@ impl Hash for PsKey {
 }
 
 /// (position_hash, kind, reason), plus `end_ply` -- the plies the game walked
-/// -- in month mode's --ply-key (0 everywhere else).
+/// -- in month mode's --ply-key and `hash_hi` in its --key128 (0 everywhere
+/// else).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct TermKey {
     pub hash: i64,
+    pub hash_hi: i64,
     pub kind: u8,
     pub reason: u8,
     pub end_ply: u16,
@@ -85,6 +90,7 @@ impl Hash for TermKey {
     fn hash<H: Hasher>(&self, st: &mut H) {
         st.write_u64(
             self.hash as u64
+                ^ (self.hash_hi as u64).rotate_left(23)
                 ^ (u64::from(self.kind) << 3)
                 ^ (u64::from(self.reason) << 5)
                 ^ (u64::from(self.end_ply) << 8),
@@ -103,8 +109,15 @@ pub fn bucket_of(hash: i64, n: u32) -> u32 {
 /// PS_COLS. The partials are Polars-written, so their strings are large_string;
 /// the bucketed months and DuckDB monthlies use plain string.
 pub fn ps_schema(large_strings: bool) -> SchemaRef {
+    ps_schema_with(large_strings, false)
+}
+
+/// PS_COLS; with `wide` (month --key128) the keys' high halves follow as the
+/// last two columns, so every PS_COLS column keeps its index and
+/// `parent_hash` / `child_hash` keep their meaning (the polyglot hash).
+pub fn ps_schema_with(large_strings: bool, wide: bool) -> SchemaRef {
     let s = if large_strings { DataType::LargeUtf8 } else { DataType::Utf8 };
-    Arc::new(Schema::new(vec![
+    let mut f = vec![
         Field::new("parent_hash", DataType::Int64, true),
         Field::new("move_san", s.clone(), true),
         Field::new("event", s.clone(), true),
@@ -117,16 +130,26 @@ pub fn ps_schema(large_strings: bool) -> SchemaRef {
         Field::new("draws", DataType::Int64, true),
         Field::new("black_wins", DataType::Int64, true),
         Field::new("total", DataType::Int64, true),
-    ]))
+    ];
+    if wide {
+        f.push(Field::new("parent_hash_hi", DataType::Int64, true));
+        f.push(Field::new("child_hash_hi", DataType::Int64, true));
+    }
+    Arc::new(Schema::new(f))
 }
 
 pub fn term_schema() -> SchemaRef {
     term_schema_with(false)
 }
 
-/// The term table; with `end_ply` (month --ply-key) that column follows
-/// `reason`, so the first three columns keep their meaning.
 pub fn term_schema_with(end_ply: bool) -> SchemaRef {
+    term_schema_full(end_ply, false)
+}
+
+/// The term table; with `end_ply` (month --ply-key) that column follows
+/// `reason`, so the first three columns keep their meaning; with `wide`
+/// (month --key128) `position_hash_hi` is the last column.
+pub fn term_schema_full(end_ply: bool, wide: bool) -> SchemaRef {
     let mut f = vec![
         Field::new("position_hash", DataType::Int64, true),
         Field::new("kind", DataType::Int32, true),
@@ -135,12 +158,16 @@ pub fn term_schema_with(end_ply: bool) -> SchemaRef {
     if end_ply {
         f.push(Field::new("end_ply", DataType::Int32, true));
     }
-    Arc::new(Schema::new([f, vec![
+    f.extend([
         Field::new("white_wins", DataType::Int64, true),
         Field::new("draws", DataType::Int64, true),
         Field::new("black_wins", DataType::Int64, true),
         Field::new("total", DataType::Int64, true),
-    ]].concat()))
+    ]);
+    if wide {
+        f.push(Field::new("position_hash_hi", DataType::Int64, true));
+    }
+    Arc::new(Schema::new(f))
 }
 
 pub fn writer_props() -> WriterProperties {

@@ -57,6 +57,26 @@ rows carry no reason, which the merge never uses. `_test_rust_extract.py` holds
 the derivation at caps 20/30/50 to direct runs; the month dir's params lock
 keeps keyed and unkeyed months apart.
 
+## 128-bit keys
+
+`month --key128` keys positions by shakmaty's `Zobrist128` (polyglot's ep rule). Every one of its
+781 keys has the polyglot key as its low 64 bits, so the low half of a position's key IS today's
+hash: `parent_hash`, `child_hash` and `position_hash` keep their columns, their values and their
+bucket, and the high halves are added as the LAST columns (`parent_hash_hi`, `child_hash_hi`;
+`position_hash_hi` in the term monthly). Rows sort by (low, high, ...). Without its high-half
+columns a `--key128` month is the 64-bit month of the same games, file for file, wherever no two
+positions share a 64-bit hash.
+
+A 128-bit key is a position, so one key with two EPDs or one edge with two children fails the
+month (nothing is promoted) instead of landing in `_conflicts`. The month dir's lock records
+`key_bits: 128`, so the two kinds never share a dir, and `merge` refuses such months: it writes
+the 64-bit book-v1.
+
+The Python side of the contract is `python/zobrist128.py` (python-chess's hasher over the high
+halves). `selftest` holds shakmaty's table to it key by key; `_test_rust_extract.py` holds both
+halves on every ply of `dump-plies` (which always writes them) and a `--key128` month's high
+halves to python-chess.
+
 ## merge: the all-time book
 
 The contract is the blog repo's `docs/explorer-merge-spec.md`; the code is

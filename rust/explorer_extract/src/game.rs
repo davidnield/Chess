@@ -4,7 +4,7 @@
 
 use shakmaty::{Chess, Position};
 
-use crate::chesspos::{hash, START_HASH};
+use crate::chesspos::PosKey;
 use crate::pyre::Tokens;
 use crate::san::{parse_san, Parsed};
 
@@ -128,15 +128,17 @@ impl Counts {
 
 /// What a mode records along the walk.
 pub trait Walker {
+    /// The position key the walk computes: i64 (polyglot) or the 128-bit Key.
+    type K: PosKey;
     /// Before the move at `ply` is parsed, at the position it is played from.
     /// The partials' EPD memo lives here: Python fills it before parse_san, so a
     /// game that fails at this ply still leaves its entry for later games.
-    fn before_parse(&mut self, _ply: u32, _pos: &Chess, _ph: i64) {}
+    fn before_parse(&mut self, _ply: u32, _pos: &Chess, _ph: Self::K) {}
     /// A parsed and played ply: `pos` is the position BEFORE the move.
-    fn row(&mut self, ply: u32, pos: &Chess, ph: i64, san: &str, ch: i64);
+    fn row(&mut self, ply: u32, pos: &Chess, ph: Self::K, san: &str, ch: Self::K);
     /// The term row, for a game that did not fail; `end_ply` is the plies
     /// walked (0 for a game with no moves).
-    fn term(&mut self, hash: i64, kind: i32, end_ply: u32);
+    fn term(&mut self, hash: Self::K, kind: i32, end_ply: u32);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -162,13 +164,13 @@ pub fn walk<W: Walker>(
     start: &Chess,
 ) -> Result<WalkEnd, NullInCheck> {
     if toks.is_empty() {
-        w.term(START_HASH, 0, 0);
+        w.term(W::K::START, 0, 0);
         return Ok(WalkEnd::Done);
     }
     let n = toks.len();
     let maxply = max_ply.min(n);
     let mut pos = start.clone();
-    let mut ph = START_HASH;
+    let mut ph = W::K::START;
     for ply in 1..=maxply as u32 {
         let san = toks.get(ply as usize - 1);
         w.before_parse(ply, &pos, ph);
@@ -189,7 +191,7 @@ pub fn walk<W: Walker>(
                 }
             }
         };
-        let ch = hash(&next);
+        let ch = W::K::of(&next);
         w.row(ply, &pos, ph, san, ch);
         pos = next;
         ph = ch;

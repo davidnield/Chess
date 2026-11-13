@@ -21,6 +21,14 @@
 //! The merged values are commutative, so the output does not depend on thread
 //! count, pass count or scheduling -- which _test_rust_extract.py checks.
 //!
+//! --key128: the position key is the 128-bit chesspos::Key. `parent_hash`,
+//! `child_hash` and `position_hash` keep their columns and their meaning (the
+//! polyglot hash = the key's low half, which also still picks the bucket); the
+//! high halves are the LAST columns (`parent_hash_hi`, `child_hash_hi`;
+//! `position_hash_hi` in the term monthly). Rows sort by (lo, hi, ...). A key
+//! is then a position: one key with two EPDs, or one edge with two children,
+//! fails the month instead of being reported in _conflicts.
+//!
 //! THE BUCKET FILE is written, then re-read in full: rows, the four sums, no NULL
 //! EPD, no parity violation (the EPD's side to move against ply % 2). At the end
 //! of the month, in this order: the term monthly, the promote of _tmp_month, the
@@ -48,11 +56,11 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use shakmaty::Chess;
 
-use crate::chesspos::{pack, Packed};
+use crate::chesspos::{pack, Key, Packed};
 use crate::fasthash::FastMap;
 use crate::game::{count_ply, drive_game, Counts, Filters, GameSink, Outcome, Walker};
 use crate::keys::{
-    band_index, bucket_of, ps_schema, rename_retry, san_of, san_str, term_schema_with, tmp_of,
+    band_index, bucket_of, ps_schema_with, rename_retry, san_of, san_str, term_schema_full, tmp_of,
     write_parquet, writer_props, PsKey, TermKey, BANDS,
 };
 use crate::partials::term_batch_with;
@@ -70,7 +78,7 @@ const OUT_BATCH: usize = 262_144;
 
 #[derive(Clone, Copy)]
 pub struct Local {
-    child: i64,
+    child: Key,
     counts: Counts,
     pos: Packed,
     ply: u16,
@@ -96,6 +104,8 @@ pub struct Config {
     /// --ply-key: ply joins the ps key and end_ply the term key, so a lower
     /// coverage cap can be derived later (python/ply_cap.py).
     pub ply_key: bool,
+    /// --key128: 128-bit position keys (the high halves as extra columns).
+    pub wide: bool,
     /// Every flag, for the provenance JSON.
     pub flags: Value,
 }
@@ -105,7 +115,7 @@ pub struct Config {
 pub fn params(cfg: &Config) -> Value {
     let mut ex = cfg.filters.excluded_terminations.clone();
     ex.sort();
-    json!({
+    let mut p = json!({
         "producer": "rust-month",
         "max_ply": cfg.max_ply,
         "ply_key": cfg.ply_key,
@@ -115,7 +125,12 @@ pub fn params(cfg: &Config) -> Value {
         "exclude_bots": cfg.filters.exclude_bots,
         "excluded_terminations": ex,
         "buckets": cfg.buckets,
-    })
+    });
+    // Only on 128-bit months, so a 64-bit month dir's lock reads as it always did.
+    if cfg.wide {
+        p["key_bits"] = json!(128);
+    }
+    p
 }
 
 // ── one chunk ────────────────────────────────────────────────────────────────
@@ -125,6 +140,7 @@ struct ChunkSink {
     hi: u32,
     nb: u32,
     ply_key: bool,
+    wide: bool,
     maps: Vec<FastMap<PsKey, Local>>,
     term: FastMap<TermKey, Counts>,
     event: u8,
@@ -136,8 +152,10 @@ struct ChunkSink {
 }
 
 impl Walker for ChunkSink {
+    type K = Key;
+
     #[inline]
-    fn row(&mut self, ply: u32, pos: &Chess, ph: i64, san: &str, ch: i64) {
+    fn row(&mut self, ply: u32, pos: &Chess, ph: Key, san: &str, ch: Key) {
         count_ply(&mut self.c, self.outcome, san);
         let s = match san_of(san) {
             Ok(s) => s,
@@ -146,12 +164,15 @@ impl Walker for ChunkSink {
                 return;
             }
         };
-        let b = bucket_of(ph, self.nb);
+        let b = bucket_of(ph.lo, self.nb);
         if b < self.lo || b >= self.hi {
             return;
         }
+        // 64-bit months carry no high half: 0, so it never splits a key.
+        let ch = if self.wide { ch } else { Key { lo: ch.lo, hi: 0 } };
         let key = PsKey {
-            hash: ph,
+            hash: ph.lo,
+            hash_hi: if self.wide { ph.hi } else { 0 },
             san: s,
             event: self.event,
             band: self.band,
@@ -166,13 +187,14 @@ impl Walker for ChunkSink {
     }
 
     #[inline]
-    fn term(&mut self, hash: i64, kind: i32, end_ply: u32) {
-        let b = bucket_of(hash, self.nb);
+    fn term(&mut self, hash: Key, kind: i32, end_ply: u32) {
+        let b = bucket_of(hash.lo, self.nb);
         if b < self.lo || b >= self.hi {
             return;
         }
         let key = TermKey {
-            hash,
+            hash: hash.lo,
+            hash_hi: if self.wide { hash.hi } else { 0 },
             kind: kind as u8,
             reason: self.reason,
             end_ply: if self.ply_key { end_ply as u16 } else { 0 },
@@ -238,8 +260,9 @@ fn write_bucket(
     runs: Vec<Run>,
     path: &Path,
     events: &[String],
+    wide: bool,
 ) -> Result<(BucketStats, Vec<Conflict>)> {
-    let schema = ps_schema(false);
+    let schema = ps_schema_with(false, wide);
     if let Some(d) = path.parent() {
         std::fs::create_dir_all(d)?;
     }
@@ -247,7 +270,7 @@ fn write_bucket(
     let mut w = ArrowWriter::try_new(f, schema.clone(), Some(writer_props()))?;
     let mut st = BucketStats::default();
     let mut conflicts = Vec::new();
-    let mut out = OutBatch::default();
+    let mut out = OutBatch { wide, ..OutBatch::default() };
     let mut idx = vec![0usize; runs.len()];
     let mut heap: BinaryHeap<Reverse<(PsKey, usize)>> = runs
         .iter()
@@ -256,7 +279,7 @@ fn write_bucket(
         .map(|(i, r)| Reverse((r[0].0, i)))
         .collect();
     let mut cur: Option<(PsKey, Merged)> = None;
-    let mut last_hash_epd: Option<(i64, String)> = None;
+    let mut last_hash_epd: Option<((i64, i64), String)> = None;
     let mut flush = |k: &PsKey, m: Merged, out: &mut OutBatch, st: &mut BucketStats,
                      conflicts: &mut Vec<Conflict>, w: &mut ArrowWriter<std::fs::File>|
      -> Result<()> {
@@ -276,7 +299,7 @@ fn write_bucket(
             }
         }
         match &last_hash_epd {
-            Some((h, e)) if *h == k.hash && *e != epd => {
+            Some((h, e)) if *h == (k.hash, k.hash_hi) && *e != epd => {
                 let (a, b) = if *e < epd { (e.clone(), epd.clone()) } else { (epd.clone(), e.clone()) };
                 conflicts.push(Conflict { hash: k.hash, a, b, kind: "parent-epd" });
             }
@@ -295,7 +318,7 @@ fn write_bucket(
             st.ply1 += m.counts[3];
         }
         out.push(k, &m, &epd, events);
-        last_hash_epd = Some((k.hash, epd));
+        last_hash_epd = Some(((k.hash, k.hash_hi), epd));
         if out.len() >= OUT_BATCH {
             w.write(&out.finish()?)?;
         }
@@ -331,7 +354,7 @@ fn write_bucket(
 struct Merged {
     ply: u16,
     pos: Packed,
-    child: i64,
+    child: Key,
     /// w, d, b, total.
     counts: [u64; 4],
     epd_conflict: Option<String>,
@@ -374,6 +397,9 @@ impl Merged {
 
 #[derive(Default)]
 struct OutBatch {
+    wide: bool,
+    hash_hi: Vec<i64>,
+    child_hi: Vec<i64>,
     hash: Vec<i64>,
     san: StringBuilder,
     event: StringBuilder,
@@ -398,7 +424,11 @@ impl OutBatch {
         self.event.append_value(&events[k.event as usize]);
         self.band.push(BANDS[k.band as usize]);
         self.epd.append_value(epd);
-        self.child.push(m.child);
+        self.child.push(m.child.lo);
+        if self.wide {
+            self.hash_hi.push(k.hash_hi);
+            self.child_hi.push(m.child.hi);
+        }
         self.ply.push(i32::from(m.ply));
         self.w.push(m.counts[0] as i64);
         self.d.push(m.counts[1] as i64);
@@ -409,7 +439,7 @@ impl OutBatch {
     fn finish(&mut self) -> Result<RecordBatch> {
         let n = self.len();
         let take = |v: &mut Vec<i64>| -> ArrayRef { Arc::new(Int64Array::from(std::mem::take(v))) };
-        let cols: Vec<ArrayRef> = vec![
+        let mut cols: Vec<ArrayRef> = vec![
             take(&mut self.hash),
             Arc::new(self.san.finish()),
             Arc::new(self.event.finish()),
@@ -423,7 +453,11 @@ impl OutBatch {
             take(&mut self.b),
             take(&mut self.t),
         ];
-        Ok(RecordBatch::try_new(ps_schema(false), cols)?)
+        if self.wide {
+            cols.push(take(&mut self.hash_hi));
+            cols.push(take(&mut self.child_hi));
+        }
+        Ok(RecordBatch::try_new(ps_schema_with(false, self.wide), cols)?)
     }
 }
 
@@ -655,6 +689,7 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
                 hi: pass.hi,
                 nb,
                 ply_key: cfg.ply_key,
+                wide: cfg.wide,
                 maps: (0..per).map(|_| FastMap::default()).collect(),
                 term: FastMap::default(),
                 event: f.event_idx,
@@ -745,7 +780,7 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
                     return Ok((b, BucketStats::default(), Vec::new()));
                 }
                 let path = out_tmp.join(format!("bkt={b}")).join("part-0000.parquet");
-                let (st, cf) = write_bucket(runs, &path, &cfg.events)?;
+                let (st, cf) = write_bucket(runs, &path, &cfg.events, cfg.wide)?;
                 let back = verify_bucket(&path)?;
                 if back.rows != st.rows || back.sums != st.sums || back.parity != 0 || st.parity != 0 {
                     bail!(
@@ -803,12 +838,29 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
         );
     }
 
+    // A 128-bit key is a position: two EPDs under one key, or two children of
+    // one edge, mean the key is broken, and nothing downstream resolves by EPD.
+    conflicts.sort();
+    conflicts.dedup();
+    if cfg.wide && !conflicts.is_empty() {
+        let shown: Vec<String> = conflicts
+            .iter()
+            .take(5)
+            .map(|c| format!("{} at parent_hash {}: {:?} / {:?}", c.kind, c.hash, c.a, c.b))
+            .collect();
+        bail!(
+            "{year}/{month}: {} conflict(s) under 128-bit keys (nothing was promoted): {}",
+            conflicts.len(),
+            shown.join("; ")
+        );
+    }
+
     // ── outputs, sentinel last ────────────────────────────────────────────────
     std::fs::create_dir_all(&cfg.term_dir)?;
     let term_path = cfg.term_dir.join(format!("year={year}_month={month}.term.parquet"));
     let term_tmp = tmp_of(&term_path);
-    let term_schema = term_schema_with(cfg.ply_key);
-    write_parquet(&term_tmp, &term_schema, &[term_batch_with(&term_rows, cfg.ply_key)?])?;
+    let term_schema = term_schema_full(cfg.ply_key, cfg.wide);
+    write_parquet(&term_tmp, &term_schema, &[term_batch_with(&term_rows, cfg.ply_key, cfg.wide)?])?;
     let back = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&term_tmp)?)?.build()?;
     let total_col = term_schema.index_of("total")?;
     let (mut n, mut tot) = (0u64, 0u64);
@@ -827,8 +879,6 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
     if out_tmp.exists() {
         rename_retry(&out_tmp, &final_dir)?;
     }
-    conflicts.sort();
-    conflicts.dedup();
     let cpath = cfg.out.join("_conflicts").join(format!("month={tag}")).join("rust.parquet");
     if conflicts.is_empty() {
         let _ = std::fs::remove_file(&cpath);
@@ -872,6 +922,7 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
         "flags": cfg.flags,
         "max_ply": cfg.max_ply,
         "ply_key": cfg.ply_key,
+        "key_bits": if cfg.wide { 128 } else { 64 },
         "month": tag,
         "files": files.iter().map(|f| f.path.display().to_string()).collect::<Vec<_>>(),
         "games_in_footers": games,

@@ -189,6 +189,11 @@ struct MonthArgs {
     /// coverage cap can be derived later (python/ply_cap.py).
     #[arg(long)]
     ply_key: bool,
+    /// 128-bit position keys: the polyglot hash stays in parent_hash /
+    /// child_hash / position_hash and the key's high half is added as
+    /// parent_hash_hi / child_hash_hi / position_hash_hi (the last columns).
+    #[arg(long)]
+    key128: bool,
 }
 
 #[derive(Args)]
@@ -464,6 +469,7 @@ fn run() -> Result<ExitCode> {
                 "below_normal": a.common.below_normal, "out": a.out, "term_dir": a.term_dir,
                 "passes": a.passes, "mem_gb": a.mem_gb, "keys_per_game": a.keys_per_game,
                 "bytes_per_key": a.bytes_per_key, "buckets": a.buckets, "ply_key": a.ply_key,
+                "key128": a.key128,
             });
             let cfg = month::Config {
                 out: a.out.clone(),
@@ -479,6 +485,7 @@ fn run() -> Result<ExitCode> {
                 buckets: a.buckets,
                 threads,
                 ply_key: a.ply_key,
+                wide: a.key128,
                 flags,
             };
             for (y, m) in a.common.months()? {

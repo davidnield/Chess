@@ -138,6 +138,8 @@ impl ChunkAgg {
 }
 
 impl Walker for ChunkAgg {
+    type K = i64;
+
     #[inline]
     fn before_parse(&mut self, ply: u32, pos: &Chess, ph: i64) {
         if ply <= self.epd_max_ply {
@@ -155,7 +157,7 @@ impl Walker for ChunkAgg {
             }
         };
         count_ply(&mut self.c, self.outcome, san);
-        let key = PsKey { hash: ph, san: s, event: self.event, band: self.band, ply: 0 };
+        let key = PsKey { hash: ph, hash_hi: 0, san: s, event: self.event, band: self.band, ply: 0 };
         let want_epd = ply <= self.epd_max_ply;
         let v = self.ps.entry(key).or_insert_with(|| PsVal {
             child: ch,
@@ -171,7 +173,7 @@ impl Walker for ChunkAgg {
 
     #[inline]
     fn term(&mut self, hash: i64, kind: i32, _end_ply: u32) {
-        let key = TermKey { hash, kind: kind as u8, reason: self.reason, end_ply: 0 };
+        let key = TermKey { hash, hash_hi: 0, kind: kind as u8, reason: self.reason, end_ply: 0 };
         self.term.entry(key).or_default().add(self.outcome);
     }
 }
@@ -284,11 +286,12 @@ pub fn ps_batch(agg: &ChunkAgg, event: &str) -> Result<RecordBatch> {
 }
 
 pub fn term_batch(rows: &[(TermKey, Counts)]) -> Result<RecordBatch> {
-    term_batch_with(rows, false)
+    term_batch_with(rows, false, false)
 }
 
-/// The term rows; `end_ply` adds that column (month --ply-key).
-pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool) -> Result<RecordBatch> {
+/// The term rows; `end_ply` adds that column (month --ply-key), `wide` the
+/// key's high half as the last one (month --key128).
+pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool, wide: bool) -> Result<RecordBatch> {
     let i64s = |f: &dyn Fn(&TermKey, &Counts) -> i64| -> ArrayRef {
         Arc::new(Int64Array::from_iter_values(rows.iter().map(|(k, c)| f(k, c))))
     };
@@ -309,7 +312,10 @@ pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool) -> Result<Reco
         i64s(&|_, c| i64::from(c.b)),
         i64s(&|_, c| i64::from(c.t)),
     ]);
-    Ok(RecordBatch::try_new(crate::keys::term_schema_with(end_ply), cols)?)
+    if wide {
+        cols.push(i64s(&|k, _| k.hash_hi));
+    }
+    Ok(RecordBatch::try_new(crate::keys::term_schema_full(end_ply, wide), cols)?)
 }
 
 /// The partial's path for chunk k: `{stem}_c{k:03d}.{kind}.parquet`.
