@@ -72,13 +72,122 @@ MAIA_PY = "D:/chess/maia/.venv/Scripts/python.exe"
 MAIA_HF = "D:/chess/maia/hf_cache"      # snapshot directory names are the weights' commit hashes
 
 
+class MaiaCache:
+    """Maia's answers kept across runs (--maia-cache DIR, 2026-11-12): (position hash, self Elo,
+    opponent Elo) -> the probabilities, in the order the server returned them (blend sums them in
+    that order). A cached answer is the float the server sent, so a run that finds every answer
+    in the cache computes exactly what the run that stored them did; fresh answers can differ
+    from a cached one only by the GPU's batch effects.
+
+    DIR holds identity.json (the Maia server, its batching code, interpreter and model snapshots:
+    a cache from another model is refused) and part-*.npz files, one per flush, written to a
+    temporary name and renamed. Every part is read at open; a position in two parts keeps the
+    first part's answer (parts sort by name, which starts with the time)."""
+
+    FLUSH_EVERY = 500_000
+
+    def __init__(self, path, ident: dict):
+        import numpy as np
+        self.np = np
+        self.dir = Path(path)
+        self.dir.mkdir(parents=True, exist_ok=True)
+        ip = self.dir / "identity.json"
+        if ip.exists():
+            have = json.loads(ip.read_text(encoding="utf-8"))
+            if have != ident:
+                raise SystemExit(f"FATAL: --maia-cache {self.dir} was filled by another Maia "
+                                 f"setup: {sorted(k for k in set(have) | set(ident) if have.get(k) != ident.get(k))}")
+        else:
+            tmp = self.dir / "identity.json.tmp"
+            tmp.write_text(json.dumps(ident, indent=1), encoding="utf-8")
+            tmp.replace(ip)
+        hs, se, oe, starts, lens, codes, ps, sans = [], [], [], [], [], [], [], {}
+        names: list[str] = []
+        for part in sorted(self.dir.glob("part-*.npz")):
+            z = np.load(part)
+            local = [str(x) for x in z["sans"]]
+            remap = np.array([sans.setdefault(m, len(sans)) for m in local] or [0], np.int64)
+            off = sum(len(x) for x in codes)
+            hs.append(z["h"])
+            se.append(z["se"])
+            oe.append(z["oe"])
+            ptr = z["ptr"]
+            starts.append(ptr[:-1] + off)
+            lens.append(np.diff(ptr))
+            codes.append(remap[z["code"]] if len(z["code"]) else z["code"].astype(np.int64))
+            ps.append(z["p"])
+        self.sans = list(sans)
+        cat = (lambda xs, dt: np.concatenate(xs).astype(dt) if xs else np.zeros(0, dt))  # noqa: E731
+        H, SE, OE = cat(hs, np.int64), cat(se, np.int64), cat(oe, np.int64)
+        ST, LN = cat(starts, np.int64), cat(lens, np.int64)
+        self.code, self.p = cat(codes, np.int64), cat(ps, np.float64)
+        order = np.lexsort((np.arange(len(H)), OE, SE, H))       # stable: the first part wins
+        self.H, self.SE, self.OE = H[order], SE[order], OE[order]
+        self.ST, self.LN = ST[order], LN[order]
+        self.new: list[tuple] = []
+        self.loaded = len(H)
+
+    def get(self, keys, self_elo: int, oppo_elo: int) -> list:
+        """The cached answer for each key, or None"""
+        np = self.np
+        if not self.loaded:
+            return [None] * len(keys)
+        k = np.asarray(keys, dtype=np.int64)
+        i = np.searchsorted(self.H, k)
+        out = []
+        n = len(self.H)
+        for key, j in zip(k.tolist(), i.tolist()):
+            d = None
+            while j < n and self.H[j] == key:
+                if self.SE[j] == self_elo and self.OE[j] == oppo_elo:
+                    a, b = int(self.ST[j]), int(self.ST[j] + self.LN[j])
+                    d = {self.sans[c]: p for c, p in zip(self.code[a:b].tolist(), self.p[a:b].tolist())}
+                    break
+                j += 1
+            out.append(d)
+        return out
+
+    def put(self, key: int, self_elo: int, oppo_elo: int, d: dict) -> None:
+        self.new.append((key, self_elo, oppo_elo, d))
+        if len(self.new) >= self.FLUSH_EVERY:
+            self.flush()
+
+    def flush(self) -> None:
+        np = self.np
+        if not self.new:
+            return
+        sans: dict[str, int] = {}
+        ptr, code, p = [0], [], []
+        for _k, _s, _o, d in self.new:
+            for m, x in d.items():
+                code.append(sans.setdefault(m, len(sans)))
+                p.append(x)
+            ptr.append(len(code))
+        import os
+        name = f"part-{time.strftime('%Y%m%d%H%M%S')}-{os.getpid()}-{len(list(self.dir.glob('part-*.npz')))}"
+        tmp = self.dir / f"{name}.tmp.npz"
+        np.savez(tmp, h=np.array([x[0] for x in self.new], np.int64),
+                 se=np.array([x[1] for x in self.new], np.int16),
+                 oe=np.array([x[2] for x in self.new], np.int16),
+                 ptr=np.array(ptr, np.int64), code=np.array(code, np.int32),
+                 p=np.array(p, np.float64), sans=np.array(list(sans) or [""]))
+        tmp.replace(self.dir / f"{name}.npz")
+        self.new = []
+
+
 class Maia:
     """The Maia-3 server process. A request that fails (the server died -- on 2026-10-23 a
     CUDA "unspecified launch failure" killed two servers sharing the GPU) restarts it and
-    retries, so one GPU hiccup no longer ends a multi-hour run."""
+    retries, so one GPU hiccup no longer ends a multi-hour run. cache: a MaiaCache directory
+    (default None: answers are kept for this run only)."""
 
-    def __init__(self):
+    def __init__(self, cache: str | None = None):
         self.cache: dict[tuple, dict] = {}
+        self.store = None
+        if cache:
+            ident = {k: v for k, v in identity().items()
+                     if k in ("maia_server", "maia_batch", "maia_python", "maia_models")}
+            self.store = MaiaCache(cache, ident)
         self.p = None
         self.start()
 
@@ -94,6 +203,8 @@ class Maia:
         assert json.loads(line).get("ready"), line
 
     def close(self):
+        if self.store is not None:
+            self.store.flush()
         try:
             self.p.stdin.close()
             self.p.wait(timeout=60)
@@ -115,6 +226,14 @@ class Maia:
 
     def probs(self, epds, self_elo, oppo_elo, keys):
         todo = [(k, e) for k, e in zip(keys, epds) if (k, self_elo) not in self.cache]
+        if self.store is not None and todo:
+            rest = []
+            for (k, e), d in zip(todo, self.store.get([k for k, _e in todo], self_elo, oppo_elo)):
+                if d is None:
+                    rest.append((k, e))
+                else:
+                    self.cache[(k, self_elo)] = d
+            todo = rest
         for s in range(0, len(todo), 20000):
             part = todo[s:s + 20000]
             out = self.ask(json.dumps({"epd": [e for _k, e in part],
@@ -122,6 +241,8 @@ class Maia:
                                        "oppo": [oppo_elo] * len(part)}) + "\n")
             for (k, _e), d in zip(part, out):
                 self.cache[(k, self_elo)] = d
+                if self.store is not None:
+                    self.store.put(k, self_elo, oppo_elo, d)
         return [self.cache[(k, self_elo)] for k in keys]
 
 
@@ -172,6 +293,10 @@ class Counts:
         self.cache: dict[int, dict] = {}
         self.rcache: dict[tuple, dict] = {}
         self.fcache: dict[int, dict] = {}
+        # move_index.py's index of every root, if all are current (else the DuckDB query)
+        from move_index import MoveIndex
+        idx = [MoveIndex.open(r) for r in roots.split(",")]
+        self.index = idx if all(x is not None for x in idx) else None
         params = [table_params(r) for r in roots.split(",")]
         self.contract = None
         if all(p is not None for p in params):
@@ -230,6 +355,22 @@ class Counts:
         if rep:
             return self._rep(hashes, rep)
         need = [h for h in set(hashes) if h not in self.cache]
+        if need and self.index is not None:
+            # the same counts from the index: per stripped move, integer game counts summed over
+            # the roots (exact in any order)
+            hs = np.array(need, dtype=np.int64)
+            for h in need:
+                self.cache[h] = {}
+            for ix in self.index:
+                lo, hi = ix.lookup(hs)
+                for h, a, b in zip(need, lo.tolist(), hi.tolist()):
+                    if a == b:
+                        continue
+                    d = self.cache[h]
+                    for c, n in zip(ix.move[a:b].tolist(), ix.n[a:b].tolist()):
+                        k = ix.moves[c]
+                        d[k] = d.get(k, 0.0) + float(n)
+            need = []
         if need:
             self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
             df = duck_pl(self.con, f"""SELECT parent_hash, move_san, SUM(total)::DOUBLE n
@@ -435,9 +576,11 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
             need = [h for h in need if (h, tag) not in dists]
             if not need:
                 continue
-            epd_of = {}
+            # the first game (in R's order) at each needed position names its EPD, as before;
+            # only those are built (the profile's largest python-chess cost was every game's EPD)
+            want, epd_of = set(need), {}
             for r in R:
-                if r[1] not in epd_of:
+                if r[1] in want and r[1] not in epd_of:
                     epd_of[r[1]] = r[0].epd()
             cs = cnt.get(need, rep)
             ms = maia.probs([epd_of[h] for h in need], se, oe, need)
@@ -710,6 +853,8 @@ def main():
     ap.add_argument("--compare-to", default=None, metavar="LABEL",
                     help="print every book minus this one, per seed, with the SE over seeds")
     ap.add_argument("--sf-procs", type=int, default=4, help="Stockfish processes for missing evals")
+    ap.add_argument("--maia-cache", default=None, metavar="DIR",
+                    help="keep Maia's answers across runs in DIR (MaiaCache). Default off.")
     ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache.parquet",
                     help="persistent (hash, depth) -> cp cache for --stockfish-depth leaves")
     ap.add_argument("--max-ply", type=int, default=30)
@@ -775,7 +920,7 @@ def main():
         if len(cs) != 1:
             raise SystemExit(f"FATAL: the tables disagree on the fold contract: {sorted(cs)} -- a "
                              f"game must carry one weight in every table")
-    maia = Maia()
+    maia = Maia(cache=a.maia_cache) if a.maia_cache else Maia()
     sf = None
     try:
       sf = StockfishFill(a.sf_cache, a.stockfish_depth, a.sf_procs)

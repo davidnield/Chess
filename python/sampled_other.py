@@ -218,6 +218,9 @@ def main():
     ap.add_argument("--opp-elo", type=int, default=2000)
     ap.add_argument("--sf-cache", default=None)
     ap.add_argument("--sf-procs", type=int, default=3)
+    ap.add_argument("--maia-cache", default=None, metavar="DIR",
+                    help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache). "
+                         "Default off.")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     t0 = time.time()
@@ -265,7 +268,7 @@ def main():
         return lookup_evals(hs, *mm)
     cvs = {r["cell"]: (r["a"], r["k"]) for r in pl.read_parquet(cv.CURVES).iter_rows(named=True)}
     curves = (cvs["stm1000-1799_vs_opp1800+"], cvs["stm1800+_vs_opp1000-1799"])
-    maia = cv.Maia()
+    maia = cv.Maia(cache=a.maia_cache) if a.maia_cache else cv.Maia()
     sf = cv.StockfishFill(a.sf_cache, 10, a.sf_procs)
     chunks = []
     try:

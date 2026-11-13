@@ -18,6 +18,10 @@ R2/R3/R6 fixes, on mock move tables, a mock Maia and a mock eval lookup.
      --seed list is not; an incomplete table is refused; leaves cover the score table. A missing
      book is refused before any engine starts, and a refusal after they start releases them (an
      open engine keeps the process alive, stalling whatever waits on it).
+  X  the speed-ups give the same numbers: the move index (move_index.py) returns Counts' DuckDB
+     counts and is ignored once its table changes; the Maia cache returns the server's answers
+     float for float in their key order, keeps the first of two, refuses another model's
+     cache, and a warm cache asks the server nothing.
 
 Run: .venv/Scripts/python.exe python/_test_convertibility_eval.py
 """
@@ -470,6 +474,117 @@ with tempfile.TemporaryDirectory() as td:
         (ours / "_month=2026_8.DONE").write_text("ok")
     finally:
         cv.Maia, cv.StockfishFill, cv.open_eval_arrays, cv.lookup_evals, cv.CURVES, cv.summarize = saved
+
+# ── X: the speed-ups give the same numbers (2026-11-12) ─────────────────────────────────────
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdx:  # the index is mmapped
+    import random as _r
+    import move_index as mi
+    tdx = Path(tdx)
+    rng = _r.Random(5)
+
+    def mtable(name, rows):
+        d = tdx / name
+        for m in ("2026_8", "2026_9"):
+            (d / f"month={m}" / "bkt=0").mkdir(parents=True)
+            pl.DataFrame([r for r in rows if r[4] == m],
+                         schema={"parent_hash": pl.Int64, "move_san": pl.Utf8, "fold": pl.Int16,
+                                 "total": pl.Int64, "m": pl.Utf8}, orient="row").drop("m") \
+                .write_parquet(d / f"month={m}" / "bkt=0" / "part-0000.parquet")
+        return str(d)
+
+    sans = ["e4", "d4", "Nf3", "Nf3+", "Qh5#", "Qh5", "O-O", "c4"]
+    rows = [(rng.randrange(-2 ** 63, 2 ** 63) if i % 7 == 0 else rng.randrange(-50, 50),
+             rng.choice(sans), rng.randrange(64), rng.randrange(1, 900),
+             rng.choice(["2026_8", "2026_9"])) for i in range(4000)]
+    ra, rb = mtable("ma", rows[:2500]), mtable("mb", rows[1500:])
+    for r in (ra, rb):
+        mi.build(r, mem="1GB", threads=1, log=lambda *_a: None)
+    con = duckdb.connect()
+    hs = list({r[0] for r in rows}) + [123456789, -5]
+    for spec in (ra, f"{ra},{rb}"):
+        c_ix = cv.Counts(con, spec, "t")
+        c_db = cv.Counts(con, spec, "t")
+        c_db.index = None
+        a_, b_ = c_ix.get(hs), c_db.get(hs)
+        same = c_ix.index is not None and all(
+            set(x) == set(y) and all(x[k] == y[k] and type(x[k]) is type(y[k]) for k in x)
+            for x, y in zip(a_, b_))
+        check(f"X: the move index gives the DuckDB query's counts ({spec.count(',') + 1} root(s), "
+              f"check-marked SANs merged, absent positions empty)", same)
+    # a table changed under its index: the index is ignored
+    p0 = Path(ra) / "month=2026_8" / "bkt=0" / "part-0000.parquet"
+    import os as _os
+    _os.utime(p0, ns=(p0.stat().st_atime_ns, p0.stat().st_mtime_ns + 10 ** 9))
+    check("X: an index whose table changed is not used", mi.MoveIndex.open(ra) is None
+          and cv.Counts(con, ra, "t").index is None)
+
+    # the Maia cache: answers come back float for float, in the server's key order
+    ident = {"maia_server": "a", "maia_batch": "b", "maia_python": "p", "maia_models": ["m"]}
+    st = cv.MaiaCache(tdx / "mc", ident)
+    want = {}
+    for i in range(300):
+        d = {s: rng.random() for s in rng.sample(sans, rng.randint(0, 6))}
+        want[(i * 7919 - 1000, 1450, 2000)] = d
+        st.put(i * 7919 - 1000, 1450, 2000, d)
+        if i == 150:
+            st.flush()
+    st.put(5, 1450, 2000, {"e4": 0.25})
+    st.flush()
+    st2 = cv.MaiaCache(tdx / "mc", ident)
+    st2.put(5, 1450, 2000, {"d4": 0.75})               # a later part: the first answer stands
+    st2.flush()
+    st3 = cv.MaiaCache(tdx / "mc", ident)
+    keys = [k[0] for k in want]
+    got = st3.get(keys, 1450, 2000)
+    check("X: the Maia cache returns every answer bit for bit and in the server's key order",
+          all(list(g.items()) == list(want[(k, 1450, 2000)].items()) for k, g in zip(keys, got)))
+    check("X: other Elo pairs and unknown positions miss",
+          st3.get(keys[:5], 1450, 2100) == [None] * 5 and st3.get([424242], 1450, 2000) == [None])
+    check("X: a position stored twice keeps the first part's answer",
+          st3.get([5], 1450, 2000) == [{"e4": 0.25}])
+    try:
+        cv.MaiaCache(tdx / "mc", dict(ident, maia_models=["other"]))
+        check("X: a cache from another Maia setup is refused", False)
+    except SystemExit:
+        check("X: a cache from another Maia setup is refused", True)
+
+    # Maia.probs with the cache: the second run asks the server nothing and gets the same answers
+    class ServerlessMaia(cv.Maia):
+        asked: list = []
+
+        def start(self):
+            self.p = None
+
+        def ask(self, req):
+            r = json.loads(req)
+            ServerlessMaia.asked.append(len(r["epd"]))
+            return [{"e4": 1 / (1 + len(e)), "d4": len(e) / 97.0} for e in r["epd"]]
+
+        def close(self):
+            if self.store is not None:
+                self.store.flush()
+
+    saved_ident = cv.identity
+    cv.identity = lambda: dict(ident, referee="r", curves="c", eval_arrays="e")
+    try:
+        ks = list(range(40))
+        es = [f"epd{k}" * (1 + k % 3) for k in ks]
+        m1 = ServerlessMaia(cache=str(tdx / "mc2"))
+        r1 = m1.probs(es, 1450, 2000, ks)
+        m1.close()
+        n1 = sum(ServerlessMaia.asked)
+        m2 = ServerlessMaia(cache=str(tdx / "mc2"))
+        r2 = m2.probs(es, 1450, 2000, ks)
+        m2.close()
+        m3 = ServerlessMaia()
+        r3 = m3.probs(es, 1450, 2000, ks)
+        check("X: a warm cache asks the server nothing and returns the same answers, as does a "
+              "run without the cache", n1 == 40 and sum(ServerlessMaia.asked) == 80
+              and [list(x.items()) for x in r1] == [list(x.items()) for x in r2]
+              == [list(x.items()) for x in r3])
+    finally:
+        cv.identity = saved_ident
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)
