@@ -13,7 +13,9 @@ pub mod price;
 mod py_collect;
 mod py_core;
 mod py_graph;
+mod py_rollout;
 pub mod reach;
+pub mod rollout;
 pub mod value;
 
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
@@ -313,6 +315,7 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_graph::build_graph_csr, m)?)?;
     m.add_class::<py_core::RsGraph>()?;
     m.add_class::<py_collect::RsCollector>()?;
+    m.add_class::<py_rollout::RsRollouts>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

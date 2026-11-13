@@ -66,6 +66,8 @@ separate code without its check suffix (its bare code).
 | `price.rs` | `price_book`, `policy_reach`, `price_search` (one pricing round, the selection rule, polish from three starts) |
 | `collect.rs` | `collect_subgraph_edges`' walk and `GateAdmit`. DuckDB still scans the pool. The gates' eval cache follows `GateAdmit`: a hash is known once a level's prefetch has looked it up, or once the engine candidates gave it a fresh eval. |
 
+| `rollout.rs` | `convertibility_eval.rollouts`' games, for the referee and the stop/other samplers (`--rs-rollouts`). This one is NOT held to Python bit for bit (user, 2026-11-12: sampler work need only replicate the tool conceptually). Still, `_test_convertibility_eval.py` R2 gets identical games on the referee's fixtures. On real data, 500 positions of Black's stop dump gave the Python sampler's table bit for bit, in 63 s against Python's 606 s (225 s with a warm Maia cache). |
+
 The Python side lives in `python/budget_rs.py`. The columnar path (`frame_inputs`, `run_csr`,
 `GraphView`, `rs_graph_from_out`) builds the graph's input arrays straight from the collector's
 frame. The graph then lives in Rust, and no `edges_by_parent`, eval, aux or source-row dict is

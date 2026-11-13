@@ -18,6 +18,8 @@ extension-module = ["pyo3/extension-module"]
 [dependencies]
 pyo3 = { version = "0.30", features = ["abi3-py311"] }
 numpy = "0.30"
+# the same pin as rust/explorer_extract (GPL-3.0, like python-chess)
+shakmaty = "=0.30.1"
 
 [profile.release]
 lto = "fat"

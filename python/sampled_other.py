@@ -218,6 +218,9 @@ def main():
     ap.add_argument("--opp-elo", type=int, default=2000)
     ap.add_argument("--sf-cache", default=None)
     ap.add_argument("--sf-procs", type=int, default=3)
+    ap.add_argument("--rs-rollouts", action="store_true",
+                    help="play the sampled games' moves in Rust (convertibility_eval.rollouts_rust). "
+                         "Default off.")
     ap.add_argument("--maia-cache", default=None, metavar="DIR",
                     help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache). "
                          "Default off.")
@@ -299,7 +302,7 @@ def main():
                 st = [(h, e, 1.0, plies[i] + 1, None, 0.0, 0.0) for i, _p, h, e in rows]
                 ro = SimpleNamespace(tau=0.0, rollouts=K, max_ply=a.max_ply, k=a.k, min_p=a.min_p,
                                      our_elo=a.our_elo, opp_elo=a.opp_elo)
-                lv, _ = cv.rollouts(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
+                lv, _ = (cv.rollouts_rust if a.rs_rollouts else cv.rollouts)(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
                 v0, se = per_start(lv, len(st), lookup, sf, curves, our_white)
                 for (i, p, _h, _e), v, s_ in zip(rows, v0.tolist(), se.tolist()):
                     if v == v:

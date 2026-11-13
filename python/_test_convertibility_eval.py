@@ -18,6 +18,7 @@ R2/R3/R6 fixes, on mock move tables, a mock Maia and a mock eval lookup.
      --seed list is not; an incomplete table is refused; leaves cover the score table. A missing
      book is refused before any engine starts, and a refusal after they start releases them (an
      open engine keeps the process alive, stalling whatever waits on it).
+  R2 rollouts_rust (the games played in Rust) reproduces rollouts' games on these fixtures.
   X  the speed-ups give the same numbers: the move index (move_index.py) returns Counts' DuckDB
      counts and is ignored once its table changes; the Maia cache returns the server's answers
      float for float in their key order, keeps the first of two, refuses another model's
@@ -585,6 +586,44 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tdx:  # the inde
               == [list(x.items()) for x in r3])
     finally:
         cv.identity = saved_ident
+
+# ── R2: the games played in Rust (rollouts_rust) ──────────────────────────────────────────
+try:
+    import book_builder_rs as _brs  # noqa: F401
+except ImportError:
+    _brs = None
+if _brs is None:
+    print("  SKIP  R2: no book_builder_rs extension")
+else:
+    def both(starts, book, our_white, a, seed, maia, lk, exits=False):
+        e1, e2 = ({}, {}) if exits else (None, None)
+        r1 = cv.rollouts(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e1)
+        r2 = cv.rollouts_rust(starts, book, our_white, 0, a, seed, NC, NC, maia, lk, e2)
+        return r1, r2, e1, e2
+
+    bad = n = 0
+    first = None
+    for our_white, book in ((True, BOOK_W), (False, {}), (True, {}), (False, BOOK_W)):
+        for seed in range(1, 41):
+            a = opts(tau=1.01, max_ply=12, rollouts=3)
+            _ex, starts, _b, _ = cv.enumerate_book(book, our_white, 0, a, NC, NC, MAIA, lookup)
+            (l1, m1), (l2, m2), e1, e2 = both(starts, book, our_white, a, seed, MAIA, lookup, True)
+            n += 1
+            if l1 != l2 or m1 != m2 or e1 != e2:
+                bad += 1
+                first = first or (our_white, seed, len(l1), len(l2))
+    cyc_starts = [(h0, chess.Board().epd(), 0.5, p_, None, 0.0, 0.0) for p_ in (0, 24, 28)]
+    for seed in range(1, 201):
+        a = opts(rollouts=3, max_ply=30)
+        (l1, m1), (l2, m2), _e1, _e2 = both(cyc_starts, {}, True, a, seed, CycleMaia(),
+                                            lambda hs: np.zeros(len(hs), dtype=np.int64))
+        n += 1
+        if l1 != l2 or m1 != m2:
+            bad += 1
+            first = first or ("cycle", seed, len(l1), len(l2))
+    check("R2: rollouts_rust plays the games rollouts plays: the same leaves (weights, hashes, "
+          "evals, plies, results, EPDs), book mass and exits, both colours, with and without a "
+          "book, on the knight round-trip cycle too", bad == 0, f"{n} runs, {bad} differ {first}")
 
 print("\nPASS" if FAIL == 0 else "\nFAIL")
 sys.exit(FAIL)

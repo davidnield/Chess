@@ -392,7 +392,8 @@ def simulation(a, cv, our_white: bool) -> dict:
     return {"our_moves": movers(a.our_moves.format(colour=a.colour)),
             "opp_moves": movers(a.opp_moves.format(colour="black" if our_white else "white")),
             "k": a.k, "min_p": a.min_p, "horizon": a.max_ply, "our_elo": a.our_elo, "opp_elo": a.opp_elo,
-            "sf_depth": 10, "sf_path": cv.SF_PATH, "identity": cv.identity()}
+            "sf_depth": 10, "sf_path": cv.SF_PATH, "identity": cv.identity(),
+            **({"rollouts": "rust"} if getattr(a, "rs_rollouts", False) else {})}
 
 
 def sampler_code(cv) -> dict:
@@ -448,6 +449,9 @@ def main():
     ap.add_argument("--opp-elo", type=int, default=2000)
     ap.add_argument("--sf-cache", default=None)
     ap.add_argument("--sf-procs", type=int, default=3)
+    ap.add_argument("--rs-rollouts", action="store_true",
+                    help="play the sampled games' moves in Rust (convertibility_eval.rollouts_rust). "
+                         "Default off.")
     ap.add_argument("--maia-cache", default=None, metavar="DIR",
                     help="keep Maia's answers across runs in DIR (convertibility_eval.MaiaCache). "
                          "Default off.")
@@ -535,7 +539,7 @@ def main():
                 continue
             ch = pick.slice(ci, a.chunk)
             st = [(h, e, 1.0, p, None, 0.0, 0.0) for h, e, p in ch.select("hash", "epd", "ply").iter_rows()]
-            lv, _ = cv.rollouts(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
+            lv, _ = (cv.rollouts_rust if a.rs_rollouts else cv.rollouts)(st, {}, our_white, 0, ro, a.seed, ours, opp, maia, lookup)
             v0, se = per_start(lv, len(st), lookup, sf, curves, our_white)
             res = ch.select("side", "hash", "ply", "reach", "stop").with_columns(
                 pl.Series("v0", v0), pl.Series("se", se), pl.lit(a.games).alias("games"))

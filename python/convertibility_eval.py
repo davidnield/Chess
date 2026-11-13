@@ -189,7 +189,8 @@ class Maia:
                      if k in ("maia_server", "maia_batch", "maia_python", "maia_models")}
             self.store = MaiaCache(cache, ident)
         self.p = None
-        self.start()
+        if self.store is None:
+            self.start()           # with a cache, the server starts on the first real request
 
     def start(self):
         import os
@@ -205,6 +206,8 @@ class Maia:
     def close(self):
         if self.store is not None:
             self.store.flush()
+        if self.p is None:
+            return
         try:
             self.p.stdin.close()
             self.p.wait(timeout=60)
@@ -212,6 +215,8 @@ class Maia:
             self.p.kill()
 
     def ask(self, req: str) -> list:
+        if self.p is None:
+            self.start()
         for attempt in range(4):
             try:
                 self.p.stdin.write(req)
@@ -634,6 +639,45 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
     return leaves, book_mass
 
 
+
+def rollouts_rust(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
+                  exits=None, weak_edges=None):
+    """rollouts with each game's moves in Rust (book_builder_rs.RsRollouts, rust/book_builder/
+    src/rollout.rs): the same games conceptually, not bit for bit (user, 2026-11-12). The draws
+    are the same u01; the board work is shakmaty's instead of python-chess's. Each ply's batch
+    work stays here: the move counts, Maia and blend. weak_edges is not ported (the Python
+    rollouts runs)."""
+    if weak_edges is not None:
+        return rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia,
+                        lookup, exits, weak_edges)
+    import book_builder_rs as brs
+    i64, f64 = np.int64, np.float64
+    st = brs.RsRollouts(
+        np.array([s[0] for s in starts], i64), [s[1] for s in starts],
+        np.array([s[2] for s in starts], f64), np.array([s[3] for s in starts], i64),
+        np.array([MISSING if s[4] is None else int(s[4]) for s in starts], i64),
+        np.array([s[5] for s in starts], f64), np.array([s[6] for s in starts], f64),
+        bool(our_white), int(a.rollouts), int(a.max_ply), int(seed), float(getattr(a, "recall", 1.0)),
+        list(book.keys()), list(book.values()), exits is not None)
+    while st.alive():
+        st.set_cp(np.asarray(lookup(st.hashes()), dtype=i64))
+        oh, oe, th, te = st.needed()
+        for hs, es, cnt, se, oe_, ours in ((oh, oe, our_counts, a.our_elo, a.opp_elo, True),
+                                          (th, te, opp_counts, a.opp_elo, a.our_elo, False)):
+            if not len(hs):
+                continue
+            need = hs.tolist()
+            cs = cnt.get(need, rep)
+            ms = maia.probs(es, se, oe_, need)
+            st.set_dists(ours, need, [sorted(blend(c, m, a.k, a.min_p).items())
+                                      for c, m in zip(cs, ms)])
+        st.advance()
+    leaves, book_mass, ex = st.results()
+    if exits is not None:
+        for h, ply, v, epd in ex:
+            exits.setdefault((h, ply), [0.0, epd])[0] += v
+    return leaves, book_mass
+
 def value_leaves(leaves, our_white, lookup, sf_fill, curves):
     """Leaves -> per-leaf arrays: the eval (arrays, else Stockfish through sf_fill, else the
     nearest evaluated ancestor's cp), its uniform and fitted utilities, and the exact result
@@ -855,6 +899,9 @@ def main():
     ap.add_argument("--sf-procs", type=int, default=4, help="Stockfish processes for missing evals")
     ap.add_argument("--maia-cache", default=None, metavar="DIR",
                     help="keep Maia's answers across runs in DIR (MaiaCache). Default off.")
+    ap.add_argument("--rs-rollouts", action="store_true",
+                    help="play the sampled games' moves in Rust (rollouts_rust): the same games "
+                         "conceptually, faster. Default off.")
     ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache.parquet",
                     help="persistent (hash, depth) -> cp cache for --stockfish-depth leaves")
     ap.add_argument("--max-ply", type=int, default=30)
@@ -980,7 +1027,8 @@ def main():
                 exits = {k: list(v) for k, v in exact_exits.items()} if exact_exits is not None else None
                 leaves, ro_book = list(ex_leaves), 0.0
                 if starts:
-                    rl, ro_book = rollouts(starts, book, our_white, rep, a, seed,
+                    rl, ro_book = (rollouts_rust if a.rs_rollouts else rollouts)(
+                        starts, book, our_white, rep, a, seed,
                                            our_counts, opp_counts, maia, lookup, exits)
                     leaves += rl
                 v = value_leaves(leaves, our_white, lookup,
