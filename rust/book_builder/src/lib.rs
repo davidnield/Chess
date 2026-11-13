@@ -3,8 +3,15 @@
 //! reference, and python/_test_book_builder_rs.py holds every exported function to it at
 //! tolerance 0. See README.md for the build and the exactness contract.
 
+pub mod collect;
+pub mod core;
+pub mod dp;
 pub mod gates;
 pub mod graph;
+pub mod polish;
+pub mod price;
+mod py_collect;
+mod py_core;
 mod py_graph;
 pub mod reach;
 pub mod value;
@@ -304,6 +311,8 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(final_candidates_batch, m)?)?;
     m.add_function(wrap_pyfunction!(reach_batch, m)?)?;
     m.add_function(wrap_pyfunction!(py_graph::build_graph_csr, m)?)?;
+    m.add_class::<py_core::RsGraph>()?;
+    m.add_class::<py_collect::RsCollector>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

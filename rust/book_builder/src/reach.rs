@@ -69,7 +69,7 @@ impl PartialOrd for Item {
 }
 
 /// Insertion-ordered map, as a Python dict iterates.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct OrderedMap<V> {
     pub keys: Vec<Key>,
     pub vals: Vec<V>,

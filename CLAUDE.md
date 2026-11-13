@@ -61,7 +61,10 @@ as the `book_builder_rs` extension. `rust/book_builder/build.ps1` installs it as
 `python/book_builder_rs.pyd`, which is gitignored. The Python builder stays the reference: every
 ported function must equal it bit for bit. `python/_test_book_builder_rs.py` enforces this and
 skips when the extension is missing. The crate README lists the exactness rules (Python 3.11
-`sum()` order; `exp`/`ln` from the same C runtime) and what is ported so far.
+`sum()` order; `exp`/`ln` from the same C runtime; Python's dict and set orders) and what is
+ported so far. `build_budget_books.py --rs-core` (default off) runs every ported stage in Rust:
+the collector's walk, graph assembly from the collector's frame, the stop values, the curve
+engine, the price search and polish. It refuses the options not ported yet.
 
 ## Data paths — critical
 

@@ -25,6 +25,22 @@ all count.
      proposals, vetoes, verified moves) and random flags: every node, candidate, kid and
      floor entry by bits and in order, the reach/ply/route dicts, the meta (disputes, crack
      edges, loss exceptions, overlay counts) and the 'other' bucket table.
+  D  the graph owned by Rust (RsGraph) on the DP and price tests' graphs, cyclic graphs,
+     big DAGs and build_graph's own graphs, with and without stickiness: Python's set
+     order rebuilt from key lists, topo_up (order and cut set), topo_down, the stop
+     positions, apply_stop_values, every node's curve at two caps, extract_book at
+     several budgets (every dict in insertion order) and match_distinct with and
+     without probe curves.
+  P  book_result and polish_book on the same graphs, from the DP's book and from random
+     over-budget books (trims), with and without stickiness: the book in insertion
+     order and every statistic, against the dict path and (no stickiness) the
+     compiled one.
+  S  price_search and policy_reach on the price and DP tests' graphs: optimistic and
+     seeded reach, polish on and off, stickiness; the book, its reach and values, lam,
+     the sweep, the nearest sizes, the duality bound and every polish's stats.
+  C  the columnar path on random build inputs: build_graph_csr's input arrays made from
+     the collector's frame equal the dict path's, and the graph view and the RsGraph made
+     straight from the Rust output behave as the Graph and its RsGraph do.
 """
 from __future__ import annotations
 
@@ -653,6 +669,470 @@ def check_graph() -> None:
         print("    first difference:", first)
 
 
+# ── D: the graph owned by Rust: orders, stop values, the curve engine ───────────────────────
+
+def dp_graphs(rng: random.Random):
+    """(label, Graph, budgets): the DP and price tests' graphs, cyclic graphs, big DAGs, and
+    graphs build_graph assembles from random_build_inputs (real candidate shapes)."""
+    import build_baseline_books as bbb
+    import _test_budget_dag as tdag
+    import _test_budget_speed as tspeed
+    out = [(f"report{t}", g, b) for t, (g, b) in enumerate(tdag.report_instances(n_graphs=120))]
+    out += [(f"E{t}", g, [2, 5]) for t, (g, _b) in enumerate(tdag.e_instances())]
+    out += [(f"NP{t}", g, [2, 5]) for t, g in enumerate(tdag.np_graphs())]
+    out += [("D", tdag.case_d(), [1, 2, 3]), ("F50", tdag.case_f(50), [1, 2, 3]),
+            ("F5", tdag.case_f(5), [1, 2, 3]), ("T8", tdag.case_t8(), [1, 2])]
+    out += [(f"cyc{t}", tspeed.cyclic_graph(rng, rng.randint(5, 120)), [1, 3, 8])
+            for t in range(150)]
+    out += [(f"big{t}", tdag.big_dag(rng, n), [10, 60, 300]) for t, n in enumerate([800, 3000])]
+    real = bbb.child_of
+    try:
+        for t in range(60):
+            our_white = t % 2 == 0
+            ebp, root, eval_ws, aux, rep, eng, verified, excluded, child = random_build_inputs(
+                rng, rng.choice([40, 120, 400]), our_white)
+            bbb.child_of = lambda epd, san: child[(epd, san)]
+            g = bc.build_graph(ebp, root, our_white, rep_moves=rep, eval_ws=eval_ws,
+                               aux_rows=aux, slice_prior=0.5196, eps=1e-6, max_ply=29,
+                               share_floor=rng.choice([0.0, 0.03]), gated_reach=True,
+                               max_eval_loss=30.0, strict_source=True,
+                               crack_at_parents=t % 3 == 0, engine_moves=eng)
+            out.append((f"built{t}", g, [1, 5, 20, 80]))
+    finally:
+        bbb.child_of = real
+    return out
+
+
+def stick(g, rng: random.Random) -> None:
+    """a random incumbent: moves at a third of the our nodes (some unknown), a margin"""
+    moves = {}
+    for h, n in g.our.items():
+        if n.cands and rng.random() < 0.33:
+            moves[h] = rng.choice([bare(rng.choice(n.cands)[0]), "Zz9"])
+    g.meta["stick"] = (moves, rng.choice([0.0, 0.01, 0.05]))
+
+
+def curve_same(c, r) -> bool:
+    return (r is not None and fbits(c.base) == fbits(r[0])
+            and c.costs.tolist() == r[1].tolist()
+            and bits(c.gains).tolist() == bits(r[2]).tolist())
+
+
+def book_same(a: dict, b: dict) -> str | None:
+    for k in ("booked", "alloc", "realized"):
+        if not deep_same(list(a[k].items()), list(b[k].items())):
+            return k
+    for k in ("visited", "spent_paths", "spent_distinct", "root_value_curve",
+              "root_value_realized"):
+        if not deep_same(a[k], b[k]):
+            return k
+    return None
+
+
+def check_dp() -> None:
+    import copy
+    import budget_rs
+    rng = random.Random(11)
+    bad = {k: 0 for k in ("set order", "topo_up", "topo_down", "stop positions",
+                          "stop values", "curves", "extract", "match")}
+    first: dict = {}
+    n_graphs = n_nodes = n_books = n_cut = n_flat = n_stick = n_probe = 0
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+
+    for label, g, budgets in dp_graphs(rng):
+        g.meta = dict(g.meta or {})
+        if rng.random() < 0.4:
+            stick(g, rng)
+            n_stick += 1
+        n_graphs += 1
+        n_nodes += len(g.our) + len(g.opp)
+        so = budget_rs.set_order(list(g.our), list(g.opp))
+        if so.tolist() != list(set(g.our) | set(g.opp)):
+            fail("set order", label)
+        r, sans = budget_rs.rs_graph(g)
+        o, e = r.topo_up()
+        po, pe = bc.topo_up(g)
+        if o.tolist() != po or set(e.tolist()) != pe or len(e) != len(pe):
+            fail("topo_up", label)
+        n_cut += bool(pe)
+        if r.topo_down().tolist() != bc.topo_down(g):
+            fail("topo_down", label)
+        xs, ys = bc.stop_model_positions(g)
+        rx, ry = r.stop_positions()
+        if rx.tolist() != sorted(xs) or ry.tolist() != sorted(ys):
+            fail("stop positions", label)
+        # stop values on most stop positions, some missing
+        W = {h: rng.random() for h in xs if rng.random() < 0.8}
+        R = {h: rng.random() for h in ys if rng.random() < 0.8}
+        g2 = copy.deepcopy(g)
+        pc = bc.apply_stop_values(g2, W, R)
+        rc = r.apply_stop_values(np.array(list(W), np.int64), np.array(list(W.values())),
+                                 np.array(list(R), np.int64), np.array(list(R.values())))
+        want, _s, _b = budget_rs.graph_to_csr(g2)
+        got = r.values()
+        if pc != dict(rc) or any(bits(want[k]).tolist() != bits(got[k]).tolist()
+                                 for k in ("l_node", "c_lv", "k_lv", "const_base")):
+            fail("stop values", (label, pc, dict(rc)))
+        g = g2
+        for bmax, k_atoms in ((max(budgets) + 1, 256), (3 * max(budgets) + 5, 4)):
+            curves, diag = bc.build_curves(g, bmax=bmax, k_atoms=k_atoms)
+            sid, flat = r.build_curves(bmax, k_atoms)
+            n_flat += flat
+            if flat != diag["stranded_cycle_nodes"] or any(
+                    not curve_same(c, r.curve(sid, h)) for h, c in curves.items()):
+                fail("curves", (label, bmax, k_atoms))
+                continue
+            for b in budgets + [0, bmax]:
+                n_books += 1
+                d = book_same(bc.extract_book(g, curves, b),
+                              budget_rs.book_from_rs(r.extract_book(sid, b), sans))
+                if d is not None:
+                    fail("extract", (label, b, d))
+            pbmax = 2 * bmax
+            probe, _ = bc.build_curves(g, bmax=pbmax, k_atoms=k_atoms)
+            pid, _ = r.build_curves(pbmax, k_atoms)
+            for target in budgets:
+                for kw, rkw in (({}, {}),
+                                (dict(probe_curves=probe, plain_bmax=bmax),
+                                 dict(probe_set=pid, plain_bmax=bmax)),
+                                (dict(probe_curves=probe, scan_cap=2),
+                                 dict(probe_set=pid, scan_cap=2))):
+                    bm = pbmax if kw else bmax
+                    pa = bc.match_distinct(g, curves, target, bm, **kw)
+                    rb = r.match_distinct(sid, target, bm, **rkw)
+                    n_probe += pa[1] != target
+                    if (tuple(pa[1:]) != tuple(rb[1:]) or
+                            book_same(pa[0], budget_rs.book_from_rs(rb[0], sans)) is not None):
+                        fail("match", (label, target, list(kw), pa[1:], rb[1:]))
+    check("D: RsGraph = budget_core: set order, topo_up (order, cuts), topo_down, stop "
+          "positions and values, every curve, extract_book, match_distinct (probe curves, "
+          "plain bmax, scan cap), stickiness",
+          not any(bad.values()),
+          f"{n_graphs} graphs, {n_nodes:,} nodes, {n_books} extractions; exercised: {n_cut} "
+          f"with cycles cut, {n_flat} flattened curves, {n_stick} sticky, {n_probe} matches "
+          f"charged above the target; differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {v}")
+
+
+# ── P: the region evaluator and polish_book ───────────────────────────────────────────────
+
+def rs_moves(moves: dict, sans: list[str]):
+    code = {s: i for i, s in enumerate(sans)}
+    return (np.array(list(moves), np.int64),
+            np.array([code.get(s, -1) for s in moves.values()], np.int64))
+
+
+def check_polish() -> None:
+    import budget_compiled
+    import budget_rs
+    rng = random.Random(23)
+    bad = {"book_result": 0, "polish": 0, "compiled": 0}
+    first: dict = {}
+    n = n_polish = n_trim = n_sticky = n_moved = n_compiled = n_open = 0
+    kinds: dict = {}
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+
+    for label, g, budgets in dp_graphs(rng):
+        g.meta = dict(g.meta or {})
+        nodes = set(g.our) | set(g.opp)
+        if g.root not in nodes or any(
+                c[2] and c[1] is not None and c[1] not in nodes
+                for x in g.our.values() for c in x.cands) or any(
+                k[2] and k[1] is not None and k[1] not in nodes
+                for x in g.opp.values() for k in x.kids):
+            n_open += 1                  # the region walk needs a closed graph (Python too)
+            continue
+        if rng.random() < 0.3:
+            stick(g, rng)
+        n += 1
+        r, sans = budget_rs.rs_graph(g)
+        order = bc.topo_up(g)[0]
+        pos = {h: i for i, h in enumerate(order)}
+        curves, _ = bc.build_curves(g, bmax=max(budgets) + 1, k_atoms=256)
+        st = g.meta.get("stick")
+        sticky = bool(st and st[1] and any(
+            h in g.our and any(c[0].rstrip("+#") == im for c in g.our[h].cands)
+            for h, im in st[0].items()))
+        cg = budget_compiled.compile_graph(g) if not sticky else None
+        for target in budgets:
+            starts = [bc.extract_book(g, curves, target)["booked"]]
+            # an over-budget random book: trims first
+            rnd = {h: rng.choice(x.cands)[0] for h, x in g.our.items()
+                   if x.cands and rng.random() < 0.6}
+            starts.append(rnd)
+            for moves in starts:
+                a = bc.book_result(g, moves, order)
+                b = r.book_result(*rs_moves(moves, sans))
+                got = {"booked": dict(zip(b["booked_keys"].tolist(),
+                                          (sans[c] for c in b["booked_san"].tolist()))),
+                       "visited": b["visited"].tolist(),
+                       "realized": dict(zip(b["visited"].tolist(), b["realized_vals"].tolist())),
+                       "reach_policy": dict(zip(b["w_keys"].tolist(), b["w_vals"].tolist())),
+                       "root_value_realized": b["value"]}
+                if any(not deep_same(list(a[k].items()) if isinstance(a[k], dict) else a[k],
+                                     list(got[k].items()) if isinstance(got[k], dict) else got[k])
+                       for k in got):
+                    fail("book_result", (label, target))
+                n_polish += 1
+                pm, ps = bc.polish_book(g, moves, target, order)
+                rk, rsn, rst = r.polish(*rs_moves(moves, sans), target)
+                rm = dict(zip(rk.tolist(), (sans[c] for c in rsn.tolist())))
+                ps = {k: v for k, v in ps.items() if k != "seconds"}
+                rst = {k: v for k, v in dict(rst).items() if k != "seconds"}
+                n_trim += ps["trims"] > 0
+                n_sticky += "objective" in ps
+                n_moved += ps["accepted"] > 0
+                for k, v in ps["by_kind"].items():
+                    kinds[k] = kinds.get(k, 0) + v
+                if (list(pm.items()) != list(rm.items()) or not deep_same(
+                        {k: ps[k] for k in sorted(ps)}, {k: rst.get(k) for k in sorted(ps)})
+                        or list(ps["by_kind"]) != list(rst["by_kind"]) or set(rst) != set(ps)):
+                    fail("polish", (label, target, len(moves), ps, rst))
+                if cg is not None and cg.ok:
+                    n_compiled += 1
+                    cm, cs_ = bc.polish_book(g, moves, target, cg.order, compiled=cg)
+                    if list(cm.items()) != list(rm.items()):
+                        fail("compiled", (label, target))
+    check("P: RsGraph book_result and polish_book = budget_core's (dict path and compiled "
+          "path): the book in insertion order, value, size, trims, steps, moves by kind, the "
+          "sticky objective",
+          not any(bad.values()),
+          f"{n} graphs ({n_open} not closed, skipped), {n_polish} polishes ({n_trim} trimmed, {n_moved} improved, "
+          f"{n_sticky} sticky, {n_compiled} also on the compiled path); moves by kind {kinds}; "
+          f"differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {str(v)[:1500]}")
+
+
+# ── S: the price search ────────────────────────────────────────────────────────────────────
+
+def closed(g) -> bool:
+    nodes = set(g.our) | set(g.opp)
+    return g.root in nodes and not any(
+        c[2] and c[1] is not None and c[1] not in nodes
+        for x in g.our.values() for c in x.cands) and not any(
+        k[2] and k[1] is not None and k[1] not in nodes
+        for x in g.opp.values() for k in x.kids)
+
+
+def no_seconds(info: dict) -> dict:
+    out = {k: v for k, v in info.items() if k != "timing"}
+    if "polish" in out:
+        out["polish"] = [{k: v for k, v in p.items() if k != "seconds"} for p in out["polish"]]
+    return out
+
+
+def check_price() -> None:
+    import _test_budget_dag as tdag
+    import _test_budget_speed as tspeed
+    import budget_rs
+    rng = random.Random(31)
+    graphs = [(n, g, b) for n, g, b in tspeed.price_graphs()] + dp_graphs(rng)
+    bad = {"policy_reach": 0, "search": 0}
+    first: dict = {}
+    n = n_search = n_sticky = n_open = 0
+    sizes_hit = 0
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+
+    quiet = lambda *_a, **_k: None  # noqa: E731
+    for label, g, budgets in graphs:
+        g.meta = dict(g.meta or {})
+        if not closed(g):
+            n_open += 1
+            continue
+        if rng.random() < 0.3:
+            stick(g, rng)
+            n_sticky += 1
+        n += 1
+        r, sans = budget_rs.rs_graph(g)
+        order = bc.topo_up(g)[0]
+        book = {h: rng.choice(x.cands)[0] for h, x in g.our.items()
+                if x.cands and rng.random() < 0.7}
+        if not deep_same(list(bc.policy_reach(g, book, order).items()),
+                         list(budget_rs.policy_reach_rs(r, sans, book).items())):
+            fail("policy_reach", label)
+        seed = tdag.source_seed(g, order)
+        for target in budgets:
+            for kw in (dict(seed_reach=seed), {}, dict(seed_reach=seed, polish=False)):
+                n_search += 1
+                a, ai = bc.price_search(g, target, log=quiet, **kw)
+                b, bi = budget_rs.price_search_rs(r, sans, target, log=quiet, **kw)
+                sizes_hit += a["spent_distinct"] == target
+                keys = ("booked", "visited", "realized", "reach_policy", "root_value_realized",
+                        "root_value_penalized", "lam", "spent_distinct")
+                if any(not deep_same(list(a[k].items()) if isinstance(a[k], dict) else a[k],
+                                     list(b[k].items()) if isinstance(b[k], dict) else b[k])
+                       for k in keys) or not deep_same(
+                        {k: v for k, v in sorted(no_seconds(ai).items())},
+                        {k: v for k, v in sorted(no_seconds(bi).items())}):
+                    fail("search", (label, target, list(kw), no_seconds(ai), no_seconds(bi)))
+    check("S: RsGraph price_search and policy_reach = budget_core's: the book, its reach "
+          "and values, lam, the sweep, the nearest sizes, the bound, every polish's stats; "
+          "optimistic and seeded reach, polish on and off, stickiness",
+          not any(bad.values()),
+          f"{n} graphs ({n_open} not closed, skipped; {n_sticky} sticky), {n_search} searches "
+          f"({sizes_hit} landing exactly on the target); differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {str(v)[:2000]}")
+
+
+# ── C: the columnar path (the collector's frame straight to Rust) ──────────────────────────
+
+def frame_of(ebp: dict):
+    """edges_by_parent as the collector's frame (no opponent-prior columns)"""
+    rows = []
+    for h, es in ebp.items():
+        for i, e in enumerate(es):
+            rows.append({"parent_hash": h, "move_san": e["move_san"],
+                         "child_hash": e.get("child_hash"),
+                         "parent_epd": e.get("parent_epd") if i == 0 else None,
+                         "total": e["total"], "white_score_avg": e.get("white_score_avg")})
+    return pl.DataFrame(rows, schema={"parent_hash": pl.Int64, "move_san": pl.String,
+                                      "child_hash": pl.Int64, "parent_epd": pl.String,
+                                      "total": pl.Int64, "white_score_avg": pl.Float64})
+
+
+def arrays_same(a, b) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    if set(a) != set(b):
+        return False
+    for k in a:
+        x, y = np.asarray(a[k]), np.asarray(b[k])
+        if x.shape != y.shape or x.dtype.kind != y.dtype.kind:
+            return False
+        if x.dtype.kind == "f":
+            if bits(x.reshape(-1)).tolist() != bits(y.reshape(-1)).tolist():
+                return False
+        elif x.tolist() != y.tolist():
+            return False
+    return True
+
+
+def check_columns() -> None:
+    import budget_rs
+    import build_baseline_books as bbb
+    rng = random.Random(41)
+    bad = {"inputs": 0, "view": 0, "rsgraph": 0}
+    first: dict = {}
+    n = nodes = 0
+    real = bbb.child_of
+    quiet = lambda *_a, **_k: None  # noqa: E731
+
+    def fail(k, what):
+        bad[k] += 1
+        first.setdefault(k, what)
+    budget_rs.KEEP_INPUTS = True
+    try:
+        for t in range(300):
+            our_white = t % 2 == 0
+            ebp, root, eval_ws, aux, rep, eng, verified, excluded, child = random_build_inputs(
+                rng, rng.choice([15, 40, 120, 400]), our_white)
+            for es in ebp.values():               # no opponent-prior rows on this path
+                for e in es:
+                    for k in ("reply_mass", "reach_share", "additional_reply"):
+                        e.pop(k, None)
+            ebp = {h: es for h, es in ebp.items() if es}
+            if root not in ebp:
+                continue
+            bbb.child_of = lambda epd, san: child[(epd, san)]
+            kw = dict(rep_moves=rep, eval_ws=eval_ws, aux_rows=aux if t % 5 else {},
+                      slice_prior=0.5196, eps=rng.choice([1e-6, 1e-4]), max_ply=29,
+                      share_floor=rng.choice([0.0, 0.03]), gated_reach=rng.random() < 0.7,
+                      max_eval_loss=rng.choice([None, 30.0]), strict_source=rng.random() < 0.7,
+                      crack_at_parents=rng.random() < 0.7,
+                      engine_moves=eng if rng.random() < 0.5 else None,
+                      excluded=excluded if rng.random() < 0.5 else None,
+                      rare_floor=rng.choice([None, 5]),
+                      verified=verified if rng.random() < 0.7 else None)
+            g = budget_rs.build_graph_rs(ebp, root, our_white, **kw)
+            want = dict(budget_rs.LAST_INPUTS)
+            af = None
+            if kw["aux_rows"]:
+                af = pl.DataFrame([{"position_hash": h, **r} for h, r in kw["aux_rows"].items()],
+                                  infer_schema_length=None)
+            got = budget_rs.frame_inputs(frame_of(ebp), rep_moves=rep, engine_moves=kw["engine_moves"],
+                                         excluded=kw["excluded"], verified=kw["verified"],
+                                         strict_source=kw["strict_source"], aux_frame=af)
+            n += 1
+            nodes += len(g.our) + len(g.opp)
+            if (got["san_list"] != want["san_list"] or not arrays_same(got["edges"], want["edges"])
+                    or not arrays_same(got["rows"], want["rows"])
+                    or not arrays_same(got["aux"], want["aux"])):
+                fail("inputs", (t, [k for k in ("edges", "rows", "aux") if not arrays_same(got[k], want[k])]))
+                continue
+            out = budget_rs.run_csr(
+                got["edges"], got["rows"], got["aux"], want["ek"], want["ev"], root, our_white,
+                slice_prior=0.5196, prior_strength=bc.PRIOR_STRENGTH, eval_weight=bc.EVAL_WEIGHT,
+                eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K,
+                eps=kw["eps"], max_ply=29, share_floor=kw["share_floor"],
+                robustness_floor=bc.ROBUSTNESS_FLOOR, gate_rel_floor=bc.GATE_REL_FLOOR,
+                gate_rel_own_margin=bc.GATE_REL_OWN_MARGIN, require_eval=True, gates=True,
+                max_eval_loss=kw["max_eval_loss"], rare_floor=kw["rare_floor"],
+                strict_source=kw["strict_source"], other_cov_blend=False,
+                gated_reach=kw["gated_reach"], crack_at_parents=kw["crack_at_parents"],
+                engine_moves_given=bool(kw["engine_moves"]), track_route_ply=False,
+                track_other=False)
+            v = budget_rs.GraphView(out, got["san_list"], root, got["parents"], got["epd"],
+                                    eps=kw["eps"], max_ply=29, share_floor=kw["share_floor"],
+                                    slice_prior=0.5196, our_white=our_white,
+                                    strict_source=kw["strict_source"],
+                                    crack_at_parents=kw["crack_at_parents"])
+            if (sorted(v.our) != sorted(g.our) or sorted(v.opp) != sorted(g.opp)
+                    or not deep_same(list(v.reach.items()), list(g.reach.items()))
+                    or not deep_same(list(v.ply.items()), list(g.ply.items()))
+                    or any(v.epd.get(h) != g.epd.get(h) for h in g.epd)
+                    or not deep_same(dict(sorted((k, x) for k, x in v.meta.items() if k != "rare_disputes")),
+                                     dict(sorted((k, x) for k, x in g.meta.items() if k != "rare_disputes")))
+                    or list(v.meta.get("rare_disputes", {})) != list(g.meta.get("rare_disputes", {}))):
+                fail("view", t)
+            if not g.our:
+                continue
+            g.meta = dict(g.meta)
+            stick_ = None
+            if rng.random() < 0.4:
+                stick(g, rng)
+                stick_ = g.meta["stick"]
+            r1, s1 = budget_rs.rs_graph(g)
+            r2, s2 = budget_rs.rs_graph_from_out(out, got["san_list"], root,
+                                                 crack_at_parents=kw["crack_at_parents"], stick=stick_)
+            same = (r1.topo_up()[0].tolist() == r2.topo_up()[0].tolist()
+                    and r1.topo_down().tolist() == r2.topo_down().tolist()
+                    and all(a.tolist() == b.tolist() for a, b in zip(r1.stop_positions(), r2.stop_positions())))
+            if same:
+                c1, _ = r1.build_curves(40, 256)
+                c2, _ = r2.build_curves(40, 256)
+                for b in (1, 5, 20):
+                    same &= book_same(budget_rs.book_from_rs(r1.extract_book(c1, b), s1),
+                                      budget_rs.book_from_rs(r2.extract_book(c2, b), s2)) is None
+                if closed(g):
+                    a1, i1 = budget_rs.price_search_rs(r1, s1, 5, log=quiet)
+                    a2, i2 = budget_rs.price_search_rs(r2, s2, 5, log=quiet)
+                    same &= list(a1["booked"].items()) == list(a2["booked"].items()) and deep_same(
+                        no_seconds(i1), no_seconds(i2))
+            if not same:
+                fail("rsgraph", t)
+    finally:
+        bbb.child_of = real
+        budget_rs.KEEP_INPUTS = False
+    check("C: the columnar path = the dict path: build_graph_csr's input arrays from the "
+          "collector's frame, the graph view (node sets, reach, ply, EPDs, meta) and the "
+          "RsGraph made straight from the Rust output (orders, curves, books, price search)",
+          not any(bad.values()), f"{n} graphs, {nodes:,} nodes; differ: {bad}")
+    for k, v in first.items():
+        print(f"    first {k} difference: {v}")
+
+
 def main() -> int:
     if rs is None:
         print("  SKIP  no book_builder_rs extension (build it: rust/book_builder/build.ps1)")
@@ -663,6 +1143,10 @@ def main() -> int:
     check_gates()
     check_reach()
     check_graph()
+    check_dp()
+    check_polish()
+    check_price()
+    check_columns()
     print("\nPASS" if FAIL == 0 else "\nFAIL")
     return FAIL
 
