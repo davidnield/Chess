@@ -14,8 +14,8 @@ line worth a place in it. The run ends when a pass asks for nothing, and only if
 meta names the last overlay that carried new evidence. The frontier is searched in round 0 only
 (reach threshold and batch limit are flags); what is left of it is reported in final.json.
 
-The code a stage runs. The build and the verifier are run from a SNAPSHOT of python/*.py taken at
-launch (<out>/code-<hash>/), never from the working tree, so an edit made while a run is live
+The code a stage runs. The build and the verifier are run from a SNAPSHOT of python/*.py (and the
+Rust extension, if built) taken at launch (<out>/code-<hash>/), never from the working tree, so an edit made while a run is live
 cannot execute under an old identity. The snapshot is re-hashed before and after every stage.
 
 Resuming. A stage is done only when its RECEIPT exists, and the receipt is written last. It binds
@@ -51,7 +51,34 @@ def sha(path) -> str:
 
 
 def code_files(folder: Path = HERE) -> list[Path]:
-    return sorted(p for p in folder.glob("*.py") if not p.name.startswith("_test_"))
+    """The maintained code a stage can execute: python/*.py and the Rust extension, if built
+    (build_budget_books --rs-core imports it, so it is part of the code's identity)."""
+    return sorted([p for p in folder.glob("*.py") if not p.name.startswith("_test_")]
+                  + list(folder.glob("book_builder_rs.pyd")))
+
+
+# build_budget_books options retired on 2026-11-12 (the simplify step): the value each one may
+# carry in an older receipt is the behaviour that is now the only one, so it is dropped
+RETIRED = {"--max-cands": "0", "--stop-model": "weak", "--price-seed": "source",
+           "--price-reprice": "max", "--price-rounds": "1", "--price-select": "best",
+           "--price-dag-mode": "polish"}
+
+
+def modern(cmd: list[str]) -> list[str]:
+    """An older receipt's command for today's build_budget_books: retired options dropped,
+    refused when one asks for a behaviour that no longer exists."""
+    out, i = [], 0
+    while i < len(cmd):
+        f = cmd[i]
+        if f in RETIRED:
+            if i + 1 >= len(cmd) or cmd[i + 1] != RETIRED[f]:
+                raise ValueError(f"{f} {cmd[i + 1] if i + 1 < len(cmd) else ''}: retired, and "
+                                 f"only {RETIRED[f]} (today's behaviour) can be dropped")
+            i += 2
+            continue
+        out.append(f)
+        i += 1
+    return out
 
 
 def code_sha(files=None) -> str:
@@ -131,7 +158,7 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
 
     receipt = a.baseline / "stages" / f"{a.colour}-cp{a.template_cap or a.cap}.json"
     cmd = json.loads(receipt.read_text())["command"]
-    base = cmd[cmd.index("--rep"):]
+    base = modern(cmd[cmd.index("--rep"):]) + list(getattr(a, "build_arg", None) or [])
     base[base.index("--max-eval-loss") + 1] = str(a.cap)
     budget = base[base.index("--budget") + 1]
     while a.wait and not (a.lookup / "ready.json").exists():
@@ -246,6 +273,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--frontier", type=int, default=300)
     ap.add_argument("--max-rounds", type=int, default=8)
     ap.add_argument("--wait", action="store_true", help="wait for the lookup's ready.json")
+    ap.add_argument("--build-arg", action="append", default=[], metavar="ARG",
+                    help="an extra build_budget_books argument (repeatable), e.g. "
+                         "--build-arg=--rs-core")
     return ap
 
 

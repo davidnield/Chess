@@ -605,6 +605,20 @@ with tempfile.TemporaryDirectory() as td:
     one = rrb.code_sha([f])
     f.write_text("x = 2\n")
     check("receipt: the code identity follows the file contents", rrb.code_sha([f]) != one)
+    # an older receipt's command: retired options carrying today's behaviour are dropped
+    cmd = ["--rep", "r", "--max-cands", "0", "--stop-model", "weak", "--method", "price",
+           "--price-seed", "source", "--price-reprice", "max", "--price-rounds", "1",
+           "--price-select", "best", "--price-dag-mode", "polish", "--budget", "1"]
+    try:
+        rrb.modern(["--rep", "r", "--price-rounds", "4"])
+        refused = False
+    except ValueError:
+        refused = True
+    check("driver: retired options with today's values are dropped, any other value refused",
+          rrb.modern(cmd) == ["--rep", "r", "--method", "price", "--budget", "1"] and refused)
+    (f.parent / "book_builder_rs.pyd").write_bytes(b"x")
+    check("driver: the Rust extension is part of the code a snapshot copies and hashes",
+          any(q.name == "book_builder_rs.pyd" for q in rrb.code_files(f.parent)))
 
 # 13. The graph reader hands the lookup the opponent overlay the book was built with.
 with tempfile.TemporaryDirectory() as td:
