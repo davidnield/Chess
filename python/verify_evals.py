@@ -25,6 +25,12 @@ Checks (each prints PASS/FAIL; exit 0 only if every one passes):
               raw source row with a usable score may carry that EPD. Catches silent misses.
   collisions  every book _collisions hash in the output has its twins as separate rows, each EPD's own
               eval (they are all in the positive sample, so the recompute checks them).
+
+An eval-db-v2 (the build meta's schema; built against a book-v2) carries the 128-bit key: position_hash is
+its low half and position_hash_hi, the last column, its high half. Then identity is zobrist128 of the board
+(both halves, ep variants included); a parent row's key must be the book parent's; a child row's key must
+be a book (child_hash, child_hash_hi) and no book (parent_hash, parent_hash_hi), whatever else shares its
+low half; and no row may be hash_ambiguous.
 """
 from __future__ import annotations
 
@@ -47,6 +53,7 @@ import pyarrow.parquet as pq
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from duck_compat import duck_arrow  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
+from zobrist128 import zobrist128  # noqa: E402
 
 BUCKETS = 512
 CAP = 2000
@@ -118,10 +125,12 @@ def sign(x: int) -> int:
 
 # ── positions ─────────────────────────────────────────────────────────────────
 
-def ep_alternatives(epd: str) -> tuple[list[str], list[int]]:
+def ep_alternatives(epd: str, wide: bool = False) -> tuple[list[str], list]:
     """(strings a source FEN4 may print for this EPD, extra hashes the book may key it by): the EPD
     itself, plus each ep square the position could carry that leaves its legal EPD unchanged; the
-    hash of such a board is an ep variant when it differs (a pseudo-legal but illegal capture)."""
+    hash of such a board is an ep variant when it differs (a pseudo-legal but illegal capture).
+    With `wide` the hashes are (low, high) pairs of the 128-bit key."""
+    zobrist_int64 = zobrist128 if wide else globals()["zobrist_int64"]
     b = chess.Board(epd + " 0 1")
     strs, hashes = [epd], []
     if b.ep_square is not None:
@@ -160,6 +169,15 @@ def check_identity(rows: list[dict]) -> tuple[int, int, list[str]]:
             continue
         if bucket(h) != r["bucket"]:
             bad.append(f"bucket {h} {r['bucket']}")
+            continue
+        hi = r.get("position_hash_hi")
+        if hi is not None:                       # an eval-db-v2 row: the whole 128-bit key
+            if zobrist128(b) == (h, hi):
+                continue
+            if (h, hi) in ep_alternatives(epd, wide=True)[1]:
+                var += 1
+                continue
+            bad.append(f"key ({h}, {hi}) {epd!r}")
             continue
         if zobrist_int64(b) == h:
             continue
@@ -234,19 +252,42 @@ def _run_isolated(fn, job):
         return ex.submit(fn, job).result()
 
 
-def _member_scan(job: tuple) -> tuple[list[int], list[int]]:
+def _member_scan(job: tuple) -> tuple[list, list]:
     """One group of book buckets: which target hashes occur as a book child_hash (buckets flagged for the
-    child scan), and which as a book parent_hash (only the targets that hash into the bucket)."""
-    groups, targets, threads, mem, tmp = job
+    child scan), and which as a book parent_hash (only the targets that hash into the bucket). With `wide`
+    the targets are (low, high) keys, matched on both halves."""
+    groups, targets, threads, mem, tmp, wide = job
     con = duckdb.connect()
     con.execute(f"SET threads={threads}")
     con.execute(f"SET memory_limit='{mem}'")
     con.execute(f"SET temp_directory='{_p(tmp)}'")
     con.execute("SET preserve_insertion_order=false")
     con.execute("SET enable_progress_bar=false")
+    as_child: set = set()
+    as_parent: set = set()
+    if wide:
+        con.register("ch_a", pa.table({"h": pa.array([t[0] for t in targets], pa.int64()),
+                                       "hi": pa.array([t[1] for t in targets], pa.int64())}))
+        con.execute("CREATE TEMP TABLE ch AS SELECT * FROM ch_a")
+        con.unregister("ch_a")
+        for _b, files, scan_child, parent_targets in groups:
+            if not files:
+                continue
+            src = f"read_parquet({lit(files)}, hive_partitioning=false)"
+            if scan_child:
+                as_child.update(tuple(r) for r in con.execute(
+                    f"SELECT DISTINCT child_hash, child_hash_hi FROM {src} s SEMI JOIN ch "
+                    f"ON s.child_hash = ch.h AND s.child_hash_hi = ch.hi").fetchall())
+            if parent_targets:
+                con.register("pt", pa.table({"h": pa.array([t[0] for t in parent_targets], pa.int64()),
+                                             "hi": pa.array([t[1] for t in parent_targets], pa.int64())}))
+                as_parent.update(tuple(r) for r in con.execute(
+                    f"SELECT DISTINCT parent_hash, parent_hash_hi FROM {src} s SEMI JOIN pt "
+                    f"ON s.parent_hash = pt.h AND s.parent_hash_hi = pt.hi").fetchall())
+                con.unregister("pt")
+        con.close()
+        return sorted(as_child), sorted(as_parent)
     con.execute("CREATE TEMP TABLE ch AS SELECT UNNEST(?::BIGINT[]) h", [targets])
-    as_child: set[int] = set()
-    as_parent: set[int] = set()
     for _b, files, scan_child, parent_targets in groups:
         if not files:
             continue
@@ -262,24 +303,25 @@ def _member_scan(job: tuple) -> tuple[list[int], list[int]]:
     return sorted(as_child), sorted(as_parent)
 
 
-def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list[int], a) -> None:
+def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list, a, wide: bool = False) -> None:
     """The sampled child-only hashes must be book child_hash values (any child-source bucket) and no book
-    parent_hash. In-process, one query over all 27,648 book files crawled at ~1 core after the sampling
+    parent_hash; with `wide` (an eval-db-v2) `chi` holds (low, high) keys and both halves must match.
+    In-process, one query over all 27,648 book files crawled at ~1 core after the sampling
     phase (2026-10-01, ~6.5 h projected): CLAUDE.md's process-wide DuckDB decay. Each group of buckets now
     runs in its own fresh process."""
     tc = time.time()
     targets = sorted(chi)
     by_b: dict[int, list[int]] = {}
     for h in targets:
-        by_b.setdefault(bucket(h), []).append(h)
+        by_b.setdefault(bucket(h[0] if wide else h), []).append(h)
     src = set(child_src)
     buckets = sorted(src | set(by_b))
     jobs = []
     for i in range(0, len(buckets), CHILD_GROUP):
         g = [(b, [str(p) for p in idx.get(b, [])], b in src, by_b.get(b, [])) for b in buckets[i:i + CHILD_GROUP]]
-        jobs.append((g, targets, a.threads, CHILD_MEM, str(a.tmp_dir)))
-    got: set[int] = set()
-    par_h: set[int] = set()
+        jobs.append((g, targets, a.threads, CHILD_MEM, str(a.tmp_dir), wide))
+    got: set = set()
+    par_h: set = set()
     for k, job in enumerate(jobs, 1):
         c, p = _run_isolated(_member_scan, job)
         got.update(c)
@@ -291,9 +333,11 @@ def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list[i
     missing = sorted(set(targets) - got)
     for h in missing[:SHOW]:
         print(f"    not a book child_hash: {h}")
+    what = ("keys are book (child_hash, child_hash_hi) keys", "(parent_hash, parent_hash_hi)") if wide else \
+        ("hashes are book child_hash values", "parent_hash")
     check(not missing and not par_h,
-          f"{len(targets):,} sampled child-only hashes are book child_hash values ({len(missing)} are not) "
-          f"and no book parent_hash ({len(par_h)} are) ({time.time() - tc:,.0f}s)")
+          f"{len(targets):,} sampled child-only {what[0]} ({len(missing)} are not) "
+          f"and no book {what[1]} ({len(par_h)} are) ({time.time() - tc:,.0f}s)")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -344,6 +388,9 @@ def main() -> int:
     t0 = time.time()
     out = a.out
     meta = json.loads((out / "_build.meta.json").read_text(encoding="utf-8"))
+    if meta.get("schema") not in ("eval-db-v1", "eval-db-v2"):
+        raise SystemExit(f"FATAL: {out} says schema {meta.get('schema')!r}: only eval-db-v1 and eval-db-v2 are known")
+    wide = meta["schema"] == "eval-db-v2"
     params = meta["params"]
     book = a.book or Path(meta["inputs"]["book"])
     cloud_dir = a.cloud or Path(meta["inputs"]["cloud"])
@@ -355,19 +402,21 @@ def main() -> int:
     child_src = all_b if params["child_sources"] == "all" else list(params["child_sources"])
     rng = random.Random(a.seed)
     picks = sorted(rng.sample(out_buckets, min(a.buckets, len(out_buckets))))
-    print(f"eval DB {out}: {len(out_buckets)} buckets, sampling {picks}; book {book}; "
+    print(f"eval DB {out} ({meta['schema']}{', 128-bit keys' if wide else ''}): {len(out_buckets)} buckets, "
+          f"sampling {picks}; book {book}; "
           f"{len(cloud_files)} cloud + {len(fish_files)} fishnet files; child sources "
           f"{'all' if len(child_src) == BUCKETS else child_src}", flush=True)
     con = connect(a)
 
     if a.child_check_only is not None:
         files = [out / f"bkt{b:03d}.parquet" for b in picks]
-        chi = sorted({r[0] for r in con.execute(
-            f"SELECT * FROM (SELECT position_hash FROM read_parquet({lit(files)}) WHERE in_book = 'child') "
+        kc = "position_hash, position_hash_hi" if wide else "position_hash"
+        chi = sorted({(tuple(r) if wide else r[0]) for r in con.execute(
+            f"SELECT * FROM (SELECT {kc} FROM read_parquet({lit(files)}) WHERE in_book = 'child') "
             f"USING SAMPLE reservoir({a.child_check_only} ROWS) REPEATABLE ({a.seed})").fetchall()})
         print(f"\nchild check only: {len(chi):,} child-only hashes from {len(picks)} buckets", flush=True)
         if chi:
-            check_children(book_index(book), child_src, chi, a)
+            check_children(book_index(book), child_src, chi, a, wide)
         else:
             check(False, "the sampled buckets hold child-only rows")
         print(f"\n{'ALL PASS' if not _FAILS else f'{len(_FAILS)} FAILURES'} ({_N} checks, "
@@ -412,6 +461,11 @@ def main() -> int:
             WITH c AS (SELECT position_hash, COUNT(*) n, bool_and(hash_ambiguous) a, bool_or(hash_ambiguous) o
                        FROM read_parquet('{_p(f)}') WHERE in_book = 'child' GROUP BY 1)
             SELECT COUNT(*) FILTER (WHERE (n >= 2) <> a OR a <> o) FROM c""").fetchone()[0]
+        if wide:
+            # Child-only positions were matched by their whole key: nothing is ambiguous, and every
+            # row carries its high half.
+            amb = con.execute(f"SELECT COUNT(*) FROM read_parquet('{_p(f)}') "
+                              f"WHERE hash_ambiguous OR position_hash_hi IS NULL").fetchone()[0]
         for k, v in zip(("rows", "order", "bucket", "cp_mate", "values"), r):
             probs[k] = probs.get(k, 0) + v
         probs["ambiguous"] = probs.get("ambiguous", 0) + amb
@@ -430,6 +484,8 @@ def main() -> int:
     cols = "position_hash, epd, in_book, source, cp, mate, eval_cp, cloud_depth, cloud_knodes, cloud_cp, " \
            "cloud_mate, cloud_line, cloud_n_evals, fishnet_cp, fishnet_mate, fishnet_tier, fishnet_n_tier, " \
            "fishnet_n, hash_ambiguous, fishnet_disagrees"
+    if wide:
+        cols += ", position_hash_hi"
     # ep-variant candidates: an own pawn next to an enemy pawn on the rank where an ep capture starts.
     ranks = ("regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace("
              "regexp_replace(regexp_replace(split_part(split_part(epd, ' ', 1), '/', {i}), '8', '........', 'g'), "
@@ -473,7 +529,8 @@ def main() -> int:
     pos = list(samp.values())
     print(f"    positive sample: {len(pos):,} distinct rows", flush=True)
     ok_n, var_n, bad = check_identity(pos)
-    check(not bad, f"{ok_n:,} sampled rows: the EPD is canonical python-chess, zobrist_int64 gives position_hash "
+    check(not bad, f"{ok_n:,} sampled rows: the EPD is canonical python-chess, "
+                   f"{'zobrist128 gives (position_hash, position_hash_hi)' if wide else 'zobrist_int64 gives position_hash'} "
                    f"({var_n} via an ep square the EPD cannot show) {bad[:SHOW]}")
     check(var_n >= n_var_found, f"every ep-variant row found ({n_var_found:,}) hashes via an ep square its EPD cannot show")
     check(len(pos) >= a.positive or sum(mb[b]["rows"] for b in picks if b in mb) < a.positive,
@@ -611,24 +668,29 @@ def main() -> int:
 
     # ── in_book against the book ──
     print("\nin_book against the book", flush=True)
-    par = [(r["position_hash"], r["epd"], r["bucket"]) for r in pos if r["in_book"] == "parent"]
-    chi = sorted({r["position_hash"] for r in pos if r["in_book"] == "child"})
+    par = [(r["position_hash"], r["epd"], r["bucket"], r.get("position_hash_hi", 0)) for r in pos
+           if r["in_book"] == "parent"]
+    chi = sorted({((r["position_hash"], r["position_hash_hi"]) if wide else r["position_hash"])
+                  for r in pos if r["in_book"] == "child"})
     bad = 0
     by_b: dict[int, list] = {}
-    for h, e, b in par:
-        by_b.setdefault(b, []).append((h, e))
+    for h, e, b, hi in par:
+        by_b.setdefault(b, []).append((h, e, hi))
+    same_hi = " AND k.parent_hash_hi = pp.hi" if wide else ""
     for b, v in by_b.items():
         bf = book_files(book, b)
-        con.register("pp", pa.table({"h": [x[0] for x in v], "e": [x[1] for x in v]}))
+        con.register("pp", pa.table({"h": [x[0] for x in v], "e": [x[1] for x in v],
+                                     "hi": pa.array([x[2] for x in v], pa.int64())}))
         # fetchall, not fetchone: duckdb 2.0 keeps a result that was not read to its end open, and then
         # refuses the unregister below and the next bucket's register.
         found = con.execute(f"""SELECT COUNT(*) FROM pp WHERE EXISTS (SELECT 1 FROM read_parquet({lit(bf)},
-                                hive_partitioning=false) k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e)""").fetchall()[0][0] if bf else 0
+                                hive_partitioning=false) k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e{same_hi})""").fetchall()[0][0] if bf else 0
         bad += len(v) - found
         con.unregister("pp")
-    check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd) ({bad} are not)")
+    check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd"
+                    f"{', parent_hash_hi' if wide else ''}) ({bad} are not)")
     if chi:
-        check_children(book_index(book), child_src, chi, a)
+        check_children(book_index(book), child_src, chi, a, wide)
     else:
         print("    (no child rows in the sample)")
 
@@ -638,8 +700,10 @@ def main() -> int:
     for r in colls:
         twins.setdefault(r["parent_hash"], set()).add(r["parent_epd"])
     in_out = [r for r in pos if r["position_hash"] in twins]
+    # In an eval-db-v2 a child-only position may share a collision hash: its whole key was checked above.
     bad = [f"{r['position_hash']} {r['epd']!r} {r['in_book']}" for r in in_out
-           if r["in_book"] != "parent" or r["epd"] not in twins[r["position_hash"]]]
+           if (r["in_book"] != "parent" and not wide)
+           or (r["in_book"] == "parent" and r["epd"] not in twins[r["position_hash"]])]
     per_h: dict[int, list] = {}
     for r in in_out:
         per_h.setdefault(r["position_hash"], []).append(r["epd"])

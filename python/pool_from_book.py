@@ -43,6 +43,12 @@ the eval arrays and Stage 3's hash-keyed dicts must; they stay in D and A summed
 over their EPDs, so the flow identities still balance. No twin can reach the
 floor book-wide; that is asserted, not assumed.
 
+A book-v2 (128-bit keys: parent_hash_hi / child_hash_hi beside the 64-bit columns) is
+read by the key's LOW half, which is the 64-bit hash, so the pool and its sidecar keep
+their schemas and every reader its keys. Its _collisions.parquet lists the 64-bit hashes
+that two or more positions share, and those are dropped as pool parents exactly as for a
+book-v1; the high halves are not read. The pool's meta records the book's schema.
+
 Phases, each resumable (atomic .tmp -> rename, sentinel per unit):
   arrivals   rows at ply <= max_ply, pre-summed by (child_hash, ply) within groups
              of source buckets and partitioned by the CHILD's bucket, so each
@@ -692,6 +698,8 @@ def write_metas(a, timings: dict) -> None:
         "max_ply": a.max_ply, "min_games": a.min_games, "term_reasons": "pooled",
         "event": POOL_EVENT, "elo_band": POOL_ELO,
         "book": str(book),
+        "book_schema": book_schema(book),
+        "position_keys": "64-bit (a book-v2 key's low half); _collisions hashes dropped as parents",
         "book_meta_sha256": _sha256(book / "_book.meta.json"),
         "collisions_sha256": _sha256(book / "_collisions.parquet"),
         "eval_arrays": str(a.eval_arrays),
@@ -808,6 +816,19 @@ def book_cap(book: Path) -> int | None:
     return json.loads(mp.read_text(encoding="utf-8")).get("input_params", {}).get("max_ply")
 
 
+def book_schema(book: Path) -> str:
+    """'book-v1' or 'book-v2', from the book's settings lock (a book without one is a v1).
+    Either is read by the 64-bit hash, which is a book-v2 key's low half; the positions
+    that share one are in _collisions.parquet for both, and are dropped as pool parents."""
+    mp = Path(book) / "_merge_params.json"
+    schema = "book-v1"
+    if mp.exists():
+        schema = json.loads(mp.read_text(encoding="utf-8")).get("schema", "book-v1")
+    if schema not in ("book-v1", "book-v2"):
+        raise SystemExit(f"FATAL: {book} is a {schema} book; only book-v1 and book-v2 are known")
+    return schema
+
+
 def check_cap(book: Path, max_ply: int, declared: int | None = None) -> None:
     """Refuse a pool cap at or above the book's (2026-10-31, external review). ended(x, p)
     is DERIVED as arrivals at p minus departures at p+1 and horizon(x) as departures at
@@ -819,13 +840,7 @@ def check_cap(book: Path, max_ply: int, declared: int | None = None) -> None:
     A book without _merge_params.json must have its cap declared (--book-cap): an
     unknown cap is not evidence of a safe one (follow-up review R6). A declared cap that
     disagrees with the recorded one is refused too."""
-    mp = Path(book) / "_merge_params.json"
-    if mp.exists():
-        schema = json.loads(mp.read_text(encoding="utf-8")).get("schema", "book-v1")
-        if schema != "book-v1":
-            # A book-v2 keys positions by 128 bits; summing its rows on parent_hash alone
-            # would merge the positions the high half tells apart.
-            raise SystemExit(f"FATAL: {book} is a {schema} book; pool_from_book reads book-v1 only")
+    book_schema(book)
     cap = book_cap(book)
     if cap is None and declared is None:
         raise SystemExit(f"FATAL: {book} records no coverage cap (_merge_params.json); "

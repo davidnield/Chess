@@ -25,6 +25,7 @@ import pyarrow.parquet as pq
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from zobrist import zobrist_int64  # noqa: E402
+from zobrist128 import zobrist128  # noqa: E402
 
 EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE", "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
 FAILS: list[str] = []
@@ -71,6 +72,61 @@ def main() -> int:
         return run(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run_v2(tmp: Path, gs: list, cmd: list[str]) -> bool:
+    """The same book with both halves of every key (a book-v2): the build writes an eval-db-v2 that
+    verify_evals.py passes, and a child row whose high half is off by one fails it."""
+    print("\nbook-v2 -> eval-db-v2", flush=True)
+    hi_of = {zobrist_int64(b): zobrist128(b)[1] for seq in gs for b in seq}
+    book2 = tmp / "book128"
+    shutil.copytree(tmp / "book", book2)
+    for f in book2.glob("ps/*/*/bkt*.parquet"):
+        t = pq.ParquetFile(f).read()
+        t = t.append_column("parent_hash_hi", pa.array([hi_of[h] for h in t["parent_hash"].to_pylist()], pa.int64()))
+        t = t.append_column("child_hash_hi", pa.array([hi_of[h] for h in t["child_hash"].to_pylist()], pa.int64()))
+        pq.write_table(t, f)
+    (book2 / "_merge_params.json").write_text(json.dumps(
+        {"schema": "book-v2", "input_params": {"max_ply": 50, "key_bits": 128}}), encoding="utf-8")
+    out2 = tmp / "out128"
+    c2 = list(cmd)
+    for flag, val in (("--book", book2), ("--work", tmp / "work128"), ("--out", out2)):
+        c2[c2.index(flag) + 1] = str(val)
+    r = subprocess.run(c2, capture_output=True, text=True)
+    ok = r.returncode == 0 and json.loads((out2 / "_build.meta.json").read_text())["schema"] == "eval-db-v2"
+    check(ok, f"explorer-extract evals on a book-v2 writes an eval-db-v2 ({r.stderr[-400:] if r.returncode else ''})")
+    if not ok:
+        return False
+    a = {r["epd"]: r for f in sorted((tmp / "out").glob("bkt*.parquet")) for r in pq.read_table(f).to_pylist()}
+    b = {r["epd"]: r for f in sorted(out2.glob("bkt*.parquet")) for r in pq.read_table(f).to_pylist()}
+    same = set(a) == set(b) and all({**b[e], "position_hash_hi": None} == {**a[e], "position_hash_hi": None}
+                                    for e in a)
+    his = all(r["position_hash_hi"] == hi_of.get(r["position_hash"], r["position_hash_hi"]) for r in b.values())
+    last = pq.read_schema(sorted(out2.glob("bkt*.parquet"))[0]).names[-1]
+    check(same and his and last == "position_hash_hi",
+          f"the eval-db-v2 has the same {len(b)} rows with position_hash_hi last, every one zobrist128's")
+    ver = [sys.executable, str(HERE / "verify_evals.py"), str(out2), "--buckets", "512", "--positive", "100000",
+           "--negative", "5", "--threads", "2", "--mem", "2GB", "--tmp-dir", str(tmp / "duck"), "--no-sha"]
+    r = subprocess.run(ver, capture_output=True, text=True)
+    check(r.returncode == 0 and "ALL PASS" in r.stdout and "zobrist128 gives" in r.stdout
+          and "child_hash_hi) keys" in r.stdout,
+          "verify_evals.py passes the eval-db-v2, keys held on both halves")
+    if r.returncode:
+        print(r.stdout[-3000:], r.stderr[-2000:])
+    for f in sorted(out2.glob("bkt*.parquet")):
+        t = pq.read_table(f)
+        kinds = t["in_book"].to_pylist()
+        if "child" in kinds:
+            k = kinds.index("child")
+            hi = t["position_hash_hi"].to_pylist()
+            hi[k] += 1
+            t = t.set_column(t.schema.get_field_index("position_hash_hi"), "position_hash_hi", pa.array(hi, pa.int64()))
+            pq.write_table(t, f)
+            break
+    r = subprocess.run(ver, capture_output=True, text=True)
+    check(r.returncode == 1 and "FAIL" in r.stdout and "key (" in r.stdout,
+          "a child row whose position_hash_hi is off by one fails the identity check")
+    return True
 
 
 def run(tmp: Path) -> int:
@@ -156,6 +212,10 @@ def run(tmp: Path) -> int:
     check(r.returncode == 0 and "ALL PASS" in r.stdout, "verify_evals.py passes the real build")
     if r.returncode:
         print(r.stdout[-3000:], r.stderr[-2000:])
+    # The book-v2 variant, while the book and the 64-bit output are still intact.
+    v2 = run_v2(tmp, gs, cmd)
+    print()
+    print("corruptions of the 64-bit build", flush=True)
     # Corrupt one value (a cloud row's cloud_line) -> fail; drop a parent row -> the negative check fails.
     outs = sorted((tmp / "out").glob("bkt*.parquet"))
     def cloud_parent(p: Path) -> int | None:
@@ -203,7 +263,7 @@ def run(tmp: Path) -> int:
             m["bytes"] = victim.stat().st_size
     pq.write_table(pa.Table.from_pylist(man), tmp / "out" / "_manifest.parquet")
     r = subprocess.run(ver + ["--no-sha", "--negative", "100000"], capture_output=True, text=True)
-    check(r.returncode == 1 and "no raw source row carries their EPD" in r.stdout and "FAIL  " in r.stdout,
+    check(v2 and r.returncode == 1 and "no raw source row carries their EPD" in r.stdout and "FAIL  " in r.stdout,
           "a dropped row is caught by the negative sample")
     print(f"\n{'ALL PASS' if not FAILS else f'{len(FAILS)} FAILURES'}")
     return 0 if not FAILS else 1

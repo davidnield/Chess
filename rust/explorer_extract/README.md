@@ -100,7 +100,14 @@ whose low half is also some parent's is no longer skipped. Every row carries
 `position_hash_hi` as the last column; rows stay sorted by (position_hash, epd). The coverage
 tables hold plies up to 63, so a deeper book is refused. `tests/evals.rs`
 (`book_v2_matches_children_by_the_whole_key`) builds the same synthetic book both ways.
-`pool_from_book.py`, `verify_evals.py` and the eval arrays are still 64-bit only.
+
+Downstream of the book and the eval DB, positions are still keyed by the 64-bit hash, which is
+a book-v2 key's low half. `pool_from_book.py` reads a book-v2 that way and writes the same pool
+and sidecar it would from a book-v1: the hashes two positions share are in `_collisions.parquet`
+for both kinds, and are dropped as pool parents. `verify_evals.py` checks either kind of eval DB
+(an eval-db-v2's keys on both halves, a child row's whole key against the book's child keys);
+`_test_verify_evals.py` builds both. The eval arrays have not been built from an eval-db-v2;
+their exclusions (a hash with two DB rows, a book collision hash) already cover shared hashes.
 
 The Python side of the contract is `python/zobrist128.py` (python-chess's hasher over the high
 halves). `selftest` holds shakmaty's table to it key by key; `_test_rust_extract.py` holds both

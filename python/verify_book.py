@@ -49,7 +49,8 @@ back on such EPDs and counts those rows separately; they are not failures.
 A book-v2 (the lock's schema; months built with `month --key128`) carries the
 128-bit key: parent_hash_hi / child_hash_hi beside the 64-bit columns. Then the
 digests cover both halves of both keys, the unique key is (parent_hash,
-parent_hash_hi, move_san, event, elo_band, ply), a key must have one EPD, the
+parent_hash_hi, move_san, event, elo_band, ply), a key must have one EPD (and an
+EPD one key within its 64-bit hash), the
 ply cap is the months' --max-ply, and the sample holds both halves to
 zobrist128.py. _collisions is still the list of 64-bit hashes with two or more
 positions; such months have no conflict records to compare it with.
@@ -220,12 +221,14 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
               GROUP BY {pos}, move_san, event, elo_band, ply)""").fetchone()
         t = 0
         if bk.wide:
-            # A 128-bit key is a position: one EPD per key, one key per EPD.
+            # A 128-bit key is a position: one EPD per key, and within a 64-bit hash one key
+            # per EPD. (Across hashes one EPD can have two keys: a pinned en-passant capture
+            # hashes with its ep file, which the EPD cannot show.)
             t = bcon.execute(f"""
                 SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
                           GROUP BY parent_hash, parent_hash_hi HAVING COUNT(DISTINCT parent_epd) > 1))
                      + (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
-                          GROUP BY parent_epd HAVING COUNT(DISTINCT (parent_hash, parent_hash_hi)) > 1))
+                          GROUP BY parent_hash, parent_epd HAVING COUNT(DISTINCT parent_hash_hi) > 1))
                 """).fetchone()[0]
         bcon.close()
         dup += int(r[0] or 0)
@@ -235,7 +238,7 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
               f"{f', {int(t or 0)} keys or EPDs naming two positions' if bk.wide else ''}", flush=True)
     check(dup == 0, f"the 6-column key is unique ({rows:,} rows)")
     if bk.wide:
-        check(two == 0, "every 128-bit key has one EPD and every EPD one key")
+        check(two == 0, "every 128-bit key has one EPD, and every EPD one key within its 64-bit hash")
 
 
 # ── book-wide ─────────────────────────────────────────────────────────────────

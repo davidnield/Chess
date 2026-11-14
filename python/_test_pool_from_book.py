@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import math
 import random
+import shutil
 import sys
 import tempfile
 from collections import defaultdict
@@ -289,6 +290,36 @@ def main() -> int:
             except SystemExit:
                 refused = True
             check(refused == want, f"cap {mp} on a ply-30 book is {'refused' if want else 'allowed'}")
+        print("F  a book-v2 (128-bit keys) is read by the low half: the same pool")
+        book2 = td / "book128"
+        shutil.copytree(book, book2)
+        for f in book2.glob("ps/*/*/bkt*.parquet"):
+            t = pl.read_parquet(f)
+            # Any high halves do: the pool must not read them.
+            t.with_columns((pl.col("parent_hash") // 7).alias("parent_hash_hi"),
+                           (pl.col("child_hash") // 11).alias("child_hash_hi")).write_parquet(f)
+        (book2 / "_merge_params.json").write_text(json.dumps(
+            {"schema": "book-v2", "input_params": {"max_ply": CAP + 1, "key_bits": 128}}))
+        e1, a1, _ = run_build(td, book, td / "ev", [thin], None, "w64")
+        e2, a2, _ = run_build(td, book2, td / "ev", [thin], None, "w128")
+        key = ["parent_hash", "move_san"]
+        check(e2.sort(key).equals(e1.sort(key)) and a2.sort("position_hash").equals(a1.sort("position_hash")),
+              f"the pool ({e2.height} edges) and its sidecar ({a2.height} rows) equal the book-v1's")
+        check(P.book_schema(book2) == "book-v2" and P.book_schema(book) == "book-v1",
+              "book_schema reads the lock (a book without one is a v1)")
+        try:
+            P.check_cap(book2, CAP)
+            ok = True
+        except SystemExit:
+            ok = False
+        check(ok, "a book-v2 capped above the pool cap is accepted")
+        (book2 / "_merge_params.json").write_text(json.dumps({"schema": "book-v9", "input_params": {"max_ply": 9}}))
+        try:
+            P.check_cap(book2, CAP)
+            refused = False
+        except SystemExit:
+            refused = True
+        check(refused, "an unknown book schema is refused")
         for args, want, label in (((book, CAP), True, "a book without merge params, no --book-cap"),
                                   ((book, CAP, CAP + 1), False, "...with --book-cap above the pool cap"),
                                   ((book, CAP, CAP), True, "...with --book-cap equal to it"),
