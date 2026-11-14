@@ -213,6 +213,34 @@ def check_dir_source() -> None:
               f"mate counts: 2 added; of 3 in the DB 1 agrees, 1 checkmate overridden, 1 collision excluded; "
               f"1 conflict ({cnt})")
         check("verified against" in verify_eval_arrays(adir, db), "a directory build verifies against its source")
+        # An eval-db-v2 over a book-v2 (128-bit keys: the high halves as extra columns) gives the
+        # same arrays: they are keyed by the low half, and the hashes two positions share are
+        # excluded by the same rules (two DB rows, a book collision).
+        import pyarrow as pa
+        from eval_arrays import _sha256
+        db2, book2, adir2 = tmp / "db128", tmp / "book128", tmp / "arrays128"
+        shutil.copytree(db, db2)
+        shutil.copytree(book, book2)
+        for f in db2.glob("bkt*.parquet"):
+            t = pq.read_table(f)
+            pq.write_table(t.append_column("position_hash_hi", pa.array(
+                [x // 3 for x in t["position_hash"].to_pylist()], pa.int64())), f)
+        for f in book2.glob("ps/*/*/bkt*.parquet"):
+            t = pq.ParquetFile(f).read()
+            for c in ("parent_hash", "child_hash"):
+                t = t.append_column(c + "_hi", pa.array([x // 5 for x in t[c].to_pylist()], pa.int64()))
+            pq.write_table(t, f)
+        (book2 / "_merge_params.json").write_text(json.dumps(
+            {"schema": "book-v2", "input_params": {"max_ply": 50, "key_bits": 128}}), encoding="utf-8")
+        (db2 / "_build.meta.json").write_text(json.dumps(
+            {"schema": "eval-db-v2",
+             "inputs": {"book": str(book2), "book_meta_sha256": _sha256(book2 / "_book.meta.json")}}), encoding="utf-8")
+        build_eval_arrays(db2, adir2, book=book2, terminal=True, work=tmp / "work128", threads=1, mem="1GB",
+                          tmp=tmp / "duck", terminal_sample=0)
+        same = all((adir / n).read_bytes() == (adir2 / n).read_bytes() for n in ("eval_hash.npy", "eval_cp.npy"))
+        ex2 = {(r["position_hash"], r["reason"]) for r in pq.read_table(adir2 / "excluded.parquet").to_pylist()}
+        check(same and ex2 == reasons,
+              "an eval-db-v2 over a book-v2 builds byte-identical arrays and the same exclusions")
         del h, e
         bf = db / "bkt003.parquet"
         st = bf.stat()
