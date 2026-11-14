@@ -30,6 +30,14 @@
 //!        match the rest against child hashes that are not parent hashes,
 //!        write, re-read, and write the sentinel.
 //!
+//! BOOK-V2 (the book's lock says schema book-v2: 128-bit keys). Parents are
+//! matched by (hash, EPD) as ever, which a book-v2 makes exact; what changes is
+//! the child-only positions, matched by their whole key (child_hash,
+//! child_hash_hi) instead of by the 64-bit hash, so no row is `hash_ambiguous`,
+//! and a position whose low half is also some parent's is no longer skipped.
+//! Every row carries its key's high half, `position_hash_hi`, as the LAST
+//! column, and the output's schema name is eval-db-v2.
+//!
 //! Every unit is resumable: a unit is done iff its sentinel exists; an
 //! unfinished unit's files are deleted on start. `_evals_params.json` locks the
 //! paths, threads, memory budget, bucket sets, source files and the build.
@@ -61,12 +69,12 @@ use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
 use shakmaty::fen::Fen;
 use shakmaty::{
-    attacks, zobrist::Zobrist64, CastlingMode, Chess, Color, EnPassantMode, File as BFile, FromSetup,
+    attacks, zobrist::Zobrist128, CastlingMode, Chess, Color, EnPassantMode, File as BFile, FromSetup,
     Position, PositionErrorKinds, Rank, Role, Setup, Square,
 };
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
-use crate::chesspos::{hash as pos_hash, pack, Packed, PACKED_BYTES};
+use crate::chesspos::{key128, pack, Packed, PACKED_BYTES};
 use crate::fasthash::{FastMap, FastSet};
 use crate::keys::{bucket_of, rename_retry, tmp_of};
 use crate::merge::{
@@ -77,6 +85,16 @@ use crate::sys;
 
 pub const BUCKETS: u32 = 512;
 pub const SCHEMA: &str = "eval-db-v1";
+/// The output of a build against a book-v2: `position_hash_hi` is added.
+pub const SCHEMA_WIDE: &str = "eval-db-v2";
+
+fn schema_name(wide: bool) -> &'static str {
+    if wide {
+        SCHEMA_WIDE
+    } else {
+        SCHEMA
+    }
+}
 pub const LOCK_FILE: &str = "_evals_params.json";
 /// Per-bucket sentinels. Not `_done`: NTFS is case-insensitive and `_DONE`
 /// (written last) sits in the same directory.
@@ -175,25 +193,35 @@ fn fail_of(k: PositionErrorKinds) -> Fail {
 }
 
 /// A position's hashes: the canonical one first (the position its legal EPD
-/// describes), then each distinct ep-variant hash.
+/// describes), then each distinct ep-variant hash. `hi` holds the high half of
+/// each one's 128-bit key (chesspos::Key), which only a book-v2 build reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hashes {
     n: u8,
     h: [i64; 9],
+    hi: [i64; 9],
 }
 
 impl Hashes {
-    fn one(h: i64) -> Hashes {
-        let mut a = [0i64; 9];
+    fn one(h: i64, hi: i64) -> Hashes {
+        let (mut a, mut b) = ([0i64; 9], [0i64; 9]);
         a[0] = h;
-        Hashes { n: 1, h: a }
+        b[0] = hi;
+        Hashes { n: 1, h: a, hi: b }
     }
 
-    fn push_unique(&mut self, h: i64) {
+    fn push_unique(&mut self, h: i64, hi: i64) {
         if !self.as_slice().contains(&h) {
             self.h[self.n as usize] = h;
+            self.hi[self.n as usize] = hi;
             self.n += 1;
         }
+    }
+
+    /// The high half of the key whose low half is `lo`, if `lo` is one of the
+    /// position's hashes.
+    pub fn hi_of(&self, lo: i64) -> Option<i64> {
+        self.as_slice().iter().position(|&h| h == lo).map(|i| self.hi[i])
     }
 
     pub fn as_slice(&self) -> &[i64] {
@@ -234,8 +262,10 @@ pub fn identify(fen: &[u8]) -> std::result::Result<Ident, Fail> {
     let setup: Setup = f.into();
     let pos = Chess::from_setup(setup, CastlingMode::Standard).map_err(|e| fail_of(e.kinds()))?;
     let packed = pack(&pos);
-    let canon: Zobrist64 = pos.zobrist_hash(EnPassantMode::Legal);
-    let mut hashes = Hashes::one(canon.0 as i64);
+    // The low half of the 128-bit hash is the polyglot hash (the selftest holds
+    // the two tables to each other), so `h` is what Zobrist64 gave.
+    let canon: Zobrist128 = pos.zobrist_hash(EnPassantMode::Legal);
+    let mut hashes = Hashes::one(canon.0 as u64 as i64, (canon.0 >> 64) as u64 as i64);
     if pos.legal_ep_square().is_none() {
         let turn = pos.turn();
         let theirs = pos.board().pawns() & pos.board().by_color(!turn);
@@ -260,7 +290,8 @@ pub fn identify(fen: &[u8]) -> std::result::Result<Ident, Fail> {
             s.ep_square = Some(ep);
             let Ok(v) = Chess::from_setup(s, CastlingMode::Standard) else { continue };
             if pack(&v) == packed {
-                hashes.push_unique(pos_hash(&v));
+                let k = key128(&v);
+                hashes.push_unique(k.lo, k.hi);
             }
         }
     }
@@ -476,10 +507,10 @@ impl Config {
         (self.mem_gb * 1e9) as u64
     }
 
-    /// Book buckets per Phase C group: ~1.2 GB of distinct child hashes each,
-    /// up to half the budget.
-    fn child_group(&self) -> usize {
-        ((self.mem_gb * 0.5 / 1.2) as usize).clamp(1, 16)
+    /// Book buckets per Phase C group: ~1.2 GB of distinct child hashes each
+    /// (twice that as 128-bit keys), up to half the budget.
+    fn child_group(&self, wide: bool) -> usize {
+        ((self.mem_gb * 0.5 / if wide { 2.4 } else { 1.2 }) as usize).clamp(1, 16)
     }
 }
 
@@ -576,6 +607,8 @@ pub struct Plan {
     pub groups: Vec<Vec<u32>>,
     pub lock: Value,
     pub want: Vec<bool>,
+    /// The book is a book-v2: 128-bit keys.
+    pub wide: bool,
 }
 
 fn plan(cfg: &Config) -> Result<Plan> {
@@ -588,18 +621,32 @@ fn plan(cfg: &Config) -> Result<Plan> {
             return Err(refused(format!("{} has no _BOOK.DONE", cfg.book.display())));
         }
     }
-    // This build keys positions by the 64-bit hash and resolves twins by EPD:
-    // on a 128-bit book it would silently drop the keys' high halves.
+    // The book's kind, from its settings lock (a book without one is a v1).
+    let mut wide = false;
     let lock = cfg.book.join("_merge_params.json");
     if lock.is_file() {
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&lock)?)
             .with_context(|| format!("parsing {}", lock.display()))?;
-        if v["schema"] != json!("book-v1") {
-            return Err(refused(format!(
-                "{} is a {} book; the eval build reads book-v1 only",
-                cfg.book.display(),
-                v["schema"]
-            )));
+        match v["schema"].as_str() {
+            Some("book-v1") => {}
+            Some("book-v2") => {
+                wide = true;
+                let cap = v["input_params"]["max_ply"].as_i64().unwrap_or(i64::MAX);
+                if cap >= PLIES as i64 {
+                    return Err(refused(format!(
+                        "{} holds plies up to {cap}; the coverage tables stop at {}",
+                        cfg.book.display(),
+                        PLIES - 1
+                    )));
+                }
+            }
+            _ => {
+                return Err(refused(format!(
+                    "{} is a {} book; only book-v1 and book-v2 are known",
+                    cfg.book.display(),
+                    v["schema"]
+                )))
+            }
         }
     }
     for (name, p) in [("--work", &cfg.work), ("--out", &cfg.out)] {
@@ -609,14 +656,14 @@ fn plan(cfg: &Config) -> Result<Plan> {
     }
     let cloud = list_sources(&cfg.cloud, false, !cfg.test_inputs)?;
     let fishnet = list_sources(&cfg.fishnet, true, !cfg.test_inputs)?;
-    let groups: Vec<Vec<u32>> = cfg.child_sources.chunks(cfg.child_group()).map(|c| c.to_vec()).collect();
+    let groups: Vec<Vec<u32>> = cfg.child_sources.chunks(cfg.child_group(wide)).map(|c| c.to_vec()).collect();
     let mut want = vec![false; BUCKETS as usize];
     for &b in &cfg.buckets {
         want[b as usize] = true;
     }
     let files = |v: &[SrcFile]| v.iter().map(|f| json!([f.name, f.bytes])).collect::<Vec<_>>();
     let lock = json!({
-        "schema": SCHEMA,
+        "schema": schema_name(wide),
         "book": cfg.book.display().to_string(),
         "cloud": cfg.cloud.display().to_string(),
         "fishnet": cfg.fishnet.display().to_string(),
@@ -626,12 +673,12 @@ fn plan(cfg: &Config) -> Result<Plan> {
         "mem_gb": cfg.mem_gb,
         "buckets": describe(&cfg.buckets),
         "child_sources": describe(&cfg.child_sources),
-        "child_group": cfg.child_group(),
+        "child_group": cfg.child_group(wide),
         "cloud_files": files(&cloud),
         "fishnet_files": files(&fishnet),
         "tool": {"version": sys::VERSION, "commit": sys::GIT_COMMIT, "built": sys::BUILD_DATE},
     });
-    Ok(Plan { cloud, fishnet, groups, lock, want })
+    Ok(Plan { cloud, fishnet, groups, lock, want, wide })
 }
 
 fn check_lock(dir: &Path, want: &Value) -> Result<()> {
@@ -693,13 +740,81 @@ fn fish_shard_schema() -> SchemaRef {
     ]))
 }
 
-fn child_shard_schema() -> SchemaRef {
-    Arc::new(Schema::new(vec![Field::new("child_hash", DataType::Int64, false)]))
+/// A book child key as Phase C carries it: the 64-bit hash, or both halves of
+/// the 128-bit key (a book-v2).
+trait ChildKey: Copy + Ord + Send + Sync {
+    fn lo(&self) -> i64;
+    fn schema() -> SchemaRef;
+    /// Every child key of one book ps file.
+    fn read(p: &Path) -> Result<Vec<Self>>;
+    fn batch(c: &[Self]) -> Result<RecordBatch>;
+}
+
+impl ChildKey for i64 {
+    fn lo(&self) -> i64 {
+        *self
+    }
+    fn schema() -> SchemaRef {
+        Arc::new(Schema::new(vec![Field::new("child_hash", DataType::Int64, false)]))
+    }
+    fn read(p: &Path) -> Result<Vec<i64>> {
+        let mut v = Vec::new();
+        for b in open_reader(p, &["child_hash"], READ_BATCH)? {
+            let c = i64_col(&b?, "child_hash")?;
+            if c.null_count() > 0 {
+                bail!("{}: NULL child_hash", p.display());
+            }
+            v.extend_from_slice(c.values());
+        }
+        Ok(v)
+    }
+    fn batch(c: &[i64]) -> Result<RecordBatch> {
+        Ok(RecordBatch::try_new(Self::schema(), vec![Arc::new(Int64Array::from(c.to_vec())) as ArrayRef])?)
+    }
+}
+
+impl ChildKey for (i64, i64) {
+    fn lo(&self) -> i64 {
+        self.0
+    }
+    fn schema() -> SchemaRef {
+        Arc::new(Schema::new(vec![
+            Field::new("child_hash", DataType::Int64, false),
+            Field::new("child_hash_hi", DataType::Int64, false),
+        ]))
+    }
+    fn read(p: &Path) -> Result<Vec<(i64, i64)>> {
+        let mut v = Vec::new();
+        for b in open_reader(p, &["child_hash", "child_hash_hi"], READ_BATCH)? {
+            let b = b?;
+            let (c, h) = (i64_col(&b, "child_hash")?, i64_col(&b, "child_hash_hi")?);
+            if c.null_count() + h.null_count() > 0 {
+                bail!("{}: NULL child_hash / child_hash_hi", p.display());
+            }
+            v.extend(c.values().iter().copied().zip(h.values().iter().copied()));
+        }
+        Ok(v)
+    }
+    fn batch(c: &[(i64, i64)]) -> Result<RecordBatch> {
+        Ok(RecordBatch::try_new(
+            Self::schema(),
+            vec![
+                Arc::new(Int64Array::from_iter_values(c.iter().map(|k| k.0))) as ArrayRef,
+                Arc::new(Int64Array::from_iter_values(c.iter().map(|k| k.1))),
+            ],
+        )?)
+    }
 }
 
 /// The output schema (docs/eval-db-spec.md section 6).
 pub fn out_schema() -> SchemaRef {
-    Arc::new(Schema::new(vec![
+    out_schema_with(false)
+}
+
+/// The output schema; a build against a book-v2 (`wide`) adds the key's high
+/// half as the last column.
+pub fn out_schema_with(wide: bool) -> SchemaRef {
+    let mut f = vec![
         Field::new("position_hash", DataType::Int64, false),
         Field::new("epd", DataType::Utf8, false),
         Field::new("in_book", DataType::Utf8, false),
@@ -720,7 +835,11 @@ pub fn out_schema() -> SchemaRef {
         Field::new("fishnet_n", DataType::Int32, true),
         Field::new("hash_ambiguous", DataType::Boolean, false),
         Field::new("fishnet_disagrees", DataType::Boolean, false),
-    ]))
+    ];
+    if wide {
+        f.push(Field::new("position_hash_hi", DataType::Int64, false));
+    }
+    Arc::new(Schema::new(f))
 }
 
 /// Shards are transient: zstd 1 for speed.
@@ -1487,92 +1606,90 @@ fn phase_c(ctx: &Ctx) -> Result<()> {
     let groups = &ctx.plan.groups;
     let todo: Vec<usize> = (0..groups.len()).filter(|&g| !done.join(format!("g{g:03}.json")).is_file()).collect();
     log(ctx, &format!("phase C: {} book buckets in {} groups of <= {}, {} groups to do",
-                      cfg.child_sources.len(), groups.len(), cfg.child_group(), todo.len()));
+                      cfg.child_sources.len(), groups.len(), cfg.child_group(ctx.plan.wide), todo.len()));
     for g in todo {
-        let t0 = Instant::now();
-        let name = format!("g{g:03}");
-        let tmp = root.join(format!("_tmp_{name}"));
-        std::fs::create_dir_all(&tmp)?;
-        let mut per: Vec<Vec<i64>> = (0..BUCKETS).map(|_| Vec::new()).collect();
-        let (mut rows_in, mut distinct, mut files_in) = (0u64, 0u64, 0u64);
-        for &s in &groups[g] {
-            let files = book_bucket_files(&cfg.book, s)?;
-            if files.is_empty() && !cfg.test_inputs {
-                bail!("book bucket {s} has no ps files");
-            }
-            files_in += files.len() as u64;
-            let parts: Vec<Result<Vec<i64>>> = files
-                .par_iter()
-                .map(|p| {
-                    let mut v = Vec::new();
-                    for b in open_reader(p, &["child_hash"], READ_BATCH)? {
-                        let c = i64_col(&b?, "child_hash")?;
-                        if c.null_count() > 0 {
-                            bail!("{}: NULL child_hash", p.display());
-                        }
-                        v.extend_from_slice(c.values());
-                    }
-                    Ok(v)
-                })
-                .collect();
-            let mut v: Vec<i64> = Vec::new();
-            for p in parts {
-                v.extend(p?);
-            }
-            rows_in += v.len() as u64;
-            v.par_sort_unstable();
-            v.dedup();
-            distinct += v.len() as u64;
-            for h in v {
-                let d = bucket_of(h, BUCKETS) as usize;
-                if ctx.plan.want[d] {
-                    per[d].push(h);
-                }
-            }
+        if ctx.plan.wide {
+            c_group::<(i64, i64)>(ctx, g, &root, &done)?;
+        } else {
+            c_group::<i64>(ctx, g, &root, &done)?;
         }
-        let res: Vec<Result<(u64, u64)>> = per
-            .par_iter_mut()
-            .enumerate()
-            .filter(|(_, v)| !v.is_empty())
-            .map(|(d, v)| {
-                v.sort_unstable();
-                v.dedup();
-                let p = tmp.join(format!("bkt{d:03}.parquet"));
-                let bytes = write_batches(
-                    &p,
-                    &child_shard_schema(),
-                    shard_props(),
-                    v.chunks(OUT_BATCH * 16).map(|c| {
-                        Ok(RecordBatch::try_new(child_shard_schema(), vec![Arc::new(Int64Array::from(c.to_vec())) as ArrayRef])?)
-                    }),
-                )?;
-                let n = v.len() as u64;
-                *v = Vec::new();
-                Ok((n, bytes))
-            })
-            .collect();
-        let (mut out_rows, mut out_bytes, mut out_files) = (0u64, 0u64, 0u64);
-        for r in res {
-            let (n, b) = r?;
-            out_rows += n;
-            out_bytes += b;
-            out_files += 1;
-        }
-        crash(cfg, CrashPhase::C, g as u32);
-        rename_retry(&tmp, &root.join(&name))?;
-        let secs = t0.elapsed().as_secs_f64();
-        write_json_atomic(
-            &done.join(format!("{name}.json")),
-            &json!({"group": g, "sources": groups[g], "files_in": files_in, "rows_in": rows_in,
-                    "distinct_per_source": distinct, "rows": out_rows, "files": out_files,
-                    "bytes": out_bytes, "secs": secs, "finished": utc_now()}),
-        )?;
-        log(ctx, &format!(
-            "C {name} (book buckets {:?}): {} files, {} child rows, {} distinct per source, {} routed in {} files ({:.2} GB), {:.0}s",
-            groups[g], files_in, fmt_n(rows_in), fmt_n(distinct), fmt_n(out_rows), out_files,
-            out_bytes as f64 / 1e9, secs
-        ));
     }
+    Ok(())
+}
+
+/// One Phase C group: the distinct child keys of its book buckets, routed by
+/// the bucket of the key's low half.
+fn c_group<K: ChildKey>(ctx: &Ctx, g: usize, root: &Path, done: &Path) -> Result<()> {
+    let cfg = ctx.cfg;
+    let groups = &ctx.plan.groups;
+    let t0 = Instant::now();
+    let name = format!("g{g:03}");
+    let tmp = root.join(format!("_tmp_{name}"));
+    std::fs::create_dir_all(&tmp)?;
+    let mut per: Vec<Vec<K>> = (0..BUCKETS).map(|_| Vec::new()).collect();
+    let (mut rows_in, mut distinct, mut files_in) = (0u64, 0u64, 0u64);
+    for &s in &groups[g] {
+        let files = book_bucket_files(&cfg.book, s)?;
+        if files.is_empty() && !cfg.test_inputs {
+            bail!("book bucket {s} has no ps files");
+        }
+        files_in += files.len() as u64;
+        let parts: Vec<Result<Vec<K>>> = files.par_iter().map(|p| K::read(p)).collect();
+        let mut v: Vec<K> = Vec::new();
+        for p in parts {
+            v.extend(p?);
+        }
+        rows_in += v.len() as u64;
+        v.par_sort_unstable();
+        v.dedup();
+        distinct += v.len() as u64;
+        for h in v {
+            let d = bucket_of(h.lo(), BUCKETS) as usize;
+            if ctx.plan.want[d] {
+                per[d].push(h);
+            }
+        }
+    }
+    let res: Vec<Result<(u64, u64)>> = per
+        .par_iter_mut()
+        .enumerate()
+        .filter(|(_, v)| !v.is_empty())
+        .map(|(d, v)| {
+            v.sort_unstable();
+            v.dedup();
+            let p = tmp.join(format!("bkt{d:03}.parquet"));
+            let bytes = write_batches(
+                &p,
+                &K::schema(),
+                shard_props(),
+                v.chunks(OUT_BATCH * 16).map(K::batch),
+            )?;
+            let n = v.len() as u64;
+            *v = Vec::new();
+            Ok((n, bytes))
+        })
+        .collect();
+    let (mut out_rows, mut out_bytes, mut out_files) = (0u64, 0u64, 0u64);
+    for r in res {
+        let (n, b) = r?;
+        out_rows += n;
+        out_bytes += b;
+        out_files += 1;
+    }
+    crash(cfg, CrashPhase::C, g as u32);
+    rename_retry(&tmp, &root.join(&name))?;
+    let secs = t0.elapsed().as_secs_f64();
+    write_json_atomic(
+        &done.join(format!("{name}.json")),
+        &json!({"group": g, "sources": groups[g], "files_in": files_in, "rows_in": rows_in,
+                "distinct_per_source": distinct, "rows": out_rows, "files": out_files,
+                "bytes": out_bytes, "secs": secs, "finished": utc_now()}),
+    )?;
+    log(ctx, &format!(
+        "C {name} (book buckets {:?}): {} files, {} child rows, {} distinct per source, {} routed in {} files ({:.2} GB), {:.0}s",
+        groups[g], files_in, fmt_n(rows_in), fmt_n(distinct), fmt_n(out_rows), out_files,
+        out_bytes as f64 / 1e9, secs
+    ));
     Ok(())
 }
 
@@ -1670,13 +1787,21 @@ struct BookCursor {
     epd: StringArray,
     ply: Int32Array,
     total: Int64Array,
+    /// parent_hash_hi (a book-v2).
+    hi: Option<Int64Array>,
+    wide: bool,
     i: usize,
     rows: u64,
 }
 
 impl BookCursor {
-    fn open(path: &Path) -> Result<Option<BookCursor>> {
-        let rdr = open_reader(path, &["parent_hash", "parent_epd", "ply", "total"], READ_BATCH)?;
+    fn open(path: &Path, wide: bool) -> Result<Option<BookCursor>> {
+        let cols: &[&str] = if wide {
+            &["parent_hash", "parent_epd", "ply", "total", "parent_hash_hi"]
+        } else {
+            &["parent_hash", "parent_epd", "ply", "total"]
+        };
+        let rdr = open_reader(path, cols, READ_BATCH)?;
         let mut c = BookCursor {
             path: path.to_path_buf(),
             rdr,
@@ -1684,6 +1809,8 @@ impl BookCursor {
             epd: StringArray::from(Vec::<&str>::new()),
             ply: Int32Array::from(Vec::<i32>::new()),
             total: Int64Array::from(Vec::<i64>::new()),
+            hi: None,
+            wide,
             i: 0,
             rows: 0,
         };
@@ -1702,6 +1829,13 @@ impl BookCursor {
             self.epd = str_col(&b, "parent_epd")?;
             self.ply = i32_col(&b, "ply")?;
             self.total = i64_col(&b, "total")?;
+            if self.wide {
+                let hi = i64_col(&b, "parent_hash_hi")?;
+                if hi.null_count() > 0 {
+                    bail!("{}: NULLs in parent_hash_hi", self.path.display());
+                }
+                self.hi = Some(hi);
+            }
             if self.hash.null_count() + self.epd.null_count() + self.ply.null_count() + self.total.null_count() > 0 {
                 bail!("{}: NULLs in parent_hash/parent_epd/ply/total", self.path.display());
             }
@@ -1718,7 +1852,8 @@ impl BookCursor {
     fn drain(&mut self, h: i64, g: &mut Group) -> Result<bool> {
         loop {
             while self.i < self.hash.len() && self.hash.value(self.i) == h {
-                g.push(self.epd.value(self.i), self.ply.value(self.i), self.total.value(self.i));
+                let hi = self.hi.as_ref().map_or(0, |a| a.value(self.i));
+                g.push(self.epd.value(self.i), self.ply.value(self.i), self.total.value(self.i), hi);
                 self.i += 1;
                 self.rows += 1;
             }
@@ -1739,7 +1874,8 @@ impl BookCursor {
 #[derive(Default)]
 struct Group {
     arena: String,
-    rows: Vec<(u32, u32, i32, i64)>,
+    /// (EPD offset, EPD length, ply, total, parent_hash_hi or 0).
+    rows: Vec<(u32, u32, i32, i64, i64)>,
 }
 
 impl Group {
@@ -1748,10 +1884,10 @@ impl Group {
         self.rows.clear();
     }
 
-    fn push(&mut self, epd: &str, ply: i32, total: i64) {
+    fn push(&mut self, epd: &str, ply: i32, total: i64, hi: i64) {
         let s = self.arena.len() as u32;
         self.arena.push_str(epd);
-        self.rows.push((s, epd.len() as u32, ply, total));
+        self.rows.push((s, epd.len() as u32, ply, total, hi));
     }
 
     fn epd(&self, i: usize) -> &str {
@@ -1760,14 +1896,21 @@ impl Group {
     }
 }
 
-const PLIES: usize = 32;
+/// Plies the coverage tables hold (index = ply): a book's cap must be below it.
+const PLIES: usize = 64;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 struct Coverage {
     positions: [u64; PLIES],
     with_eval: [u64; PLIES],
     games: [u64; PLIES],
     games_with_eval: [u64; PLIES],
+}
+
+impl Default for Coverage {
+    fn default() -> Coverage {
+        Coverage { positions: [0; PLIES], with_eval: [0; PLIES], games: [0; PLIES], games_with_eval: [0; PLIES] }
+    }
 }
 
 impl Coverage {
@@ -1797,20 +1940,20 @@ struct OutRow {
     fish: Option<FishPick>,
     ambiguous: bool,
     variant: bool,
+    /// The key's high half (a book-v2 build; 0 otherwise).
+    hi: i64,
 }
 
 fn sat32(x: u64) -> i32 {
     i32::try_from(x).unwrap_or(i32::MAX)
 }
 
-fn out_batch(rows: &[OutRow]) -> Result<RecordBatch> {
+fn out_batch(rows: &[OutRow], wide: bool) -> Result<RecordBatch> {
     let (cp, mate): (Vec<_>, Vec<_>) = rows.iter().map(|r| key_cp_mate(r.chosen.key)).unzip();
     let (ccp, cmate): (Vec<_>, Vec<_>) =
         rows.iter().map(|r| r.cloud.as_ref().map_or((None, None), |c| key_cp_mate(c.cand.key))).unzip();
     let (fcp, fmate): (Vec<_>, Vec<_>) = rows.iter().map(|r| r.fish.map_or((None, None), |f| key_cp_mate(f.key))).unzip();
-    Ok(RecordBatch::try_new(
-        out_schema(),
-        vec![
+    let mut cols: Vec<ArrayRef> = vec![
             Arc::new(Int64Array::from_iter_values(rows.iter().map(|r| r.hash))),
             Arc::new(StringArray::from_iter_values(rows.iter().map(|r| r.epd.as_str()))),
             Arc::new(StringArray::from_iter_values(rows.iter().map(|r| r.in_book))),
@@ -1831,8 +1974,11 @@ fn out_batch(rows: &[OutRow]) -> Result<RecordBatch> {
             Arc::new(Int32Array::from(rows.iter().map(|r| r.fish.map(|f| sat32(f.n))).collect::<Vec<_>>())),
             Arc::new(BooleanArray::from_iter(rows.iter().map(|r| Some(r.ambiguous)))),
             Arc::new(BooleanArray::from_iter(rows.iter().map(|r| Some(r.chosen.disagrees)))),
-        ],
-    )?)
+    ];
+    if wide {
+        cols.push(Arc::new(Int64Array::from_iter_values(rows.iter().map(|r| r.hi))));
+    }
+    Ok(RecordBatch::try_new(out_schema_with(wide), cols)?)
 }
 
 /// The bucket's output file, written as rows arrive (they arrive in order),
@@ -1848,16 +1994,17 @@ struct OutWriter {
     variant: u64,
     disagrees: u64,
     with_fish: u64,
+    wide: bool,
 }
 
 impl OutWriter {
-    fn create(path: &Path) -> Result<OutWriter> {
+    fn create(path: &Path, wide: bool) -> Result<OutWriter> {
         if let Some(d) = path.parent() {
             std::fs::create_dir_all(d)?;
         }
         let f = File::create(path).with_context(|| format!("creating {}", path.display()))?;
         Ok(OutWriter {
-            w: ArrowWriter::try_new(f, out_schema(), Some(out_props()))?,
+            w: ArrowWriter::try_new(f, out_schema_with(wide), Some(out_props()))?,
             buf: Vec::with_capacity(OUT_BATCH),
             digest: 0,
             rows: 0,
@@ -1867,11 +2014,12 @@ impl OutWriter {
             variant: 0,
             disagrees: 0,
             with_fish: 0,
+            wide,
         })
     }
 
     fn push(&mut self, r: OutRow) -> Result<()> {
-        self.digest = self.digest.wrapping_add(digest_out_row(&r));
+        self.digest = self.digest.wrapping_add(digest_out_row(&r, self.wide));
         self.rows += 1;
         self.parents += u64::from(r.in_book == "parent");
         self.cloud += u64::from(r.chosen.source == "cloud");
@@ -1881,7 +2029,7 @@ impl OutWriter {
         self.with_fish += u64::from(r.fish.is_some());
         self.buf.push(r);
         if self.buf.len() >= OUT_BATCH {
-            self.w.write(&out_batch(&self.buf)?)?;
+            self.w.write(&out_batch(&self.buf, self.wide)?)?;
             self.buf.clear();
         }
         Ok(())
@@ -1889,7 +2037,7 @@ impl OutWriter {
 
     fn close(mut self) -> Result<OutWriter> {
         if !self.buf.is_empty() {
-            self.w.write(&out_batch(&self.buf)?)?;
+            self.w.write(&out_batch(&self.buf, self.wide)?)?;
             self.buf.clear();
         }
         self.w.flush()?;
@@ -1915,11 +2063,11 @@ fn s<T: ToString>(x: T) -> Option<String> {
     Some(x.to_string())
 }
 
-fn digest_out_row(r: &OutRow) -> u64 {
+fn digest_out_row(r: &OutRow, wide: bool) -> u64 {
     let (cp, mate) = key_cp_mate(r.chosen.key);
     let (ccp, cmate) = r.cloud.as_ref().map_or((None, None), |c| key_cp_mate(c.cand.key));
     let (fcp, fmate) = r.fish.map_or((None, None), |f| key_cp_mate(f.key));
-    row_digest(&[
+    let mut fields = vec![
         s(r.hash),
         s(&r.epd),
         s(r.in_book),
@@ -1940,15 +2088,19 @@ fn digest_out_row(r: &OutRow) -> u64 {
         r.fish.map(|f| sat32(f.n).to_string()),
         s(r.ambiguous),
         s(r.chosen.disagrees),
-    ])
+    ];
+    if wide {
+        fields.push(s(r.hi));
+    }
+    row_digest(&fields)
 }
 
 /// Re-read an output file in full: schema, strict (hash, epd) order, bucket,
 /// the exactly-one-of-cp-and-mate rule, the value sets, and the digest.
-fn verify_out(path: &Path, b: u32, want_rows: u64, want_digest: u64) -> Result<()> {
+fn verify_out(path: &Path, b: u32, want_rows: u64, want_digest: u64, wide: bool) -> Result<()> {
     let f = File::open(path)?;
     let rdr = ParquetRecordBatchReaderBuilder::try_new(f)?.with_batch_size(READ_BATCH).build()?;
-    if rdr.schema().fields() != out_schema().fields() {
+    if rdr.schema().fields() != out_schema_with(wide).fields() {
         bail!("{}: schema differs from the output schema", path.display());
     }
     let mut n = 0u64;
@@ -2102,6 +2254,14 @@ fn eval_group(h: i64, fish: &[FRow], cloud: &[CRow], fi: &mut usize, ci: &mut us
     *ci = ce;
 }
 
+/// The high half of the 128-bit key of a stored position under its hash `h`
+/// (the canonical hash or an ep variant's).
+fn hi_of_pos(pos: &[u8; PACKED_BYTES], h: i64) -> Result<i64> {
+    let epd = Packed::from_bytes(pos).render();
+    let id = identify(epd.as_bytes()).map_err(|_| anyhow!("the stored position {epd:?} does not parse back"))?;
+    id.hashes.hi_of(h).ok_or_else(|| anyhow!("the stored position {epd:?} does not hash to {h}"))
+}
+
 fn fish_of(pr: &PosRows, fish: &[FRow]) -> Option<FishPick> {
     let trip: Vec<(u8, i32, u64)> = fish[pr.fish.clone()].iter().map(|r| (r.tier, r.key, r.n)).collect();
     fish_pick(&trip)
@@ -2138,17 +2298,26 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let mut cloud = load_cloud(&inp.cloud)?;
     cloud.par_sort_unstable_by(|a, b| (a.hash, a.pos, a.file, a.row).cmp(&(b.hash, b.pos, b.file, b.row)));
     let (n_fish_rows, n_cloud_rows) = (fish.len(), cloud.len());
-    // Child hashes that some eval carries.
-    let mut children: Vec<i64> = Vec::new();
+    let wide = ctx.plan.wide;
+    // Child keys whose hash some eval carries: (child_hash, child_hash_hi), the
+    // high half 0 in a book-v1.
+    let mut children: Vec<(i64, i64)> = Vec::new();
     let mut child_rows = 0u64;
     {
         let mut eval_hashes: FastSet<i64> = FastSet::default();
         eval_hashes.extend(fish.iter().map(|r| r.hash).chain(cloud.iter().map(|r| r.hash)));
+        let cols: &[&str] = if wide { &["child_hash", "child_hash_hi"] } else { &["child_hash"] };
         for p in &inp.child {
-            for bt in open_reader(p, &["child_hash"], READ_BATCH * 16)? {
-                let c = i64_col(&bt?, "child_hash")?;
+            for bt in open_reader(p, cols, READ_BATCH * 16)? {
+                let bt = bt?;
+                let c = i64_col(&bt, "child_hash")?;
+                let hi = if wide { Some(i64_col(&bt, "child_hash_hi")?) } else { None };
                 child_rows += c.len() as u64;
-                children.extend(c.values().iter().copied().filter(|h| eval_hashes.contains(h)));
+                for (i, &h) in c.values().iter().enumerate() {
+                    if eval_hashes.contains(&h) {
+                        children.push((h, hi.as_ref().map_or(0, |a| a.value(i))));
+                    }
+                }
             }
         }
     }
@@ -2162,7 +2331,7 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     }
     let mut curs: Vec<BookCursor> = Vec::new();
     for p in &files {
-        if let Some(c) = BookCursor::open(p)? {
+        if let Some(c) = BookCursor::open(p, wide)? {
             curs.push(c);
         }
     }
@@ -2172,13 +2341,14 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     let mut g = Group::default();
     let mut idx: Vec<usize> = Vec::new();
     let mut last_book: Option<i64> = None;
-    // Book positions of the current hash: (epd, ply mask, games per ply, has an eval).
-    let mut bpos: Vec<(String, u32, [u64; PLIES], bool)> = Vec::new();
+    // Book positions of the current hash: (epd, ply mask, games per ply, has an
+    // eval, parent_hash_hi or 0).
+    let mut bpos: Vec<(String, u64, [u64; PLIES], bool, i64)> = Vec::new();
     let mut prs: Vec<PosRows> = Vec::new();
     let (mut fi, mut ci) = (0usize, 0usize);
     let path = out_path(cfg, b);
     let tmp = tmp_of(&path);
-    let mut ow = OutWriter::create(&tmp)?;
+    let mut ow = OutWriter::create(&tmp, wide)?;
     let mut amb_list: Vec<Value> = Vec::new();
     let (mut amb_hashes, mut n_evals, mut n_fish_pos) = (0u64, 0u64, 0u64);
     let (mut order_n, mut order_bad, mut order_n_out, mut order_bad_out) = (0u64, 0u64, 0u64, 0u64);
@@ -2221,25 +2391,33 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
             idx.sort_by(|&x, &y| g.epd(x).cmp(g.epd(y)));
             let mut k = 0;
             while k < idx.len() {
-                let mut mask = 0u32;
+                let mut mask = 0u64;
                 let mut totals = [0u64; PLIES];
                 let mut e = k;
+                let hi = g.rows[idx[k]].4;
                 while e < idx.len() && g.epd(idx[e]) == g.epd(idx[k]) {
                     let r = g.rows[idx[e]];
                     if !(1..PLIES as i32).contains(&r.2) || r.3 < 1 {
                         bail!("bucket {b}: ply {} / total {} out of range at hash {h}", r.2, r.3);
                     }
-                    mask |= 1 << r.2;
+                    if r.4 != hi {
+                        bail!("bucket {b}: book EPD {:?} at hash {h} carries two high halves", g.epd(idx[k]));
+                    }
+                    mask |= 1u64 << r.2;
                     totals[r.2 as usize] += r.3 as u64;
                     e += 1;
                 }
-                bpos.push((g.epd(idx[k]).to_string(), mask, totals, false));
+                bpos.push((g.epd(idx[k]).to_string(), mask, totals, false, hi));
                 k = e;
             }
         }
         // The evals with this hash.
         eval_group(h, &fish, &cloud, &mut fi, &mut ci, &mut prs);
-        let is_child = bpos.is_empty() && !prs.is_empty() && children.binary_search(&h).is_ok();
+        // Some child key has this hash. In a book-v1 that makes every eval position
+        // of a hash no parent has a "child"; in a book-v2 a position is a child iff
+        // its whole key is a child key, whatever the hash's parents are.
+        let child_lo = !prs.is_empty() && children.binary_search_by(|k| k.0.cmp(&h)).is_ok();
+        let is_child = bpos.is_empty() && child_lo;
         let mut grp: Vec<OutRow> = Vec::new();
         for pr in &prs {
             n_evals += 1;
@@ -2255,8 +2433,25 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
                 let epd = Packed::from_bytes(&pr.pos).render();
                 bpos.iter().position(|x| x.0 == epd).map(|i| (i, epd))
             };
-            if matched.is_none() && !is_child {
+            let hi = if wide && (matched.is_some() || child_lo) {
+                Some(hi_of_pos(&pr.pos, h).with_context(|| format!("bucket {b}"))?)
+            } else {
+                None
+            };
+            let child_here = match hi {
+                Some(x) => children.binary_search(&(h, x)).is_ok(),
+                None => is_child,
+            };
+            if matched.is_none() && !child_here {
                 continue;
+            }
+            if let (Some((i, epd)), Some(x)) = (&matched, hi) {
+                if bpos[*i].4 != x {
+                    bail!(
+                        "bucket {b}: {epd:?} at hash {h}: the book's parent_hash_hi {} is not the position's {x}",
+                        bpos[*i].4
+                    );
+                }
             }
             let f = fish_of(pr, &fish);
             if let Some(c) = c.as_ref().filter(|c| c.cand.npv >= 2) {
@@ -2271,9 +2466,12 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
                 }
                 None => (Packed::from_bytes(&pr.pos).render(), "child"),
             };
-            grp.push(OutRow { hash: h, epd, in_book, chosen, cloud: c, fish: f, ambiguous: false, variant: pr.variant });
+            grp.push(OutRow {
+                hash: h, epd, in_book, chosen, cloud: c, fish: f, ambiguous: false, variant: pr.variant,
+                hi: hi.unwrap_or(0),
+            });
         }
-        if is_child && grp.len() >= 2 {
+        if !wide && is_child && grp.len() >= 2 {
             amb_hashes += 1;
             let n = grp.len();
             for r in &mut grp {
@@ -2285,11 +2483,11 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
         for r in grp {
             ow.push(r)?;
         }
-        for (_, mask, totals, has) in &bpos {
+        for (_, mask, totals, has, _) in &bpos {
             book_parents += 1;
             matched_parents += u64::from(*has);
             for p in 1..PLIES {
-                if mask & (1 << p) != 0 {
+                if mask & (1u64 << p) != 0 {
                     cov.positions[p] += 1;
                     cov.games[p] += totals[p];
                     if *has {
@@ -2316,7 +2514,7 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
         (ow.parents, ow.cloud, ow.ambiguous, ow.variant, ow.disagrees, ow.with_fish);
     ow.w.close()?;
     let bytes = std::fs::metadata(&tmp)?.len();
-    verify_out(&tmp, b, n, digest)?;
+    verify_out(&tmp, b, n, digest, wide)?;
     let sha = sha256_file(&tmp)?;
     crash(cfg, CrashPhase::J, b);
     rename_retry(&tmp, &path)?;
@@ -2429,6 +2627,17 @@ fn write_small(path: &Path, batch: &RecordBatch) -> Result<u64> {
 }
 
 pub const README: &str = include_str!("evals_readme.md");
+/// Appended to the README of a build against a book-v2.
+pub const README_WIDE: &str = "\
+## 128-bit keys (eval-db-v2)
+
+This DB was built against a book-v2. Every row carries `position_hash_hi`, the high half of the
+position's 128-bit key (python/zobrist128.py; `position_hash` is its low half, the polyglot hash),
+as the LAST column. Child-only positions were matched by their whole key, so `hash_ambiguous` is
+false on every row and `(position_hash, position_hash_hi)` identifies a row's position: look an
+eval up by both halves. A lookup by `position_hash` alone must still treat a hash with two rows as
+unanswerable. Rows stay sorted by (position_hash, epd).
+";
 
 fn finalize(ctx: &Ctx) -> Result<()> {
     let cfg = ctx.cfg;
@@ -2545,7 +2754,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
     let exe = std::env::current_exe().ok();
     let exe_sha = exe.as_ref().and_then(|p| sha256_file(p).ok());
     let meta = json!({
-        "schema": SCHEMA,
+        "schema": schema_name(ctx.plan.wide),
         "tool": {"version": sys::VERSION, "commit": sys::GIT_COMMIT, "built": sys::BUILD_DATE,
                  "exe": exe.map(|p| p.display().to_string()), "exe_sha256": exe_sha,
                  "version_line": sys::version_line()},
@@ -2577,7 +2786,8 @@ fn finalize(ctx: &Ctx) -> Result<()> {
     });
     write_json_atomic(&cfg.out.join("_build.meta.json"), &meta)?;
     let readme = cfg.out.join("README.md");
-    std::fs::write(tmp_of(&readme), README)?;
+    let text = if ctx.plan.wide { format!("{README}\n{README_WIDE}") } else { README.to_string() };
+    std::fs::write(tmp_of(&readme), text)?;
     rename_retry(&tmp_of(&readme), &readme)?;
     let done = cfg.out.join("_DONE");
     std::fs::write(tmp_of(&done), format!("{}\n", utc_now()))?;

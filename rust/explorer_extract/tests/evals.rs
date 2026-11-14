@@ -25,7 +25,7 @@ use explorer_extract::evals::{
     score_key, tier_of, CloudCand, CloudPick, FishPick, MATE_BASE,
 };
 use explorer_extract::keys::bucket_of;
-use explorer_extract::merge::book_ps_schema;
+use explorer_extract::merge::{book_ps_schema, book_ps_schema_with};
 
 const EXE: &str = env!("CARGO_BIN_EXE_explorer-extract");
 
@@ -594,4 +594,110 @@ fn end_to_end_resume_lock_determinism() {
         assert!(std::fs::read_dir(c.dir.join(&out)).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
     }
     let _ = evals::BUCKETS;
+}
+
+// ── book-v2: 128-bit keys ────────────────────────────────────────────────────
+
+/// Rewrite the case's book as a book-v2: every ps file gains parent_hash_hi
+/// (the high half of the key its (hash, EPD) names, plus `parent_delta`) and
+/// child_hash_hi (`child_hi` of the child hash), and the lock says book-v2.
+fn widen_book(book: &Path, child_hi: &dyn Fn(i64) -> i64, parent_delta: i64) {
+    fn walk(d: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "parquet") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(&book.join("ps"), &mut files);
+    assert!(!files.is_empty());
+    for p in files {
+        let batches: Vec<RecordBatch> = ParquetRecordBatchReaderBuilder::try_new(File::open(&p).unwrap())
+            .unwrap()
+            .build()
+            .unwrap()
+            .map(|b| b.unwrap().project(&(0..12).collect::<Vec<_>>()).unwrap())
+            .collect();
+        let b = arrow::compute::concat_batches(&book_ps_schema(), &batches).unwrap();
+        let (h, epd, ch) =
+            (b.column(0).as_primitive::<Int64Type>(), b.column(4).as_string::<i32>(), b.column(5).as_primitive::<Int64Type>());
+        let phi: Vec<i64> = (0..b.num_rows())
+            .map(|i| identify(epd.value(i).as_bytes()).unwrap().hashes.hi_of(h.value(i)).unwrap() + parent_delta)
+            .collect();
+        let chi: Vec<i64> = (0..b.num_rows()).map(|i| child_hi(ch.value(i))).collect();
+        let mut cols: Vec<ArrayRef> = b.columns().to_vec();
+        cols.push(Arc::new(Int64Array::from(phi)));
+        cols.push(Arc::new(Int64Array::from(chi)));
+        write(&p, RecordBatch::try_new(book_ps_schema_with(true), cols).unwrap());
+    }
+    let lock = serde_json::json!({"schema": "book-v2", "input_params": {"max_ply": 50, "key_bits": 128}});
+    std::fs::write(book.join("_merge_params.json"), lock.to_string()).unwrap();
+}
+
+/// The high half of the key of the position a FEN's legal EPD describes.
+fn canon_hi(fen: &str) -> i64 {
+    let id = identify(fen.as_bytes()).unwrap();
+    id.hashes.hi_of(id.hashes.canonical()).unwrap()
+}
+
+#[test]
+fn book_v2_matches_children_by_the_whole_key() {
+    let c = build_case("v2");
+    let o = run(&c, "out64", "work64", &[]);
+    assert!(o.status.success(), "{}", log(&o));
+    let narrow = read_out(&c.dir.join("out64"));
+    let book = c.dir.join("book");
+    let q = canon(POS_Q);
+
+    // The same book with both halves of every key: the same evals, each row with its key's high half.
+    widen_book(&book, &|h| if h == q { canon_hi(POS_Q) } else { 0 }, 0);
+    let o = run(&c, "out128", "work128", &[]);
+    assert!(o.status.success(), "{}", log(&o));
+    let out = c.dir.join("out128");
+    assert_expected(&out);
+    assert_eq!(read_out(&out), narrow, "the 64-bit columns of a book-v2 build");
+    let mut rows = 0;
+    for e in std::fs::read_dir(&out).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_name().unwrap().to_string_lossy().into_owned();
+        if !(name.starts_with("bkt") && name.ends_with(".parquet")) {
+            continue;
+        }
+        let r = ParquetRecordBatchReaderBuilder::try_new(File::open(&p).unwrap()).unwrap();
+        assert_eq!(r.schema().fields(), evals::out_schema_with(true).fields(), "{name}: position_hash_hi is the last column");
+        for b in r.build().unwrap() {
+            let b = b.unwrap();
+            let (h, epd, hi) = (
+                b.column(0).as_primitive::<Int64Type>(),
+                b.column(1).as_string::<i32>(),
+                b.column(20).as_primitive::<Int64Type>(),
+            );
+            for j in 0..b.num_rows() {
+                let want = identify(epd.value(j).as_bytes()).unwrap().hashes.hi_of(h.value(j));
+                assert_eq!(Some(hi.value(j)), want, "{}", epd.value(j));
+                rows += 1;
+            }
+        }
+    }
+    assert_eq!(rows, narrow.len());
+    let meta: Value = serde_json::from_str(&std::fs::read_to_string(out.join("_build.meta.json")).unwrap()).unwrap();
+    assert_eq!(meta["schema"], serde_json::json!("eval-db-v2"));
+    assert!(std::fs::read_to_string(out.join("README.md")).unwrap().contains("position_hash_hi"));
+
+    // A child key with another high half is another position: Q is no longer a book child.
+    widen_book(&book, &|_| 0, 0);
+    let o = run(&c, "out128b", "work128b", &[]);
+    assert!(o.status.success(), "{}", log(&o));
+    let m = read_out(&c.dir.join("out128b"));
+    assert!(!m.contains_key(POS_Q) && m.len() == narrow.len() - 1, "{:?}", m.keys().collect::<Vec<_>>());
+
+    // A book parent whose high half is not its position's stops the build.
+    widen_book(&book, &|_| 0, 1);
+    let o = run(&c, "out128c", "work128c", &[]);
+    assert!(!o.status.success() && log(&o).contains("parent_hash_hi"), "{}", log(&o));
+    assert!(!c.dir.join("out128c").join("_DONE").exists());
 }

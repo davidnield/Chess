@@ -90,8 +90,17 @@ low half, and tells a group's positions apart by the high half instead of by EPD
 `tests/merge.rs` builds 128-bit months to ply 50 with a shared 64-bit hash whose key order is
 the reverse of its EPD order (`book_v2_*`). `verify_book.py` and
 `compare_explorer_outputs.py book` read either kind (the book's lock says which) and hold a
-book-v2's high halves to python-chess; `_test_verify_book.py` builds one. `evals` and
-`pool_from_book.py` are still book-v1 only and refuse a book-v2.
+book-v2's high halves to python-chess; `_test_verify_book.py` builds one.
+
+`evals` against a book-v2 writes **eval-db-v2**. Book parents are matched by (hash, EPD) as
+before, which a book-v2 makes exact (the build stops if a matched parent's `parent_hash_hi` is
+not its position's). Child-only positions are matched by their whole key (`child_hash`,
+`child_hash_hi`) instead of by the 64-bit hash: no row is `hash_ambiguous`, and a position
+whose low half is also some parent's is no longer skipped. Every row carries
+`position_hash_hi` as the last column; rows stay sorted by (position_hash, epd). The coverage
+tables hold plies up to 63, so a deeper book is refused. `tests/evals.rs`
+(`book_v2_matches_children_by_the_whole_key`) builds the same synthetic book both ways.
+`pool_from_book.py`, `verify_evals.py` and the eval arrays are still 64-bit only.
 
 The Python side of the contract is `python/zobrist128.py` (python-chess's hasher over the high
 halves). `selftest` holds shakmaty's table to it key by key; `_test_rust_extract.py` holds both

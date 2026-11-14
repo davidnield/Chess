@@ -233,8 +233,9 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
   side. A key with two EPDs fails the month. `merge` over such months writes book-v2: the same
   layout with the high halves as the last columns, rows ordered by the key, the months'
   `--max-ply` as the cap, and a stop on any key with two EPDs. `verify_book.py` and
-  `compare_explorer_outputs.py book` check either kind; the eval build and `pool_from_book.py`
-  are still book-v1 only and refuse a book-v2.
+  `compare_explorer_outputs.py book` check either kind, and `evals` against a book-v2 writes
+  eval-db-v2 (`position_hash_hi` last, child-only positions matched by the whole key).
+  `pool_from_book.py` refuses a book-v2; `verify_evals.py` and the eval arrays are 64-bit only.
 - **The all-time book is `explorer-extract merge`** over ply-keyed Rust months (book-v1:
   `ps/event=E/elo_band=B/bkt<iii>.parquet` plus pooled `term/`). Its settings lock refuses any other
   build, month set or writer settings, so a book is continued only by the exe that began it — delete
