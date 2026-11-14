@@ -588,6 +588,20 @@ fn plan(cfg: &Config) -> Result<Plan> {
             return Err(refused(format!("{} has no _BOOK.DONE", cfg.book.display())));
         }
     }
+    // This build keys positions by the 64-bit hash and resolves twins by EPD:
+    // on a 128-bit book it would silently drop the keys' high halves.
+    let lock = cfg.book.join("_merge_params.json");
+    if lock.is_file() {
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(&lock)?)
+            .with_context(|| format!("parsing {}", lock.display()))?;
+        if v["schema"] != json!("book-v1") {
+            return Err(refused(format!(
+                "{} is a {} book; the eval build reads book-v1 only",
+                cfg.book.display(),
+                v["schema"]
+            )));
+        }
+    }
     for (name, p) in [("--work", &cfg.work), ("--out", &cfg.out)] {
         if sys::volume_root(p).is_some_and(|v| v.starts_with("f:")) {
             return Err(refused(format!("{name} {} is on F: (never F:)", p.display())));

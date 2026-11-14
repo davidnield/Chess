@@ -230,7 +230,11 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
   columns keep their names and values (the polyglot hash is the key's low half, so 64-bit tables
   still join and buckets do not move) and the high halves follow as the last columns
   (`parent_hash_hi`, `child_hash_hi`, `position_hash_hi`). `python/zobrist128.py` is the Python
-  side. A key with two EPDs fails the month; `merge` (64-bit book-v1) refuses these months.
+  side. A key with two EPDs fails the month. `merge` over such months writes book-v2: the same
+  layout with the high halves as the last columns, rows ordered by the key, the months'
+  `--max-ply` as the cap, and a stop on any key with two EPDs. `verify_book.py` and
+  `compare_explorer_outputs.py book` check either kind; the eval build and `pool_from_book.py`
+  are still book-v1 only and refuse a book-v2.
 - **The all-time book is `explorer-extract merge`** over ply-keyed Rust months (book-v1:
   `ps/event=E/elo_band=B/bkt<iii>.parquet` plus pooled `term/`). Its settings lock refuses any other
   build, month set or writer settings, so a book is continued only by the exe that began it — delete

@@ -46,6 +46,14 @@ pawn) hashes WITH its ep file (polyglot's rule) while its EPD omits it
 (python-chess prints only legal ep squares). The hash test tries the ep file
 back on such EPDs and counts those rows separately; they are not failures.
 
+A book-v2 (the lock's schema; months built with `month --key128`) carries the
+128-bit key: parent_hash_hi / child_hash_hi beside the 64-bit columns. Then the
+digests cover both halves of both keys, the unique key is (parent_hash,
+parent_hash_hi, move_san, event, elo_band, ply), a key must have one EPD, the
+ply cap is the months' --max-ply, and the sample holds both halves to
+zobrist128.py. _collisions is still the list of 64-bit hashes with two or more
+positions; such months have no conflict records to compare it with.
+
 DuckDB is throttled (2 threads, 4 GB) with temp on D:\\chess_duckdb_tmp, never F:.
 """
 from __future__ import annotations
@@ -66,6 +74,7 @@ import pyarrow.parquet as pq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from zobrist import zobrist_int64  # noqa: E402
+from zobrist128 import zobrist128  # noqa: E402
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -73,6 +82,7 @@ if hasattr(sys.stdout, "reconfigure"):
 BUCKETS = 512
 DEFAULT_TMP = Path("D:/chess_duckdb_tmp")
 KEY_TUPLE = "parent_hash, parent_epd, move_san, event, elo_band, ply, child_hash"
+KEY_TUPLE_WIDE = KEY_TUPLE + ", parent_hash_hi, child_hash_hi"
 COUNTS = ("white_wins", "draws", "black_wins", "total")
 SALT = "verify_book salt 2"
 SHOW = 10
@@ -133,6 +143,11 @@ class Book:
             raise SystemExit(f"FATAL: {lock} not found: not a merged book")
         self.lock = json.loads(lock.read_text(encoding="utf-8"))
         self.months: list[str] = self.lock["months"]
+        schema = self.lock.get("schema", "book-v1")
+        if schema not in ("book-v1", "book-v2"):
+            raise SystemExit(f"FATAL: {lock} says schema {schema!r}: only book-v1 and book-v2 are known")
+        self.wide = schema == "book-v2"
+        self.max_ply = int(self.lock.get("input_params", {}).get("max_ply", 30))
         if Path(self.lock["months_root"]).resolve() != root.resolve():
             print(f"  note: the book was built from {self.lock['months_root']}; reading {root}")
         self.ps: dict[int, list[Path]] = {}
@@ -154,11 +169,12 @@ class Book:
 
 # ── digests and duplicates ────────────────────────────────────────────────────
 
-def _digest(con, files: list[Path]) -> tuple:
+def _digest(con, files: list[Path], wide: bool = False) -> tuple:
     if not files:
         return (0,) * 9
-    parts = [f"COALESCE(SUM(hash({KEY_TUPLE})::HUGEINT * {c}), 0)" for c in COUNTS]
-    parts += [f"COALESCE(SUM(hash({KEY_TUPLE}, '{SALT}')::HUGEINT * {c}), 0)" for c in COUNTS]
+    key = KEY_TUPLE_WIDE if wide else KEY_TUPLE
+    parts = [f"COALESCE(SUM(hash({key})::HUGEINT * {c}), 0)" for c in COUNTS]
+    parts += [f"COALESCE(SUM(hash({key}, '{SALT}')::HUGEINT * {c}), 0)" for c in COUNTS]
     row = con.execute(f"SELECT COALESCE(SUM(total), 0), {', '.join(parts)} FROM read_parquet("
                       f"{_lit(files)}, hive_partitioning=false)").fetchone()
     return tuple(int(x) for x in row)
@@ -177,7 +193,7 @@ def check_digests(con, bk: Book, buckets: list[int]) -> None:
             continue
         n += 1
         bcon = connect(*_CONNECT_ARGS)   # per bucket: DuckDB decays in a long-lived connection
-        di, do = _digest(bcon, ins), _digest(bcon, outs)
+        di, do = _digest(bcon, ins, bk.wide), _digest(bcon, outs, bk.wide)
         bcon.close()
         if di != do:
             bad.append(f"bucket {b}: months {di[:2]}.. vs book {do[:2]}..")
@@ -185,13 +201,14 @@ def check_digests(con, bk: Book, buckets: list[int]) -> None:
               f"{di[0]:,}: {'equal' if di == do else 'DIFFERENT'} ({time.time() - t0:,.0f}s)", flush=True)
     for s in bad[:SHOW]:
         print(f"    {s}")
-    check(not bad and n > 0, f"the 8 hash-weighted sums (two salts x 4 counts) are equal in "
-                             f"{n} bucket(s) with sentinels")
+    check(not bad and n > 0, f"the 8 hash-weighted sums (two salts x 4 counts{', both key halves' if bk.wide else ''}) "
+                             f"are equal in {n} bucket(s) with sentinels")
 
 
 def check_dups(con, bk: Book, buckets: list[int]) -> None:
     print(f"\nduplicate keys, {len(buckets)} bucket(s)", flush=True)
-    dup, rows = 0, 0
+    dup, rows, two = 0, 0, 0
+    pos = "parent_hash, parent_hash_hi" if bk.wide else "parent_hash, parent_epd"
     for b in buckets:
         outs = bk.ps.get(b, [])
         if not outs:
@@ -200,12 +217,25 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
         r = bcon.execute(f"""
             SELECT COUNT(*) FILTER (WHERE n > 1), SUM(n) FROM (
               SELECT COUNT(*) AS n FROM read_parquet({_lit(outs)}, hive_partitioning=false)
-              GROUP BY parent_hash, parent_epd, move_san, event, elo_band, ply)""").fetchone()
+              GROUP BY {pos}, move_san, event, elo_band, ply)""").fetchone()
+        t = 0
+        if bk.wide:
+            # A 128-bit key is a position: one EPD per key, one key per EPD.
+            t = bcon.execute(f"""
+                SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
+                          GROUP BY parent_hash, parent_hash_hi HAVING COUNT(DISTINCT parent_epd) > 1))
+                     + (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
+                          GROUP BY parent_epd HAVING COUNT(DISTINCT (parent_hash, parent_hash_hi)) > 1))
+                """).fetchone()[0]
         bcon.close()
         dup += int(r[0] or 0)
         rows += int(r[1] or 0)
-        print(f"    bkt {b:03d}: {int(r[1] or 0):,} rows, {int(r[0] or 0)} duplicated keys", flush=True)
+        two += int(t or 0)
+        print(f"    bkt {b:03d}: {int(r[1] or 0):,} rows, {int(r[0] or 0)} duplicated keys"
+              f"{f', {int(t or 0)} keys or EPDs naming two positions' if bk.wide else ''}", flush=True)
     check(dup == 0, f"the 6-column key is unique ({rows:,} rows)")
+    if bk.wide:
+        check(two == 0, "every 128-bit key has one EPD and every EPD one key")
 
 
 # ── book-wide ─────────────────────────────────────────────────────────────────
@@ -234,18 +264,19 @@ SCAN_NULLS = " OR ".join(f"{c} IS NULL" for c in (
 
 def _scan_bucket(job: tuple) -> list:
     """One bucket's scan query, run in a fresh child process."""
-    files, threads, mem, tmp = job
+    files, threads, mem, tmp, max_ply, wide = job
     bcon = connect(threads, mem, Path(tmp))
+    nulls = SCAN_NULLS + (" OR parent_hash_hi IS NULL OR child_hash_hi IS NULL" if wide else "")
     rows = bcon.execute(f"""
         SELECT filename, COUNT(*),
-               COUNT(*) FILTER (WHERE {SCAN_NULLS}),
+               COUNT(*) FILTER (WHERE {nulls}),
                COUNT(*) FILTER (WHERE split_part(parent_epd, ' ', 2) NOT IN ('w', 'b')
                                    OR (split_part(parent_epd, ' ', 2) = 'w') <> (ply % 2 = 1)),
                COUNT(*) FILTER (WHERE total <> white_wins + draws + black_wins OR total < 1
                                    OR white_wins < 0 OR draws < 0 OR black_wins < 0),
                COUNT(*) FILTER (WHERE abs(white_score_avg - (white_wins::DOUBLE + 0.5::DOUBLE
                                           * draws::DOUBLE) / total::DOUBLE) > 1e-12),
-               COUNT(*) FILTER (WHERE ply < 1 OR ply > 30),
+               COUNT(*) FILTER (WHERE ply < 1 OR ply > {int(max_ply)}),
                MIN(event), MAX(event), MIN(elo_band), MAX(elo_band),
                MIN(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}),
                MAX(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS})
@@ -274,7 +305,7 @@ def check_scan(con, bk: Book) -> None:
     t0 = time.time()
     buckets = sorted(bk.ps)
     threads, mem, tmp = _CONNECT_ARGS
-    jobs = [(bk.ps[b], threads, mem, str(tmp)) for b in buckets]
+    jobs = [(bk.ps[b], threads, mem, str(tmp), bk.max_ply, bk.wide) for b in buckets]
     pool = ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1)
     tb = time.time()
     for b, rows in zip(buckets, pool.map(_scan_bucket, jobs)):
@@ -309,16 +340,21 @@ def check_scan(con, bk: Book) -> None:
 
 # ── positions (python-chess) ──────────────────────────────────────────────────
 
-def hash_matches(board: chess.Board, h: int) -> tuple[bool, bool]:
-    """(matches, via an illegal ep square the EPD cannot show)."""
-    if zobrist_int64(board) == h:
+def _key(board: chess.Board, wide: bool):
+    return zobrist128(board) if wide else zobrist_int64(board)
+
+
+def hash_matches(board: chess.Board, h, wide: bool = False) -> tuple[bool, bool]:
+    """(matches, via an illegal ep square the EPD cannot show). `h` is the 64-bit hash, or
+    with `wide` the (low, high) pair of the 128-bit key."""
+    if _key(board, wide) == h:
         return True, False
     if board.ep_square is None:
         rank = 5 if board.turn == chess.WHITE else 2
         for f in range(8):
             b2 = board.copy(stack=False)
             b2.ep_square = chess.square(f, rank)
-            if zobrist_int64(b2) == h:
+            if _key(b2, wide) == h:
                 return True, True
     return False, False
 
@@ -328,14 +364,18 @@ def _check_rows(rows: list[tuple]) -> tuple[int, int, dict, list]:
     fails: dict[str, int] = {}
     ex: list[str] = []
     ep = 0
-    for h, epd, san, child, ply in rows:
+    for row in rows:
+        h, epd, san, child, ply = row[:5]
+        wide = len(row) == 7
+        if wide:
+            h, child = (h, row[5]), (child, row[6])
         why = None
         try:
             board = chess.Board(epd)
         except ValueError:
             why = "epd"
         if why is None:
-            ok, via_ep = hash_matches(board, h)
+            ok, via_ep = hash_matches(board, h, wide)
             ep += via_ep
             if not ok:
                 why = "hash"
@@ -344,7 +384,7 @@ def _check_rows(rows: list[tuple]) -> tuple[int, int, dict, list]:
             else:
                 try:
                     board.push(board.parse_san(san))
-                    if zobrist_int64(board) != child:
+                    if _key(board, wide) != child:
                         why = "child"
                 except ValueError:
                     why = "san"
@@ -392,8 +432,12 @@ def check_collisions(con, bk: Book) -> None:
                 n += 1
                 if (r["hash"], r["epd_a"]) not in pairs or (r["hash"], r["epd_b"]) not in pairs:
                     missing.append(f"{t} {r['hash']}")
-    check(not missing, f"the months' {n} collision record(s) in finished buckets are in "
-                       f"_collisions with both EPDs {missing[:5]}")
+    if bk.wide:
+        # A --key128 month fails on a conflict, so finished months have no records.
+        check(n == 0, f"128-bit months carry no collision records ({n} found)")
+    else:
+        check(not missing, f"the months' {n} collision record(s) in finished buckets are in "
+                           f"_collisions with both EPDs {missing[:5]}")
 
 
 def check_sample(con, bk: Book, n: int, seed: int, workers: int) -> None:
@@ -405,10 +449,11 @@ def check_sample(con, bk: Book, n: int, seed: int, workers: int) -> None:
         check(False, "the book has finished buckets to sample")
         return
     per = math.ceil(n / len(picks))
+    his = ", parent_hash_hi, child_hash_hi" if bk.wide else ""
     rows: list[tuple] = []
     for b in picks:
         rows += con.execute(f"""
-            SELECT parent_hash, parent_epd, move_san, child_hash, ply
+            SELECT parent_hash, parent_epd, move_san, child_hash, ply{his}
             FROM read_parquet({_lit(bk.ps[b])}, hive_partitioning=false)
             USING SAMPLE reservoir({per} ROWS) REPEATABLE ({seed})""").fetchall()
     chunks = [rows[i:i + 20_000] for i in range(0, len(rows), 20_000)]
@@ -424,7 +469,8 @@ def check_sample(con, bk: Book, n: int, seed: int, workers: int) -> None:
     for s in ex:
         print(f"    {s}")
     check(tot > 0 and not fails,
-          f"{tot:,} sampled rows: the EPD hashes to parent_hash, move_san leads to child_hash, "
+          f"{tot:,} sampled rows: the EPD hashes to {'the 128-bit parent key' if bk.wide else 'parent_hash'}, "
+          f"move_san leads to {'the 128-bit child key' if bk.wide else 'child_hash'}, "
           f"the side to move matches ply ({ep} via an illegal ep square; failures {fails or 'none'}; "
           f"{time.time() - t0:,.0f}s)")
 
@@ -448,7 +494,8 @@ def main() -> int:
     t0 = time.time()
     bk = Book(a.book, a.months_root)
     con = connect(a.threads, a.mem, a.tmp_dir)
-    print(f"book {a.book}: {len(bk.done)}/{BUCKETS} buckets done, {sum(map(len, bk.ps.values())):,} "
+    print(f"book {a.book} ({'book-v2, 128-bit keys' if bk.wide else 'book-v1'}, ply cap {bk.max_ply}): "
+          f"{len(bk.done)}/{BUCKETS} buckets done, {sum(map(len, bk.ps.values())):,} "
           f"ps files, {'complete' if bk.complete else 'incomplete'}; {len(bk.months)} months under "
           f"{a.months_root}\nduckdb: {a.threads} threads, {a.mem}, temp {a.tmp_dir}", flush=True)
     named = any(x is not None and x is not False for x in

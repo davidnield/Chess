@@ -9,13 +9,18 @@ month, then `explorer-extract merge`. Required:
     replayed by python-chess) and compare_explorer_outputs.py book (a DuckDB
     GROUP BY of the months, every column, and term);
   * with one book row's sums corrupted (white_wins and total +1, the average
-    recomputed so the row still scans clean), both checkers fail.
+    recomputed so the row still scans clean), both checkers fail;
+  * the same games as 128-bit months to ply 50 (`month --key128`) merge to a
+    book-v2 that both checkers pass, with rows past ply 30; a row whose
+    parent_hash_hi is off by one fails verify_book's sample and its
+    one-EPD-per-key check.
 
 Run: .venv/Scripts/python.exe python/_test_verify_book.py
 Exe: $EXPLORER_EXTRACT_EXE, else D:/rust-target/explorer_extract/release/explorer-extract.exe
 """
 from __future__ import annotations
 
+import json
 import os
 import random
 import shutil
@@ -193,6 +198,54 @@ def main() -> None:
         s = run(sys.executable, HERE / "verify_book.py", book, months, "--scan", *duck)
         check(s.returncode == 1 and "white_score_avg 1," in s.stdout,
               "verify_book.py --scan fails a row whose white_score_avg is off the formula")
+
+        print("\nbook-v2: the same games as 128-bit months to ply 50")
+        months2, book2 = tmp / "months128", tmp / "book128"
+        p = run(EXE, "month", "--source", src, "--months", *tags, "--out", months2, "--ply-key",
+                "--key128", "--max-ply", "50", "--mem-gb", "2", "--threads", "2")
+        check(p.returncode == 0, f"month --key128 --max-ply 50 builds both months (rc {p.returncode}) "
+                                 f"{tail(p) if p.returncode else ''}")
+        p = run(EXE, "merge", "--months-root", months2, "--months", f"{tags[0]}..{tags[-1]}",
+                "--out", book2, "--stage-dir", tmp / "stage2", "--threads", "3", "--min-free-gb", "1",
+                "--test-one-volume")
+        lock = json.loads((book2 / "_merge_params.json").read_text()) if p.returncode == 0 else {}
+        check(p.returncode == 0 and (book2 / "_BOOK.DONE").exists() and lock.get("schema") == "book-v2",
+              f"merge finishes a book-v2 (rc {p.returncode}) {tail(p) if p.returncode else ''}")
+        ps2 = sorted((book2 / "ps").glob("event=*/elo_band=*/*.parquet"))
+        deep = sum(1 for f in ps2 for x in pq.ParquetFile(f).read(columns=["ply"])["ply"].to_pylist()
+                   if x > 30)
+        names = pq.read_schema(ps2[0]).names
+        check(deep > 0 and names[-2:] == ["parent_hash_hi", "child_hash_hi"],
+              f"the book-v2 keeps {deep:,} rows past ply 30 and ends with the keys' high halves")
+        v = run(sys.executable, HERE / "verify_book.py", book2, months2, "--digest-buckets", "0-511",
+                "--dup-buckets", "0-511", "--sums", "--scan", "--collisions", "--sample", "3000",
+                "--workers", "2", *duck)
+        check(v.returncode == 0 and "ALL PASS" in v.stdout and "128-bit parent key" in v.stdout,
+              f"verify_book.py passes the book-v2, both key halves replayed (rc {v.returncode})")
+        if v.returncode:
+            print(tail(v, 3000))
+        c = run(sys.executable, HERE / "compare_explorer_outputs.py", "book", months2, book2,
+                "--months", *tags, *duck)
+        check(c.returncode == 0 and "IDENTICAL" in c.stdout and "book-v2" in c.stdout,
+              f"compare_explorer_outputs.py book: the book-v2 is the months' GROUP BY on the 128-bit "
+              f"key, ps and term (rc {c.returncode})")
+        if c.returncode:
+            print(tail(c, 3000))
+        f = max(ps2, key=lambda x: x.stat().st_size)
+        t = pq.ParquetFile(f).read()
+        d = {k: t[k].to_pylist() for k in t.column_names}
+        # One row of a position that has several in this file, so its EPD is left under two keys.
+        k = next(i for i in range(len(d["ply"]) - 1)
+                 if (d["parent_hash"][i], d["parent_hash_hi"][i]) == (d["parent_hash"][i + 1], d["parent_hash_hi"][i + 1]))
+        d["parent_hash_hi"][k] += 1
+        pq.write_table(pa.Table.from_pydict(d, schema=t.schema), f, compression="zstd")
+        b = int(f.stem[3:])
+        v = run(sys.executable, HERE / "verify_book.py", book2, months2, "--dup-buckets", str(b),
+                "--digest-buckets", str(b), *duck)
+        check(v.returncode == 1 and "FAIL  every 128-bit key has one EPD" in v.stdout
+              and "FAIL  the 8 hash-weighted sums" in v.stdout,
+              "verify_book.py fails a book-v2 row whose parent_hash_hi is off by one (two keys for "
+              "one EPD, and the digest)")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     n_fail = sum(1 for ok, _ in _checks if not ok)

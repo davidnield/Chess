@@ -31,6 +31,18 @@
 //!
 //! I/O: only the stager thread reads the months root, and only whole files
 //! (stage.rs). Workers read the stage.
+//!
+//! BOOK-V2 (months built with `month --key128`; the lock's key_bits 128 selects
+//! it). The position key is 128 bits: `parent_hash` / `child_hash` /
+//! `position_hash` are its low half, unchanged, and `parent_hash_hi` /
+//! `child_hash_hi` / `position_hash_hi` are the LAST columns. The merge still
+//! streams and groups by the low half, and tells the positions of a group
+//! apart by the high half instead of by EPD: rows are strictly increasing on
+//! (parent_hash, parent_hash_hi, move_san, ply), `parent_epd` is a function of
+//! the key, and one key with two EPDs (or one EPD under two keys, or an edge
+//! with two child keys) stops the bucket. 64-bit hashes shared by two
+//! positions are still listed in _collisions, as information: nothing has to
+//! be excluded any more. The ply cap is the months' --max-ply (book-v1 is 30).
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
@@ -53,14 +65,18 @@ use parquet::schema::types::ColumnPath;
 use serde_json::{json, Value};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
-use crate::chesspos::START_HASH;
-use crate::keys::{bucket_of, ps_schema, rename_retry, san_of, term_schema_with, tmp_of, San, BANDS};
+use crate::chesspos::{START_HASH, START_HASH_HI};
+use crate::keys::{bucket_of, ps_schema_with, rename_retry, san_of, term_schema_full, tmp_of, San, BANDS};
 use crate::stage::{self, bucket_dir_name, CopyJob, Queue, Staged};
 use crate::sys;
 
 pub const BUCKETS: u32 = 512;
 pub const MAX_PLY: i32 = 30;
 pub const BOOK_SCHEMA: &str = "book-v1";
+/// The 128-bit book (months built with `month --key128`).
+pub const BOOK_SCHEMA_WIDE: &str = "book-v2";
+/// The deepest ply a book-v2 may hold (a row's ply is a u8 in the merge).
+pub const MAX_PLY_WIDE: i32 = 200;
 pub const ZSTD_LEVEL: i32 = 3;
 /// The six speeds, alphabetical: the months' event index is this order.
 pub const EVENTS: [&str; 6] = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"];
@@ -230,7 +246,13 @@ pub fn parse_buckets(args: &[String]) -> Result<Vec<u32>> {
 /// The book's ps schema: every column REQUIRED, `child_eval` dropped,
 /// `white_score_avg` added.
 pub fn book_ps_schema() -> SchemaRef {
-    Arc::new(Schema::new(vec![
+    book_ps_schema_with(false)
+}
+
+/// The book's ps schema; `wide` (book-v2) adds the keys' high halves as the
+/// last two columns.
+pub fn book_ps_schema_with(wide: bool) -> SchemaRef {
+    let mut f = vec![
         Field::new("parent_hash", DataType::Int64, false),
         Field::new("move_san", DataType::Utf8, false),
         Field::new("event", DataType::Utf8, false),
@@ -243,7 +265,12 @@ pub fn book_ps_schema() -> SchemaRef {
         Field::new("black_wins", DataType::Int64, false),
         Field::new("total", DataType::Int64, false),
         Field::new("white_score_avg", DataType::Float64, false),
-    ]))
+    ];
+    if wide {
+        f.push(Field::new("parent_hash_hi", DataType::Int64, false));
+        f.push(Field::new("child_hash_hi", DataType::Int64, false));
+    }
+    Arc::new(Schema::new(f))
 }
 
 /// The merge's own writer settings (month mode keeps `writer_props`): zstd 3,
@@ -389,6 +416,24 @@ pub fn ps_key_hashes(
     ply: i32,
     child: i64,
 ) -> (u64, u64) {
+    ps_key_hashes_wide(buf, hash, epd, san, event, band, ply, child, None)
+}
+
+/// The same, followed for book-v2 by parent_hash_hi LE and child_hash_hi LE
+/// (`hi` = Some((parent_hash_hi, child_hash_hi))).
+#[allow(clippy::too_many_arguments)]
+#[inline]
+pub fn ps_key_hashes_wide(
+    buf: &mut Vec<u8>,
+    hash: i64,
+    epd: &[u8],
+    san: &[u8],
+    event: &[u8],
+    band: i64,
+    ply: i32,
+    child: i64,
+    hi: Option<(i64, i64)>,
+) -> (u64, u64) {
     buf.clear();
     buf.extend_from_slice(&hash.to_le_bytes());
     buf.extend_from_slice(epd);
@@ -400,6 +445,10 @@ pub fn ps_key_hashes(
     buf.extend_from_slice(&band.to_le_bytes());
     buf.extend_from_slice(&ply.to_le_bytes());
     buf.extend_from_slice(&child.to_le_bytes());
+    if let Some((h, c)) = hi {
+        buf.extend_from_slice(&h.to_le_bytes());
+        buf.extend_from_slice(&c.to_le_bytes());
+    }
     (xxh3_64_with_seed(buf, 1), xxh3_64_with_seed(buf, 2))
 }
 
@@ -411,6 +460,26 @@ pub fn term_key_hashes(key: (i64, i32, i32, i32)) -> (u64, u64) {
     b[8..12].copy_from_slice(&key.1.to_le_bytes());
     b[12..16].copy_from_slice(&key.2.to_le_bytes());
     b[16..].copy_from_slice(&key.3.to_le_bytes());
+    (xxh3_64_with_seed(&b, 1), xxh3_64_with_seed(&b, 2))
+}
+
+/// A term key in the merge: (position_hash, position_hash_hi, kind, reason,
+/// end_ply); the high half is 0 in a book-v1, so the order is unchanged there.
+type TKey = (i64, i64, i32, i32, i32);
+
+/// The term digest's key hashes: book-v1's over the 4-column key, book-v2's
+/// over the same bytes followed by position_hash_hi LE.
+#[inline]
+fn tkey_hashes(key: TKey, wide: bool) -> (u64, u64) {
+    if !wide {
+        return term_key_hashes((key.0, key.2, key.3, key.4));
+    }
+    let mut b = [0u8; 28];
+    b[..8].copy_from_slice(&key.0.to_le_bytes());
+    b[8..12].copy_from_slice(&key.2.to_le_bytes());
+    b[12..16].copy_from_slice(&key.3.to_le_bytes());
+    b[16..20].copy_from_slice(&key.4.to_le_bytes());
+    b[20..].copy_from_slice(&key.1.to_le_bytes());
     (xxh3_64_with_seed(&b, 1), xxh3_64_with_seed(&b, 2))
 }
 
@@ -597,6 +666,20 @@ pub struct Plan {
     /// Month conflict records of other kinds (edge-child): recorded, not controls.
     pub other_conflicts: Vec<Value>,
     pub term_bytes: u64,
+    /// book-v2: the months carry 128-bit keys (`month --key128`).
+    pub wide: bool,
+    /// The months' --max-ply: 30 for a book-v1, the lock's value for a book-v2.
+    pub max_ply: i32,
+}
+
+impl Plan {
+    pub fn schema_name(&self) -> &'static str {
+        if self.wide {
+            BOOK_SCHEMA_WIDE
+        } else {
+            BOOK_SCHEMA
+        }
+    }
 }
 
 fn read_manifest(p: &Path) -> Result<ManNums> {
@@ -638,17 +721,30 @@ fn preflight(cfg: &Config) -> Result<Plan> {
             params["ply_key"]
         ));
     }
-    if params["max_ply"] != json!(MAX_PLY) {
-        bad.push(format!("max_ply is {}, not {MAX_PLY}", params["max_ply"]));
-    }
+    let wide = match &params["key_bits"] {
+        Value::Null => false,
+        v if *v == json!(128) => true,
+        v => {
+            bad.push(format!("key_bits is {v}: only 64-bit months (no key_bits) and 128 are known"));
+            false
+        }
+    };
+    let max_ply = if wide {
+        match params["max_ply"].as_i64() {
+            Some(n) if (1..=i64::from(MAX_PLY_WIDE)).contains(&n) => n as i32,
+            _ => {
+                bad.push(format!("max_ply is {}, outside 1..={MAX_PLY_WIDE}", params["max_ply"]));
+                MAX_PLY
+            }
+        }
+    } else {
+        if params["max_ply"] != json!(MAX_PLY) {
+            bad.push(format!("max_ply is {}, not {MAX_PLY}", params["max_ply"]));
+        }
+        MAX_PLY
+    };
     if params["buckets"] != json!(BUCKETS) {
         bad.push(format!("buckets is {}, not {BUCKETS}", params["buckets"]));
-    }
-    if !params["key_bits"].is_null() {
-        bad.push(format!(
-            "key_bits is {}: these are 128-bit months (month --key128), and this merge writes the              64-bit book-v1, which would drop the keys' high halves",
-            params["key_bits"]
-        ));
     }
     if params["events"] != Value::Array(want_events) {
         bad.push(format!("events is {}, not the six speeds {EVENTS:?}", params["events"]));
@@ -719,10 +815,12 @@ fn preflight(cfg: &Config) -> Result<Plan> {
             bad.push(format!("{t}: provenance lacks term_rows / counters.kept / counters.failed"));
             continue;
         };
-        if prov["max_ply"] != json!(MAX_PLY) || prov["ply_key"] != json!(true) {
+        // A 64-bit month's provenance has no key_bits (older builds) or 64.
+        let prov_wide = prov["key_bits"] == json!(128);
+        if prov["max_ply"] != json!(max_ply) || prov["ply_key"] != json!(true) || prov_wide != wide {
             bad.push(format!(
-                "{t}: provenance says max_ply {} ply_key {}",
-                prov["max_ply"], prov["ply_key"]
+                "{t}: provenance says max_ply {} ply_key {} key_bits {}",
+                prov["max_ply"], prov["ply_key"], prov["key_bits"]
             ));
         }
         // 3. Directory recount: one listing per month.
@@ -815,14 +913,21 @@ fn preflight(cfg: &Config) -> Result<Plan> {
             }
         }
     }
+    if wide && !(controls.is_empty() && other_conflicts.is_empty()) {
+        return Err(refused(format!(
+            "pre-flight: 128-bit months carry {} conflict record(s) under _conflicts; a --key128 month \
+             fails on a conflict, so these months are not what `month --key128` finished",
+            controls.len() + other_conflicts.len()
+        )));
+    }
     let term_bytes = months.iter().map(|m| m.term_bytes).sum();
-    Ok(Plan { months_root: root, months, params, producer, controls, other_conflicts, term_bytes })
+    Ok(Plan { months_root: root, months, params, producer, controls, other_conflicts, term_bytes, wide, max_ply })
 }
 
 /// The settings lock's content.
 fn lock_value(cfg: &Config, plan: &Plan, props: &WriterProperties) -> Value {
     json!({
-        "schema": BOOK_SCHEMA,
+        "schema": plan.schema_name(),
         "months_root": plan.months_root.display().to_string(),
         "months": plan.months.iter().map(|m| m.tag.clone()).collect::<Vec<_>>(),
         "input_params": plan.params,
@@ -1168,8 +1273,8 @@ pub fn run(cfg: &Config) -> Result<()> {
         plan: &plan,
         q: Queue::new(cfg.stage_bytes),
         props,
-        schema: book_ps_schema(),
-        term_schema: term_schema_with(true),
+        schema: book_ps_schema_with(plan.wide),
+        term_schema: term_schema_full(true, plan.wide),
         t0,
         todo: todo.len(),
         st: Mutex::new(RunState { done_before, bytes_before, ..Default::default() }),
@@ -1399,6 +1504,9 @@ struct PsBatch {
     d: Int64Array,
     b: Int64Array,
     t: Int64Array,
+    /// parent_hash_hi and child_hash_hi (book-v2 months).
+    hi: Option<Int64Array>,
+    child_hi: Option<Int64Array>,
     n: usize,
 }
 
@@ -1416,8 +1524,16 @@ const PS_NONNULL: [(usize, &str); 10] = [
 ];
 
 impl PsBatch {
-    fn new(b: &RecordBatch, path: &Path, first_row: u64) -> Result<PsBatch> {
+    fn new(b: &RecordBatch, path: &Path, first_row: u64, wide: bool) -> Result<PsBatch> {
         let n = b.num_rows();
+        if wide {
+            for (i, name) in [(12usize, "parent_hash_hi"), (13, "child_hash_hi")] {
+                if b.column(i).null_count() > 0 {
+                    let k = (0..n).find(|&k| b.column(i).is_null(k)).unwrap_or(0);
+                    bail!("{} row {}: NULL {name}", path.display(), first_row + k as u64);
+                }
+            }
+        }
         for (i, name) in PS_NONNULL {
             if b.column(i).null_count() > 0 {
                 let k = (0..n).find(|&k| b.column(i).is_null(k)).unwrap_or(0);
@@ -1445,6 +1561,8 @@ impl PsBatch {
             d: i64c(9),
             b: i64c(10),
             t: i64c(11),
+            hi: wide.then(|| i64c(12)),
+            child_hi: wide.then(|| i64c(13)),
             n,
         })
     }
@@ -1453,6 +1571,7 @@ impl PsBatch {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct PsKeyV {
     h: i64,
+    hi: i64,
     san: San,
     ev: u8,
     band: u8,
@@ -1470,14 +1589,15 @@ struct PsIn {
     prev: Option<PsKeyV>,
     acc: Stats,
     bytes: u64,
+    wide: bool,
 }
 
 impl PsIn {
-    fn open(mi: usize, path: &Path, bytes: u64) -> Result<PsIn> {
+    fn open(mi: usize, path: &Path, bytes: u64, wide: bool) -> Result<PsIn> {
         let f = File::open(path).with_context(|| format!("opening {}", path.display()))?;
         let bld = ParquetRecordBatchReaderBuilder::try_new(f)
             .with_context(|| format!("reading the footer of {}", path.display()))?;
-        if bld.schema().fields() != ps_schema(false).fields() {
+        if bld.schema().fields() != ps_schema_with(false, wide).fields() {
             bail!("{}: the schema is not the months' ps schema: {:?}", path.display(), bld.schema());
         }
         let footer = bld.metadata().file_metadata().num_rows() as u64;
@@ -1493,6 +1613,7 @@ impl PsIn {
             prev: None,
             acc: Stats::default(),
             bytes,
+            wide,
         };
         s.load()?;
         Ok(s)
@@ -1504,7 +1625,7 @@ impl PsIn {
         for b in self.reader.by_ref() {
             let b = b.with_context(|| format!("decoding {}", self.path.display()))?;
             if b.num_rows() > 0 {
-                self.cur = Some(PsBatch::new(&b, &self.path, self.read)?);
+                self.cur = Some(PsBatch::new(&b, &self.path, self.read, self.wide)?);
                 return Ok(());
             }
         }
@@ -1541,6 +1662,8 @@ struct GRow {
     ply: u8,
     month: u16,
     child: i64,
+    /// child_hash_hi (0 in a book-v1).
+    child_hi: i64,
     /// white_wins, draws, black_wins, total.
     c: [u64; 4],
 }
@@ -1552,12 +1675,14 @@ impl GRow {
     }
 }
 
-/// One parent_hash's rows from every month, and the EPDs they carry.
+/// One parent_hash's rows from every month, and the positions they carry: an
+/// EPD each, with its key's high half (0 in a book-v1).
 #[derive(Default)]
 struct Group {
     rows: Vec<GRow>,
     epd_buf: Vec<u8>,
     epds: Vec<(u32, u32)>,
+    his: Vec<i64>,
 }
 
 impl Group {
@@ -1565,6 +1690,7 @@ impl Group {
         self.rows.clear();
         self.epd_buf.clear();
         self.epds.clear();
+        self.his.clear();
     }
 
     #[inline]
@@ -1573,17 +1699,36 @@ impl Group {
         &self.epd_buf[s as usize..(s + l) as usize]
     }
 
+    /// The index of the position (EPD `e`, high half `hi`) in this group. In a
+    /// book-v1 (`hi` always 0) a position is its EPD. In a book-v2 it is its
+    /// key, and the key and the EPD must name each other.
     #[inline]
-    fn epd_index(&mut self, e: &[u8]) -> u32 {
+    fn epd_index(&mut self, e: &[u8], hi: i64, wide: bool) -> std::result::Result<u32, String> {
         for k in 0..self.epds.len() as u32 {
-            if self.epd(k) == e {
-                return k;
+            let (same_epd, same_hi) = (self.epd(k) == e, self.his[k as usize] == hi);
+            if same_epd && same_hi {
+                return Ok(k);
+            }
+            if wide && same_hi {
+                return Err(format!(
+                    "two EPDs under one 128-bit key (parent_hash_hi {hi}): {:?} and {:?}",
+                    String::from_utf8_lossy(self.epd(k)),
+                    String::from_utf8_lossy(e)
+                ));
+            }
+            if wide && same_epd {
+                return Err(format!(
+                    "one EPD under two 128-bit keys (parent_hash_hi {} and {hi}): {:?}",
+                    self.his[k as usize],
+                    String::from_utf8_lossy(e)
+                ));
             }
         }
         let s = self.epd_buf.len() as u32;
         self.epd_buf.extend_from_slice(e);
         self.epds.push((s, e.len() as u32));
-        self.epds.len() as u32 - 1
+        self.his.push(hi);
+        Ok(self.epds.len() as u32 - 1)
     }
 }
 
@@ -1614,6 +1759,9 @@ struct SliceOut {
     c: [Vec<i64>; 4],
     wsa: Vec<f64>,
     st: Stats,
+    wide: bool,
+    hi: Vec<i64>,
+    child_hi: Vec<i64>,
 }
 
 struct SliceFile {
@@ -1625,7 +1773,7 @@ struct SliceFile {
 }
 
 impl SliceOut {
-    fn create(dir: &Path, b: u32, ev: u8, band: u8, schema: &SchemaRef, props: &WriterProperties) -> Result<SliceOut> {
+    fn create(dir: &Path, b: u32, ev: u8, band: u8, schema: &SchemaRef, props: &WriterProperties, wide: bool) -> Result<SliceOut> {
         let d = dir.join(format!("event={}", EVENTS[ev as usize])).join(format!("elo_band={}", BANDS[band as usize]));
         std::fs::create_dir_all(&d).with_context(|| format!("creating {}", d.display()))?;
         let path = d.join(format!("{}.parquet", bucket_dir_name(b)));
@@ -1644,12 +1792,19 @@ impl SliceOut {
             c: Default::default(),
             wsa: Vec::new(),
             st: Stats::default(),
+            wide,
+            hi: Vec::new(),
+            child_hi: Vec::new(),
         })
     }
 
     #[inline]
-    fn push(&mut self, h: i64, epd: &[u8], r: &GRow) -> Result<()> {
+    fn push(&mut self, h: i64, hi: i64, epd: &[u8], r: &GRow) -> Result<()> {
         self.hash.push(h);
+        if self.wide {
+            self.hi.push(hi);
+            self.child_hi.push(r.child_hi);
+        }
         self.san.append_value(crate::keys::san_str(&r.san));
         // The EPD bytes came from a StringArray, so they are UTF-8.
         self.epd.append_value(std::str::from_utf8(epd)?);
@@ -1675,7 +1830,7 @@ impl SliceOut {
         let band = BANDS[self.band as usize];
         let take = |v: &mut Vec<i64>| -> ArrayRef { Arc::new(Int64Array::from(std::mem::take(v))) };
         let [c0, c1, c2, c3] = &mut self.c;
-        let cols: Vec<ArrayRef> = vec![
+        let mut cols: Vec<ArrayRef> = vec![
             take(&mut self.hash),
             Arc::new(self.san.finish()),
             Arc::new(StringArray::from_iter_values(std::iter::repeat_n(ev, n))),
@@ -1689,6 +1844,10 @@ impl SliceOut {
             take(c3),
             Arc::new(Float64Array::from(std::mem::take(&mut self.wsa))),
         ];
+        if self.wide {
+            cols.push(take(&mut self.hi));
+            cols.push(take(&mut self.child_hi));
+        }
         self.w.write(&RecordBatch::try_new(self.schema.clone(), cols)?)?;
         Ok(())
     }
@@ -1742,17 +1901,22 @@ impl<'a> BucketMerge<'a> {
             bail!("{}: elo_band {band_v} is not one of {BANDS:?}", at());
         };
         let ply = bt.ply.value(i);
-        if !(1..=MAX_PLY).contains(&ply) {
-            bail!("{}: ply {ply} is outside 1..={MAX_PLY}", at());
+        let (wide, max_ply) = (self.ctx.plan.wide, self.ctx.plan.max_ply);
+        if !(1..=max_ply).contains(&ply) {
+            bail!("{}: ply {ply} is outside 1..={max_ply}", at());
         }
-        let key = PsKeyV { h, san, ev: ev as u8, band: band as u8, ply: ply as u8 };
+        let hi = bt.hi.as_ref().map_or(0, |a| a.value(i));
+        let child_hi = bt.child_hi.as_ref().map_or(0, |a| a.value(i));
+        let key = PsKeyV { h, hi, san, ev: ev as u8, band: band as u8, ply: ply as u8 };
         if let Some(p) = inp.prev {
             if key <= p {
                 bail!(
-                    "{}: rows are not strictly increasing on (parent_hash, move_san, event, elo_band, \
-                     ply): ({h}, {san_s}, {ev_s}, {band_v}, {ply}) follows ({}, {}, {}, {}, {})",
+                    "{}: rows are not strictly increasing on (parent_hash, [parent_hash_hi,] move_san, \
+                     event, elo_band, ply): ({h}, {hi}, {san_s}, {ev_s}, {band_v}, {ply}) follows \
+                     ({}, {}, {}, {}, {}, {})",
                     at(),
                     p.h,
+                    p.hi,
                     crate::keys::san_str(&p.san),
                     EVENTS[p.ev as usize],
                     BANDS[p.band as usize],
@@ -1776,10 +1940,16 @@ impl<'a> BucketMerge<'a> {
         }
         let child = bt.child.value(i);
         let c = [w as u64, d as u64, bl as u64, t as u64];
+        let e = match self.g.epd_index(epd.as_bytes(), hi, wide) {
+            Ok(e) => e,
+            Err(why) => bail!("{}: parent_hash {h}: {why}", at()),
+        };
         inp.acc.add(c, ply);
-        let (k1, k2) = ps_key_hashes(&mut self.keybuf, h, epd.as_bytes(), san_s.as_bytes(), ev_s.as_bytes(), band_v, ply, child);
+        let (k1, k2) = ps_key_hashes_wide(
+            &mut self.keybuf, h, epd.as_bytes(), san_s.as_bytes(), ev_s.as_bytes(), band_v, ply, child,
+            wide.then_some((hi, child_hi)),
+        );
         self.digest.add(k1, k2, c);
-        let e = self.g.epd_index(epd.as_bytes());
         self.g.rows.push(GRow {
             epd: e,
             san,
@@ -1788,6 +1958,7 @@ impl<'a> BucketMerge<'a> {
             ply: ply as u8,
             month: inp.mi as u16,
             child,
+            child_hi,
             c,
         });
         self.rows_in += 1;
@@ -1810,21 +1981,29 @@ impl<'a> BucketMerge<'a> {
         }
     }
 
-    fn emit(&mut self, h: i64, epd: &[u8], r: &GRow) -> Result<()> {
+    fn emit(&mut self, h: i64, hi: i64, epd: &[u8], r: &GRow) -> Result<()> {
         let si = r.ev as usize * BANDS.len() + r.band as usize;
         if self.slices[si].is_none() {
-            self.slices[si] = Some(SliceOut::create(&self.out_stage, self.b, r.ev, r.band, &self.ctx.schema, &self.ctx.props)?);
+            self.slices[si] = Some(SliceOut::create(
+                &self.out_stage, self.b, r.ev, r.band, &self.ctx.schema, &self.ctx.props, self.ctx.plan.wide,
+            )?);
         }
-        self.slices[si].as_mut().unwrap().push(h, epd, r)
+        self.slices[si].as_mut().unwrap().push(h, hi, epd, r)
     }
 
     fn reduce(&mut self, h: i64) -> Result<()> {
         let mut g = std::mem::take(&mut self.g);
         let n_epd = g.epds.len();
         if n_epd > 1 {
-            // Rank the EPDs as strings, so twins come out in EPD order.
+            // Rank the positions: by EPD as strings in a book-v1, so twins come
+            // out in EPD order; by the key's high half in a book-v2, so the rows
+            // come out in key order.
             let mut order: Vec<u32> = (0..n_epd as u32).collect();
-            order.sort_by(|&x, &y| g.epd(x).cmp(g.epd(y)));
+            if self.ctx.plan.wide {
+                order.sort_by_key(|&x| g.his[x as usize]);
+            } else {
+                order.sort_by(|&x, &y| g.epd(x).cmp(g.epd(y)));
+            }
             let mut rank = vec![0u32; n_epd];
             for (r, &e) in order.iter().enumerate() {
                 rank[e as usize] = r as u32;
@@ -1833,6 +2012,7 @@ impl<'a> BucketMerge<'a> {
                 row.epd = rank[row.epd as usize];
             }
             g.epds = order.iter().map(|&e| g.epds[e as usize]).collect();
+            g.his = order.iter().map(|&e| g.his[e as usize]).collect();
         }
         if g.rows.len() > 1 {
             g.rows.sort_unstable_by_key(GRow::key);
@@ -1848,11 +2028,13 @@ impl<'a> BucketMerge<'a> {
             let mut acc = g.rows[i];
             let mut j = i + 1;
             while j < g.rows.len() && g.rows[j].key() == acc.key() {
-                if g.rows[j].child != acc.child {
+                if (g.rows[j].child, g.rows[j].child_hi) != (acc.child, acc.child_hi) {
                     let months: Vec<String> = g.rows[i..]
                         .iter()
                         .take_while(|r| r.key() == acc.key())
-                        .map(|r| format!("{} (child {})", self.ctx.plan.months[r.month as usize].tag, r.child))
+                        .map(|r| {
+                            format!("{} (child {}, high half {})", self.ctx.plan.months[r.month as usize].tag, r.child, r.child_hi)
+                        })
                         .collect();
                     bail!(
                         "child disagreement: parent_hash {h}, EPD {:?}, SAN {}, {} {}, ply {}: {}",
@@ -1881,7 +2063,7 @@ impl<'a> BucketMerge<'a> {
             }
             let (s, l) = g.epds[acc.epd as usize];
             let epd = &g.epd_buf[s as usize..(s + l) as usize];
-            self.emit(h, epd, &acc)?;
+            self.emit(h, g.his[acc.epd as usize], epd, &acc)?;
             i = j;
         }
         if n_epd > 1 {
@@ -1932,7 +2114,15 @@ impl<'a> BucketMerge<'a> {
 }
 
 /// Re-read a staged slice file in full; its stats, and its rows into `dg`.
-fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf: &mut Vec<u8>) -> Result<Stats> {
+fn verify_slice(
+    b: u32,
+    sf: &SliceFile,
+    schema: &SchemaRef,
+    dg: &mut Digest,
+    buf: &mut Vec<u8>,
+    wide: bool,
+    max_ply: i32,
+) -> Result<Stats> {
     let p = sf.path.display();
     let f = File::open(&sf.path)?;
     let bld = ParquetRecordBatchReaderBuilder::try_new(f)?;
@@ -1944,6 +2134,7 @@ fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf
     let (ev_s, band_v) = (EVENTS[sf.ev as usize], BANDS[sf.band as usize]);
     let mut st = Stats::default();
     let (mut ph, mut pepd, mut psan, mut pply, mut first) = (0i64, Vec::<u8>::new(), Vec::<u8>::new(), 0i32, true);
+    let mut phi = 0i64;
     for batch in rd {
         let batch = batch?;
         for (k, f) in schema.fields().iter().enumerate() {
@@ -1957,9 +2148,11 @@ fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf
             (batch.column(1).as_string::<i32>(), batch.column(2).as_string::<i32>(), batch.column(4).as_string::<i32>());
         let ply = batch.column(6).as_primitive::<Int32Type>();
         let wsa = batch.column(11).as_primitive::<Float64Type>();
+        let his = wide.then(|| (i64c(12), i64c(13)));
         for i in 0..batch.num_rows() {
             let at = || format!("{p} row {}", st.rows);
             let hv = h.value(i);
+            let (hiv, chiv) = his.map_or((0, 0), |(a, c)| (a.value(i), c.value(i)));
             if bucket_of(hv, BUCKETS) != b {
                 bail!("{}: parent_hash {hv} is not in bucket {b}", at());
             }
@@ -1967,7 +2160,15 @@ fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf
                 bail!("{}: event/elo_band {}/{} disagree with the path", at(), ev.value(i), band.value(i));
             }
             let (e, s, pl) = (epd.value(i).as_bytes(), san.value(i).as_bytes(), ply.value(i));
-            if !first {
+            if !first && wide {
+                let o = hv.cmp(&ph).then_with(|| hiv.cmp(&phi)).then_with(|| s.cmp(&psan)).then_with(|| pl.cmp(&pply));
+                if o != Ordering::Greater {
+                    bail!("{}: not strictly increasing on (parent_hash, parent_hash_hi, move_san, ply)", at());
+                }
+                if ((hv, hiv) == (ph, phi)) != (e == pepd.as_slice()) {
+                    bail!("{}: the key and parent_epd do not name each other ({:?})", at(), epd.value(i));
+                }
+            } else if !first {
                 let o = hv.cmp(&ph).then_with(|| e.cmp(&pepd)).then_with(|| s.cmp(&psan)).then_with(|| pl.cmp(&pply));
                 if o != Ordering::Greater {
                     bail!("{}: not strictly increasing on (parent_hash, parent_epd, move_san, ply)", at());
@@ -1975,12 +2176,13 @@ fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf
             }
             first = false;
             ph = hv;
+            phi = hiv;
             pepd.clear();
             pepd.extend_from_slice(e);
             psan.clear();
             psan.extend_from_slice(s);
             pply = pl;
-            if !(1..=MAX_PLY).contains(&pl) {
+            if !(1..=max_ply).contains(&pl) {
                 bail!("{}: ply {pl}", at());
             }
             if e.is_empty() || epd_white(epd.value(i)) != Some(pl % 2 == 1) {
@@ -1995,7 +2197,9 @@ fn verify_slice(b: u32, sf: &SliceFile, schema: &SchemaRef, dg: &mut Digest, buf
             }
             let c = [wv as u64, dv as u64, bv as u64, tv as u64];
             st.add(c, pl);
-            let (k1, k2) = ps_key_hashes(buf, hv, e, s, ev_s.as_bytes(), band_v, pl, child.value(i));
+            let (k1, k2) = ps_key_hashes_wide(
+                buf, hv, e, s, ev_s.as_bytes(), band_v, pl, child.value(i), wide.then_some((hiv, chiv)),
+            );
             dg.add(k1, k2, c);
         }
     }
@@ -2068,7 +2272,7 @@ fn do_bucket(ctx: &Ctx, staged: Staged) -> Result<()> {
         groups: 0,
     };
     for (mi, path, bytes) in &staged.files {
-        m.ins.push(PsIn::open(*mi, path, *bytes)?);
+        m.ins.push(PsIn::open(*mi, path, *bytes, ctx.plan.wide)?);
     }
     m.run()?;
     let ins: Vec<(usize, Stats, u64)> = m.ins.iter().map(|x| (x.mi, x.acc, x.bytes)).collect();
@@ -2093,7 +2297,7 @@ fn do_bucket(ctx: &Ctx, staged: Staged) -> Result<()> {
     let mut buf = Vec::with_capacity(128);
     let mut total_out = Stats::default();
     for (k, f) in files.iter().enumerate() {
-        let back = verify_slice(b, f, &ctx.schema, &mut dg, &mut buf)?;
+        let back = verify_slice(b, f, &ctx.schema, &mut dg, &mut buf, ctx.plan.wide, ctx.plan.max_ply)?;
         if back != f.st {
             bail!("{}: re-read {:?}, wrote {:?}", f.path.display(), back, f.st);
         }
@@ -2221,22 +2425,38 @@ fn footer_of(ins: &[PsIn], mi: usize) -> u64 {
 
 // ── term ─────────────────────────────────────────────────────────────────────
 
-type TKey = (i64, i32, i32, i32);
 
 /// Phase T's rule for a term key, from game.rs walk(): a kept game with no
 /// moves writes term(START_HASH, 0, 0); every other game writes end_ply =
 /// min(30, its moves), kind 1 (horizon) only if it had more moves than that.
 pub fn term_key_rule(key: (i64, i32, i32, i32)) -> std::result::Result<(), String> {
+    term_key_rule_at(key, MAX_PLY)
+}
+
+/// The same for months walked to `max_ply`.
+pub fn term_key_rule_at(key: (i64, i32, i32, i32), max_ply: i32) -> std::result::Result<(), String> {
     let (hash, kind, end) = (key.0, key.1, key.3);
     match kind {
-        0 if !(0..=MAX_PLY).contains(&end) => Err(format!("kind 0 with end_ply {end}, outside 0..={MAX_PLY}")),
+        0 if !(0..=max_ply).contains(&end) => Err(format!("kind 0 with end_ply {end}, outside 0..={max_ply}")),
         0 if end == 0 && hash != START_HASH => Err(format!(
             "end_ply 0 at position_hash {hash}: only the start position {START_HASH} ends at ply 0"
         )),
-        1 if end != MAX_PLY => Err(format!("kind 1 (horizon) with end_ply {end}, not {MAX_PLY}")),
+        1 if end != max_ply => Err(format!("kind 1 (horizon) with end_ply {end}, not {max_ply}")),
         0 | 1 => Ok(()),
         _ => Err(format!("kind {kind} is not 0 or 1")),
     }
+}
+
+/// The rule on a merge term key; in a book-v2 the start position is its whole key.
+fn tkey_rule(key: TKey, wide: bool, max_ply: i32) -> std::result::Result<(), String> {
+    term_key_rule_at((key.0, key.2, key.3, key.4), max_ply)?;
+    if wide && key.2 == 0 && key.4 == 0 && key.1 != START_HASH_HI {
+        return Err(format!(
+            "end_ply 0 at position_hash_hi {}: only the start position ({START_HASH}, {START_HASH_HI}) ends at ply 0",
+            key.1
+        ));
+    }
+    Ok(())
 }
 
 struct TermBatch {
@@ -2245,6 +2465,8 @@ struct TermBatch {
     reason: Int32Array,
     end: Int32Array,
     c: [Int64Array; 4],
+    /// position_hash_hi (book-v2 months).
+    hi: Option<Int64Array>,
     n: usize,
 }
 
@@ -2259,10 +2481,12 @@ struct TermIn {
     prev: Option<TKey>,
     acc: Stats,
     bytes: u64,
+    wide: bool,
+    max_ply: i32,
 }
 
 impl TermIn {
-    fn open(mi: usize, path: &Path, bytes: u64, schema: &SchemaRef) -> Result<TermIn> {
+    fn open(mi: usize, path: &Path, bytes: u64, schema: &SchemaRef, wide: bool, max_ply: i32) -> Result<TermIn> {
         let f = File::open(path).with_context(|| format!("opening {}", path.display()))?;
         let bld = ParquetRecordBatchReaderBuilder::try_new(f)?;
         if bld.schema().fields() != schema.fields() {
@@ -2270,7 +2494,10 @@ impl TermIn {
         }
         let footer = bld.metadata().file_metadata().num_rows() as u64;
         let reader = bld.with_batch_size(READ_BATCH).build()?;
-        let mut s = TermIn { mi, path: path.to_path_buf(), reader, cur: None, i: 0, footer, read: 0, prev: None, acc: Stats::default(), bytes };
+        let mut s = TermIn {
+            mi, path: path.to_path_buf(), reader, cur: None, i: 0, footer, read: 0, prev: None,
+            acc: Stats::default(), bytes, wide, max_ply,
+        };
         s.load()?;
         Ok(s)
     }
@@ -2291,7 +2518,10 @@ impl TermIn {
             }
             let i32c = |k: usize| b.column(k).as_primitive::<Int32Type>().clone();
             let i64c = |k: usize| b.column(k).as_primitive::<Int64Type>().clone();
-            self.cur = Some(TermBatch { hash: i64c(0), kind: i32c(1), reason: i32c(2), end: i32c(3), c: [i64c(4), i64c(5), i64c(6), i64c(7)], n });
+            self.cur = Some(TermBatch {
+                hash: i64c(0), kind: i32c(1), reason: i32c(2), end: i32c(3),
+                c: [i64c(4), i64c(5), i64c(6), i64c(7)], hi: self.wide.then(|| i64c(8)), n,
+            });
             return Ok(());
         }
         if self.read != self.footer {
@@ -2302,21 +2532,27 @@ impl TermIn {
 
     #[inline]
     fn key(&self) -> Option<TKey> {
-        self.cur.as_ref().map(|c| (c.hash.value(self.i), c.kind.value(self.i), c.reason.value(self.i), c.end.value(self.i)))
+        self.cur.as_ref().map(|c| {
+            let i = self.i;
+            (c.hash.value(i), c.hi.as_ref().map_or(0, |a| a.value(i)), c.kind.value(i), c.reason.value(i), c.end.value(i))
+        })
     }
 
     /// Validate and take the current row into `sum` and `dg`, then advance.
     fn take(&mut self, sum: &mut [u64; 4], dg: &mut Digest, tag: &str) -> Result<()> {
         let bt = self.cur.as_ref().expect("a current row");
         let i = self.i;
-        let key = (bt.hash.value(i), bt.kind.value(i), bt.reason.value(i), bt.end.value(i));
+        let key: TKey = (
+            bt.hash.value(i), bt.hi.as_ref().map_or(0, |a| a.value(i)), bt.kind.value(i), bt.reason.value(i),
+            bt.end.value(i),
+        );
         let at = || format!("term, month {tag}, row {}", self.read);
         if let Some(p) = self.prev {
             if key <= p {
                 bail!("{}: rows are not strictly increasing on TermKey: {key:?} follows {p:?}", at());
             }
         }
-        if let Err(why) = term_key_rule(key) {
+        if let Err(why) = tkey_rule(key, self.wide, self.max_ply) {
             bail!("{}: {why}", at());
         }
         let c = [bt.c[0].value(i), bt.c[1].value(i), bt.c[2].value(i), bt.c[3].value(i)];
@@ -2326,7 +2562,7 @@ impl TermIn {
         let c = c.map(|x| x as u64);
         self.prev = Some(key);
         self.acc.add(c, 0);
-        let (k1, k2) = term_key_hashes(key);
+        let (k1, k2) = tkey_hashes(key, self.wide);
         dg.add(k1, k2, c);
         for j in 0..4 {
             sum[j] += c[j];
@@ -2348,28 +2584,31 @@ struct TermOut {
 }
 
 impl TermOut {
-    fn flush(&mut self, schema: &SchemaRef) -> Result<()> {
+    fn flush(&mut self, schema: &SchemaRef, wide: bool) -> Result<()> {
         if self.rows.is_empty() {
             return Ok(());
         }
         let r = &self.rows;
-        let cols: Vec<ArrayRef> = vec![
+        let mut cols: Vec<ArrayRef> = vec![
             Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.0 .0))),
-            Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .1))),
             Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .2))),
             Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .3))),
+            Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .4))),
             Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.1[0] as i64))),
             Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.1[1] as i64))),
             Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.1[2] as i64))),
             Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.1[3] as i64))),
         ];
+        if wide {
+            cols.push(Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.0 .1))));
+        }
         self.w.write(&RecordBatch::try_new(schema.clone(), cols)?)?;
         self.rows.clear();
         Ok(())
     }
 }
 
-fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest) -> Result<Stats> {
+fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest, wide: bool, max_ply: i32) -> Result<Stats> {
     let p = path.display();
     let bld = ParquetRecordBatchReaderBuilder::try_new(File::open(path)?)?;
     if bld.schema().fields() != schema.fields() {
@@ -2389,8 +2628,9 @@ fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest) ->
         let i64c = |k: usize| batch.column(k).as_primitive::<Int64Type>();
         let (h, kind, reason, end) = (i64c(0), i32c(1), i32c(2), i32c(3));
         let cs = [i64c(4), i64c(5), i64c(6), i64c(7)];
+        let his = wide.then(|| i64c(8));
         for i in 0..batch.num_rows() {
-            let key = (h.value(i), kind.value(i), reason.value(i), end.value(i));
+            let key: TKey = (h.value(i), his.map_or(0, |a| a.value(i)), kind.value(i), reason.value(i), end.value(i));
             if bucket_of(key.0, BUCKETS) != b {
                 bail!("{p} row {}: position_hash {} is not in bucket {b}", st.rows, key.0);
             }
@@ -2398,7 +2638,7 @@ fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest) ->
                 bail!("{p} row {}: not strictly increasing on TermKey", st.rows);
             }
             prev = Some(key);
-            if let Err(why) = term_key_rule(key) {
+            if let Err(why) = tkey_rule(key, wide, max_ply) {
                 bail!("{p} row {}: {why}", st.rows);
             }
             let c = [cs[0].value(i), cs[1].value(i), cs[2].value(i), cs[3].value(i)];
@@ -2407,7 +2647,7 @@ fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest) ->
             }
             let c = c.map(|x| x as u64);
             st.add(c, 0);
-            let (k1, k2) = term_key_hashes(key);
+            let (k1, k2) = tkey_hashes(key, wide);
             dg.add(k1, k2, c);
         }
     }
@@ -2426,7 +2666,7 @@ fn do_term(ctx: &Ctx, staged: Staged) -> Result<()> {
     let schema = &ctx.term_schema;
     let mut ins = Vec::with_capacity(staged.files.len());
     for (mi, path, bytes) in &staged.files {
-        ins.push(TermIn::open(*mi, path, *bytes, schema)?);
+        ins.push(TermIn::open(*mi, path, *bytes, schema, ctx.plan.wide, ctx.plan.max_ply)?);
     }
     let tags: Vec<String> = ins.iter().map(|x| ctx.plan.months[x.mi].tag.clone()).collect();
     let mut outs: Vec<Option<TermOut>> = (0..BUCKETS).map(|_| None).collect();
@@ -2463,7 +2703,7 @@ fn do_term(ctx: &Ctx, staged: Staged) -> Result<()> {
         o.rows.push((key, sum));
         o.st.add(sum, 0);
         if o.rows.len() >= TERM_OUT_BATCH {
-            o.flush(schema)?;
+            o.flush(schema, ctx.plan.wide)?;
         }
         emitted += 1;
         if emitted == 1 {
@@ -2489,7 +2729,7 @@ fn do_term(ctx: &Ctx, staged: Staged) -> Result<()> {
             Some(o) => o,
             None => open(b)?,
         };
-        o.flush(schema)?;
+        o.flush(schema, ctx.plan.wide)?;
         o.w.close()?;
         let bytes = std::fs::metadata(&o.path)?.len();
         files.push((b, o.path, bytes, o.st));
@@ -2500,7 +2740,7 @@ fn do_term(ctx: &Ctx, staged: Staged) -> Result<()> {
     let mut dg_out = Digest::default();
     let mut total_out = Stats::default();
     for (b, path, _, st) in &files {
-        let back = verify_term_file(*b, path, schema, &mut dg_out)?;
+        let back = verify_term_file(*b, path, schema, &mut dg_out, ctx.plan.wide, ctx.plan.max_ply)?;
         if back != *st {
             bail!("{}: re-read {:?}, wrote {:?}", path.display(), back, st);
         }
@@ -2613,6 +2853,28 @@ pub const READ_CONTRACT: [&str; 10] = [
     "pyarrow's default hive partitioning clashes with those in-file columns (pyarrow 24: 'Unable to merge: Field event has incompatible types'), for a file or the tree alike: read with pq.read_table(path, partitioning=None) or pq.ParquetFile(path).read().",
     "white_score_avg = (white_wins + 0.5 * draws) / total, in IEEE doubles.",
 ];
+
+/// The read contract of a book-v2: a key is a position.
+pub const READ_CONTRACT_WIDE: [&str; 10] = [
+    "Whole book: read_parquet('<book>/ps/event=*/elo_band=*/*.parquet'). One slice: glob ps/event=Blitz/elo_band=1800/*.parquet.",
+    "By position: (h, hi) = zobrist128.zobrist128(board), i = ((h % 512) + 512) % 512; read ps/event=*/elo_band=*/bkt{i:03d}.parquet; filter parent_hash = h AND parent_hash_hi = hi. The 128-bit key is the position: the merge stops on a key with two EPDs, so parent_epd is a function of the key (python-chess's legal-en-passant EPD).",
+    "Lichess-explorer counts sum over ply. A lower coverage cap C uses ply <= C. For endings at cap C, use ply_cap.derived_term: it is linear, so it holds for the summed book.",
+    "Walking to a child: (child_hash, child_hash_hi) is the child position's key; follow it directly.",
+    "parent_hash, child_hash and position_hash are the key's low half, which is the 64-bit polyglot hash (zobrist_int64): tables keyed by it still join. A consumer that keys by the low half alone must handle the hashes in _collisions.parquet (64-bit hashes shared by two or more positions); the high half tells them apart.",
+    "Term is pooled over event and elo_band, and keyed by (position_hash, position_hash_hi) (term/bkt<iii>.parquet holds the positions of ps bucket iii). Per-slice 'games that ended here' is not available.",
+    "Key: (parent_hash, parent_hash_hi, move_san, event, elo_band, ply), unique across the book. Within a slice file rows are strictly increasing on (parent_hash, parent_hash_hi, move_san, ply). The high halves are the last columns.",
+    "event and elo_band are stored in every file as well as in the path, so every hive mode of DuckDB and Polars returns them.",
+    "pyarrow's default hive partitioning clashes with those in-file columns (pyarrow 24: 'Unable to merge: Field event has incompatible types'), for a file or the tree alike: read with pq.read_table(path, partitioning=None) or pq.ParquetFile(path).read().",
+    "white_score_avg = (white_wins + 0.5 * draws) / total, in IEEE doubles.",
+];
+
+fn read_contract(plan: &Plan) -> &'static [&'static str; 10] {
+    if plan.wide {
+        &READ_CONTRACT_WIDE
+    } else {
+        &READ_CONTRACT
+    }
+}
 
 fn population(plan: &Plan) -> String {
     let p = &plan.params;
@@ -2773,10 +3035,14 @@ fn finalize(ctx: &Ctx) -> Result<()> {
     if !failed.is_empty() {
         bail!("positive control failed: these month collision records lack one or both EPDs in _collisions: {failed:?}");
     }
-    if hashes.len() > COLLISIONS_FATAL {
+    if !plan.wide && hashes.len() > COLLISIONS_FATAL {
         bail!("{} collision hashes (> {COLLISIONS_FATAL}): a hash or EPD bug; no _BOOK.DONE", hashes.len());
     }
-    let coll_status = if hashes.len() < COLLISIONS_LOW || hashes.len() > COLLISIONS_HIGH {
+    // In a book-v2 these are 64-bit hashes shared by positions the high half
+    // tells apart: a count for the record, with no expected range to hold it to.
+    let coll_status = if plan.wide {
+        "resolved by the 128-bit key"
+    } else if hashes.len() < COLLISIONS_LOW || hashes.len() > COLLISIONS_HIGH {
         eprintln!(
             "  WARNING: {} collision hashes, outside the expected {COLLISIONS_LOW}-{COLLISIONS_HIGH} for the full book",
             hashes.len()
@@ -2820,7 +3086,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
     // 6. The meta and README.
     let files = want.len() - n_term;
     let meta = json!({
-        "schema": BOOK_SCHEMA,
+        "schema": plan.schema_name(),
         "tool": {"line": sys::version_line(), "version": sys::VERSION, "commit": sys::GIT_COMMIT, "built": sys::BUILD_DATE},
         "input": {
             "months_root": plan.months_root.display().to_string(),
@@ -2844,15 +3110,16 @@ fn finalize(ctx: &Ctx) -> Result<()> {
         "peak_commit_bytes_this_run": sys::peak_commit(),
         "ps_schema": ctx.schema.fields().iter().map(|f| format!("{}: {} (required)", f.name(), f.data_type())).collect::<Vec<_>>(),
         "term_schema": ctx.term_schema.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>(),
-        "read_contract": READ_CONTRACT,
+        "read_contract": read_contract(plan),
         "population": population(plan),
         "finished": utc_now(),
     });
     write_json_atomic(&out.join("_book.meta.json"), &meta)?;
     let mut readme = format!(
-        "# The banded explorer book ({BOOK_SCHEMA})\n\nBuilt by `explorer-extract merge` ({}) from {} Rust months ({} to {}) \
+        "# The banded explorer book ({})\n\nBuilt by `explorer-extract merge` ({}) from {} Rust months ({} to {}) \
          under `{}`, producer commit {}.\n\n{} book rows ({} input rows), {} term rows, {} files, {:.1} GB; {} positions; \
          {} collision hashes.\n\n## Read contract\n\n",
+        plan.schema_name(),
         sys::version_line(),
         plan.months.len(),
         plan.months.first().map_or("", |m| m.tag.as_str()),
@@ -2867,7 +3134,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
         fmt_n(positions),
         hashes.len()
     );
-    for line in READ_CONTRACT {
+    for line in read_contract(plan) {
         readme.push_str(&format!("- {line}\n"));
     }
     readme.push_str(&format!("- {}\n\n## Layout\n\n", population(plan)));

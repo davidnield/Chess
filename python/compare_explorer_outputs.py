@@ -63,6 +63,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -101,6 +102,9 @@ BOOK_SCHEMA = [("parent_hash", "int64"), ("move_san", "string"), ("event", "stri
                ("black_wins", "int64"), ("total", "int64"), ("white_score_avg", "double")]
 BOOK_TERM_COLS = ("position_hash", "kind", "reason", "end_ply", "white_wins", "draws",
                   "black_wins", "total")
+# A book-v2 (128-bit keys): the keys' high halves are the last columns.
+BOOK_WIDE_COLS = ("parent_hash_hi", "child_hash_hi")
+BOOK_WIDE_TERM_COLS = ("position_hash_hi",)
 
 
 def _p(path: Path) -> str:
@@ -429,22 +433,41 @@ def book_ps_files(book: Path) -> dict[int, list[Path]]:
     return out
 
 
-def _book_schema_ok(f: Path) -> str | None:
+def _book_schema_ok(f: Path, wide: bool = False) -> str | None:
     s = pq.read_schema(f)
     got = [(x.name, str(x.type), x.nullable) for x in s]
-    want = [(n, t, False) for n, t in BOOK_SCHEMA]
+    want = [(n, t, False) for n, t in BOOK_SCHEMA] + [(n, "int64", False) for n in BOOK_WIDE_COLS if wide]
     return None if got == want else f"{f}: schema {got}"
+
+
+def book_is_wide(book: Path) -> bool:
+    """A book-v2 (128-bit keys), by the book's settings lock; a book without one is a v1."""
+    lock = book / "_merge_params.json"
+    if not lock.exists():
+        return False
+    schema = json.loads(lock.read_text(encoding="utf-8")).get("schema", "book-v1")
+    if schema not in ("book-v1", "book-v2"):
+        raise SystemExit(f"FATAL: {lock} says schema {schema!r}: only book-v1 and book-v2 are known")
+    return schema == "book-v2"
 
 
 def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | None) -> int:
     t0 = time.time()
     bad = 0
+    wide = book_is_wide(book)
+    # The position within a 64-bit hash: its EPD in a book-v1, the key's high half in a book-v2.
+    BOOK_COLS = globals()["BOOK_COLS"] + (BOOK_WIDE_COLS if wide else ())
+    BOOK_TERM_COLS = globals()["BOOK_TERM_COLS"] + (BOOK_WIDE_TERM_COLS if wide else ())
+    hi_key = "parent_hash_hi, " if wide else ""
+    hi_child = ("MIN(child_hash_hi) AS child_hash_hi, MAX(child_hash_hi) AS child_hi_max, "
+                if wide else "0 AS child_hi_max, ")
+    hi_sel = ", parent_hash_hi, child_hash_hi" if wide else ""
     by_bucket = book_ps_files(book)
     files = [f for v in by_bucket.values() for f in v]
-    print(f"[book] {book}: {len(files):,} ps files over {len(by_bucket)} buckets; months "
-          f"{tags[0]}..{tags[-1]} ({len(tags)})", flush=True)
+    print(f"[book] {book} ({'book-v2, 128-bit keys' if wide else 'book-v1'}): {len(files):,} ps files "
+          f"over {len(by_bucket)} buckets; months {tags[0]}..{tags[-1]} ({len(tags)})", flush=True)
     for f in files:
-        err = _book_schema_ok(f)
+        err = _book_schema_ok(f, wide)
         if err:
             bad += 1
             print(f"  FAIL  {err}")
@@ -476,16 +499,17 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
             SELECT parent_hash, move_san, event, elo_band, parent_epd, child_hash, ply,
                    white_wins, draws, black_wins, total,
                    (white_wins::DOUBLE + 0.5::DOUBLE * draws::DOUBLE) / total::DOUBLE AS white_score_avg,
-                   child_max
-            FROM (SELECT parent_hash, move_san, event, elo_band, parent_epd, ply,
-                         MIN(child_hash) AS child_hash, MAX(child_hash) AS child_max,
+                   child_max, child_hi_max{hi_sel}
+            FROM (SELECT parent_hash, {hi_key}move_san, event, elo_band, parent_epd, ply,
+                         MIN(child_hash) AS child_hash, MAX(child_hash) AS child_max, {hi_child}
                          SUM(white_wins)::BIGINT AS white_wins, SUM(draws)::BIGINT AS draws,
                          SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total
                   FROM {_src(ref_files)}
-                  GROUP BY parent_hash, parent_epd, move_san, event, elo_band, ply)""")
+                  GROUP BY parent_hash, {hi_key}parent_epd, move_san, event, elo_band, ply)""")
         b_rel = f"(SELECT {cols} FROM read_parquet({_lit(bk)}, hive_partitioning=false))"
-        n_ref, n_child = con.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE child_hash <> child_max) "
-                                     "FROM ref").fetchone()
+        n_ref, n_child = con.execute(
+            "SELECT COUNT(*), COUNT(*) FILTER (WHERE child_hash <> child_max"
+            + (" OR child_hash_hi <> child_hi_max" if wide else "") + ") FROM ref").fetchone()
         n_book = con.execute(f"SELECT COUNT(*) FROM {b_rel}").fetchone()[0]
         a_only = con.execute(f"SELECT COUNT(*) FROM (SELECT {cols} FROM ref EXCEPT ALL "
                              f"SELECT {cols} FROM {b_rel})").fetchone()[0]
@@ -525,10 +549,11 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
                 print(f"  FAIL  no {p}")
             refs.append(p)
         tcols = ", ".join(BOOK_TERM_COLS)
+        thi = ", position_hash_hi" if wide else ""
         tref = f"""(SELECT position_hash, kind, reason, end_ply, SUM(white_wins)::BIGINT AS white_wins,
                            SUM(draws)::BIGINT AS draws, SUM(black_wins)::BIGINT AS black_wins,
-                           SUM(total)::BIGINT AS total
-                    FROM {_src(refs)} GROUP BY position_hash, kind, reason, end_ply)"""
+                           SUM(total)::BIGINT AS total{thi}
+                    FROM {_src(refs)} GROUP BY position_hash, kind, reason, end_ply{thi})"""
         tb = f"(SELECT {tcols} FROM read_parquet({_lit(tfiles)}))"
         if tfiles:
             sd = [f.name for f in tfiles if pq.read_schema(f).names != list(BOOK_TERM_COLS)]

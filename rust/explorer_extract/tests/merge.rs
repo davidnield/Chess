@@ -15,8 +15,10 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use serde_json::{json, Value};
 
-use explorer_extract::chesspos::START_HASH;
-use explorer_extract::keys::{bucket_of, ps_schema, term_schema_with, writer_props, BANDS};
+use explorer_extract::chesspos::{START_HASH, START_HASH_HI};
+use explorer_extract::keys::{
+    bucket_of, ps_schema, ps_schema_with, term_schema_full, term_schema_with, writer_props, BANDS,
+};
 use explorer_extract::merge::{self, Digest, EVENTS};
 use explorer_extract::month::MANIFEST_FIELDS;
 
@@ -37,6 +39,9 @@ struct Row {
     w: i64,
     d: i64,
     b: i64,
+    /// parent_hash_hi and child_hash_hi (128-bit months; 0 otherwise).
+    hi: i64,
+    chi: i64,
 }
 
 /// A stand-in EPD for position `pos`, with the side to move `ply` implies.
@@ -51,10 +56,18 @@ fn hb(bkt: u32, k: i64) -> i64 {
 
 #[allow(clippy::too_many_arguments)]
 fn row(h: i64, san: &str, ev: usize, band: usize, pos: u32, ply: i32, child: i64, wdb: [i64; 3]) -> Row {
-    Row { h, san: san.into(), ev, band, epd: epd(pos, ply), child, ply, w: wdb[0], d: wdb[1], b: wdb[2] }
+    Row { h, san: san.into(), ev, band, epd: epd(pos, ply), child, ply, w: wdb[0], d: wdb[1], b: wdb[2], hi: 0, chi: 0 }
+}
+
+/// A row of a 128-bit month: `row` with the two keys' high halves.
+#[allow(clippy::too_many_arguments)]
+fn wrow(h: i64, hi: i64, san: &str, ev: usize, band: usize, pos: u32, ply: i32, child: i64, chi: i64, wdb: [i64; 3]) -> Row {
+    Row { hi, chi, ..row(h, san, ev, band, pos, ply, child, wdb) }
 }
 
 type TermRow = (i64, i32, i32, i32, [i64; 4]);
+/// (position_hash, position_hash_hi, kind, reason, end_ply, counts).
+type WTermRow = (i64, i64, i32, i32, i32, [i64; 4]);
 
 #[derive(Clone, Default)]
 struct Month {
@@ -73,6 +86,15 @@ struct Month {
     man_ww_delta: i64,
     man_files_delta: i64,
     term_rows_delta: i64,
+    /// A `month --key128` month: the wide schemas, `wterm` for the term rows.
+    wide: bool,
+    wterm: Vec<WTermRow>,
+    /// The provenance's max_ply (0 = 30).
+    max_ply: i32,
+}
+
+fn wmonth(y: i32, m: u32, rows: Vec<Row>, wterm: Vec<WTermRow>) -> Month {
+    Month { y, m, rows, wterm, wide: true, max_ply: 50, ..Default::default() }
 }
 
 fn month(y: i32, m: u32, rows: Vec<Row>, term: Vec<TermRow>) -> Month {
@@ -98,10 +120,14 @@ fn write_batch(path: &Path, batch: &RecordBatch) {
 }
 
 fn ps_batch(rows: &[Row], null_epd_at: Option<usize>) -> RecordBatch {
+    ps_batch_w(rows, null_epd_at, false)
+}
+
+fn ps_batch_w(rows: &[Row], null_epd_at: Option<usize>, wide: bool) -> RecordBatch {
     let i64s = |f: &dyn Fn(&Row) -> i64| -> ArrayRef { Arc::new(Int64Array::from_iter_values(rows.iter().map(f))) };
     let epds: Vec<Option<&str>> =
         rows.iter().enumerate().map(|(i, r)| if Some(i) == null_epd_at { None } else { Some(r.epd.as_str()) }).collect();
-    RecordBatch::try_new(ps_schema(false), vec![
+    let mut cols = vec![
         i64s(&|r| r.h),
         Arc::new(StringArray::from_iter_values(rows.iter().map(|r| r.san.as_str()))),
         Arc::new(StringArray::from_iter_values(rows.iter().map(|r| EVENTS[r.ev]))),
@@ -114,12 +140,16 @@ fn ps_batch(rows: &[Row], null_epd_at: Option<usize>) -> RecordBatch {
         i64s(&|r| r.d),
         i64s(&|r| r.b),
         i64s(&|r| r.w + r.d + r.b),
-    ])
-    .unwrap()
+    ];
+    if wide {
+        cols.push(i64s(&|r| r.hi));
+        cols.push(i64s(&|r| r.chi));
+    }
+    RecordBatch::try_new(ps_schema_with(false, wide), cols).unwrap()
 }
 
-fn sort_key(r: &Row) -> (i64, Vec<u8>, usize, usize, i32) {
-    (r.h, r.san.as_bytes().to_vec(), r.ev, r.band, r.ply)
+fn sort_key(r: &Row) -> (i64, i64, Vec<u8>, usize, usize, i32) {
+    (r.h, r.hi, r.san.as_bytes().to_vec(), r.ev, r.band, r.ply)
 }
 
 fn manifest_batch(v: &BTreeMap<&str, Value>) -> RecordBatch {
@@ -161,7 +191,7 @@ fn write_month(root: &Path, s: &Month) {
         }
         let null_at = s.null_epd_at.and_then(|j| v.iter().position(|(i, _)| *i == j));
         let rs: Vec<Row> = v.iter().map(|(_, r)| r.clone()).collect();
-        write_batch(&root.join(format!("month={tag}")).join(format!("bkt={b}")).join("part-0000.parquet"), &ps_batch(&rs, null_at));
+        write_batch(&root.join(format!("month={tag}")).join(format!("bkt={b}")).join("part-0000.parquet"), &ps_batch_w(&rs, null_at, s.wide));
         for r in &rs {
             rows += 1;
             let t = r.w + r.d + r.b;
@@ -202,11 +232,28 @@ fn write_month(root: &Path, s: &Month) {
         Arc::new(Int64Array::from_iter_values(term.iter().map(|t| t.4[3]))),
     ])
     .unwrap();
+    let (tb, n_term, term_total) = if s.wide {
+        let mut wt = s.wterm.clone();
+        wt.sort_by_key(|t| (t.0, t.1, t.2, t.3, t.4));
+        let i32s = |f: &dyn Fn(&WTermRow) -> i32| -> ArrayRef { Arc::new(Int32Array::from_iter_values(wt.iter().map(f))) };
+        let i64s = |f: &dyn Fn(&WTermRow) -> i64| -> ArrayRef { Arc::new(Int64Array::from_iter_values(wt.iter().map(f))) };
+        let b = RecordBatch::try_new(term_schema_full(true, true), vec![
+            i64s(&|t| t.0), i32s(&|t| t.2), i32s(&|t| t.3), i32s(&|t| t.4),
+            i64s(&|t| t.5[0]), i64s(&|t| t.5[1]), i64s(&|t| t.5[2]), i64s(&|t| t.5[3]), i64s(&|t| t.1),
+        ])
+        .unwrap();
+        (b, wt.len() as i64, wt.iter().map(|t| t.5[3]).sum::<i64>())
+    } else {
+        (tb, term.len() as i64, term.iter().map(|t| t.4[3]).sum::<i64>())
+    };
     write_batch(&root.join("_term").join(format!("year={}_month={}.term.parquet", s.y, s.m)), &tb);
-    let term_total: i64 = term.iter().map(|t| t.4[3]).sum();
-    let prov = json!({"commit": s.commit.clone().unwrap_or_else(|| COMMIT.into()), "max_ply": 30, "ply_key": true,
-                      "term_rows": term.len() as i64 + s.term_rows_delta,
-                      "counters": {"kept": term_total + 5, "failed": 5}, "flags": {"source": "synthetic"}});
+    let mut prov = json!({"commit": s.commit.clone().unwrap_or_else(|| COMMIT.into()),
+                          "max_ply": if s.max_ply == 0 { 30 } else { s.max_ply }, "ply_key": true,
+                          "term_rows": n_term + s.term_rows_delta,
+                          "counters": {"kept": term_total + 5, "failed": 5}, "flags": {"source": "synthetic"}});
+    if s.wide {
+        prov["key_bits"] = json!(128);
+    }
     std::fs::create_dir_all(root.join("_provenance")).unwrap();
     std::fs::write(root.join("_provenance").join(format!("month={tag}.json")), prov.to_string()).unwrap();
     if !s.conflicts.is_empty() {
@@ -234,6 +281,22 @@ fn write_month(root: &Path, s: &Month) {
 fn build_root(root: &Path, months: &[Month]) {
     let _ = std::fs::remove_dir_all(root);
     write_params(root, &params());
+    for m in months {
+        write_month(root, m);
+    }
+}
+
+/// The lock of a `month --key128 --max-ply 50` months root.
+fn wide_params() -> Value {
+    let mut p = params();
+    p["max_ply"] = json!(50);
+    p["key_bits"] = json!(128);
+    p
+}
+
+fn build_root_wide(root: &Path, months: &[Month]) {
+    let _ = std::fs::remove_dir_all(root);
+    write_params(root, &wide_params());
     for m in months {
         write_month(root, m);
     }
@@ -950,4 +1013,218 @@ fn parsers_and_helpers() {
     let (j1, _) = merge::ps_key_hashes(&mut buf, -5, b"e", b"e4", b"Blitz", 1600, 1, 8);
     assert_ne!(j1, k1, "the child is part of the digest key");
     assert_eq!(merge::white_score_avg(3, 1, 6).to_bits(), ((3.0 + 0.5) / 6.0f64).to_bits());
+}
+
+// ── book-v2: months with 128-bit keys ────────────────────────────────────────
+
+type WKey = (i64, i64, String, usize, usize, i32);
+type WVal = (String, i64, i64, [i64; 4]);
+
+/// A book-v2's ps rows by (parent_hash, parent_hash_hi, move_san, event,
+/// elo_band, ply), checking every file's schema, bucket and order.
+fn read_book_wide(out: &Path) -> BTreeMap<WKey, WVal> {
+    let mut rows = BTreeMap::new();
+    for (rel, _) in parquet_files(&out.join("ps")) {
+        let parts: Vec<&str> = rel.split('/').collect();
+        let ev = parts[0].strip_prefix("event=").unwrap();
+        let band: i64 = parts[1].strip_prefix("elo_band=").unwrap().parse().unwrap();
+        let bkt: u32 = parts[2].strip_prefix("bkt").unwrap().strip_suffix(".parquet").unwrap().parse().unwrap();
+        let p = out.join("ps").join(parts[0]).join(parts[1]).join(parts[2]);
+        let schema = ParquetRecordBatchReaderBuilder::try_new(File::open(&p).unwrap()).unwrap().schema().clone();
+        assert_eq!(schema.fields(), merge::book_ps_schema_with(true).fields(), "{rel}: schema");
+        let mut prev: Option<(i64, i64, String, i32)> = None;
+        for b in batches(&p) {
+            let i64c = |k: usize| b.column(k).as_primitive::<Int64Type>().clone();
+            let (h, ch, hi, chi) = (i64c(0), i64c(5), i64c(12), i64c(13));
+            let (san, pe) = (b.column(1).as_string::<i32>(), b.column(4).as_string::<i32>());
+            let ply = b.column(6).as_primitive::<Int32Type>();
+            for i in 0..b.num_rows() {
+                assert_eq!(bucket_of(h.value(i), 512), bkt, "{rel}: bucket");
+                let k = (h.value(i), hi.value(i), san.value(i).to_string(), ply.value(i));
+                assert!(prev.as_ref().is_none_or(|p| k > *p), "{rel}: not strictly increasing at {k:?}");
+                prev = Some(k.clone());
+                let cs: [i64; 4] = std::array::from_fn(|j| i64c(7 + j).value(i));
+                let evi = EVENTS.iter().position(|x| *x == ev).unwrap();
+                let bi = BANDS.iter().position(|&x| x == band).unwrap();
+                let key = (k.0, k.1, k.2, evi, bi, k.3);
+                let v = (pe.value(i).to_string(), ch.value(i), chi.value(i), cs);
+                assert!(rows.insert(key.clone(), v).is_none(), "duplicate key {key:?}");
+            }
+        }
+    }
+    rows
+}
+
+fn expected_wide(months: &[Month]) -> BTreeMap<WKey, WVal> {
+    let mut e: BTreeMap<WKey, WVal> = BTreeMap::new();
+    for m in months {
+        for r in &m.rows {
+            let v = e
+                .entry((r.h, r.hi, r.san.clone(), r.ev, r.band, r.ply))
+                .or_insert((r.epd.clone(), r.child, r.chi, [0; 4]));
+            assert_eq!((&v.0, v.1, v.2), (&r.epd, r.child, r.chi), "a test case gave one key two EPDs or children");
+            for (k, x) in [r.w, r.d, r.b, r.w + r.d + r.b].into_iter().enumerate() {
+                v.3[k] += x;
+            }
+        }
+    }
+    e
+}
+
+/// Two 128-bit months walked to ply 50. Hash `c` is shared by two positions
+/// (EPD 4 under high half 8, EPD 6 under high half -5: the key order is the
+/// reverse of the EPD order), which play the same move in the same slice.
+fn wide_months() -> Vec<Month> {
+    let (a, n, c) = (hb(0, 3), hb(511, -1), hb(7, 11));
+    let m1 = vec![
+        wrow(a, 70, "e4", 0, 5, 1, 1, 900, 71, [3, 1, 2]),
+        wrow(a, 70, "e4", 0, 5, 1, 45, 900, 71, [0, 1, 0]),
+        wrow(c, 8, "O-O", 3, 3, 4, 9, 904, 72, [0, 2, 0]),
+        wrow(c, -5, "O-O", 3, 3, 6, 9, 907, 76, [1, 0, 0]),
+        wrow(c, -5, "Nf3", 3, 3, 6, 9, 905, 73, [1, 0, 0]),
+        wrow(n, 1, "c5", 2, 8, 3, 2, 903, 74, [1, 1, 1]),
+    ];
+    let m2 = vec![
+        wrow(a, 70, "e4", 0, 5, 1, 1, 900, 71, [10, 5, 7]),
+        wrow(c, 8, "O-O", 3, 3, 4, 9, 904, 72, [1, 0, 0]),
+        wrow(c, -5, "Nf3", 3, 3, 6, 9, 905, 73, [0, 0, 2]),
+        wrow(c, -5, "a3", 3, 4, 6, 9, 906, 75, [1, 0, 0]),
+        wrow(n, 1, "c5", 2, 8, 3, 50, 903, 74, [0, 0, 1]),
+    ];
+    let s = (START_HASH, START_HASH_HI);
+    let t1 = vec![(a, 70, 0, 0, 3, [1, 0, 0, 1]), (c, 8, 1, 3, 50, [0, 1, 0, 1]), (c, -5, 1, 3, 50, [2, 0, 0, 2]),
+                  (s.0, s.1, 0, 0, 0, [1, 0, 0, 1]), (n, 1, 0, 1, 44, [0, 0, 1, 1])];
+    let t2 = vec![(a, 70, 0, 0, 3, [0, 0, 2, 2]), (c, 8, 1, 3, 50, [1, 0, 0, 1]), (s.0, s.1, 0, 1, 0, [0, 0, 1, 1])];
+    vec![wmonth(2099, 1, m1, t1), wmonth(2099, 2, m2, t2)]
+}
+
+const WBASE: &str = "2099_1..2099_2";
+
+#[test]
+fn book_v2_end_to_end() {
+    let t = Case::new("v2");
+    let months = wide_months();
+    build_root_wide(&t.root(), &months);
+    let o = t.merge("book", WBASE, &[]);
+    assert_eq!(code(&o), 0, "{}", log(&o));
+    let out = t.book("book");
+    assert!(out.join("_BOOK.DONE").exists());
+    let (got, want) = (read_book_wide(&out), expected_wide(&months));
+    assert_eq!(got, want, "the book's rows: counts summed per 128-bit key, plies past 30 kept");
+    // The two positions under hash c stay apart, also where they share a move.
+    let c = hb(7, 11);
+    assert_eq!(got[&(c, 8, "O-O".to_string(), 3, 3, 9)], (epd(4, 9), 904, 72, [1, 2, 0, 3]));
+    assert_eq!(got[&(c, -5, "O-O".to_string(), 3, 3, 9)], (epd(6, 9), 907, 76, [1, 0, 0, 1]));
+    // ... and are listed as a 64-bit collision, for the record.
+    let want_coll: BTreeSet<(i64, String)> = [(c, epd(4, 9)), (c, epd(6, 9))].into_iter().collect();
+    assert_eq!(collisions(&out), want_coll);
+    let meta: Value = serde_json::from_str(&std::fs::read_to_string(out.join("_book.meta.json")).unwrap()).unwrap();
+    assert_eq!(meta["schema"], json!("book-v2"));
+    assert_eq!(meta["collisions"]["status"], json!("resolved by the 128-bit key"));
+    assert_eq!(meta["totals"]["rows"].as_u64().unwrap(), want.len() as u64);
+    let lock: Value = serde_json::from_str(&std::fs::read_to_string(out.join("_merge_params.json")).unwrap()).unwrap();
+    assert_eq!(lock["schema"], json!("book-v2"));
+    assert_eq!(lock["input_params"]["key_bits"], json!(128));
+    assert!(std::fs::read_to_string(out.join("README.md")).unwrap().contains("parent_hash_hi"));
+    // Term: keyed by the whole key, the high half last.
+    let mut term = BTreeMap::new();
+    for rel in parquet_files(&out.join("term")).keys() {
+        let b: u32 = rel.strip_prefix("bkt").unwrap().strip_suffix(".parquet").unwrap().parse().unwrap();
+        let p = out.join("term").join(rel);
+        let schema = ParquetRecordBatchReaderBuilder::try_new(File::open(&p).unwrap()).unwrap().schema().clone();
+        assert_eq!(schema.fields(), term_schema_full(true, true).fields());
+        let mut prev = None;
+        for bt in batches(&p) {
+            let i64c = |k: usize| bt.column(k).as_primitive::<Int64Type>().clone();
+            let i32c = |k: usize| bt.column(k).as_primitive::<Int32Type>().clone();
+            for i in 0..bt.num_rows() {
+                let key = (i64c(0).value(i), i64c(8).value(i), i32c(1).value(i), i32c(2).value(i), i32c(3).value(i));
+                assert_eq!(bucket_of(key.0, 512), b, "routing");
+                assert!(prev.is_none_or(|p| key > p), "order");
+                prev = Some(key);
+                let cs: [i64; 4] = std::array::from_fn(|k| i64c(4 + k).value(i));
+                assert!(term.insert(key, cs).is_none());
+            }
+        }
+    }
+    let mut want_term = BTreeMap::new();
+    for m in &months {
+        for w in &m.wterm {
+            let v = want_term.entry((w.0, w.1, w.2, w.3, w.4)).or_insert([0i64; 4]);
+            for k in 0..4 {
+                v[k] += w.5[k];
+            }
+        }
+    }
+    assert_eq!(term, want_term, "term rows by (position_hash, position_hash_hi, kind, reason, end_ply)");
+    // Threads cannot change a byte.
+    let o = t.merge("book1", WBASE, &["--threads", "1"]);
+    assert_eq!(code(&o), 0, "{}", log(&o));
+    assert_eq!(parquet_files(&out.join("ps")), parquet_files(&t.book("book1").join("ps")));
+    assert_eq!(parquet_files(&out.join("term")), parquet_files(&t.book("book1").join("term")));
+}
+
+#[test]
+fn book_v2_violations_fail() {
+    let a = hb(0, 3);
+    let mut cases: Vec<(&str, Vec<Month>, &str)> = Vec::new();
+    let with = |extra: Row| {
+        let mut ms = wide_months();
+        ms[1].rows.push(extra);
+        ms
+    };
+    // One key, two positions.
+    cases.push(("two_epds", with(wrow(a, 70, "d4", 0, 5, 2, 1, 950, 77, [1, 0, 0])), "two EPDs under one 128-bit key"));
+    // One position, two keys.
+    cases.push(("two_keys", with(wrow(a, 71, "d4", 0, 5, 1, 1, 950, 77, [1, 0, 0])), "one EPD under two 128-bit keys"));
+    // One edge, two child keys (the low halves agree).
+    let mut ms = wide_months();
+    ms[1].rows[0].chi = 99;
+    cases.push(("child_hi", ms, "child disagreement"));
+    // A ply past the months' cap.
+    cases.push(("ply51", with(wrow(a, 70, "d4", 0, 5, 1, 51, 950, 77, [1, 0, 0])), "outside 1..=50"));
+    // A no-move game somewhere other than the start position's whole key.
+    let mut ms = wide_months();
+    ms[1].wterm.push((START_HASH, START_HASH_HI + 1, 0, 0, 0, [1, 0, 0, 1]));
+    cases.push(("term_start", ms, "only the start position"));
+    for (name, months, needle) in cases {
+        let t = Case::new(&format!("v2_viol_{name}"));
+        build_root_wide(&t.root(), &months);
+        let o = t.merge("book", WBASE, &["--threads", "2"]);
+        assert_eq!(code(&o), 1, "{name}: {}", log(&o));
+        assert!(log(&o).contains(needle), "{name}: want {needle:?} in:\n{}", log(&o));
+        assert!(!t.book("book").join("_BOOK.DONE").exists(), "{name}: the book was finished");
+    }
+}
+
+#[test]
+fn book_v2_preflight_refusals() {
+    let run = |name: &str, months: Vec<Month>, prep: &dyn Fn(&Case), needle: &str| {
+        let t = Case::new(&format!("v2_refuse_{name}"));
+        build_root_wide(&t.root(), &months);
+        prep(&t);
+        let o = t.merge("book", WBASE, &[]);
+        assert_eq!(code(&o), 5, "{name}: {}", log(&o));
+        assert!(log(&o).contains(needle), "{name}: want {needle:?} in:\n{}", log(&o));
+        assert!(!t.book("book").join("_done").exists(), "{name}: wrote buckets");
+    };
+    let set = |k: &'static str, v: Value| {
+        move |t: &Case| {
+            let mut p = wide_params();
+            p[k] = v.clone();
+            write_params(&t.root(), &p);
+        }
+    };
+    run("bits", wide_months(), &set("key_bits", json!(256)), "only 64-bit months");
+    run("cap", wide_months(), &set("max_ply", json!(201)), "outside 1..=200");
+    // The lock says 64-bit, the months are 128-bit (and the other way round in preflight_refusals).
+    run("lock64", wide_months(), &|t| {
+        let mut p = wide_params();
+        p.as_object_mut().unwrap().remove("key_bits");
+        write_params(&t.root(), &p);
+    }, "max_ply is 50, not 30");
+    // A --key128 month fails on a conflict, so a finished one has no record of any.
+    let mut ms = wide_months();
+    ms[0].conflicts = vec![(hb(7, 11), epd(4, 9), epd(6, 9))];
+    run("conflicts", ms, &|_| {}, "conflict record");
 }

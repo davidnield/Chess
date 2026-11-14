@@ -69,8 +69,29 @@ positions share a 64-bit hash.
 
 A 128-bit key is a position, so one key with two EPDs or one edge with two children fails the
 month (nothing is promoted) instead of landing in `_conflicts`. The month dir's lock records
-`key_bits: 128`, so the two kinds never share a dir, and `merge` refuses such months: it writes
-the 64-bit book-v1.
+`key_bits: 128`, so the two kinds never share a dir.
+
+`merge` over such months writes **book-v2** (the lock's `key_bits` selects it; the ply cap is the
+months' `--max-ply`, up to 200, where book-v1 is fixed at 30). It still streams and groups by the
+low half, and tells a group's positions apart by the high half instead of by EPD:
+
+- rows are strictly increasing on (parent_hash, parent_hash_hi, move_san, ply), and the high
+  halves are the last columns of the ps and term files;
+- `parent_epd` is a function of the key: one key with two EPDs, one EPD under two keys, or an
+  edge whose months disagree on either half of the child key stops the bucket;
+- term rows are keyed by (position_hash, position_hash_hi, kind, reason, end_ply), and a no-move
+  game must sit at the start position's whole key;
+- `_collisions.parquet` still lists the 64-bit hashes shared by two or more positions, for the
+  record and for consumers that key by the low half; there is no expected range and no positive
+  control, since a `--key128` month with a conflict never finishes (a months root with
+  `_conflicts` records is refused);
+- the digests cover both halves of both keys.
+
+`tests/merge.rs` builds 128-bit months to ply 50 with a shared 64-bit hash whose key order is
+the reverse of its EPD order (`book_v2_*`). `verify_book.py` and
+`compare_explorer_outputs.py book` read either kind (the book's lock says which) and hold a
+book-v2's high halves to python-chess; `_test_verify_book.py` builds one. `evals` and
+`pool_from_book.py` are still book-v1 only and refuse a book-v2.
 
 The Python side of the contract is `python/zobrist128.py` (python-chess's hasher over the high
 halves). `selftest` holds shakmaty's table to it key by key; `_test_rust_extract.py` holds both

@@ -819,6 +819,13 @@ def check_cap(book: Path, max_ply: int, declared: int | None = None) -> None:
     A book without _merge_params.json must have its cap declared (--book-cap): an
     unknown cap is not evidence of a safe one (follow-up review R6). A declared cap that
     disagrees with the recorded one is refused too."""
+    mp = Path(book) / "_merge_params.json"
+    if mp.exists():
+        schema = json.loads(mp.read_text(encoding="utf-8")).get("schema", "book-v1")
+        if schema != "book-v1":
+            # A book-v2 keys positions by 128 bits; summing its rows on parent_hash alone
+            # would merge the positions the high half tells apart.
+            raise SystemExit(f"FATAL: {book} is a {schema} book; pool_from_book reads book-v1 only")
     cap = book_cap(book)
     if cap is None and declared is None:
         raise SystemExit(f"FATAL: {book} records no coverage cap (_merge_params.json); "
