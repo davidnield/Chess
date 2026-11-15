@@ -120,6 +120,16 @@ The contract is the blog repo's `docs/explorer-merge-spec.md`; the code is
 `src/merge.rs` and `src/stage.rs`, and `tests/merge.rs` runs the binary end to
 end on synthetic month roots.
 
+- **Input events.** The months hold the six speeds, or a subset of them that
+  was given to `month --events` in the merge's own order (Blitz, Bullet,
+  Classical, Correspondence, Rapid, UltraBullet): for example `--events Blitz
+  Classical Rapid`. The order matters because a month sorts its rows by an
+  event's position in its own list and the merge by its position in that fixed
+  one; any other list is refused before a bucket is read
+  (`merge::months_events`), and a row of a speed the months do not declare
+  fails its bucket. A slice the months do not hold has no file and a zero row
+  in `_slices`. The lock records the months' events, so a book begun on three
+  speeds cannot be continued with six.
 - **Output (book-v1).** `ps/event=E/elo_band=B/bkt<iii>.parquet` (every column
   REQUIRED, `child_eval` dropped, `white_score_avg` added, zstd 3, 262,144-row
   groups, page indexes), unique on (parent_hash, parent_epd, move_san, event,

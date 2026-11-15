@@ -5,6 +5,9 @@
 //! INPUT  a months root written by `month --ply-key` (30 plies, 512 buckets):
 //!        month=Y_M/bkt=i/part-0000.parquet, strictly increasing on PsKey,
 //!        plus each month's manifest, provenance, term monthly and sentinel.
+//!        The months hold the six speeds or a subset of them given in EVENTS
+//!        order (`month --events Blitz Classical Rapid`); a slice the months
+//!        do not hold has no file, and a zero row in _slices.
 //! OUTPUT <out>/ps/event=E/elo_band=B/bkt<iii>.parquet, one file per (slice,
 //!        bucket) with a row, strictly increasing on (parent_hash, parent_epd,
 //!        move_san, ply) and unique on the 6-column key; term/bkt<iii>.parquet;
@@ -78,7 +81,8 @@ pub const BOOK_SCHEMA_WIDE: &str = "book-v2";
 /// The deepest ply a book-v2 may hold (a row's ply is a u8 in the merge).
 pub const MAX_PLY_WIDE: i32 = 200;
 pub const ZSTD_LEVEL: i32 = 3;
-/// The six speeds, alphabetical: the months' event index is this order.
+/// The six speeds, alphabetical. The merge orders rows by an event's position here, and the
+/// months by its position in their own `--events` list: see `months_events`.
 pub const EVENTS: [&str; 6] = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"];
 pub const SLICES: usize = EVENTS.len() * BANDS.len();
 /// Columns whose dictionary encoding `--no-dictionary` may turn off.
@@ -670,6 +674,8 @@ pub struct Plan {
     pub wide: bool,
     /// The months' --max-ply: 30 for a book-v1, the lock's value for a book-v2.
     pub max_ply: i32,
+    /// Which of EVENTS the months hold (their `--events`): a row of any other speed is refused.
+    pub events: [bool; EVENTS.len()],
 }
 
 impl Plan {
@@ -704,6 +710,26 @@ fn read_manifest(p: &Path) -> Result<ManNums> {
     })
 }
 
+/// The events a months root may hold, from its `_extract_params.json`: a non-empty subset of
+/// the six speeds, listed in EVENTS order. The order is required, not cosmetic: a month sorts
+/// its rows by an event's position in its own `--events` list, the merge by its position in
+/// EVENTS, and the two agree only for a list in EVENTS order. Returns which speeds are in.
+pub fn months_events(v: &Value) -> std::result::Result<[bool; EVENTS.len()], String> {
+    let bad = || format!("events is {v}, not a non-empty subset of the six speeds in their order {EVENTS:?}");
+    let list = v.as_array().filter(|a| !a.is_empty()).ok_or_else(bad)?;
+    let mut held = [false; EVENTS.len()];
+    let mut next = 0usize;
+    for e in list {
+        let i = e.as_str().and_then(|s| EVENTS.iter().position(|x| *x == s)).ok_or_else(bad)?;
+        if i < next {
+            return Err(bad());
+        }
+        held[i] = true;
+        next = i + 1;
+    }
+    Ok(held)
+}
+
 fn preflight(cfg: &Config) -> Result<Plan> {
     let root = std::path::absolute(&cfg.months_root)?;
     let mut bad: Vec<String> = Vec::new();
@@ -711,7 +737,6 @@ fn preflight(cfg: &Config) -> Result<Plan> {
     // 1. Settings.
     let pp = root.join("_extract_params.json");
     let params = read_json(&pp).map_err(|e| refused(format!("{e:#}")))?;
-    let want_events: Vec<Value> = EVENTS.iter().map(|e| json!(e)).collect();
     if params["producer"] != json!("rust-month") {
         bad.push(format!("producer is {}, not \"rust-month\"", params["producer"]));
     }
@@ -746,9 +771,10 @@ fn preflight(cfg: &Config) -> Result<Plan> {
     if params["buckets"] != json!(BUCKETS) {
         bad.push(format!("buckets is {}, not {BUCKETS}", params["buckets"]));
     }
-    if params["events"] != Value::Array(want_events) {
-        bad.push(format!("events is {}, not the six speeds {EVENTS:?}", params["events"]));
-    }
+    let events = months_events(&params["events"]).unwrap_or_else(|why| {
+        bad.push(why);
+        [true; EVENTS.len()]
+    });
     if !bad.is_empty() {
         return Err(refused(format!("{}: {}", pp.display(), bad.join("; "))));
     }
@@ -921,7 +947,7 @@ fn preflight(cfg: &Config) -> Result<Plan> {
         )));
     }
     let term_bytes = months.iter().map(|m| m.term_bytes).sum();
-    Ok(Plan { months_root: root, months, params, producer, controls, other_conflicts, term_bytes, wide, max_ply })
+    Ok(Plan { months_root: root, months, params, producer, controls, other_conflicts, term_bytes, wide, max_ply, events })
 }
 
 /// The settings lock's content.
@@ -1896,6 +1922,9 @@ impl<'a> BucketMerge<'a> {
         let Some(ev) = EVENTS.iter().position(|e| *e == ev_s) else {
             bail!("{}: event {ev_s:?} is not one of {EVENTS:?}", at());
         };
+        if !self.ctx.plan.events[ev] {
+            bail!("{}: event {ev_s:?} is not one of the months' events {}", at(), self.ctx.plan.params["events"]);
+        }
         let band_v = bt.band.value(i);
         let Some(band) = BANDS.iter().position(|&x| x == band_v) else {
             bail!("{}: elo_band {band_v} is not one of {BANDS:?}", at());

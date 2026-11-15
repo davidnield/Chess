@@ -763,6 +763,17 @@ fn preflight_refusals() {
         p["key_bits"] = json!(128);
         write_params(&t.root(), &p);
     }, &[], "key_bits");
+    // events: the six speeds or a subset of them in EVENTS order, nothing else
+    for (name, events) in [("events_order", json!(["Blitz", "Rapid", "Classical"])),
+                           ("events_unknown", json!(["Blitz", "Chess960"])),
+                           ("events_twice", json!(["Blitz", "Blitz"])),
+                           ("events_empty", json!([])), ("events_string", json!("Blitz"))] {
+        run(name, &|t| {
+            let mut p = params();
+            p["events"] = events.clone();
+            write_params(&t.root(), &p);
+        }, &[], "not a non-empty subset of the six speeds in their order");
+    }
     run("file_count", &|t| {
         let mut m = base_months().remove(1);
         m.man_files_delta = 1;
@@ -795,6 +806,76 @@ fn preflight_refusals() {
     let o = t.merge("book", BASE, &[]);
     assert_eq!(code(&o), 0, "{}", log(&o));
     assert_book(&t.book("book"), &months);
+}
+
+// ── 5b. months that hold a subset of the six speeds ──────────────────────────
+
+/// The base case with only its Blitz, Classical and Rapid rows, as `month --events Blitz
+/// Classical Rapid` would write it.
+fn three_speed_months() -> Vec<Month> {
+    let mut months = base_months();
+    for m in &mut months {
+        m.rows.retain(|r| [0, 2, 4].contains(&r.ev));
+    }
+    months
+}
+
+fn three_speed_root(root: &Path, months: &[Month]) {
+    build_root(root, months);
+    let mut p = params();
+    p["events"] = json!(["Blitz", "Classical", "Rapid"]);
+    write_params(root, &p);
+}
+
+#[test]
+fn months_of_three_speeds() {
+    let t = Case::new("three_speeds");
+    let months = three_speed_months();
+    assert!(months.iter().all(|m| !m.rows.is_empty()));
+    three_speed_root(&t.root(), &months);
+    let o = t.merge("book", BASE, &[]);
+    assert_eq!(code(&o), 0, "{}", log(&o));
+    let out = t.book("book");
+    assert!(out.join("_BOOK.DONE").exists());
+    assert_book(&out, &months);
+    // Only the three speeds have slice files; _slices still lists all 54, the others at zero.
+    let have: BTreeSet<String> = parquet_files(&out.join("ps")).into_keys().collect();
+    let held = ["event=Blitz/", "event=Classical/", "event=Rapid/"];
+    assert!(!have.is_empty() && have.iter().all(|f| held.iter().any(|e| f.starts_with(e))), "{have:?}");
+    let sl = batches(&out.join("_slices.parquet"));
+    assert_eq!(sl.iter().map(|b| b.num_rows()).sum::<usize>(), 54);
+    let mut absent_rows = 0i64;
+    for b in &sl {
+        let (ev, rows) = (b.column(0).as_string::<i32>(), b.column(3).as_primitive::<Int64Type>());
+        for i in 0..b.num_rows() {
+            if !["Blitz", "Classical", "Rapid"].contains(&ev.value(i)) {
+                absent_rows += rows.value(i);
+            }
+        }
+    }
+    assert_eq!(absent_rows, 0);
+    // The lock and the meta record the months' events, so six-speed months cannot continue it.
+    for f in ["_merge_params.json", "_book.meta.json"] {
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(out.join(f)).unwrap()).unwrap();
+        let p = if f == "_merge_params.json" { &v["input_params"] } else { &v["input"]["params"] };
+        assert_eq!(p["events"], json!(["Blitz", "Classical", "Rapid"]), "{f}");
+    }
+    write_params(&t.root(), &params());
+    let o = t.merge("book", BASE, &[]);
+    assert_eq!(code(&o), 5, "six-speed params against a three-speed book: {}", log(&o));
+    assert!(log(&o).contains("_merge_params.json"), "{}", log(&o));
+
+    // A row of a speed the months do not declare fails its bucket.
+    let t = Case::new("three_speeds_stray");
+    let mut months = three_speed_months();
+    let bad_bkt = 5u32;
+    months[0].rows.push(row(hb(bad_bkt, 1), "d4", 1, 0, 2, 1, 2, [1, 0, 0]));
+    three_speed_root(&t.root(), &months);
+    let o = t.merge("book", BASE, &["--threads", "2"]);
+    assert_eq!(code(&o), 1, "{}", log(&o));
+    assert!(log(&o).contains("is not one of the months' events"), "{}", log(&o));
+    assert!(!t.book("book").join("_done").join(format!("bkt{bad_bkt:03}.DONE")).exists());
+    assert!(!t.book("book").join("_BOOK.DONE").exists());
 }
 
 // ── 6. month conservation ────────────────────────────────────────────────────

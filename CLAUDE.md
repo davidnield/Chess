@@ -242,7 +242,10 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
 - **The all-time book is `explorer-extract merge`** over ply-keyed Rust months (book-v1:
   `ps/event=E/elo_band=B/bkt<iii>.parquet` plus pooled `term/`). Its settings lock refuses any other
   build, month set or writer settings, so a book is continued only by the exe that began it — delete
-  the book dir after a code change. `verify_book.py` and `compare_explorer_outputs.py book` hold a
+  the book dir after a code change. The months may hold a subset of the six speeds, but only if
+  `month --events` listed them in the merge's order (`--events Blitz Classical Rapid`): a month
+  sorts rows by an event's position in its own list, so `merge` refuses any other order, and it
+  can only do so after the extraction has been paid for. `verify_book.py` and `compare_explorer_outputs.py book` hold a
   book to its months with DuckDB and python-chess alone; the rest of the contract is in the crate
   README.
 - **Build and check the Rust tool:** `RUSTUP_TOOLCHAIN=stable` (this machine's stable is the pinned
