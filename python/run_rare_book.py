@@ -95,7 +95,8 @@ def code_sha(files=None) -> str:
     h = hashlib.sha256()
     for p in (code_files() if files is None else files):
         h.update(p.name.encode())
-        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
+        data = p.read_bytes()
+        h.update(data.replace(b"\r\n", b"\n") if p.suffix == ".py" else data)
     return h.hexdigest()
 
 
@@ -160,6 +161,13 @@ def snapshot(work: Path, code: str, source: Path = HERE) -> Path:
     return dest
 
 
+def lookahead_depth(args):
+    # argparse accepts both spellings, and its last occurrence wins.
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    ap.add_argument("--lookahead-floor", type=int, default=0)
+    return ap.parse_known_args(args)[0].lookahead_floor
+
+
 def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
     """The round loop. build(args, log) and verify(book, overlay_out, frontier_args, log) default
     to the snapshot's build_budget_books.py and rare_verify.py; tests pass their own."""
@@ -211,12 +219,24 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
         args += ["--uncut-own-moves", str(a.lookup), "--rare-verification"]
         if overlay:
             args += ["--engine-candidates", str(overlay)]
+        outputs = [book, Path(str(book)+".meta.json"), Path(str(book)+".rare.json")]
+        depth = lookahead_depth(args)
+        audit_path = Path(str(book)+".lookahead-audit.json")
+        if depth:
+            outputs.extend([Path(str(book)+".lookahead-inputs.parquet"), Path(str(book)+".lookahead.json"), audit_path])
+
+        def build_and_check():
+            build(args, rd / "build.log")
+            if depth:
+                # Use the captured implementation, even if the live worktree changes.
+                run([py, "-X", "utf8", kept / "lookahead_audit.py", book, audit_path,
+                     "--depth", str(depth)], rd / "lookahead-audit.log", kept)
+
         built, reused = stage(
             rd / "build.receipt.json",
             {"code": code, "command": args, "lookup": lookup, "baseline_receipt": sha(receipt),
              "overlay_in": sha(overlay) if overlay else None},
-            [book, Path(str(book) + ".meta.json"), Path(str(book) + ".rare.json")],
-            lambda: build(args, rd / "build.log"), guard)
+            outputs, build_and_check, guard)
         ours = pl.read_parquet(book).filter((pl.col("side_to_move") == a.colour)
                                             & pl.col("best_move").is_not_null())
         if ours.height != int(budget) or ours["position_hash"].n_unique() != int(budget):

@@ -149,7 +149,10 @@ pub fn build_graph_csr<'py>(
     let ecols = graph::EdgeCols { san: esan.as_slice()?, bare: ebare.as_slice()?,
                                   ws: ews.as_slice()?, reply_mass: emass.as_slice()?,
                                   additional: eadd.as_slice()? };
+    let post = rows.get_item("lookahead_veto")?
+        .map(|d| d.extract::<std::collections::HashMap<i64, Vec<i64>>>()).transpose()?.unwrap_or_default();
     let extras = graph::RowExtras {
+        lookahead: post.into_iter().map(|(h, moves)| (key(h), moves)).collect(),
         src_san: ssan.as_slice()?, src_bare: sbare.as_slice()?, src_child: &src_child,
         named: named.as_slice()?, aux: aux_v.as_deref(), m_ptr: mp.as_slice()?, m: &m,
         m_child: &m_child, v_ptr: vp.as_slice()?, v_bare: vb.as_slice()?,

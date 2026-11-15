@@ -209,12 +209,27 @@ def main():
     checked_moves = {}
     excluded = bc.verified_exclusions(proposal_input, meta.get("max_eval_loss"),
                 max_score_loss=meta.get("max_score_loss"), our_white=our_white, score_floor=score_floor)
+    lookahead_report = None
+    base_book = Path(str(meta_p).removesuffix(".meta.json"))
+    receipt = base_book.parent / "build.receipt.json"
+    if receipt.exists():
+        bound = json.loads(receipt.read_text(encoding="utf-8"))["outputs"]
+        if base_book.name + ".lookahead.json" in bound and not meta.get("lookahead_floor"):
+            raise ValueError("receipted veto file missing from book metadata")
     if meta.get("lookahead_floor"):
-        # --lookahead-floor: the builder's vetoes, from the sidecar beside the recipe meta
-        import lookahead_floor
-        side = Path(str(meta_p)[:-len(".meta.json")] + ".lookahead.json")
-        excluded = lookahead_floor.merged(excluded, {
-            r["position_hash"]: set(r["moves"]) for r in json.loads(side.read_text())})
+        from lookahead_audit import audit
+        if meta["perspective"] != a.colour:
+            raise ValueError("book colour differs from the lookahead recipe")
+        # Audit uses the pre-veto admitted menu. Verified engine exclusions still enter
+        # classify before the gates. The lookahead veto only applies after admission.
+        lookahead_report = audit(base_book, meta)
+        if Path(a.book).resolve() != base_book.resolve():
+            fields = ["position_hash", "best_move"]
+            base_rows = (pl.read_parquet(base_book)
+                         .filter((pl.col("side_to_move") == a.colour) & pl.col("best_move").is_not_null())
+                         .select(fields).sort(fields))
+            if not ours.filter(~pl.col("_ext")).select(fields).sort(fields).equals(base_rows):
+                raise ValueError("derived book prescriptions differ from its audited base")
     from book_graph import rare_policy
     rare_floor, verified_at = rare_policy(
         meta, pl.read_parquet(proposal_input) if proposal_input is not None else None)
@@ -284,6 +299,8 @@ def main():
             "flagged": int(out["flagged"].sum()),
             "missing_child_eval": int(out["child_cp_us"].is_null().sum()),
             "engine_eval_conflicts": conflicts}
+    if lookahead_report is not None:
+        summ["lookahead_audit"] = lookahead_report
     if "fresh" in out.columns:
         summ["fresh"] = dict(out.filter(pl.col("fresh").is_not_null()).group_by("fresh").len().iter_rows())
     selected = [r for r in rows if r["selected_cloud"]]

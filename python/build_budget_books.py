@@ -20,10 +20,8 @@ Out-of-book positions are always valued by the weak-player stop model (--weak-po
 replaced by sampled tables (--sampled-stop / --sampled-other); strict source and crack at parents
 are always on.
 
---lookahead-floor N (default 0 = off, an exact no-op; lookahead_floor.py): the absolute gate
-checks the eval right after one move. This also vetoes a move after which a followed reply leaves
-no move that passes that gate, N of our moves ahead; a large N (99) is the fixed point, where a
-booked line can go under the floor only where the opponent can force it.
+--lookahead-floor N uses the gated graph and prunes its admitted menus after following up to N
+opponent replies. It records the pre-veto menus, boundaries and floor ranks for independent audit.
 
 Outputs one book per --budget from a single curve build. Books are
 replay_holdout/score_repertoire-compatible; `value` on booked rows is the
@@ -193,7 +191,7 @@ def _set_frontier(con, hashes) -> None:
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
                            min_games: int, admit=None, engine_moves=None, reply_overlay=None,
-                           uncut_own: bool = False) -> pl.DataFrame:
+                           uncut_own: bool = False, source_moves=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -237,7 +235,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         floor += f" OR split_part(s.parent_epd, ' ', 2) = '{our_turn}'"
     frames: list[pl.DataFrame] = []
     reach: dict[int, float] = {root: 1.0}
-    ply: dict[int, int] = {root: 0}
     frontier = [root]
     fetched: set[int] = set()
     lvl = 0
@@ -271,11 +268,13 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
             # parents and children of this level, for the gates' eval lookups
             admit.prefetch(df["parent_hash"].to_list()
                            + df["child_hash"].drop_nulls().to_list())
+        source_children = (unrecorded_sources(df, source_moves, getattr(admit, "excluded", {}) or {})
+                           if source_moves is not None and lvl < max_ply and (lvl % 2 == 0) == our_white else {})
         if df.height:
             for ph, grp in df.group_by("parent_hash", maintain_order=True):
                 ph = ph[0] if isinstance(ph, tuple) else ph
                 r = reach.get(ph, 0.0)
-                p_ply = ply.get(ph, 0)
+                p_ply = lvl
                 if p_ply >= max_ply:
                     continue
                 tot = int(grp["total"].sum())
@@ -286,6 +285,13 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                     rows.extend({"move_san": san, "child_hash": ch, "total": 0, "engine": True}
                                 for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
+                if ph in source_children:
+                    # Fetch possible continuations. Final assembly decides whether to restore it.
+                    child = source_children[ph]
+                    if child not in {row["child_hash"] for row in rows}:
+                        rows.append({"child_hash": child, "total": 0})
+                        if allowed is not None:
+                            allowed = allowed | {child}
                 for row in rows:
                     ch = row["child_hash"]
                     if ch is None:
@@ -305,11 +311,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                         if ch in fetched:
                             reopened += 1
                         reach[ch] = cr
-                        # A position's side to move is fixed, so every path to it
-                        # has the same parity and only the DEPTH can differ. Keep
-                        # the shallowest, which is what level-order discovery gave
-                        # before re-propagation existed.
-                        ply[ch] = min(ply.get(ch, p_ply + 1), p_ply + 1)
                         nxt[ch] = cr
         frontier = list(nxt)
         lvl += 1
@@ -348,10 +349,33 @@ class SanCoder:
         return self.bares(pl.Series(list(sans), dtype=pl.String)).tolist()
 
 
+def unrecorded_sources(frame, sources, excluded):
+    """Replay only legal, unrecorded source moves on this frontier."""
+    from build_baseline_books import child_of
+    if not frame.height or not len(sources):
+        return {}
+    parents = frame.select("parent_hash", "parent_epd").unique("parent_hash")
+    keys = parents["parent_hash"].to_numpy()
+    if hasattr(sources, "h"):
+        idx = np.minimum(np.searchsorted(sources.h, keys), len(sources.h) - 1)
+        src = [sources.san[i] if hit else None for i, hit in zip(idx, sources.h[idx] == keys)]
+    else:
+        src = [sources.get(h) for h in keys]
+    missing = (parents.with_columns(pl.Series("move_san", src, dtype=pl.String)).drop_nulls()
+               .join(frame.select("parent_hash", "move_san"), on=["parent_hash","move_san"], how="anti"))
+    out = {}
+    for h, epd, san in missing.iter_rows():
+        if san.rstrip("+#") not in excluded.get(h, ()):
+            child = child_of(epd, san)
+            if child is not None:
+                out[h] = child
+    return out
+
+
 def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                               eps: float, max_ply: int, share_floor: float,
                               min_games: int, admit=None, engine_moves=None, reply_overlay=None,
-                              uncut_own: bool = False) -> pl.DataFrame:
+                              uncut_own: bool = False, source_moves=None) -> pl.DataFrame:
     """collect_subgraph_edges with the walk and the gates in Rust (book_builder_rs.RsCollector):
     the same DuckDB scans, the same sorted rows, the same frames returned. With an opponent
     prior (reply_overlay) each level's rows are replaced as in collect_subgraph_edges, and the
@@ -422,6 +446,9 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                 from eval_arrays import lookup_evals
                 new = col.unseen(par, ch, has)
                 col.store(new, np.asarray(lookup_evals(new, *admit._mm), np.int16))
+            if source_moves is not None and (lvl % 2 == 0) == our_white and lvl < max_ply:
+                restored = unrecorded_sources(df, source_moves, admit.excluded if admit else {})
+                col.set_source_children(np.fromiter(restored, np.int64), np.fromiter(restored.values(), np.int64))
             col.walk(par, ch, has, df["total"].cast(pl.Int64).to_numpy(),
                      coder.sans(df["move_san"]), coder.bares(df["move_san"]),
                      None if reply_overlay is None else
@@ -577,15 +604,10 @@ def main() -> int:
                          "candidate. Writes <book>.rare.json: the decisions where such a move "
                          "would have excluded a rival. Default off = the old rule exactly.")
     ap.add_argument("--lookahead-floor", type=int, default=0, metavar="N",
-                    help="Veto a move that passes the absolute gate (--robustness-floor) when a "
-                         "reply the collector follows leaves no move that passes it. N = how many "
-                         "of our moves ahead a dead end is propagated (1 = one reply ahead; the "
-                         "walk stops at its fixed point, so a large N such as 99 prunes every "
-                         "decision that cannot avoid the floor). Also vetoes a source move under "
-                         "the bar where the node keeps a passing move. The "
-                         "vetoes join the verified exclusions and are written to "
-                         "<book>.lookahead.json. Contract in lookahead_floor.py. Default 0 = off, "
-                         "an exact no-op.")
+                    help="Prune the final admitted move menu across followed opponent replies "
+                         "up to N of our decisions ahead. Keep a known passing alternative; report "
+                         "voids and unknown frontiers separately. Write the pre-veto evidence and "
+                         "per-book veto list. See lookahead_policy.py. Default 0 disables lookahead.")
     ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
@@ -622,8 +644,6 @@ def main() -> int:
         ap.error("--stick-margin needs --incumbent")
     if a.lookahead_floor < 0:
         ap.error("--lookahead-floor is a number of moves, 0 or more")
-    if a.lookahead_floor and a.opponent_prior:
-        ap.error("--lookahead-floor has not been tested with --opponent-prior")
     if a.polish and a.method != "dp":
         ap.error("--polish is for --method dp (--method price always polishes)")
     if a.incumbent and a.stick_margin is None:
@@ -676,6 +696,12 @@ def main() -> int:
         if dest.exists() and not a.force:
             mp = Path(str(dest) + ".meta.json")
             previous = json.loads(mp.read_text()) if mp.exists() else {}
+            if (previous.get("reach_version") != 2
+                    or previous.get("lookahead_floor", {}).get("depth", 0) != a.lookahead_floor):
+                ap.error("Existing output uses a different reach or lookahead policy; choose a fresh prefix or --force")
+            if a.lookahead_floor:
+                from lookahead_audit import artifacts
+                artifacts(dest, previous)
             if previous.get("uncut_own_recipe") != uncut_recipe:
                 ap.error("Existing output uses another move lookup; choose a fresh output prefix")
             if (previous.get("max_score_loss") != a.max_score_loss
@@ -712,12 +738,15 @@ def main() -> int:
         f"method {a.method}")
 
     admit = None
+    from stage3_backwards_induction import IncumbentMoves
+    # Final assembly keeps the last nonempty source SAN for a position.
+    moves = (pl.scan_parquet(a.rep).filter((pl.col("side_to_move") == a.perspective)
+             & pl.col("best_move").is_not_null() & (pl.col("best_move") != ""))
+             .select("position_hash", "best_move").unique("position_hash", keep="last").collect())
+    src_all = IncumbentMoves(moves["position_hash"].to_numpy(), moves["best_move"].to_list())
+    del moves
+    log(f"{len(src_all):,} source decisions loaded for collection")
     if a.gated_reach:
-        from stage3_backwards_induction import load_incumbent
-        _sl0 = (pl.scan_parquet(a.rep).select(["event", "elo_band"]).unique().collect())
-        src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
-                                 _sl0["elo_band"][0])
-        log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
         admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss, **gate_settings)
     pool_floor = _pool_min_games(stats)
     if a.min_games is None:
@@ -745,16 +774,14 @@ def main() -> int:
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
         verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
-        gate = admit
-        if gate is not None:
-            gate.excluded = excluded
-            gate.eval_ws.update(fresh)
-            gate._seen.update(fresh)
+        if admit is not None:
+            admit.excluded = excluded
+            admit.eval_ws.update(fresh)
+            admit._seen.update(fresh)
     rare_floor = a.min_games if a.rare_verification else None
     if rare_floor is not None:
-        gate = admit
-        if gate is not None:
-            gate.rare_floor, gate.verified = rare_floor, verified_at
+        if admit is not None:
+            admit.rare_floor, admit.verified = rare_floor, verified_at
     reply_overlay = None
     if a.opponent_prior:
         from opponent_prior import ReplyOverlay
@@ -768,7 +795,8 @@ def main() -> int:
         log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
     edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
-                                 reply_overlay, uncut_own=bool(uncut))
+                                 reply_overlay, uncut_own=bool(uncut), source_moves=src_all)
+    del src_all, admit
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -855,22 +883,6 @@ def main() -> int:
         log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
             f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
 
-    lookahead, lookahead_vetoes = None, {}
-    if a.lookahead_floor:
-        import lookahead_floor
-        tl = time.time()
-        lookahead_vetoes, lookahead = lookahead_floor.vetoes(
-            edf, ek, ev, our_white, slice_prior, depth=a.lookahead_floor,
-            robustness_floor=gate_settings["robustness_floor"], share_floor=a.share_floor,
-            excluded=excluded, engine_moves=engine_moves, source_moves=rep_moves)
-        excluded = lookahead_floor.merged(excluded, lookahead_vetoes)
-        log(f"lookahead floor {a.lookahead_floor}: {lookahead['dead_nodes']:,} our nodes with no "
-            f"passing move; bad moves after each step {lookahead['bad_moves_by_depth']}"
-            f"{' (fixed point)' if lookahead['fixed_point'] else ''}; "
-            f"{lookahead['vetoed_moves']:,} moves vetoed at {lookahead['vetoed_nodes']:,} nodes "
-            f"({lookahead['source_moves_vetoed']:,} of them source moves under the bar), void at "
-            f"{lookahead['void_nodes']:,} ({time.time()-tl:,.0f}s)")
-
     log("building graph...")
     track_route = bool(a.dump_stop_positions or a.sampled_stop or a.dump_other_positions
                        or a.sampled_other)
@@ -879,7 +891,7 @@ def main() -> int:
                                 excluded=excluded, verified=verified_at, strict_source=True,
                                 aux_frame=aux_frame)
     del edf, aux_frame
-    if a.max_score_loss is not None and fi["rows"]["src_has_child"].any():
+    if fi["rows"]["src_has_child"].any():
         # A source-only move can lead outside the collected edge table. Its child
         # still needs a gate evaluation; verified overlays already in ek take priority.
         rows_in = fi["rows"]
@@ -895,15 +907,36 @@ def main() -> int:
         terminal = ss.terminal_outcomes_rs(fi, our_white)
         log(f"  {len(terminal):,} recorded moves end the game")
     t2 = time.time()
-    rs_out = budget_rs.run_csr(
-        fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
+    graph_args = dict(
         slice_prior=slice_prior, prior_strength=a.prior_strength, eval_weight=a.eval_weight,
         eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K, eps=eps,
         max_ply=a.max_ply, share_floor=a.share_floor, **gate_settings, require_eval=True,
         gates=True, max_eval_loss=a.max_eval_loss, rare_floor=rare_floor,
-        strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach,
+        strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach or bool(a.lookahead_floor),
         crack_at_parents=True, engine_moves_given=bool(engine_moves),
         track_route_ply=track_route, track_other=bool(a.dump_other_positions or a.sampled_other))
+
+    def assemble(**opts):
+        return budget_rs.run_csr(fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
+                                 **(graph_args | opts))
+
+    lookahead, lookahead_vetoes = None, {}
+    if a.lookahead_floor:
+        import lookahead_policy
+        base = assemble(track_route_ply=False, track_other=False)
+        evidence_book = next(iter(todo.values()), outs[budgets[0]])
+        evidence_path = Path(str(evidence_book) + ".lookahead-inputs.parquet")
+        if a.dump_engine_targets or a.dump_stop_positions or a.dump_other_positions:
+            evidence_path = Path(str(a.out_prefix) + ".dump.lookahead-inputs.parquet")
+        post, lookahead_vetoes, veto_reach, lookahead = lookahead_policy.prepare(
+            base, fi["san_list"], ek, ev, white=our_white, prior=slice_prior,
+            floor=a.robustness_floor, depth=a.lookahead_floor, score_gate=a.max_score_loss is not None,
+            max_ply=a.max_ply, path=evidence_path)
+        del base
+        fi["rows"]["lookahead_veto"] = post
+        log(f"lookahead: {lookahead['vetoed_moves']:,} moves removed from final candidate menus, "
+            f"{lookahead['void_nodes']:,} decisions with no passing alternative")
+    rs_out = assemble()
     t3 = time.time()
     rs_sans = fi["san_list"]
     g = budget_rs.GraphView(rs_out, rs_sans, root, fi["parents"], fi["epd"], eps=eps,
@@ -931,6 +964,8 @@ def main() -> int:
         other_key = recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
+        other_key["reach_version"] = 2
+        other_key["lookahead_depth"] = a.lookahead_floor
         other_key["engine_candidates_sha256"] = proposal_sha
         other_key["uncut_own_recipe"] = uncut_recipe
         other_key["gate_policy"] = gate_recipe
@@ -956,8 +991,6 @@ def main() -> int:
         on_graph = sum(1 for h in incumbent if h in g.our)
         log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
             f"stick margin {a.stick_margin}")
-    # nothing below reads the edge lists, the eval cache or the gate's source moves
-    del admit
     import gc
     gc.collect()
     # the graph, owned by Rust from here: every stage below runs on it (g keeps the meta,
@@ -982,6 +1015,8 @@ def main() -> int:
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=WEAK_MIN_SHARE, stop_model="weak")
+            dump_key["reach_version"] = 2
+            dump_key["lookahead_depth"] = a.lookahead_floor
             dump_key["engine_candidates_sha256"] = proposal_sha
             dump_key["uncut_own_recipe"] = uncut_recipe
             dump_key["gate_policy"] = gate_recipe
@@ -1227,7 +1262,8 @@ def main() -> int:
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": True,
-            "max_cands": 0, "gated_reach": a.gated_reach,
+            "max_cands": 0, "gated_reach": graph_args["gated_reach"], "collector_gated_reach": a.gated_reach,
+            "reach_version": 2,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
             **({"absolute_score_floor": absolute_score_floor, "slice_prior_override": a.slice_prior}
                if a.max_score_loss is not None else {}),
@@ -1282,12 +1318,21 @@ def main() -> int:
             "peak_commit_gb": peak_commit_gb(),
             "built": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
-        Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
         if lookahead is not None:
-            # the vetoes this book was built with (validate_book reads them back)
-            Path(str(out) + ".lookahead.json").write_text(json.dumps(
-                [{"position_hash": h, "reach": g.reach.get(h, 0.0), "moves": sorted(bs)}
-                 for h, bs in sorted(lookahead_vetoes.items())]))
+            # Each book owns its proof, including when only one budget is rebuilt later.
+            proof = Path(str(out) + ".lookahead-inputs.parquet")
+            if evidence_path != proof:
+                from shutil import copyfile
+                temp = proof.with_suffix(".parquet.tmp")
+                temp.unlink(missing_ok=True)
+                try:
+                    temp.hardlink_to(evidence_path)
+                except OSError:
+                    copyfile(evidence_path, temp)
+                temp.replace(proof)
+            meta["lookahead_floor"] = dict(lookahead, evidence_file=proof.name,
+                veto_sha256=lookahead_policy.write_veto(out, lookahead_vetoes, veto_reach))
+        Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
         if rare_floor is not None:
             # every decision where an unverified rare move would have excluded a rival had it
             # bound, with the graph's optimistic reach: the verifier's work list

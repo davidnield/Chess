@@ -1,4 +1,6 @@
-"""The lookahead floor (build_budget_books --lookahead-floor N, default 0 = off, an exact no-op).
+"""Historical raw-edge implementation retained for comparisons. The builder uses lookahead_policy.
+
+The lookahead floor (build_budget_books --lookahead-floor N, default 0 = off, an exact no-op).
 
 The absolute gate (budget_core.passes_abs_gate) checks one move: the eval right after our move
 must stay within --robustness-floor of the slice prior. It does not look at what we can still

@@ -681,8 +681,8 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      admitted: dict[int, set] | None = None
                      ) -> tuple[dict[int, float], dict[int, int]]:
     """Policy-free reach upper bound: max over paths of the product of opponent
-    reply shares; our moves carry probability 1. Max-product Dijkstra (all
-    factors <= 1, so first finalization is maximal); lazy-deletion heap.
+    reply shares; our moves carry probability 1. Pop route labels by descending
+    reach, expanding each shorter arrival that still fits under the ply cap.
 
     admitted (--gated-reach): our node -> the child hashes of the moves the gates
     admit. Reach then flows only through moves the book could actually play; a
@@ -691,16 +691,15 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
     import heapq
     reach: dict[int, float] = {}
     ply: dict[int, int] = {}
-    heap = [(-1.0, 0, root)]
-    ply[root] = 0
+    heap = [(-1.0, 0, root, 0)]
     tie = 1
     while heap:
-        nr, _, h = heapq.heappop(heap)
+        nr, _, h, p_ply = heapq.heappop(heap)
         r = -nr
-        if h in reach:
+        if h in ply and ply[h] <= p_ply:
             continue
-        reach[h] = r
-        p_ply = ply[h]
+        reach.setdefault(h, r)
+        ply[h] = p_ply
         if p_ply >= max_ply:
             continue
         es = edges_by_parent.get(h)
@@ -721,11 +720,9 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                 if share < share_floor:
                     continue
                 cr = r * share
-            if cr < eps or ch in reach:
+            if cr < eps or (ch in ply and ply[ch] <= p_ply + 1):
                 continue
-            if ch not in ply or ply[ch] > p_ply + 1:
-                ply[ch] = p_ply + 1
-            heapq.heappush(heap, (-cr, tie, ch))
+            heapq.heappush(heap, (-cr, tie, ch, p_ply + 1))
             tie += 1
     return reach, ply
 
@@ -975,12 +972,8 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
                 reach: dict[int, float], ply: dict[int, int], max_ply: int,
                 share_floor: float, admitted: dict[int, set] | None = None) -> dict[int, int]:
     """The ply of each position's highest-reach route AMONG THE ROUTES THAT ARRIVE IN TIME.
-    optimistic_reach's ply is a traversal-dependent mix: it takes the minimum over every parent
-    that happened to push the position before it was finalised, so a reach-1 parent's 10% reply
-    sets the ply even when the position's reach of 0.9 comes from a longer route. Changing it
-    would change the depth cut for every recipe, so this is separate. A stop value that stands for
-    one ply stands for this one: the objective averages over the games played, so the value should
-    be the one at the ply most of them arrive at (sampled_stop.py).
+    optimistic_reach records the earliest qualifying arrival. The stop model instead
+    uses the ply of the most likely qualifying route.
 
     Best reach per (position, ply), level by level up to the cap (2026-11-04, review finding 1).
     Keeping only each position's overall best route ran past the horizon: a high-reach long arrival
@@ -988,7 +981,7 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
     label is at most max_ply; a stop just outside is then at most max_ply + 1, the horizon. Ties
     (within rounding, as products of the same shares can differ in the last bit) go to the shortest
     route, independently of edge order. Only edges the graph can hold are walked: a node whose
-    legacy ply is at the cap has no children in it."""
+    earliest qualifying arrival is at the cap has no children in it."""
     best: dict[int, tuple[float, int]] = {root: (1.0, 0)}
     level = {root: 1.0}
     t = 0
@@ -1105,6 +1098,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     # the root (ply 0, White to move) is an OPPONENT node, so reach must decay
     # by White's reply shares there.
     admitted = None
+    restored_children = {}
     if gated_reach:
         # Our-turn parity is unknown until reach assigns plies, but the gate is a
         # property of the position: admit per parent, and optimistic_reach only
@@ -1115,20 +1109,32 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 continue  # the overlay contains only opponent-to-move positions
             if strict_source or engine_moves:
                 # reach flows only through what the node can finally book
-                cs = final_candidates(
+                cs, restored, _, _ = final_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor=robustness_floor, gate_rel_floor=gate_rel_floor,
                     gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
                     gates=gates, max_eval_loss=max_eval_loss, max_score_loss=max_score_loss, strict_source=strict_source,
                     engine_moves=engine_moves, edges_by_parent=edges_by_parent,
                     epd=es[0].get("parent_epd"), excluded=excluded,
-                    rare_floor=rare_floor, verified=verified)[0]
+                    rare_floor=rare_floor, verified=verified)
+                if restored is not None and restored[1] is not None:
+                    restored_children[h] = restored[1]
             else:
                 cs = gate_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor, gate_rel_floor, gate_rel_own_margin,
                     require_eval, gates, max_eval_loss, rare_floor, verified, max_score_loss=max_score_loss)
             admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
+            if h in restored_children:
+                admitted[h].add(restored_children[h])
+    if strict_source and not gated_reach:
+        for h, src in rep_moves.items():
+            es = edges_by_parent.get(h)
+            if es and src and not any(e['move_san'] == src for e in es) and es[0].get('parent_epd'):
+                from build_baseline_books import child_of
+                child = child_of(es[0]['parent_epd'], src)
+                if child is not None and src.rstrip('+#') not in (excluded or {}).get(h, ()):
+                    restored_children[h] = child
     # Search below an unplayed nominated move when its child has pool replies.
     # Zero observations keep it out of empirical frequencies and stop estimates.
     reach_edges = edges_by_parent
@@ -1139,6 +1145,11 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 existing = {e.get("child_hash") for e in edges_by_parent[h]}
                 reach_edges[h] = edges_by_parent[h] + [
                     {"child_hash": ch, "total": 0} for _, ch in moves if ch not in existing]
+    if restored_children:
+        reach_edges = dict(reach_edges)
+        for h, ch in restored_children.items():
+            if not any(e.get('child_hash') == ch for e in reach_edges[h]):
+                reach_edges[h] = reach_edges[h] + [{"child_hash": ch, "total": 0}]
     reach, ply = optimistic_reach(reach_edges, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
@@ -1214,7 +1225,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             if restored is not None:
                 src, ch = restored
                 in_sub = ch is not None and ch in reach and \
-                    edges_by_parent.get(ch) is not None
+                    edges_by_parent.get(ch) is not None and p_ply + 1 <= max_ply
                 lv = leaf_edge_value(slice_prior, 0,
                                      eval_ws.get(ch) if ch is not None else None,
                                      slice_prior, our_white,

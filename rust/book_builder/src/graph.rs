@@ -43,6 +43,8 @@ pub struct EdgeCols<'a> {
 }
 
 pub struct RowExtras<'a> {
+    /// SAN codes removed after final gate admission, including restored candidates.
+    pub lookahead: HashMap<Key, Vec<i64>>,
     pub src_san: &'a [i64],        // -1 = no source move
     pub src_bare: &'a [i64],
     pub src_child: &'a [Option<Key>],  // the source move's child (python-chess), if resolvable
@@ -136,7 +138,17 @@ pub fn build_graph(g_edges: &Edges, e: &EdgeCols, x: &RowExtras, evals: &Evals, 
             verified: vr(row),
             veto: xr(row),
         };
-        gates::final_candidates(&node, &p.gate, p.gate.rare_floor.is_some())
+        let mut menu = gates::final_candidates(&node, &p.gate, p.gate.rare_floor.is_some());
+        if let Some(veto) = x.lookahead.get(&h) {
+            menu.kept.retain(|r| !veto.contains(&match *r {
+                Ref::Edge(i) => e.san[i], Ref::Engine(i) => x.m[i].san,
+            }));
+            if menu.restored && veto.contains(&x.src_san[row]) {
+                menu.restored = false;
+                menu.n_rej = 1;
+            }
+        }
+        menu
     };
 
     // --gated-reach: the admitted children of every (non-overlay) parent row
@@ -171,6 +183,9 @@ pub fn build_graph(g_edges: &Edges, e: &EdgeCols, x: &RowExtras, evals: &Evals, 
                         }
                     }
                 }
+                if o.restored {
+                    adm_keys.extend(x.src_child[row]);
+                }
                 fc_cache.insert(row, o);
             }
             adm_ptr.push(adm_keys.len() as i64);
@@ -183,9 +198,9 @@ pub fn build_graph(g_edges: &Edges, e: &EdgeCols, x: &RowExtras, evals: &Evals, 
     };
     // Engine proposals join the reach walk as zero-game edges (build_graph's reach_edges):
     // child hashes not already recorded at the parent, total 0. Rebuilt as an extended CSR.
-    let has_engine = !x.m.is_empty();
+    let has_extra = !x.m.is_empty() || (p.gate.strict_source && x.src_child.iter().any(Option::is_some));
     let (rp, rc, rt, rs);
-    let reach_edges = if has_engine {
+    let reach_edges = if has_extra {
         let mut ptr = vec![0i64];
         let (mut ch, mut tot, mut sh) = (Vec::new(), Vec::new(), Vec::new());
         for row in 0..g_edges.parents.len() {
@@ -204,6 +219,20 @@ pub fn build_graph(g_edges: &Edges, e: &EdgeCols, x: &RowExtras, evals: &Evals, 
                     ch.push(c);
                     tot.push(0);
                     sh.push(f64::NAN);
+                }
+            }
+            let follow_source = if p.gated_reach {
+                fc_cache.get(&row).is_some_and(|menu| menu.restored)
+            } else {
+                p.gate.strict_source
+            };
+            if follow_source {
+                if let Some(source) = x.src_child[row] {
+                    if !ch[ptr[row] as usize..].contains(&Some(source)) {
+                        ch.push(Some(source));
+                        tot.push(0);
+                        sh.push(f64::NAN);
+                    }
                 }
             }
             ptr.push(ch.len() as i64);
@@ -293,7 +322,7 @@ pub fn build_graph(g_edges: &Edges, e: &EdgeCols, x: &RowExtras, evals: &Evals, 
             if o.restored {
                 let ch = x.src_child[row];
                 let in_sub = match ch {
-                    Some(c) => reach_m.contains(&c) && is_parent(&c),
+                    Some(c) => reach_m.contains(&c) && is_parent(&c) && p_ply < p.max_ply,
                     None => false,
                 };
                 let lv = value::leaf_edge_value(b.slice_prior, 0.0, evals.get(ch), b);

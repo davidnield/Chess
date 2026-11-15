@@ -38,6 +38,13 @@ impl RsCollector {
         RsCollector { c: Collector::new(key(root), our_white, eps, max_ply, share_floor) }
     }
 
+    fn set_source_children(&mut self, parents: PyReadonlyArray1<i64>, children: PyReadonlyArray1<i64>) -> PyResult<()> {
+        let (p, c) = (parents.as_slice()?, children.as_slice()?);
+        crate::same_len(p.len(), &[c.len()])?;
+        self.c.source_children = p.iter().zip(c).map(|(&h,&ch)| (key(h), key(ch))).collect();
+        Ok(())
+    }
+
     /// GateAdmit: the source moves (first per hash wins, as IncumbentMoves.get), vetoes and
     /// verified moves as (key, bare code) pairs, the seen cache (NaN = no eval) and the gates
     #[allow(clippy::too_many_arguments)]
