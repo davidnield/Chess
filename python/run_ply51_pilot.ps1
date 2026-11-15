@@ -60,6 +60,8 @@ foreach ($month in $months) {
     if ($LASTEXITCODE -ne 0) { throw "Month $month exited $LASTEXITCODE. The launcher can resume its stage." }
     $receipt = Get-Content -Raw -LiteralPath (Join-Path $Archive "_archive_receipts/$month.json") | ConvertFrom-Json
     $prov = Get-Content -Raw -LiteralPath (Join-Path $Archive "_provenance/month=$month.json") | ConvertFrom-Json
+    $year, $number = $month.Split('_')
+    $terminal = Get-Item -LiteralPath (Join-Path $Archive "_term/year=${year}_month=${number}.term.parquet")
     $measurements += [pscustomobject]@{
         Month=$month
         SourceGames=$prov.games_in_footers
@@ -67,6 +69,8 @@ foreach ($month in $months) {
         Plies=$prov.counters.plies
         Rows=$prov.rows
         TermRows=$prov.term_rows
+        MoveParquetGB=$($prov.output_bytes / 1e9)
+        TermParquetGB=$($terminal.Length / 1e9)
         Passes=$prov.passes
         PeakExtractorCommitGB=$($prov.peak_commit_bytes / 1e9)
         ExtractSeconds=$prov.seconds

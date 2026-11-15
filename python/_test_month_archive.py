@@ -63,6 +63,9 @@ class PilotTest(unittest.TestCase):
     def test_preflight(self):
         with self.assertRaises(ValueError):
             self.drive(["--dest", str(self.stage / "nested")])
+        with self.assertRaises(OSError):
+            with archive.root_lock(self.tmp / "lock"), archive.root_lock(self.tmp / "lock"):
+                pass
         self.dest.mkdir()
         (self.dest / "_month=2026_3.DONE").touch()
         with self.assertRaisesRegex(ValueError, "without a launcher"):
@@ -93,6 +96,12 @@ class PilotTest(unittest.TestCase):
         self.assertFalse((self.dest / "_month=2026_3.DONE").exists())
         with self.assertRaisesRegex(ValueError, "settings"):
             self.drive(["--max-ply", "50"])
+        cfgpath = self.stage / "_extract_params.json"
+        cfg = archive.read_json(cfgpath)
+        archive.write_json(cfgpath, {**cfg, "max_ply": 30})
+        with self.assertRaisesRegex(ValueError, "settings"):
+            self.drive()
+        archive.write_json(cfgpath, cfg)
         with patch.object(archive, "release", side_effect=OSError("interrupted after publication")):
             self.assertEqual(self.drive(), launcher.EXIT_FAIL)
         with patch.object(launcher.subprocess, "run", side_effect=AssertionError("unnecessary re-extraction")):

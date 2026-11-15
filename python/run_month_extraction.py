@@ -126,7 +126,7 @@ def receipt(root, ym):
 
 def validate_archive(a, ym, source):
     parts = month_parts(a.dest, ym)
-    files = archive.check_month(parts, ym, a, source)
+    files = archive.check_month(parts, ym, a, source, check_footers=False)
     rec = archive.read_json(receipt(a.dest, ym))
     if rec["source"] != source or rec["verify"] != a.verify:
         raise ValueError(f"{tag(ym)}: archive source or verification policy changed")
@@ -254,7 +254,8 @@ def run_pending(a, months, todo):
     lock = threading.Lock()
 
     def staged_bytes(ym) -> int:
-        return sum(f.stat().st_size for f in archive.check_month(month_parts(a.stage, ym), ym, a, a.inventories[ym]))
+        parts = month_parts(a.stage, ym)
+        return sum(f.stat().st_size for f in tree_files(parts["dir"])) + parts["term"].stat().st_size
 
     def mover():
         while (item := jobs.get()) is not None:

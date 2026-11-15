@@ -942,6 +942,11 @@ def main() -> None:
     if "F:" in str(a.tmp_dir).upper()[:2]:
         sys.exit("FATAL: DuckDB temp on F: (USB HDD) is forbidden")
     a.source_events_by_month = check_population(Path(a.book), a.events, a.elo_bands)
+    for event in a.events:
+        absent = [month for month, speeds in a.source_events_by_month.items()
+                  if speeds is not None and event not in speeds]
+        if absent:
+            print(f"{event} has no source partitions in {len(absent)} months: {', '.join(absent)}", flush=True)
     lock_params(a)
     from eval_arrays import verify_eval_arrays
     print(f"eval arrays: {verify_eval_arrays(Path(a.eval_arrays))}", flush=True)

@@ -64,7 +64,7 @@ def bind(path, expected, dry=False):
 
 def root_binding(root, settings, dry):
     p = root / "_launcher_settings.json"
-    if root.exists() and not p.exists() and any(f.name != "_launcher.lock" for f in root.iterdir()):
+    if root.exists() and not p.exists() and any(f.name not in ("_launcher.lock", p.name + ".tmp") for f in root.iterdir()):
         raise ValueError(f"{root}: pre-existing data without a launcher settings receipt")
     bind(p, settings, dry)
 
@@ -116,7 +116,7 @@ def check_root_params(root, a):
     return lock
 
 
-def check_month(parts, ym, a, source):
+def check_month(parts, ym, a, source, *, check_footers=True):
     root = parts["dir"].parent
     lock = check_root_params(root, a)
     prov = read_json(parts["provenance"])
@@ -147,6 +147,19 @@ def check_month(parts, ym, a, source):
             or prov["rows"] != manifest["rows"] or prov["output_bytes"] != manifest["bytes"]
             or pq.ParquetFile(parts["term"]).metadata.num_rows != prov["term_rows"]):
         raise ValueError(f"{tag}: incomplete bucket or terminal files")
+    if check_footers:
+        rows = 0
+        for p in buckets:
+            header = pq.ParquetFile(p)
+            names = header.schema_arrow.names
+            if ("parent_hash_hi" in names) != a.key128 or ("child_hash_hi" in names) != a.key128:
+                raise ValueError(f"{p}: unexpected position key width")
+            rows += header.metadata.num_rows
+        term_fields = pq.ParquetFile(parts["term"]).schema_arrow.names
+        if (rows != manifest["rows"] or "end_ply" not in term_fields
+                or ("position_hash_hi" in term_fields) != a.key128
+                or ("event_id" in term_fields) != a.term_slices or ("elo_band" in term_fields) != a.term_slices):
+            raise ValueError(f"{tag}: parquet row count or terminal schema mismatch")
     conflicts = sorted(p for p in parts["conflicts"].rglob("*") if p.is_file())
     if bool(conflicts) != bool(prov["conflicts"]):
         raise ValueError(f"{tag}: conflict file and provenance disagree")
