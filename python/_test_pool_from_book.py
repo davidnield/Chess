@@ -332,7 +332,7 @@ def main() -> int:
         (book4 / "_merge_params.json").write_text(json.dumps(
             {"schema":"book-v4","input_params":{"max_ply":CAP+1, "key_bits":128, "term_slices":True}}))
         P.check_cap(book4, CAP)
-        e4, a4, _ = run_build(td, book4, td / "ev", [thin], None, "w4")
+        e4, a4, _ = run_build(td, book4, td / "ev", [thin], None, "wcompact")
         check(e4.sort(key).equals(e2.sort(key)) and a4.sort("position_hash").equals(a2.sort("position_hash")),
               "materialized edges and auxiliary values match for compact and ordinary 128-bit books")
         (book2 / "_merge_params.json").write_text(json.dumps({"schema": "book-v9", "input_params": {"max_ply": 9}}))

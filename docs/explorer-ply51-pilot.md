@@ -48,7 +48,7 @@ Before scheduling all months, compare the observed extraction, streaming write a
 
 ## Sunday, November 15 migration and restart
 
-Use the November 15 pins below for this generation. The Saturday pin predates the check for conflicting parents or child keys within a single extraction chunk. The March production-sized pilot used the fixed executable at Rust commit `b54e3a0`, SHA-256 `c4b03572818a713c3e40cb85b80f88e518641f8fd9584e070e91a372a5463e74`. The native eval executable has a separate pin at `27c68f3`. Training spans January 2013 through July 2026 and covers 4,530,190,835 raw Blitz, Rapid and Classical games in 2,525 local partitions across 163 months. Source counts describe the cleaned games retained by the project's original ingestion recipe.
+Use the November 15 pins below for this generation. The Saturday pin predates the check for conflicting parents or child keys within a single extraction chunk. The March production-sized pilot used the fixed executable at Rust commit `b54e3a0`, SHA-256 `c4b03572818a713c3e40cb85b80f88e518641f8fd9584e070e91a372a5463e74`. The compact merger and native eval reader share release `b72b0dc`. The extraction worker uses its original pin. Training spans January 2013 through July 2026 and covers 4,530,190,835 raw Blitz, Rapid and Classical games in 2,525 local partitions across 163 months. Source counts describe the cleaned games retained by the project's original ingestion recipe.
 
 | State or artifact | Path |
 |---|---|
@@ -56,7 +56,7 @@ Use the November 15 pins below for this generation. The Saturday pin predates th
 | Active migration status, forecast, pilot verification and worker logs | `D:\chess\ply51-migration-20261115` |
 | Verified monthly archives and per-month hash receipts | `F:\chess\explorer_brc_p51_pilot` |
 | Three-month and training explorers | `E:\chess\position-stats\brc-p51-pilot-20261115` and `E:\chess\position-stats\brc-p51-train-201301-202607-20261115` |
-| Cloud/Fishnet and diagnostic ChessDB workers and checksums | `D:\chess\bin\ply51-evals-20261115` |
+| Original eval release and diagnostic ChessDB tools | `D:\chess\bin\ply51-evals-20261115` |
 | Separate eval status and measured scratch layout | `D:\chess\ply51-migration-20261115\evals` |
 | August–September independent inventory receipts, upon reconciliation | `D:\chess\ply51-migration-20261115\holdout-inputs` |
 
@@ -70,17 +70,31 @@ March's 51,436,065 raw input games took 1,192 seconds to extract. The archive re
 4. WSL 2 and Ubuntu are available. ChessDB's empty LOCK has been restored and all 291 declared sizes and recorded digests have been matched to the exact remote revision. The fresh 1.188 TB readback publishes its own completion receipt. The offline probe then opens the snapshot read-only and tests the fixed 1,000 previously missing parent positions. ChessDB integration depends on interpreting this report. It does not block Cloud/Fishnet.
 5. The official August–September PGNs have a separate checksum and event-header audit. The local ingestion accepts specific rated event labels and can exclude tournament-labelled games. The audit reconciles each speed against the local Parquet footers and each full official month against the published total. The holdouts never enter the training merge.
 
+### Compact merged explorer
+
+The November 15 queue uses the three original monthly archives for a full rehearsal. The reference is the published book-v3 pilot on E:. The independent book-v4 pilot writes to `D:/chess/ply51-migration-20261115/compact-pilot-book`. Its native merger at `b72b0dc` writes rank strings, the EPD state, and two parent-to-child XOR columns directly into each move slice. Each completed bucket has a readback digest over the original logical values. Prepared pools, the uncut move graph and the eval lookup retain their ordinary column formats. DuckDB consumers can use `explorer_storage.relation(files)` and PyArrow consumers can use `read_columns(file, columns)`.
+
+The three initial native buckets contained 25,752,025 move rows. They occupied 909,243,601 bytes, compared with 1,527,409,674 bytes in the reference. The native eval A/B read bucket 7 on the same SSD, used the same 262,144-row excerpt from each of Cloud and Fishnet and ran four alternating trials. All 105 stored evaluation rows matched. Mean wall time rose from 3.93 to 4.85 seconds. This sample measures the eval build path over one bucket. The timing of a full eval generation depends on its source scan, I/O and join volume.
+
+The rehearsal checks all 512 move digests, the terminal digest, replayed positions, and every logical column of 81 files using DuckDB and PyArrow. The comparison and the whole-directory measurements are bound in `compact-verified.json`. Its `compact-forecast.json` includes terminal files and metadata. The queue uses the verified monthly forecast to start extraction at midnight Pacific on November 16. After archival it checks the compact certificate and real available space before permitting the production merge. The eval worker waits for the verified production explorer. The files `status.json`, `compact-pilot-status.json`, and `evals/status.json` describe those three workers.
+
 ### After interruption
 
-Inspect the process command lines and the JSON status files first. If an existing worker is alive, leave its slot alone. For the November 15 pinned pilot, run the following commands in PowerShell if the corresponding workers have stopped. If three measurements already exist in order (2026_3, 2024_6, 2020_4), skip the pilot script. A manually restarted migration can reuse a complete pilot receipt and complete month or merge checkpoints.
+Check the three status files and active process command lines. Use the command for the stopped worker in a separate PowerShell window. A completed compact pilot has `compact-verified.json`. The queue reuses verified months and published merge buckets. Its configured extraction window ends at midnight Pacific on November 20.
 
 ```powershell
-$pilotPin = 'D:/chess/bin/ply51-pilot-20261115'
-$evalPin = 'D:/chess/bin/ply51-evals-20261115'
+$compactPin = 'D:/chess/bin/ply51-compact-20261115'
+$queuePin = 'D:/chess/bin/ply51-queue-20261115'
 $venvPython = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
-pwsh -NoProfile -File "$pilotPin/run_ply51_pilot.ps1"
-& $venvPython -u "$pilotPin/run_ply51_migration.py"
-& $venvPython -u "$evalPin/run_ply51_evals.py"
+
+# Three-month rehearsal
+& $venvPython -X utf8 -u "$compactPin/run_ply51_migration.py" --compact-pilot-only
+
+# Scheduled training extraction and receipt-gated production merge
+& $venvPython -X utf8 -u "$queuePin/run_ply51_migration.py" --compact-release $compactPin
+
+# Cloud/Fishnet eval generation and 128-bit lookup
+& $venvPython -X utf8 -u "$compactPin/run_ply51_evals.py"
 ```
 
-The detached workers already launched Sunday have separate stdout and error logs. The commands above are the sequential recovery path. If a worker reports a changed digest, a capacity shortfall, or the end of its reserved window, inspect the specific receipt or resource before resuming. The active playing repertoires and the corrected Black 0.30 experiment have no dependency on publishing the new training data.
+The workers write separate logs under `D:/chess/ply51-migration-20261115` with the prefixes `compact-pilot`, `compact-training`, and `compact-eval-worker`. Their release directories contain their SHA-256 manifests. The active playing repertoires and the corrected Black 0.30 experiment have their own release and validation process.
