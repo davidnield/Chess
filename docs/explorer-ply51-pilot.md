@@ -45,3 +45,42 @@ After an interruption, check that the pilot coordinator is no longer running, th
 
 Before scheduling all months, compare the observed extraction, streaming write and readback times, peak commit and output sizes with available space and the historical input volume. The streaming measurement includes source reads and hashing. Output readback can benefit from Windows' file cache. The existing lookahead-floor books are experimental controls. A switch of either playing book requires the separate horizon and candidate-menu corrections, receipt checks, and Black 0.30 pilot.
 
+
+## Sunday, November 15 migration and restart
+
+Use the November 15 pins below for this generation. The Saturday pin predates the check for conflicting parents or child keys within a single extraction chunk. The March production-sized pilot used the fixed executable at Rust commit `b54e3a0`, SHA-256 `c4b03572818a713c3e40cb85b80f88e518641f8fd9584e070e91a372a5463e74`. The native eval executable has a separate pin at `27c68f3`. Training spans January 2013 through July 2026 and covers 4,530,190,835 raw Blitz, Rapid and Classical games in 2,525 local partitions across 163 months. Source counts describe the cleaned games retained by the project's original ingestion recipe.
+
+| State or artifact | Path |
+|---|---|
+| Extraction, pilot coordinator, fingerprints, independent input inventory, direct cap test and pilot measurements | `D:\chess\bin\ply51-pilot-20261115` |
+| Active migration status, forecast, pilot verification and worker logs | `D:\chess\ply51-migration-20261115` |
+| Verified monthly archives and per-month hash receipts | `F:\chess\explorer_brc_p51_pilot` |
+| Three-month and training explorers | `E:\chess\position-stats\brc-p51-pilot-20261115` and `E:\chess\position-stats\brc-p51-train-201301-202607-20261115` |
+| Cloud/Fishnet and diagnostic ChessDB workers and checksums | `D:\chess\bin\ply51-evals-20261115` |
+| Separate eval status and measured scratch layout | `D:\chess\ply51-migration-20261115\evals` |
+| August–September independent inventory receipts, upon reconciliation | `D:\chess\ply51-migration-20261115\holdout-inputs` |
+
+March's 51,436,065 raw input games took 1,192 seconds to extract. The archive receipt covers 89,935,988,831 bytes, including 1,685,519,477 move rows and 50,473,854 terminal rows. Streaming took 685 seconds and the SHA-256 readback took 210 seconds. See the measured JSON for June and April as they finish. Disk projections become actionable at `forecast.json` only after merging and independently verifying all three months. Cap tests on 1,162 games (three speeds across three months plus controls) compared all move and terminal counts at plies 30 and 50 against directly capped extractions.
+
+### How the queue advances
+
+1. The three original pilot months publish individually with SHA-256 readback. The migration coordinator repeats a real March invocation, merges the three months, verifies all move/outcome sums and sliced terminal digests, checks selected move digests and replays sampled positions, then writes the forecast and pilot verification receipt.
+2. Capacity permitting, training extraction starts on Monday, November 16, at 00:00 Pacific, with new batches bounded by the reserved window through Thursday, November 19. It skips and revalidates previously published months. If the window runs out, the coordinator records the remaining work. The production merge checks E: against measured output and D: against actual terminal staging. Existing repertoire artifacts can continue to use the previous generation.
+3. The independent eval worker waits for `training explorer verified` and the matching book metadata digest. It first measures eight distributed eval buckets against all 512 child-source buckets. It chooses scratch placement using those measurements and remaining D:, H: and E: space. The whole generation uses refreshed October Cloud and the original Fishnet dump. The executable checks payload SHA-256, individual receipts, the exact pinned revisions and explorer publication on resume. The completed DB is independently checked against the raw sources. The separate lookup retains both hash halves, authoritative mate overrides and source labels. Its production report checks scores, source and mates against the published arrays.
+4. WSL 2 and Ubuntu are available. ChessDB's empty LOCK has been restored and all 291 declared sizes and recorded digests have been matched to the exact remote revision. The fresh 1.188 TB readback publishes its own completion receipt. The offline probe then opens the snapshot read-only and tests the fixed 1,000 previously missing parent positions. ChessDB integration depends on interpreting this report. It does not block Cloud/Fishnet.
+5. The official August–September PGNs have a separate checksum and event-header audit. The local ingestion accepts specific rated event labels and can exclude tournament-labelled games. The audit reconciles each speed against the local Parquet footers and each full official month against the published total. The holdouts never enter the training merge.
+
+### After interruption
+
+Inspect the process command lines and the JSON status files first. If an existing worker is alive, leave its slot alone. For the November 15 pinned pilot, run the following commands in PowerShell if the corresponding workers have stopped. If three measurements already exist in order (2026_3, 2024_6, 2020_4), skip the pilot script. A manually restarted migration can reuse a complete pilot receipt and complete month or merge checkpoints.
+
+```powershell
+$pilotPin = 'D:/chess/bin/ply51-pilot-20261115'
+$evalPin = 'D:/chess/bin/ply51-evals-20261115'
+$venvPython = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
+pwsh -NoProfile -File "$pilotPin/run_ply51_pilot.ps1"
+& $venvPython -u "$pilotPin/run_ply51_migration.py"
+& $venvPython -u "$evalPin/run_ply51_evals.py"
+```
+
+The detached workers already launched Sunday have separate stdout and error logs. The commands above are the sequential recovery path. If a worker reports a changed digest, a capacity shortfall, or the end of its reserved window, inspect the specific receipt or resource before resuming. The active playing repertoires and the corrected Black 0.30 experiment have no dependency on publishing the new training data.
