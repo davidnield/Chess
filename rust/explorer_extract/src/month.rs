@@ -183,12 +183,27 @@ impl Walker for ChunkSink {
             band: self.band,
             ply: if self.ply_key { ply as u16 } else { 0 },
         };
-        let o = self.outcome;
-        self.maps[(b - self.lo) as usize]
-            .entry(key)
-            .or_insert_with(|| Local { child: ch, counts: Counts::default(), pos: pack(pos), ply: ply as u16 })
-            .counts
-            .add(o);
+        let map = &mut self.maps[(b - self.lo) as usize];
+        let row = match map.entry(key) {
+            std::collections::hash_map::Entry::Vacant(entry) => entry.insert(Local {
+                child: ch, counts: Counts::default(), pos: pack(pos), ply: ply as u16,
+            }),
+            std::collections::hash_map::Entry::Occupied(entry) => {
+                let row = entry.into_mut();
+                if self.wide {
+                    let observed = pack(pos);
+                    if row.child != ch || row.pos != observed {
+                        self.err.get_or_insert_with(|| anyhow::anyhow!(
+                            "within-chunk conflict at parent ({}, {}), move {san}: {} -> {:?}, {} -> {:?}",
+                            ph.lo, ph.hi, row.pos.render(), row.child, observed.render(), ch
+                        ));
+                        return;
+                    }
+                }
+                row
+            }
+        };
+        row.counts.add(self.outcome);
     }
 
     #[inline]
@@ -976,4 +991,42 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
         secs / 60.0
     );
     Ok(Some(man))
+}
+
+#[cfg(test)]
+mod within_chunk_tests {
+    use super::*;
+    use crate::chesspos::START_KEY;
+    use shakmaty::{fen::Fen, CastlingMode};
+
+    fn one_bucket(wide: bool) -> ChunkSink {
+        ChunkSink {
+            lo: 0, hi: 1, nb: 1, ply_key: true, wide, term_event_id: None,
+            maps: vec![FastMap::default()], term: FastMap::default(), event: 0,
+            band: 0, outcome: Outcome::White, reason: 0, c: Counters::default(), err: None,
+        }
+    }
+
+    #[test]
+    fn duplicate_edges_check_parent_and_both_child_halves_before_counting() {
+        let start = Chess::default();
+        let other: Chess = "4k3/8/8/8/8/8/4P3/4K3 w - - 0 1".parse::<Fen>().unwrap()
+            .into_position(CastlingMode::Standard).unwrap();
+        let child = Key { lo: 11, hi: 22 };
+        for (pos, arrival) in [
+            (&other, child), (&start, Key { lo: 11, hi: 23 }), (&start, Key { lo: 12, hi: 22 })
+        ] {
+            let mut sink = one_bucket(true);
+            sink.row(1, &start, START_KEY, "e4", child);
+            sink.row(1, &start, START_KEY, "e4", child);
+            sink.row(1, pos, START_KEY, "e4", arrival);
+            assert!(sink.take_err().unwrap().to_string().contains("within-chunk conflict"));
+            assert_eq!(sink.maps[0].values().next().unwrap().counts.t, 2);
+        }
+        let mut legacy = one_bucket(false);
+        legacy.row(1, &start, START_KEY, "e4", child);
+        legacy.row(1, &other, START_KEY, "e4", child);
+        assert!(legacy.take_err().is_none());
+        assert_eq!(legacy.maps[0].values().next().unwrap().counts.t, 2);
+    }
 }
