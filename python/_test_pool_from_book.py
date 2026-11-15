@@ -331,6 +331,24 @@ def main() -> int:
                 f.with_suffix(".tmp").replace(f)
         (book4 / "_merge_params.json").write_text(json.dumps(
             {"schema":"book-v4","input_params":{"max_ply":CAP+1, "key_bits":128, "term_slices":True}}))
+        # Supply the sliced terminal side of a v4 book as well. All fixture
+        # endings use the legacy "other" category so the sidecars are comparable.
+        event_names = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"]
+        (book4 / "_book.meta.json").write_text(json.dumps({"term_event_ids": event_names}))
+        ends = []
+        for g in games:
+            _, hashes = walk(g["moves"])
+            ply = min(len(hashes) - 1, CAP + 1)
+            h = hashes[ply]
+            w, d, b = wdb(g["res"])
+            event, band = g["slice"]
+            ends.append({"position_hash": h, "position_hash_hi": h // 7, "end_ply": ply,
+                         "kind": int(len(g["moves"]) > ply), "reason": 2, "event_id": event_names.index(event),
+                         "elo_band": band, "white_wins": w, "draws": d, "black_wins": b, "total": 1})
+        terms = pl.DataFrame(ends)
+        (book4 / "term").mkdir()
+        for i in range(512):
+            terms.filter(pl.col("position_hash") % 512 == i).write_parquet(book4 / "term" / f"bkt{i:03d}.parquet")
         P.check_cap(book4, CAP)
         e4, a4, _ = run_build(td, book4, td / "ev", [thin], None, "wcompact")
         check(e4.sort(key).equals(e2.sort(key)) and a4.sort("position_hash").equals(a2.sort("position_hash")),
