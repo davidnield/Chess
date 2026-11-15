@@ -39,6 +39,7 @@ pub struct GateParams {
     pub require_eval: bool,
     pub gates: bool,
     pub max_eval_loss: Option<f64>,
+    pub max_score_loss: Option<f64>,
     pub rare_floor: Option<i64>,
     pub strict_source: bool,
 }
@@ -232,6 +233,9 @@ pub fn eval_loss_keep(cands: &[Cand], own: f64, our_white: bool, max_loss: f64,
 /// candidates and, when `want_dispute`, the node's dispute if Python would record one.
 pub fn gate_candidates(edges: &[Cand], src: Option<i64>, own: f64, verified: &[i64],
                        p: &GateParams, want_dispute: bool) -> (Vec<Cand>, Option<Dispute>) {
+    if let Some(limit) = p.max_score_loss {
+        return score_candidates(edges, own, verified, p, limit, want_dispute);
+    }
     let binds = |c: &Cand| -> bool {
         let rf = p.rare_floor.unwrap();
         c.engine || c.total >= rf || verified.contains(&c.bare)
@@ -304,6 +308,44 @@ pub fn gate_candidates(edges: &[Cand], src: Option<i64>, own: f64, verified: &[i
     (cand, dispute)
 }
 
+/// Expected-score gates, inclusive at both boundaries. CP is only used to describe
+/// disputes in the existing sidecar format. An empty menu ends the book at this node.
+fn score_candidates(edges: &[Cand], own: f64, verified: &[i64], p: &GateParams,
+                    limit: f64, want_dispute: bool) -> (Vec<Cand>, Option<Dispute>) {
+    const EPS: f64 = 1e-12;
+    let side = |ws: f64| if p.our_white { ws } else { 1.0 - ws };
+    let floor = side(p.slice_prior) - p.robustness_floor;
+    let trusted = |c: &Cand| p.rare_floor.is_none_or(|n|
+        c.engine || c.total >= n || verified.contains(&c.bare));
+    let mut kept: Vec<Cand> = edges.iter().copied()
+        .filter(|c| side(c.eval) + EPS >= floor).collect();
+    let reference = kept.iter().filter(|c| trusted(c)).map(|c| side(c.eval))
+        .chain(own.is_finite().then(|| side(own))).reduce(f64::max);
+    if let Some(best) = reference {
+        kept.retain(|c| best - side(c.eval) <= limit + EPS);
+    }
+    if !want_dispute || p.rare_floor.is_none() {
+        return (kept, None);
+    }
+    let mut threats: Vec<_> = kept.iter().filter(|c| !trusted(c) &&
+        reference.is_none_or(|best| side(c.eval) > best + EPS)).collect();
+    let Some(top) = threats.iter().map(|c| side(c.eval)).reduce(f64::max) else {
+        return (kept, None);
+    };
+    let at_risk: Vec<_> = kept.iter().filter(|c| top - side(c.eval) > limit + EPS)
+        .map(|c| c.san).collect();
+    if at_risk.is_empty() {
+        return (kept, None);
+    }
+    threats.sort_by(|a,b| side(b.eval).total_cmp(&side(a.eval)).then(a.san.cmp(&b.san)));
+    let dispute = Dispute {
+        reference_cp: reference.map(|s| ws_to_cp(s, true)),
+        threats: threats.iter().map(|c| (c.san, ws_to_cp(side(c.eval), true))).collect(),
+        at_risk, unresolved: reference.is_none(), fallback: false,
+    };
+    (kept, Some(dispute))
+}
+
 /// One our-node's inputs to final_candidates.
 pub struct NodeIn<'a> {
     pub own: f64,
@@ -347,6 +389,24 @@ pub fn final_candidates(n: &NodeIn, p: &GateParams, want_dispute: bool) -> NodeO
             n_eng = extra.len() as i64;
             es_g.extend(extra);
         }
+    }
+    // Include a missing source alongside all rivals before computing the hard gates.
+    // Expose a surviving source separately, as required by the graph's output format.
+    if p.max_score_loss.is_some() {
+        let restored_ref = Ref::Edge(usize::MAX);
+        if let Some(san) = src {
+            if !es_g.iter().any(|c| c.bare == n.src_bare) {
+                es_g.push(Cand { r: restored_ref, san, bare: n.src_bare, eval: n.src_eval,
+                                 total: 0, engine: true });
+            }
+        }
+        let (cand, dispute) = gate_candidates(&es_g, src, n.own, n.verified, p, want_dispute);
+        return NodeOut {
+            restored: cand.iter().any(|c| c.r == restored_ref),
+            n_rej: (src.is_some() && !cand.iter().any(|c| c.bare == n.src_bare)) as i64,
+            kept: cand.iter().map(|c| c.r).filter(|r| *r != restored_ref).collect(),
+            n_eng, dispute,
+        };
     }
     let (mut cand, dispute) = gate_candidates(&es_g, src, n.own, n.verified, p, want_dispute);
     let out = |cand: Vec<Cand>, restored: bool, n_rej: i64, dispute: Option<Dispute>| NodeOut {

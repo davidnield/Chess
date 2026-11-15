@@ -55,7 +55,11 @@ fn arr2<'py>(d: &Bound<'py, PyDict>, k: &str) -> PyResult<PyReadonlyArray2<'py, 
 /// budget_core.build_graph into CSR arrays (graph.rs). `edges` and `rows` are dicts of
 /// arrays (budget_rs.build_graph_rs documents and builds them); `aux` is None (no aux rows)
 /// or the aux_mix arrays, one row per parent. Returns a dict of arrays and meta.
-#[pyfunction]
+#[pyfunction(signature=(edges,rows,aux,eval_keys,eval_vals,root,our_white,slice_prior,
+    prior_strength,eval_weight,eval_weight_min,eval_weight_k,eps,max_ply,share_floor,
+    robustness_floor,gate_rel_floor,gate_rel_own_margin,require_eval,gates,max_eval_loss,
+    rare_floor,strict_source,other_cov_blend,gated_reach,crack_at_parents,engine_moves_given,
+    track_route_ply,track_other,max_score_loss=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn build_graph_csr<'py>(
     py: Python<'py>, edges: &Bound<'py, PyDict>, rows: &Bound<'py, PyDict>,
@@ -66,7 +70,7 @@ pub fn build_graph_csr<'py>(
     gate_rel_own_margin: f64, require_eval: bool, gates: bool, max_eval_loss: f64,
     rare_floor: i64, strict_source: bool, other_cov_blend: bool, gated_reach: bool,
     crack_at_parents: bool, engine_moves_given: bool, track_route_ply: bool,
-    track_other: bool,
+    track_other: bool, max_score_loss: Option<f64>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let pa = arr::<i64>(edges, "parents")?;
     let par: Vec<reach::Key> = pa.as_slice()?.iter().map(|&h| key(h)).collect();
@@ -160,6 +164,7 @@ pub fn build_graph_csr<'py>(
             our_white, slice_prior, robustness_floor, gate_rel_floor, gate_rel_own_margin,
             require_eval, gates,
             max_eval_loss: if max_eval_loss.is_nan() { None } else { Some(max_eval_loss) },
+            max_score_loss: crate::score_limit(max_score_loss, max_eval_loss)?,
             rare_floor: if rare_floor < 0 { None } else { Some(rare_floor) },
             strict_source,
         },

@@ -7,6 +7,9 @@ AND which move to book at each — the budget is inside the selection, so a
 book (which can afford deep traps). Method: per-node value-vs-budget curves
 (budget_core.py, where the algorithm and its documented approximations live).
 
+The production engine gates use the repertoire side's expected score. The absolute tolerance
+is 0.110 for White and 0.075 for Black. The relative tolerance is 0.095 for both.
+
 Two optimisers (2026-11-12; the greedy, fixed-policy and price-variant paths were retired and
 live in tag archive-2026-11-11):
   --method price     price search, one repricing round at max(book, optimistic) reach from the
@@ -380,7 +383,7 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                      gs.get("gate_rel_floor", bc.GATE_REL_FLOOR),
                      gs.get("gate_rel_own_margin", bc.GATE_REL_OWN_MARGIN), admit.gates,
                      math.nan if admit.max_eval_loss is None else float(admit.max_eval_loss),
-                     -1 if admit.rare_floor is None else int(admit.rare_floor))
+                     -1 if admit.rare_floor is None else int(admit.rare_floor), gs.get("max_score_loss"))
     if engine_moves:
         em = [(h, san, ch) for h, lst in engine_moves.items() for san, ch in lst]
         sans = pl.Series([x[1] for x in em], dtype=pl.String)
@@ -546,13 +549,17 @@ def main() -> int:
     ap.add_argument("--stick-margin", type=float, default=None,
                     help="Expected-score advantage a new move needs to replace the incumbent's "
                          "(default 0.01 with --incumbent; 0 = no stickiness, churn report only).")
-    ap.add_argument("--robustness-floor", type=float, default=bc.ROBUSTNESS_FLOOR,
-                    help="Absolute gate tolerance in expected-score units")
-    ap.add_argument("--gate-rel-floor", type=float, default=bc.GATE_REL_FLOOR,
-                    help="Relative gate tolerance in expected-score units")
-    ap.add_argument("--gate-rel-own-margin", type=float, default=bc.GATE_REL_OWN_MARGIN,
-                    help="Discount on the position's own eval for the relative gate")
-    ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
+    ap.add_argument("--robustness-floor", type=float, metavar="FRACTION",
+                    help="Allowed deficit below the side's construction prior (White 0.110, Black 0.075)")
+    ap.add_argument("--gate-rel-floor", type=float,
+                    help="Legacy Stage-3 relative tolerance (default 0.10 in legacy mode)")
+    ap.add_argument("--gate-rel-own-margin", type=float,
+                    help="Legacy Stage-3 parent discount (default 0.02 in legacy mode)")
+    policy = ap.add_mutually_exclusive_group()
+    policy.add_argument("--max-score-loss", type=float, metavar="FRACTION",
+                        help="Maximum engine expected-score loss at our decision (default 0.095)")
+    policy.add_argument("--legacy-gates", action="store_true", help="Replay the old gates without a cp cap")
+    policy.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
                     help="Soundness gate: at our nodes book only moves whose engine eval "
                          "is within CP centipawns of the best play there (the best "
                          "evaluated candidate, or the position's own eval if higher), "
@@ -588,14 +595,29 @@ def main() -> int:
     if not budget_rs.available():
         print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
         return 1
+    legacy = a.legacy_gates or a.max_eval_loss is not None
+    if not legacy and (a.gate_rel_floor is not None or a.gate_rel_own_margin is not None):
+        ap.error("--gate-rel-floor and --gate-rel-own-margin belong to --legacy-gates or --max-eval-loss")
+    if a.gate_rel_floor is None:
+        a.gate_rel_floor = bc.GATE_REL_FLOOR
+    if a.gate_rel_own_margin is None:
+        a.gate_rel_own_margin = bc.GATE_REL_OWN_MARGIN
+    if not legacy and a.max_score_loss is None:
+        a.max_score_loss = bc.MAX_SCORE_LOSS
+    if a.robustness_floor is None:
+        a.robustness_floor = bc.ROBUSTNESS_FLOOR if legacy else bc.SCORE_ABSOLUTE_TOLERANCE[a.perspective]
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
+    if not legacy:
+        gate_settings["max_score_loss"] = a.max_score_loss
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
         ap.error("gate tolerances must be between 0 and 1 expected-score units")
+    if a.slice_prior is not None and not 0 <= a.slice_prior <= 1:
+        ap.error("--slice-prior must be a White expected score between 0 and 1")
     # sampled tables record this; gates and strict_source are fixed True since 2026-11-12
     gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=True,
                        gated_reach=a.gated_reach, strict_source=True)
-    if a.dump_engine_targets and a.max_eval_loss is None:
-        ap.error("--dump-engine-targets requires --max-eval-loss")
+    if a.dump_engine_targets and legacy and a.max_eval_loss is None:
+        ap.error("--dump-engine-targets requires a relative loss cap")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
     if a.lookahead_floor < 0:
@@ -653,9 +675,16 @@ def main() -> int:
     for dest in outs.values():
         if dest.exists() and not a.force:
             mp = Path(str(dest) + ".meta.json")
-            old = json.loads(mp.read_text()).get("uncut_own_recipe") if mp.exists() else None
-            if old != uncut_recipe:
+            previous = json.loads(mp.read_text()) if mp.exists() else {}
+            if previous.get("uncut_own_recipe") != uncut_recipe:
                 ap.error("Existing output uses another move lookup; choose a fresh output prefix")
+            if (previous.get("max_score_loss") != a.max_score_loss
+                    or previous.get("max_eval_loss") != a.max_eval_loss
+                    or previous.get("robustness_floor", bc.ROBUSTNESS_FLOOR) != a.robustness_floor
+                    or (not legacy and (previous.get("slice_prior_override") != a.slice_prior
+                        or previous.get("perspective") != a.perspective
+                        or Path(previous.get("stats", "")).resolve() != Path(a.stats).resolve()))):
+                ap.error("Existing output uses different evaluation gates; choose a fresh prefix or --force")
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
     if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
@@ -673,7 +702,12 @@ def main() -> int:
         slice_prior = con.execute(f"""
             SELECT SUM(white_score_avg * total) / SUM(total)
             FROM read_parquet('{stats}') WHERE parent_hash = {root}
-        """).fetchone()[0] or 0.5
+        """).fetchone()[0]
+        if slice_prior is None:
+            slice_prior = 0.5
+    absolute_score_floor = (slice_prior if our_white else 1.0 - slice_prior) - a.robustness_floor
+    if not legacy:
+        gate_recipe["absolute_score_floor"] = absolute_score_floor
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
         f"method {a.method}")
 
@@ -706,7 +740,8 @@ def main() -> int:
         proposal_input = Path(a.engine_candidates).read_bytes()
         proposal_sha = hashlib.sha256(proposal_input).hexdigest()
         fresh = {}
-        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
+        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss, max_score_loss=a.max_score_loss,
+                    our_white=our_white, score_floor=absolute_score_floor)
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
         verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
@@ -844,6 +879,16 @@ def main() -> int:
                                 excluded=excluded, verified=verified_at, strict_source=True,
                                 aux_frame=aux_frame)
     del edf, aux_frame
+    if a.max_score_loss is not None and fi["rows"]["src_has_child"].any():
+        # A source-only move can lead outside the collected edge table. Its child
+        # still needs a gate evaluation; verified overlays already in ek take priority.
+        rows_in = fi["rows"]
+        missing = np.setdiff1d(rows_in["src_child"][rows_in["src_has_child"]], ek)
+        if missing.size:
+            cp = lookup_evals(missing, mm_hash, mm_cp)
+            hit = cp != MISSING
+            ek = np.concatenate([ek, missing[hit]])
+            ev = np.concatenate([ev, book_builder_rs.cp_to_expected_score(cp[hit].astype(np.float64))])
     terminal = None
     if a.dump_stop_positions or a.sampled_stop:
         import sampled_stop as ss
@@ -1184,6 +1229,8 @@ def main() -> int:
             "prior_strength": a.prior_strength, "gates": True,
             "max_cands": 0, "gated_reach": a.gated_reach,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
+            **({"absolute_score_floor": absolute_score_floor, "slice_prior_override": a.slice_prior}
+               if a.max_score_loss is not None else {}),
             "min_games": a.min_games, "pool_min_games": pool_floor,
             **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
                if uncut else {}),

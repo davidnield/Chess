@@ -47,23 +47,29 @@ def search(engine, board, nodes, san=None):
             "depth":info["depth"], "nodes":info["nodes"]}
 
 
-def score_moves(engine, board, moves, nodes, limit):
+def score_moves(engine, board, moves, nodes, limit, score_units=False):
     sign = 1 if board.turn else -1
     free = search(engine, board, nodes)
     sans = set(moves) | {free["san"]}
     scores = {san:search(engine, board, nodes, san) for san in sorted(sans)} if len(sans) > 1 else {free["san"]:free}
     best = max(scores, key=lambda m:(sign * scores[m]["cp"], m == free["san"]))
-    unstable = abs(free["cp"] - scores[free["san"]]["cp"]) > limit
+    unstable = abs(bc.engine_loss(free["cp"], scores[free["san"]]["cp"], score_units)) > limit
     return {"best":best, "free":free, "scores":scores, "budget":nodes, "unstable":unstable}
 
 
-def needs_check(selected, moves, signed_cp, parent, cloud, limit):
+def needs_check(selected, moves, signed_cp, parent, cloud, limit, score_units=False, score_floor=None):
     if cloud:
         return True
     chosen = signed_cp.get(selected)
     if chosen is None or parent is None or any(m not in signed_cp for m in moves):
         return True
     best = max(parent, *signed_cp.values())
+    if score_units:
+        return (bc.fails_engine_gate(best, chosen - GATE_MARGIN_CP, limit, True, score_floor)
+                or any(bc.engine_loss(best, cp + GATE_MARGIN_CP, True) <= limit + bc.SCORE_EPS
+                       and bc.engine_loss(best, cp - GATE_MARGIN_CP, True) >= limit - bc.SCORE_EPS
+                       for cp in signed_cp.values())
+                or any(m != selected and abs(cp - chosen) <= SCREEN_CP for m, cp in signed_cp.items()))
     return any(abs(best - cp - limit) <= GATE_MARGIN_CP or
                (m != selected and abs(cp - chosen) <= SCREEN_CP)
                for m, cp in signed_cp.items())
@@ -120,15 +126,20 @@ def decisions(book, meta, proposals, colour):
     cp = {int(h):int(v) for h,v in zip(keys,lookup_evals(keys,*open_eval_arrays())) if v != MISSING}
     cp.update(bc.proposal_cp(proposals))
     sign = 1 if colour == "white" else -1
+    score_units = meta.get("max_score_loss") is not None
+    limit = meta["max_score_loss"] if score_units else meta["max_eval_loss"]
+    floor = bc.score_floor_from_meta(meta, colour == "white")
     for h, epd, selected, moves in positions:
         old = prior.get(h, {})
         if old and set(moves) <= old.keys():
-            if old[selected]["verified_loss_cp"] > meta["max_eval_loss"]:
+            row = old[selected]
+            if bc.fails_engine_gate(sign * row["parent_cp_white"], sign * row["child_cp_white"],
+                                    limit, score_units, floor):
                 raise ValueError(f"Builder selected a verified over-limit move at {h} {selected}")
             continue
         signed = {m:sign*cp[ch] for m,ch in moves.items() if ch in cp}
         if old or needs_check(selected, moves, signed, sign*cp[h] if h in cp else None,
-                              cloud_kids.intersection(moves.values()), meta["max_eval_loss"]):
+                              cloud_kids.intersection(moves.values()), limit, score_units, floor):
             yield h, epd, moves
 
 
@@ -159,6 +170,10 @@ def run(book, proposals, colour, cache, out, nodes=15_000_000, threads=6):
     cache.mkdir(parents=True, exist_ok=True)
     contract = {"engine":sha(ec.SF), "nodes":nodes, "threads":threads, "hash_mb":1024,
                 "limit":meta["max_eval_loss"], "colour":colour, "verifier":sha(__file__)}
+    score_units = meta.get("max_score_loss") is not None
+    limit = meta["max_score_loss"] if score_units else meta["max_eval_loss"]
+    if score_units:
+        contract.update(max_score_loss=limit, absolute_score_floor=bc.score_floor_from_meta(meta, colour == "white"))
     config = cache / "config.json"
     if config.exists() and json.loads(config.read_text()) != contract:
         raise ValueError("Verification cache settings changed")
@@ -179,9 +194,9 @@ def run(book, proposals, colour, cache, out, nodes=15_000_000, threads=6):
                     engine.configure({"Threads":threads, "Hash":1024})
                 b = chess.Board(epd + " 0 1")
                 sans = set(moves) | (set(saved["scores"]) if saved else set())
-                saved = score_moves(engine, b, sans, nodes, meta["max_eval_loss"])
+                saved = score_moves(engine, b, sans, nodes, limit, score_units)
                 if saved["unstable"]:
-                    saved = score_moves(engine, b, sans | set(saved["scores"]), nodes*2, meta["max_eval_loss"])
+                    saved = score_moves(engine, b, sans | set(saved["scores"]), nodes*2, limit, score_units)
                 saved.update(epd=epd, engine=engine.id["name"], date=datetime.date.today().isoformat())
                 write_json(saved, file)
             records.extend(corrected_rows(h, epd, saved, originals, saved["engine"], contract["engine"]))

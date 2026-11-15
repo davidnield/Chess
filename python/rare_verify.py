@@ -34,6 +34,11 @@ this budget: the whole parent is searched again at --deep-nodes (its own cache, 
 only) and the deeper scores decide. verification_nodes records which budget a row rests on, and
 verification_unstable that the two budgets disagreed about the move.
 
+Score-policy books compare the converted parent and move evaluations. The retry band remains
+in centipawns around each move, testing whether it straddles the absolute or relative boundary.
+When an earlier seed supplies a shallow verification, a booked observed move near the new
+boundary goes back through the depth check.
+
 The budget never goes down at a parent. If the overlay the book was built with already holds a
 deeper verdict there, a later pass that adds a rival compares the WHOLE set at that deeper budget
 again (the earlier deep searches are cache hits), whatever the base scores say: evidence that
@@ -81,7 +86,18 @@ def bare(san: str) -> str:
     return san.rstrip("+#")
 
 
-def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, frontier=0):
+def near_score_boundary(best, move, free, limit, band_cp, score_floor):
+    """Would a cp perturbation of the child, or the alternate reference, change the verdict?"""
+    lo, hi = move - band_cp, move + band_cp
+    return (bc.engine_loss(best, hi, True) - bc.SCORE_EPS <= limit <= bc.engine_loss(best, lo, True) + bc.SCORE_EPS
+            or (score_floor is not None and bc.cp_to_expected_score(lo) - bc.SCORE_EPS
+                <= score_floor <= bc.cp_to_expected_score(hi) + bc.SCORE_EPS)
+            or (free is not None and bc.fails_engine_gate(best, move, limit, True)
+                != bc.fails_engine_gate(free, move, limit, True)))
+
+
+def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, frontier=0,
+         deep_nodes=20_000_000, band=BAND):
     """{parent hash: (reason, epd, moves to order)}; moves are bare SANs of observed moves.
     cps: White-view stored or overridden cp by position hash."""
     floor = meta["rare_floor"]
@@ -97,6 +113,20 @@ def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, f
             .select("position_hash", "best_move").collect())
         src = {h: bare(m) for h, m in s.iter_rows() if m}
     dis = {d["position_hash"]: d for d in disputes}
+    # A seed searched under a different gate can already carry a 5M verdict on
+    # a booked move that now needs 20M. Reuse its cp evidence at the new boundary.
+    revisit = set()
+    limit = meta.get("max_score_loss")
+    if limit is not None and frame is not None and frame.height:
+        floor_score = bc.score_floor_from_meta(meta, colour == "white")
+        shallow = frame.filter((pl.col("verification_nodes") < deep_nodes)
+                               & pl.col("position_hash").is_in(list(booked)))
+        for h, san, p, c, free in shallow.select("position_hash", "move_san", "parent_cp_white",
+                "child_cp_white", "verification_free_cp_white").iter_rows():
+            if (booked[h][1] == bare(san) and p is not None and c is not None and
+                    near_score_boundary(sign*p, sign*c, None if free is None else sign*free,
+                                        limit, band, floor_score)):
+                revisit.add(h)
 
     def trusted_rival(h, exclude):
         best = None
@@ -115,6 +145,9 @@ def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, f
         menu = {bare(e["move_san"]): e for e in edges.get(h, ())}
         done = verified.get(h, set())
         want, reason = set(), None
+        if h in revisit and move in menu:
+            want.add(move)
+            reason = "score gate boundary"
         e = menu.get(move)
         if e is not None and e["total"] < floor and move not in done:
             want.add(move)
@@ -133,7 +166,7 @@ def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, f
             want.add(rival)
         if src.get(h) in menu:
             want.add(src[h])
-        if not want <= done:
+        if reason == "score gate boundary" or not want <= done:
             out[h] = (reason, epd, sorted(want))
     if frontier and frontier_reach is not None:
         extra = [d for d in disputes if d["position_hash"] not in booked and d["at_risk"]
@@ -223,7 +256,7 @@ class Searches:
             self.engine.quit()
 
 
-def comparison_set(search, requested, done, menu, stored, floor, limit, sign, band=BAND):
+def comparison_set(search, requested, done, menu, stored, floor, limit, sign, band=BAND, score_units=False):
     """(the moves compared at one parent, the cached searches covering them).
     search(moves, first) -> the parent's cache entry with at least `moves` (Searches.get);
     requested: this pass's moves; done: moves verified here in the applied overlay; menu: bare SAN
@@ -234,7 +267,8 @@ def comparison_set(search, requested, done, menu, stored, floor, limit, sign, ba
     use = set(requested) | set(done)
     if trusted and limit is not None:
         top = max(trusted.values())
-        use |= {m for m, c in trusted.items() if c >= top - limit - bc.CP_EPS}
+        eps = bc.SCORE_EPS if score_units else bc.CP_EPS
+        use |= {m for m, c in trusted.items() if bc.engine_loss(top, c, score_units) <= limit + eps}
     first = True
     while True:
         saved = search(sorted(use), first)
@@ -243,13 +277,14 @@ def comparison_set(search, requested, done, menu, stored, floor, limit, sign, ba
         if limit is None:
             return use, saved
         root = max(sign * saved["moves"][m]["cp"] for m in use)
-        more = {m for m, c in trusted.items() if m not in use and c >= root - limit - 2 * band}
+        more = {m for m, c in trusted.items() if m not in use
+                and not bc.fails_engine_gate(root, c + 2 * band, limit, score_units)}
         if not more:
             return use, saved
         use |= more
 
 
-def boundary(saved, limit, band=BAND, moves=None) -> list[str]:
+def boundary(saved, limit, band=BAND, moves=None, score_units=False, score_floor=None) -> list[str]:
     """The moves (of `moves`; default all cached) at a searched parent whose verdict this budget
     cannot settle: the loss against the best restricted score is within `band` of the limit, or
     the verdict differs when the unrestricted score is the reference instead."""
@@ -257,12 +292,14 @@ def boundary(saved, limit, band=BAND, moves=None) -> list[str]:
     scores = {m: sign * r["cp"] for m, r in saved["moves"].items()
               if moves is None or m in moves}
     best, free = max(scores.values()), sign * saved["free"]["cp"]
+    if score_units:
+        return sorted(m for m, c in scores.items() if near_score_boundary(best, c, free, limit, band, score_floor))
     return sorted(m for m, c in scores.items()
                   if abs(best - c - limit) <= band or (best - c > limit) != (free - c > limit))
 
 
 def rows_for(h, saved, menu, limit, nodes, engine_sha, reason, deep=None, deep_nodes=None,
-             moves=None):
+             moves=None, score_units=False, score_floor=None):
     """Overlay rows for the OBSERVED moves of the comparison set `moves` (default: all cached) at
     one parent. The reference is the set's best restricted score. deep: the same parent's
     restricted searches at the larger budget; when given, its scores are the parent's and every
@@ -281,8 +318,10 @@ def rows_for(h, saved, menu, limit, nodes, engine_sha, reason, deep=None, deep_n
         if e is None:
             continue                # an engine choice nobody has played: reported, not a candidate
         loss = sign * (root - r["cp"])
-        flipped = bool(deep) and m in base and \
-            (sign * (base_root - base[m]["cp"]) > limit) != (loss > limit)
+        flipped = bool(deep) and (bc.fails_engine_gate(sign * base_root, sign * base[m]["cp"],
+                                                       limit, score_units, score_floor)
+                                  != bc.fails_engine_gate(sign * root, sign * r["cp"],
+                                                          limit, score_units, score_floor))
         yield dict(position_hash=h, position_epd=saved["epd"], move_san=e["move_san"],
                    child_hash=e["child_hash"], child_cp_white=r["cp"], nodes=r["nodes"],
                    depth=r["depth"], engine=saved["engine"], searched=saved["date"], reason=reason,
@@ -325,7 +364,7 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
            if v != MISSING}
     stored = dict(cps)
     cps.update(bc.proposal_cp(frame))
-    wanted = plan(b, meta, frame, colour, cps, edges, disputes, frontier_reach, frontier)
+    wanted = plan(b, meta, frame, colour, cps, edges, disputes, frontier_reach, frontier, deep_nodes, band)
     verified = bc.verified_moves(frame)
     sign = 1 if colour == "white" else -1
     # the deepest budget already applied at each parent, from the overlay this book was built with
@@ -337,17 +376,19 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
     searches = Searches(Path(cache), nodes, threads)
     deeper = Searches(Path(cache) / f"deep-{deep_nodes}", deep_nodes, threads, free=False)
     records, unplayed, retried = [], [], []
-    limit = meta["max_eval_loss"]
+    score_units = meta.get("max_score_loss") is not None
+    limit = meta["max_score_loss"] if score_units else meta["max_eval_loss"]
+    score_floor = bc.score_floor_from_meta(meta, colour == "white")
     try:
         for i, (h, (reason, epd, moves)) in enumerate(sorted(wanted.items()), 1):
             menu = {bare(e["move_san"]): e for e in edges.get(h, ())}
             use, saved = comparison_set(
                 lambda ms, first: searches.get(h, epd, ms, count=first), moves,
-                verified.get(h, ()), menu, stored, meta["rare_floor"], limit, sign, band)
+                verified.get(h, ()), menu, stored, meta["rare_floor"], limit, sign, band, score_units)
             if bare(saved["free"]["san"]) not in menu:
                 unplayed.append({"position_hash": h, "epd": epd, "engine_move": saved["free"]["san"],
                                  "cp_white": saved["free"]["cp"]})
-            again = boundary(saved, limit, band, use) if limit is not None else []
+            again = boundary(saved, limit, band, use, score_units, score_floor) if limit is not None else []
             was = applied.get(h, 0)
             if was > deep_nodes:
                 raise ValueError(f"The applied overlay holds a {was:,}-node verdict at {h}; "
@@ -358,7 +399,7 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
                 before = dict(deeper.stats)
                 deep = deeper.get(h, epd, sorted(use))
             new = list(rows_for(h, saved, menu, limit, nodes, searches.contract["engine"], reason,
-                                deep, deep_nodes, use))
+                                deep, deep_nodes, use, score_units, score_floor))
             if deep:
                 retried.append({"position_hash": h,
                                 "why": "boundary" if again else "carried forward",
@@ -403,6 +444,7 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
                 "rows": len(records), "engine_choice_unplayed": unplayed,
                 "contract": searches.contract, "searches": searches.stats,
                 "deep_contract": deeper.contract, "deep_searches": deeper.stats, "band_cp": band,
+                "max_score_loss": meta.get("max_score_loss"), "absolute_score_floor": score_floor,
                 "retried_parents": retried,
                 "seconds": time.monotonic() - t0}, Path(str(out) + ".meta.json"))
     print(f"{len(wanted)} parents, {searches.stats} -> {out}", flush=True)

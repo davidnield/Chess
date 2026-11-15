@@ -46,7 +46,7 @@ def build_graph_rs(edges_by_parent: dict[int, list[dict]], root: int, our_white:
                    gate_rel_floor=bc.GATE_REL_FLOOR,
                    gate_rel_own_margin=bc.GATE_REL_OWN_MARGIN, require_eval=True,
                    max_cands=0, gates=True, other_cov_blend=False, gated_reach=False,
-                   max_eval_loss=None, strict_source=False, crack_at_parents=False,
+                   max_eval_loss=None, max_score_loss=None, strict_source=False, crack_at_parents=False,
                    engine_moves=None, track_route_ply=False, track_other=False,
                    excluded=None, rare_floor=None, verified=None) -> bc.Graph:
     if max_cands:
@@ -175,7 +175,7 @@ def build_graph_rs(edges_by_parent: dict[int, list[dict]], root: int, our_white:
                   eval_weight_min=eval_weight_min, eval_weight_k=eval_weight_k, eps=eps,
                   max_ply=max_ply, share_floor=share_floor, robustness_floor=robustness_floor,
                   gate_rel_floor=gate_rel_floor, gate_rel_own_margin=gate_rel_own_margin,
-                  require_eval=require_eval, gates=gates, max_eval_loss=max_eval_loss,
+                  require_eval=require_eval, gates=gates, max_eval_loss=max_eval_loss, max_score_loss=max_score_loss,
                   rare_floor=rare_floor, strict_source=strict_source,
                   other_cov_blend=other_cov_blend, gated_reach=gated_reach,
                   crack_at_parents=crack_at_parents, engine_moves_given=bool(engine_moves),
@@ -193,7 +193,7 @@ def run_csr(edges, rows, aux, ek, ev, root, our_white, *, slice_prior, prior_str
             eval_weight, eval_weight_min, eval_weight_k, eps, max_ply, share_floor,
             robustness_floor, gate_rel_floor, gate_rel_own_margin, require_eval, gates,
             max_eval_loss, rare_floor, strict_source, other_cov_blend, gated_reach,
-            crack_at_parents, engine_moves_given, track_route_ply, track_other) -> dict:
+            crack_at_parents, engine_moves_given, track_route_ply, track_other, max_score_loss=None) -> dict:
     """book_builder_rs.build_graph_csr on the input arrays"""
     return rs.build_graph_csr(
         edges, rows, aux, ek, ev, root, our_white, slice_prior, prior_strength, eval_weight,
@@ -201,7 +201,7 @@ def run_csr(edges, rows, aux, ek, ev, root, our_white, *, slice_prior, prior_str
         gate_rel_floor, gate_rel_own_margin, require_eval, gates,
         math.nan if max_eval_loss is None else float(max_eval_loss),
         -1 if rare_floor is None else int(rare_floor), strict_source, other_cov_blend,
-        gated_reach, crack_at_parents, engine_moves_given, track_route_ply, track_other)
+        gated_reach, crack_at_parents, engine_moves_given, track_route_ply, track_other, max_score_loss)
 
 
 def meta_from_csr(out: dict, san_list, m: dict, *, strict_source, crack_at_parents) -> dict:

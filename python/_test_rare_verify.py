@@ -810,7 +810,16 @@ with tempfile.TemporaryDirectory() as td:
           and str(final["overlay"]) in r0["command"] and fs["seed_overlay"] == str(final["overlay"])
           and final.get("seed_overlay") is None, f"{log[n0:]} {fs}")
 
-    # the default stages run the snapshot's files, not the working tree's
+    # A cp template supplies the rest of the recipe for a score-policy run.
+    score_run = ns("score")
+    score_run.cap, score_run.template_cap, score_run.max_score_loss = None, 30, None
+    rrb.drive(score_run, build, verify, source=src)
+    args = json.loads((score_run.out / "round-00/build.receipt.json").read_text())["identity"]["command"]
+    check("driver: a historical template yields the new Black score recipe",
+          "--max-eval-loss" not in args and args[args.index("--max-score-loss")+1] == "0.095"
+          and args[args.index("--robustness-floor")+1] == "0.075")
+
+    # The default stages run the snapshot's files.
     final = rrb.drive(ns("c"), None, lambda b_, o_, f_, l_: (
         pl.DataFrame({"x": [1]}).write_parquet(o_),
         Path(str(o_) + ".meta.json").write_text(json.dumps({"requested_parents": 0, "by_reason": {}}))),

@@ -2,8 +2,10 @@
 book rests on (rare_verify.py), rebuild with the verified scores, repeat until a verification
 pass produces no new evidence.
 
-    python run_rare_book.py --colour black --cap 30 --baseline <cutoff screen dir>
+    python run_rare_book.py --colour black --baseline <cutoff screen dir>
                             --lookup <uncut cache> --out <work dir> --searches <search cache>
+
+New runs use the lifetime expected-score gates. An explicit --cap replays a historical cp arm.
 
 Round r lives in <out>/round-NN: the build (book_b<B>.parquet, its .meta.json and .rare.json) and
 the verifier's overlay. Round 0 is the expanded menu before any fresh score; keep it.
@@ -17,7 +19,7 @@ meta names the last overlay that carried new evidence. The frontier is searched 
 Starting from earlier evidence (--seed-overlay). A verified score is a fact about a position, not
 about a book, and the position searches are cached. Without a seed a new run still rebuilds once
 per round to rediscover which of those scores its book rests on. With the last overlay of another
-run of the same colour and cap as the seed, round 0 is built with that evidence already applied
+run of the same colour as the seed, round 0 is built with that evidence already applied
 (so it is no longer the bare expanded menu), and the run needs only the rounds its own new
 decisions call for. The seed is part of round 0's receipt; final.json names it.
 
@@ -163,10 +165,21 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
     to the snapshot's build_budget_books.py and rare_verify.py; tests pass their own."""
     import polars as pl
 
-    receipt = a.baseline / "stages" / f"{a.colour}-cp{a.template_cap or a.cap}.json"
+    template = a.template_cap if a.template_cap is not None else (60 if a.cap is None else a.cap)
+    receipt = a.baseline / "stages" / f"{a.colour}-cp{template}.json"
     cmd = json.loads(receipt.read_text())["command"]
-    base = modern(cmd[cmd.index("--rep"):]) + list(getattr(a, "build_arg", None) or [])
-    base[base.index("--max-eval-loss") + 1] = str(a.cap)
+    base = modern(cmd[cmd.index("--rep"):])
+    if a.cap is not None:
+        base[base.index("--max-eval-loss") + 1] = str(a.cap)
+    else:
+        from budget_core import MAX_SCORE_LOSS, SCORE_ABSOLUTE_TOLERANCE
+        for flag in ("--max-eval-loss", "--robustness-floor", "--gate-rel-floor", "--gate-rel-own-margin"):
+            if flag in base:
+                i = base.index(flag)
+                del base[i:i+2]
+        limit = a.max_score_loss if a.max_score_loss is not None else MAX_SCORE_LOSS
+        base.extend(["--max-score-loss", str(limit), "--robustness-floor", str(SCORE_ABSOLUTE_TOLERANCE[a.colour])])
+    base += list(getattr(a, "build_arg", None) or [])
     budget = base[base.index("--budget") + 1]
     while a.wait and not (a.lookup / "ready.json").exists():
         time.sleep(30)
@@ -266,10 +279,12 @@ def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--colour", required=True, choices=["black", "white"])
-    ap.add_argument("--cap", type=int, required=True)
+    gate = ap.add_mutually_exclusive_group()
+    gate.add_argument("--cap", type=int, help="Replay a historical centipawn cap")
+    gate.add_argument("--max-score-loss", type=float, help="Relative score fraction (default 0.095)")
     ap.add_argument("--baseline", type=Path, required=True,
                     help="cutoff screen dir holding stages/<colour>-cp<cap>.json")
-    ap.add_argument("--template-cap", type=int, help="take the recipe from this cap's receipt")
+    ap.add_argument("--template-cap", type=int, help="take other settings from this cp receipt (score mode default 60)")
     ap.add_argument("--lookup", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--searches", type=Path, required=True,
@@ -283,7 +298,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-rounds", type=int, default=8)
     ap.add_argument("--wait", action="store_true", help="wait for the lookup's ready.json")
     ap.add_argument("--seed-overlay", type=Path, metavar="PARQUET",
-                    help="the last overlay of another run of this colour and cap: round 0 starts "
+                    help="the last overlay of another run of this colour: round 0 starts "
                          "from its verified scores (see the header)")
     ap.add_argument("--build-arg", action="append", default=[], metavar="ARG",
                     help="an extra build_budget_books argument (repeatable), e.g. "

@@ -158,8 +158,15 @@ pub(crate) fn csr(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()>
     Ok(())
 }
 
+fn score_limit(score: Option<f64>, cp: f64) -> PyResult<Option<f64>> {
+    if score.is_some_and(|s| !cp.is_nan() || !(0.0..=1.0).contains(&s)) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max_score_loss must be in [0,1] and cannot be combined with max_eval_loss"));
+    }
+    Ok(score)
+}
+
 /// final_candidates for many our-nodes (budget_core.final_candidates, max_cands 0).
-///
 /// Nodes: own eval, source move (san/bare code, -1 = none) and the restored source move's
 /// child eval. Recorded edges e_* and engine proposals m_* in CSR (san/bare codes, child
 /// eval, total); verified (v_*) and vetoed (x_*) bare codes in CSR. SAN codes must be
@@ -168,7 +175,10 @@ pub(crate) fn csr(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()>
 /// Returns (k_ptr, k_ref, restored, n_rej, n_eng, disputes): k_ref >= 0 is a global
 /// recorded-edge index, -(1 + j) the global engine proposal j; disputes is a list of
 /// (node, reference_cp or None, [(san, cp)], [san], fallback, unresolved).
-#[pyfunction]
+#[pyfunction(signature=(own,src_san,src_bare,src_eval,e_ptr,e_san,e_bare,e_eval,e_total,
+    m_ptr,m_san,m_bare,m_eval,v_ptr,v_bare,x_ptr,x_bare,our_white,slice_prior,robustness_floor,
+    gate_rel_floor,gate_rel_own_margin,require_eval,gates,max_eval_loss,rare_floor,strict_source,
+    want_disputes,max_score_loss=None))]
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn final_candidates_batch<'py>(
     py: Python<'py>,
@@ -183,7 +193,7 @@ fn final_candidates_batch<'py>(
     x_ptr: PyReadonlyArray1<'py, i64>, x_bare: PyReadonlyArray1<'py, i64>,
     our_white: bool, slice_prior: f64, robustness_floor: f64, gate_rel_floor: f64,
     gate_rel_own_margin: f64, require_eval: bool, gates: bool, max_eval_loss: f64,
-    rare_floor: i64, strict_source: bool, want_disputes: bool,
+    rare_floor: i64, strict_source: bool, want_disputes: bool, max_score_loss: Option<f64>,
 ) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<bool>>,
                Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyList>)> {
     let (own, ss, sb, se) = (own.as_slice()?, src_san.as_slice()?, src_bare.as_slice()?,
@@ -206,6 +216,7 @@ fn final_candidates_batch<'py>(
         our_white, slice_prior, robustness_floor, gate_rel_floor, gate_rel_own_margin,
         require_eval, gates,
         max_eval_loss: if max_eval_loss.is_nan() { None } else { Some(max_eval_loss) },
+        max_score_loss: score_limit(max_score_loss, max_eval_loss)?,
         rare_floor: if rare_floor < 0 { None } else { Some(rare_floor) },
         strict_source,
     };
