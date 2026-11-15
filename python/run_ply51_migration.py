@@ -62,7 +62,7 @@ def wait_pilot(pid):
     if [r["Month"] for r in results] != PILOTS:
         if pid:
             raise ValueError("pilot exited before publishing all three measurements; see pilot.err.log")
-        run("powershell.exe", "-NoProfile", "-File", runner)
+        run("pwsh.exe", "-NoProfile", "-File", runner)
         results = read_json(report)
     if [r["Month"] for r in results] != PILOTS:
         raise ValueError("incomplete pilot measurements")
