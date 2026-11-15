@@ -254,6 +254,9 @@ struct MergeArgs {
     /// parent_epd, parent_hash, child_hash). In the settings lock.
     #[arg(long, num_args = 1.., value_parser = ["parent_epd", "parent_hash", "child_hash"])]
     no_dictionary: Vec<String>,
+    /// Write book-v4 move slices using rank strings and 128-bit parent/child XOR.
+    #[arg(long)]
+    compact: bool,
     /// Run at BELOW_NORMAL priority.
     #[arg(long)]
     below_normal: bool,
@@ -373,6 +376,7 @@ fn run_merge(a: MergeArgs) -> Result<ExitCode> {
         min_free_bytes: (a.min_free_gb * 1e9) as u64,
         row_group_rows: a.row_group_rows.max(1),
         no_dictionary: no_dict,
+        compact: a.compact,
         allow_one_volume: a.test_one_volume,
         crash_at: a.test_crash_at.as_deref().map(merge::parse_crash).transpose()?,
         months_root: a.months_root,

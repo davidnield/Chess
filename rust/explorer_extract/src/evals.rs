@@ -722,6 +722,7 @@ pub struct Plan {
     pub want: Vec<bool>,
     /// The book is a book-v2: 128-bit keys.
     pub wide: bool,
+    pub compact: bool,
 }
 
 fn plan(cfg: &Config) -> Result<Plan> {
@@ -730,17 +731,19 @@ fn plan(cfg: &Config) -> Result<Plan> {
     }
     // The book's kind, from its settings lock (a book without one is a v1).
     let mut wide = false;
+    let mut compact = false;
     let lock = cfg.book.join("_merge_params.json");
     if lock.is_file() {
         let v: Value = serde_json::from_str(&std::fs::read_to_string(&lock)?)
             .with_context(|| format!("parsing {}", lock.display()))?;
         match v["schema"].as_str() {
             Some("book-v1") => {}
-            Some("book-v2" | "book-v3") => {
-                if v["schema"] == "book-v3" && (v["input_params"]["key_bits"] != 128 || v["input_params"]["term_slices"] != true) {
+            Some("book-v2" | "book-v3" | "book-v4") => {
+                if v["schema"] != "book-v2" && (v["input_params"]["key_bits"] != 128 || v["input_params"]["term_slices"] != true) {
                     return Err(refused(format!("{}: incomplete sliced 128-bit book header", cfg.book.display())));
                 }
                 wide = true;
+                compact = v["schema"] == "book-v4";
                 let cap = v["input_params"]["max_ply"].as_i64().unwrap_or(i64::MAX);
                 if cap >= PLIES as i64 {
                     return Err(refused(format!(
@@ -752,7 +755,7 @@ fn plan(cfg: &Config) -> Result<Plan> {
             }
             _ => {
                 return Err(refused(format!(
-                    "{} is a {} book; expected book-v1, book-v2 or book-v3",
+                    "{} is a {} book; expected book-v1 through book-v4",
                     cfg.book.display(),
                     v["schema"]
                 )))
@@ -793,7 +796,7 @@ fn plan(cfg: &Config) -> Result<Plan> {
         "fishnet_files": files(&fishnet),
         "tool": {"version": sys::VERSION, "commit": sys::GIT_COMMIT, "built": sys::BUILD_DATE},
     });
-    Ok(Plan { cloud, fishnet, groups, lock, want, wide })
+    Ok(Plan { cloud, fishnet, groups, lock, want, wide, compact })
 }
 
 fn check_lock(dir: &Path, want: &Value) -> Result<()> {
@@ -861,7 +864,7 @@ trait ChildKey: Copy + Ord + Send + Sync {
     fn lo(&self) -> i64;
     fn schema() -> SchemaRef;
     /// Every child key of one book ps file.
-    fn read(p: &Path) -> Result<Vec<Self>>;
+    fn read(p: &Path, compact: bool) -> Result<Vec<Self>>;
     fn batch(c: &[Self]) -> Result<RecordBatch>;
 }
 
@@ -872,7 +875,7 @@ impl ChildKey for i64 {
     fn schema() -> SchemaRef {
         Arc::new(Schema::new(vec![Field::new("child_hash", DataType::Int64, false)]))
     }
-    fn read(p: &Path) -> Result<Vec<i64>> {
+    fn read(p: &Path, _compact: bool) -> Result<Vec<i64>> {
         let mut v = Vec::new();
         for b in open_reader(p, &["child_hash"], READ_BATCH)? {
             let c = i64_col(&b?, "child_hash")?;
@@ -898,9 +901,9 @@ impl ChildKey for (i64, i64) {
             Field::new("child_hash_hi", DataType::Int64, false),
         ]))
     }
-    fn read(p: &Path) -> Result<Vec<(i64, i64)>> {
+    fn read(p: &Path, compact: bool) -> Result<Vec<(i64, i64)>> {
         let mut v = Vec::new();
-        for b in open_reader(p, &["child_hash", "child_hash_hi"], READ_BATCH)? {
+        for b in crate::compact_book::reader(p, &["child_hash", "child_hash_hi"], READ_BATCH, compact)? {
             let b = b?;
             let (c, h) = (i64_col(&b, "child_hash")?, i64_col(&b, "child_hash_hi")?);
             if c.null_count() + h.null_count() > 0 {
@@ -1749,7 +1752,7 @@ fn c_group<K: ChildKey>(ctx: &Ctx, g: usize, root: &Path, done: &Path) -> Result
             bail!("book bucket {s} has no ps files");
         }
         files_in += files.len() as u64;
-        let parts: Vec<Result<Vec<K>>> = files.par_iter().map(|p| K::read(p)).collect();
+        let parts: Vec<Result<Vec<K>>> = files.par_iter().map(|p| K::read(p, ctx.plan.compact)).collect();
         let mut v: Vec<K> = Vec::new();
         for p in parts {
             v.extend(p?);
@@ -1897,7 +1900,7 @@ fn load_cloud(files: &[PathBuf]) -> Result<Vec<CRow>> {
 /// One book file, read by hash group.
 struct BookCursor {
     path: PathBuf,
-    rdr: ParquetRecordBatchReader,
+    rdr: crate::compact_book::Reader,
     hash: Int64Array,
     epd: StringArray,
     ply: Int32Array,
@@ -1910,13 +1913,13 @@ struct BookCursor {
 }
 
 impl BookCursor {
-    fn open(path: &Path, wide: bool) -> Result<Option<BookCursor>> {
+    fn open(path: &Path, wide: bool, compact: bool) -> Result<Option<BookCursor>> {
         let cols: &[&str] = if wide {
             &["parent_hash", "parent_epd", "ply", "total", "parent_hash_hi"]
         } else {
             &["parent_hash", "parent_epd", "ply", "total"]
         };
-        let rdr = open_reader(path, cols, READ_BATCH)?;
+        let rdr = crate::compact_book::reader(path, cols, READ_BATCH, compact)?;
         let mut c = BookCursor {
             path: path.to_path_buf(),
             rdr,
@@ -2446,7 +2449,7 @@ fn do_bucket(ctx: &Ctx, b: u32, inp: &BucketInputs) -> Result<Value> {
     }
     let mut curs: Vec<BookCursor> = Vec::new();
     for p in &files {
-        if let Some(c) = BookCursor::open(p, wide)? {
+        if let Some(c) = BookCursor::open(p, wide, ctx.plan.compact)? {
             curs.push(c);
         }
     }

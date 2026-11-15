@@ -4,6 +4,7 @@
 //! the `explorer-extract` binary's subcommands.
 
 pub mod chesspos;
+mod compact_book;
 pub mod dump;
 pub mod evals;
 pub mod fasthash;

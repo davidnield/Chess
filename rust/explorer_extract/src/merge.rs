@@ -176,6 +176,7 @@ pub struct Config {
     pub row_group_rows: usize,
     pub min_free_bytes: u64,
     pub no_dictionary: Vec<String>,
+    pub compact: bool,
     /// Test only: the stage may share the input volume.
     pub allow_one_volume: bool,
     pub crash_at: Option<(Phase, u32)>,
@@ -280,10 +281,16 @@ pub fn book_ps_schema_with(wide: bool) -> SchemaRef {
 /// The merge's own writer settings (month mode keeps `writer_props`): zstd 3,
 /// page statistics and page indexes (the arrow-rs defaults), and
 /// `row_group_rows`-row groups.
-pub fn book_writer_props(row_group_rows: usize, no_dictionary: &[String]) -> WriterProperties {
+pub fn book_writer_props(row_group_rows: usize, no_dictionary: &[String], compact: bool) -> WriterProperties {
     let mut b = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::try_new(ZSTD_LEVEL).expect("zstd level")))
         .set_max_row_group_row_count(Some(row_group_rows));
+    if compact {
+        for name in ["parent_hash", "parent_hash_hi"] {
+            b = b.set_column_dictionary_enabled(ColumnPath::from(name), false);
+        }
+        b = b.set_column_encoding(ColumnPath::from("parent_hash"), parquet::basic::Encoding::DELTA_BINARY_PACKED);
+    }
     for c in no_dictionary {
         b = b.set_column_dictionary_enabled(ColumnPath::from(c.as_str()), false);
     }
@@ -291,9 +298,9 @@ pub fn book_writer_props(row_group_rows: usize, no_dictionary: &[String]) -> Wri
 }
 
 /// The writer settings as the lock records them.
-pub fn writer_settings(props: &WriterProperties) -> Value {
+pub fn writer_settings(props: &WriterProperties, schema: &SchemaRef) -> Value {
     let mut dict = serde_json::Map::new();
-    for f in book_ps_schema().fields() {
+    for f in schema.fields() {
         dict.insert(f.name().clone(), json!(props.dictionary_enabled(&ColumnPath::from(f.name().as_str()))));
     }
     json!({
@@ -309,6 +316,7 @@ pub fn writer_settings(props: &WriterProperties) -> Value {
         "writer_version": format!("{:?}", props.writer_version()),
         "created_by": props.created_by(),
         "dictionary": dict,
+        "parent_hash_encoding": format!("{:?}", props.encoding(&ColumnPath::from("parent_hash"))),
         "out_batch_rows": OUT_BATCH,
         "term_out_batch_rows": TERM_OUT_BATCH,
     })
@@ -668,6 +676,7 @@ pub struct Control {
 
 pub struct Plan {
     pub months_root: PathBuf,
+    pub compact: bool,
     pub months: Vec<MonthIn>,
     pub params: Value,
     pub producer: String,
@@ -684,7 +693,12 @@ pub struct Plan {
 }
 
 impl Plan {
+    fn disk_schema(&self) -> SchemaRef {
+        let schema = book_ps_schema_with(self.wide);
+        if self.compact { crate::compact_book::physical_schema(&schema) } else { schema }
+    }
     pub fn schema_name(&self) -> &'static str {
+        if self.compact { return "book-v4"; }
         if self.params["term_slices"] == json!(true) {
             "book-v3"
         } else if self.wide {
@@ -976,7 +990,10 @@ fn preflight(cfg: &Config) -> Result<Plan> {
         )));
     }
     let term_bytes = months.iter().map(|m| m.term_bytes).sum();
-    Ok(Plan { months_root: root, months, params, producer, controls, other_conflicts, term_bytes, wide, max_ply, events })
+    if cfg.compact && (!wide || params["term_slices"] != true || !cfg.no_dictionary.is_empty()) {
+        bail!("--compact requires 128-bit keys, sliced terminals and its fixed encoding settings");
+    }
+    Ok(Plan { compact: cfg.compact, months_root: root, months, params, producer, controls, other_conflicts, term_bytes, wide, max_ply, events })
 }
 
 /// The settings lock's content.
@@ -991,7 +1008,7 @@ fn lock_value(cfg: &Config, plan: &Plan, props: &WriterProperties) -> Value {
         "buckets": BUCKETS,
         "row_group_rows": cfg.row_group_rows,
         "zstd_level": ZSTD_LEVEL,
-        "writer": writer_settings(props),
+        "writer": writer_settings(props, &plan.disk_schema()),
     })
 }
 
@@ -1290,7 +1307,7 @@ pub fn run(cfg: &Config) -> Result<()> {
     }
 
     // 5. The settings lock.
-    let props = book_writer_props(cfg.row_group_rows, &cfg.no_dictionary);
+    let props = book_writer_props(cfg.row_group_rows, &cfg.no_dictionary, cfg.compact);
     std::fs::create_dir_all(&cfg.out).with_context(|| format!("creating {}", cfg.out.display()))?;
     check_lock(&cfg.out, &lock_value(cfg, &plan, &props))?;
 
@@ -1328,7 +1345,7 @@ pub fn run(cfg: &Config) -> Result<()> {
         plan: &plan,
         q: Queue::new(cfg.stage_bytes),
         props,
-        schema: book_ps_schema_with(plan.wide),
+        schema: plan.disk_schema(),
         term_schema: term_schema_sliced(true, plan.wide, plan.params["term_slices"] == json!(true)),
         t0,
         todo: todo.len(),
@@ -1903,7 +1920,12 @@ impl SliceOut {
             cols.push(take(&mut self.hi));
             cols.push(take(&mut self.child_hi));
         }
-        self.w.write(&RecordBatch::try_new(self.schema.clone(), cols)?)?;
+        if self.schema.index_of("move_xor_lo").is_ok() {
+            let logical = RecordBatch::try_new(book_ps_schema_with(true), cols)?;
+            self.w.write(&crate::compact_book::encode(&logical, &self.schema)?)?;
+        } else {
+            self.w.write(&RecordBatch::try_new(self.schema.clone(), cols)?)?;
+        }
         Ok(())
     }
 
@@ -2194,9 +2216,12 @@ fn verify_slice(
     let mut st = Stats::default();
     let (mut ph, mut pepd, mut psan, mut pply, mut first) = (0i64, Vec::<u8>::new(), Vec::<u8>::new(), 0i32, true);
     let mut phi = 0i64;
+    let compact = schema.index_of("move_xor_lo").is_ok();
+    let logical = book_ps_schema_with(wide);
     for batch in rd {
         let batch = batch?;
-        for (k, f) in schema.fields().iter().enumerate() {
+        let batch = if compact { crate::compact_book::decode(&batch,&logical)? } else { batch };
+        for (k, f) in logical.fields().iter().enumerate() {
             if batch.column(k).null_count() > 0 {
                 bail!("{p}: NULL {}", f.name());
             }
@@ -3169,7 +3194,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
             "source_events_by_month": plan.months.iter().map(|m| (&m.tag, &m.source_events)).collect::<BTreeMap<_,_>>(),
             "producer_commit": plan.producer,
         },
-        "writer": writer_settings(&ctx.props),
+        "writer": writer_settings(&ctx.props, &ctx.schema),
         "totals": {
             "rows_in": rows_in, "rows": book.rows, "compaction": book.rows as f64 / rows_in.max(1) as f64,
             "white_wins": book.sums[0], "draws": book.sums[1], "black_wins": book.sums[2], "total": book.sums[3],

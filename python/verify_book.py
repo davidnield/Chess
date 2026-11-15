@@ -59,6 +59,7 @@ DuckDB is throttled (2 threads, 4 GB) with temp on D:\\chess_duckdb_tmp, never F
 """
 from __future__ import annotations
 
+from explorer_storage import relation
 import argparse
 import json
 import math
@@ -146,9 +147,9 @@ class Book:
         self.months: list[str] = self.lock["months"]
         schema = self.lock.get("schema", "book-v1")
         self.schema = schema
-        if schema not in ("book-v1", "book-v2", "book-v3"):
-            raise SystemExit(f"FATAL: {lock} says schema {schema!r}: expected book-v1, book-v2 or book-v3")
-        self.wide = schema in ("book-v2", "book-v3")
+        if schema not in ("book-v1", "book-v2", "book-v3", "book-v4"):
+            raise SystemExit(f"FATAL: {lock} says schema {schema!r}: expected book-v1 through book-v4")
+        self.wide = schema in ("book-v2", "book-v3", "book-v4")
         self.max_ply = int(self.lock.get("input_params", {}).get("max_ply", 30))
         if Path(self.lock["months_root"]).resolve() != root.resolve():
             print(f"  note: the book was built from {self.lock['months_root']}; reading {root}")
@@ -178,8 +179,7 @@ def _digest(con, files: list[Path], wide: bool = False, *, key: str | None = Non
         key = KEY_TUPLE_WIDE if wide else KEY_TUPLE
     parts = [f"COALESCE(SUM(hash({key})::HUGEINT * {c}), 0)" for c in COUNTS]
     parts += [f"COALESCE(SUM(hash({key}, '{SALT}')::HUGEINT * {c}), 0)" for c in COUNTS]
-    row = con.execute(f"SELECT COALESCE(SUM(total), 0), {', '.join(parts)} FROM read_parquet("
-                      f"{_lit(files)}, hive_partitioning=false)").fetchone()
+    row = con.execute(f"SELECT COALESCE(SUM(total), 0), {', '.join(parts)} FROM {relation(files)}").fetchone()
     return tuple(int(x) for x in row)
 
 
@@ -209,8 +209,8 @@ def check_digests(con, bk: Book, buckets: list[int]) -> None:
 
 
 def check_term_digest(con, bk: Book) -> None:
-    if bk.schema != "book-v3":
-        raise ValueError("the sliced terminal digest requires book-v3")
+    if bk.schema not in ("book-v3", "book-v4"):
+        raise ValueError("the sliced terminal digest requires sliced terminals")
     meta = json.loads((bk.book / "_book.meta.json").read_text(encoding="utf-8"))
     events = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"]
     if meta.get("term_event_ids") != events:
@@ -239,7 +239,7 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
         bcon = connect(*_CONNECT_ARGS)   # per bucket: DuckDB decays in a long-lived connection
         r = bcon.execute(f"""
             SELECT COUNT(*) FILTER (WHERE n > 1), SUM(n) FROM (
-              SELECT COUNT(*) AS n FROM read_parquet({_lit(outs)}, hive_partitioning=false)
+              SELECT COUNT(*) AS n FROM {relation(outs)}
               GROUP BY {pos}, move_san, event, elo_band, ply)""").fetchone()
         t = 0
         if bk.wide:
@@ -247,9 +247,9 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
             # per EPD. (Across hashes one EPD can have two keys: a pinned en-passant capture
             # hashes with its ep file, which the EPD cannot show.)
             t = bcon.execute(f"""
-                SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
+                SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM {relation(outs)}
                           GROUP BY parent_hash, parent_hash_hi HAVING COUNT(DISTINCT parent_epd) > 1))
-                     + (SELECT COUNT(*) FROM (SELECT 1 FROM read_parquet({_lit(outs)}, hive_partitioning=false)
+                     + (SELECT COUNT(*) FROM (SELECT 1 FROM {relation(outs)}
                           GROUP BY parent_hash, parent_epd HAVING COUNT(DISTINCT parent_hash_hi) > 1))
                 """).fetchone()[0]
         bcon.close()
@@ -305,7 +305,7 @@ def _scan_bucket(job: tuple) -> list:
                MIN(event), MAX(event), MIN(elo_band), MAX(elo_band),
                MIN(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS}),
                MAX(((parent_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS})
-        FROM read_parquet({_lit(files)}, hive_partitioning=false, filename=true)
+        FROM {relation(files, filename=True)}
         GROUP BY filename""").fetchall()
     bcon.close()
     return rows
@@ -479,7 +479,7 @@ def check_sample(con, bk: Book, n: int, seed: int, workers: int) -> None:
     for b in picks:
         rows += con.execute(f"""
             SELECT parent_hash, parent_epd, move_san, child_hash, ply{his}
-            FROM read_parquet({_lit(bk.ps[b])}, hive_partitioning=false)
+            FROM {relation(bk.ps[b])}
             USING SAMPLE reservoir({per} ROWS) REPEATABLE ({seed})""").fetchall()
     chunks = [rows[i:i + 20_000] for i in range(0, len(rows), 20_000)]
     tot, ep, fails, ex = 0, 0, {}, []
@@ -534,7 +534,7 @@ def main() -> int:
             check_dups(con, bk, parse_buckets(a.dup_buckets))
         if a.sums or (not named and bk.complete):
             check_sums(con, bk)
-        if a.term_digest or (not named and bk.complete and bk.schema == "book-v3"):
+        if a.term_digest or (not named and bk.complete and bk.schema in ("book-v3", "book-v4")):
             check_term_digest(con, bk)
         if a.scan or not named:
             check_scan(con, bk)

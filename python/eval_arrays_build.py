@@ -36,6 +36,7 @@ tofile(): a memmap'd output could not be renamed on Windows.
 """
 from __future__ import annotations
 
+from explorer_storage import relation
 import gc
 import json
 import random
@@ -136,7 +137,7 @@ def _mate_scan(job: tuple) -> int:
             con.execute(f"""COPY (
                 SELECT child_hash, MIN(ply % 2)::TINYINT AS pmin, MAX(ply % 2)::TINYINT AS pmax,
                        SUM(total)::BIGINT AS games, COUNT(*)::BIGINT AS book_rows
-                FROM read_parquet({_lit(files)}, hive_partitioning=false)
+                FROM {relation(files)}
                 WHERE move_san LIKE '%#' GROUP BY child_hash
             ) TO '{_p(part)}' (FORMAT PARQUET, COMPRESSION ZSTD)""")
         else:
@@ -210,7 +211,7 @@ def _sample_job(job: tuple) -> list:
     con.execute(f"SET temp_directory='{_p(tmp)}'")
     con.execute("SET enable_progress_bar=false")
     rows = con.execute(f"""SELECT * FROM (SELECT parent_epd, move_san, child_hash, ply
-        FROM read_parquet({_lit(files)}, hive_partitioning=false) WHERE move_san LIKE '%#')
+        FROM {relation(files)} WHERE move_san LIKE '%#')
         USING SAMPLE reservoir({n} ROWS) REPEATABLE ({seed})""").fetchall()
     con.close()
     return rows

@@ -720,3 +720,60 @@ fn book_v2_matches_children_by_the_whole_key() {
     assert!(!o.status.success() && log(&o).contains("parent_hash_hi"), "{}", log(&o));
     assert!(!c.dir.join("out128c").join("_DONE").exists());
 }
+
+#[test]
+fn compact_book_matches_full_key_eval_database() {
+    let case = build_case("v4");
+    let book = case.dir.join("book");
+    let q = canon(POS_Q);
+    widen_book(&book, &|h| if h == q { canon_hi(POS_Q) } else { 0 }, 0);
+    let baseline = run(&case, "plain", "work-plain", &[]);
+    assert!(baseline.status.success(), "{}", log(&baseline));
+    fn batches(path: &Path) -> Vec<RecordBatch> {
+        ParquetRecordBatchReaderBuilder::try_new(File::open(path).unwrap()).unwrap()
+            .build().unwrap().map(Result::unwrap).collect()
+    }
+    // Encode the test fixture independently of the merge writer.
+    fn compact_files(dir: &Path) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() { compact_files(&path); continue; }
+            let rows = arrow::compute::concat_batches(&book_ps_schema_with(true), &batches(&path)).unwrap();
+            let epd = rows.column(4).as_string::<i32>();
+            let mut names = Vec::new();
+            let mut columns = Vec::<ArrayRef>::new();
+            for (i, field) in rows.schema().fields().iter().enumerate() {
+                if !matches!(i, 4 | 5 | 13) {
+                    names.push(field.name().clone());
+                    columns.push(rows.column(i).clone());
+                }
+            }
+            for j in 0..9 {
+                names.push(if j == 8 { "epd_state".to_owned() } else { format!("rank{}",8-j) });
+                columns.push(Arc::new(StringArray::from_iter_values(epd.iter().map(|s| {
+                    let (board, state) = s.unwrap().split_once(' ').unwrap();
+                    if j == 8 { state } else { board.split('/').nth(j).unwrap() }
+                }))));
+            }
+            for (a,b,n) in [(0,5,"move_xor_lo"), (12,13,"move_xor_hi")] {
+                names.push(n.to_owned());
+                columns.push(Arc::new(Int64Array::from_iter_values(rows.column(a).as_primitive::<Int64Type>()
+                    .values().iter().zip(rows.column(b).as_primitive::<Int64Type>().values()).map(|(x,y)| x ^ y))));
+            }
+            let fields = names.into_iter().zip(&columns).map(|(n,c)| Field::new(n,c.data_type().clone(),false)).collect::<Vec<_>>();
+            write(&path,RecordBatch::try_new(Arc::new(Schema::new(fields)),columns).unwrap());
+        }
+    }
+    compact_files(&book.join("ps"));
+    let lock = serde_json::json!({"schema":"book-v4","input_params":{"max_ply":51,"key_bits":128,"term_slices":true}});
+    std::fs::write(book.join("_merge_params.json"),lock.to_string()).unwrap();
+    let result = run(&case, "compact", "work-compact", &[]);
+    assert!(result.status.success(), "{}", log(&result));
+    for entry in std::fs::read_dir(case.dir.join("plain")).unwrap() {
+        let p = entry.unwrap().path();
+        let name = p.file_name().unwrap();
+        if name.to_string_lossy().starts_with("bkt") {
+            assert_eq!(batches(&p),batches(&case.dir.join("compact").join(name)));
+        }
+    }
+}

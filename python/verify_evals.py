@@ -34,6 +34,7 @@ low half; and no row may be hash_ambiguous.
 """
 from __future__ import annotations
 
+from explorer_storage import relation
 import argparse
 import hashlib
 import json
@@ -273,7 +274,7 @@ def _member_scan(job: tuple) -> tuple[list, list]:
         for _b, files, scan_child, parent_targets in groups:
             if not files:
                 continue
-            src = f"read_parquet({lit(files)}, hive_partitioning=false)"
+            src = relation(files)
             if scan_child:
                 as_child.update(tuple(r) for r in con.execute(
                     f"SELECT DISTINCT child_hash, child_hash_hi FROM {src} s SEMI JOIN ch "
@@ -291,7 +292,7 @@ def _member_scan(job: tuple) -> tuple[list, list]:
     for _b, files, scan_child, parent_targets in groups:
         if not files:
             continue
-        src = f"read_parquet({lit(files)}, hive_partitioning=false)"
+        src = relation(files)
         if scan_child:
             as_child.update(r[0] for r in con.execute(
                 f"SELECT DISTINCT child_hash FROM {src} WHERE child_hash IN (SELECT h FROM ch)").fetchall())
@@ -545,7 +546,7 @@ def main() -> int:
             continue
         rows = con.execute(f"""
             WITH s AS (SELECT DISTINCT parent_hash, parent_epd FROM (SELECT parent_hash, parent_epd
-                       FROM read_parquet({lit(bf)}, hive_partitioning=false)
+                       FROM {relation(bf)}
                        USING SAMPLE reservoir({per_b} ROWS) REPEATABLE ({a.seed})))
             SELECT s.parent_hash, s.parent_epd FROM s
             ANTI JOIN read_parquet('{_p(f)}') o ON o.position_hash = s.parent_hash AND o.epd = s.parent_epd""").fetchall()
@@ -683,8 +684,7 @@ def main() -> int:
                                      "hi": pa.array([x[2] for x in v], pa.int64())}))
         # fetchall, not fetchone: duckdb 2.0 keeps a result that was not read to its end open, and then
         # refuses the unregister below and the next bucket's register.
-        found = con.execute(f"""SELECT COUNT(*) FROM pp WHERE EXISTS (SELECT 1 FROM read_parquet({lit(bf)},
-                                hive_partitioning=false) k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e{same_hi})""").fetchall()[0][0] if bf else 0
+        found = con.execute(f"""SELECT COUNT(*) FROM pp WHERE EXISTS (SELECT 1 FROM {relation(bf)} k WHERE k.parent_hash = pp.h AND k.parent_epd = pp.e{same_hi})""").fetchall()[0][0] if bf else 0
         bad += len(v) - found
         con.unregister("pp")
     check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd"

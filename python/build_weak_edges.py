@@ -22,6 +22,7 @@ final concatenation is written last.
 """
 from __future__ import annotations
 
+from explorer_storage import relation
 import argparse
 import json
 import sys
@@ -93,11 +94,10 @@ def main() -> int:
         if not files:
             continue
         t1 = time.time()
-        flist = ", ".join(f"'{f}'" for f in files)
         con.execute(f"""
             COPY (
               SELECT s.parent_hash, s.move_san, s.child_hash, SUM(s.total) AS total
-              FROM read_parquet([{flist}], hive_partitioning=false) s
+              FROM {relation(files)} s
               SEMI JOIN (SELECT h FROM read_parquet('{keys.as_posix()}') WHERE bkt = {i}) k
                 ON k.h = s.parent_hash
               GROUP BY 1, 2, 3

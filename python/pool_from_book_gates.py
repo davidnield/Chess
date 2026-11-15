@@ -38,6 +38,7 @@ Usage (same population flags as the build; --work is the build's work dir):
 """
 from __future__ import annotations
 
+from explorer_storage import relation, read_columns
 import argparse
 import json
 import math
@@ -207,11 +208,11 @@ def gate_reimpl(a) -> bool:
 
     # Arrivals for the gate's buckets: ONE plain scan of the population.
     con = _duck(a)
-    globs = ", ".join(f"'{g}'" for g in _slice_globs(book, events, bands))
+    pop = relation(_slice_globs(book, events, bands))
     bl = ", ".join(map(str, a.buckets))
     arr = pl.from_arrow(duck_arrow(con, f"""
         SELECT child_hash, SUM(white_wins) w, SUM(draws) d, SUM(black_wins) b, SUM(total) t
-        FROM read_parquet([{globs}], hive_partitioning=false)
+        FROM {pop}
         WHERE ply <= {cap} AND ((child_hash % 512) + 512) % 512 IN ({bl})
         GROUP BY child_hash"""))
     con.close()
@@ -232,8 +233,7 @@ def gate_reimpl(a) -> bool:
                     # Polars' own reader rejects the book's parquet-rs files
                     # ("Invalid thrift: bad data", polars 1.40); pyarrow's
                     # ParquetFile reads them (README: partitioning stays off).
-                    frames.append(pl.from_arrow(pq.ParquetFile(f).read(
-                        columns=["parent_hash", "parent_epd", "move_san", "child_hash",
+                    frames.append(pl.from_arrow(read_columns(f, ["parent_hash", "parent_epd", "move_san", "child_hash",
                                  "ply", *SUMS])))
         rows = pl.concat(frames)
         le = rows.filter(pl.col("ply") <= cap)
@@ -358,8 +358,7 @@ def gate_conservation(a) -> bool:
     pool_f, aux_f = out_files(work, Path(a.out_dir))
     root = int(zobrist_int64(chess.Board()))
     con = _duck(a)
-    globs = ", ".join(f"'{g}'" for g in _slice_globs(book, prm["events"], prm["elo_bands"]))
-    pop = f"read_parquet([{globs}], hive_partitioning=false)"
+    pop = relation(_slice_globs(book, prm["events"], prm["elo_bands"]))
     coll = f"(SELECT DISTINCT parent_hash FROM read_parquet('{_p(book / '_collisions.parquet')}'))"
     t0 = time.time()
     pool_t = con.execute(f"SELECT SUM(total) FROM read_parquet('{_p(pool_f)}')").fetchone()[0]
@@ -487,10 +486,9 @@ def gate_evals(a) -> bool:
         files = [_p(book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet")
                  for e in prm["events"] for b in prm["elo_bands"]
                  if (book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet").exists()]
-        lst = ", ".join(f"'{f}'" for f in files)
         below.append(pl.from_arrow(duck_arrow(con, f"""
             SELECT parent_hash, move_san, MIN(child_hash) AS child_hash, SUM(total)::BIGINT AS total
-            FROM read_parquet([{lst}], hive_partitioning=false) WHERE ply <= {cap}
+            FROM {relation(files)} WHERE ply <= {cap}
             GROUP BY parent_hash, move_san HAVING SUM(total) < {floor}""")))
     con.close()
     below = pl.concat(below).filter(pl.col("parent_hash").is_in(list(pp))

@@ -71,6 +71,7 @@ Usage (pin a copy under D:/chess/bin first; never run long jobs from a worktree)
 """
 from __future__ import annotations
 
+from explorer_storage import relation
 import argparse
 import hashlib
 import json
@@ -185,8 +186,7 @@ def _read(files: list[str], cols: str, where: str) -> str:
         return "(SELECT " + ", ".join(f"NULL::{_BOOK_TYPES[c.strip()]} AS {c.strip()}"
                                       for c in cols.split(",")) + " WHERE FALSE)"
     # hive_partitioning off: event/elo_band are in-file columns too (README).
-    lst = ", ".join(f"'{f}'" for f in files)
-    return (f"(SELECT {cols} FROM read_parquet([{lst}], hive_partitioning=false) "
+    return (f"(SELECT {cols} FROM {relation(files)} "
             f"WHERE {where})")
 
 
@@ -903,8 +903,8 @@ def book_schema(book: Path) -> str:
     schema = "book-v1"
     if mp.exists():
         schema = json.loads(mp.read_text(encoding="utf-8")).get("schema", "book-v1")
-    if schema not in ("book-v1", "book-v2", "book-v3"):
-        raise SystemExit(f"FATAL: {book} is a {schema} book; supported schemas are book-v1 through book-v3")
+    if schema not in ("book-v1", "book-v2", "book-v3", "book-v4"):
+        raise SystemExit(f"FATAL: {book} is a {schema} book; supported schemas are book-v1 through book-v4")
     return schema
 
 

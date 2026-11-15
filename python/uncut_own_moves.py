@@ -6,6 +6,7 @@ Keep native opponent edges. Restore all native observations at our positions,
 including positions without a single move above the original cutoff.
 """
 
+from explorer_storage import relation
 import argparse
 import hashlib
 import json
@@ -179,7 +180,7 @@ def domain(con, stats, aux, colour, overlay, collisions):
 
 def partial(con, files, term_files, cap, target):
     """One independently resumable month or group of banded archive slices."""
-    src = parquet(files)
+    src = parquet(files) if cap is None else relation(files)
     # For a raw-only parent reconstruct the native sidecar. The banded exporter
     # defines endings as arrivals through the cap minus departures on plies
     # 2..cap+1, with departures on cap+1 also recorded as horizon observations.

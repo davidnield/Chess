@@ -1,6 +1,7 @@
 """Build and look up a published eval-db-v2 by both signed Zobrist halves."""
 from __future__ import annotations
 
+from explorer_storage import relation
 import argparse
 from pathlib import Path
 
@@ -78,7 +79,7 @@ def gather_mates(con, book, work):
             path = tmp.as_posix().replace("'", "''")
             con.execute(f"""CREATE OR REPLACE TEMP TABLE hits AS
                 SELECT parent_epd,move_san,child_hash AS lo,child_hash_hi AS hi,ply
-                FROM read_parquet({_lit(inputs)}, hive_partitioning=false)
+                FROM {relation(inputs)}
                 WHERE ends_with(move_san, '#')""")
             for epd, san, lo, hi, ply in con.execute(
                     "SELECT * FROM hits USING SAMPLE reservoir(8 ROWS) REPEATABLE (20261115)").fetchall():
