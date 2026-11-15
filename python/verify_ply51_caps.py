@@ -13,7 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from month_archive import sha, write_json
-from verify_book import COUNTS, _lit
+from explorer_storage import relation
+from verify_book import COUNTS
 from zobrist128 import zobrist128
 
 EVENTS = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"]
@@ -63,10 +64,6 @@ def require_equal(con, label, actual, expected):
         mismatch = con.execute(f"SELECT * FROM (({lhs}) EXCEPT ALL ({rhs})) LIMIT 1").fetchone()
         if mismatch is not None:
             raise ValueError(f"{label}: {mismatch}")
-
-
-def relation(files):
-    return f"read_parquet({_lit(files)}, hive_partitioning=false)"
 
 
 def compare(con, book, direct, cap):
