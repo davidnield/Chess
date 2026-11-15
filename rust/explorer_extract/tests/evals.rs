@@ -559,6 +559,18 @@ fn end_to_end_resume_lock_determinism() {
     let o = run(&c, "out", "work", &[]);
     assert!(o.status.success() && log(&o).contains("_DONE exists"), "{}", log(&o));
 
+    // Same path and size, new bytes: even an already completed build must refuse.
+    for file in [c.dir.join("evals/cloud/data_0000.parquet"),
+                 std::fs::read_dir(c.dir.join("book/ps/event=Blitz/elo_band=1600")).unwrap()
+                    .next().unwrap().unwrap().path()] {
+        let bytes = std::fs::read(&file).unwrap();
+        let mut changed = bytes.clone();
+        changed[8] ^= 1;
+        std::fs::write(&file, changed).unwrap();
+        let o = run(&c, "out", "work", &[]);
+        assert_eq!(o.status.code(), Some(5), "changed {:?}: {}", file, log(&o));
+        std::fs::write(&file, bytes).unwrap();
+    }
     // Phase J refuses before E and C are done.
     let o = run(&c, "out_j", "work_j", &["--phases", "j"]);
     assert_eq!(o.status.code(), Some(5), "{}", log(&o));
@@ -655,6 +667,13 @@ fn book_v2_matches_children_by_the_whole_key() {
 
     // The same book with both halves of every key: the same evals, each row with its key's high half.
     widen_book(&book, &|h| if h == q { canon_hi(POS_Q) } else { 0 }, 0);
+    let params = c.dir.join("book/_merge_params.json");
+    let v2 = std::fs::read(&params).unwrap();
+    let v3 = serde_json::json!({"schema":"book-v3","input_params":{"max_ply":51,"key_bits":128,"term_slices":true}});
+    std::fs::write(&params, v3.to_string()).unwrap();
+    let sliced = run(&c, "out-sliced", "work-sliced", &[]);
+    assert!(sliced.status.success(), "{}", log(&sliced));
+    std::fs::write(&params, v2).unwrap();
     let o = run(&c, "out128", "work128", &[]);
     assert!(o.status.success(), "{}", log(&o));
     let out = c.dir.join("out128");

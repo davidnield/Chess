@@ -43,7 +43,7 @@
 //! paths, threads, memory budget, bucket sets, source files and the build.
 
 use std::cmp::Reverse;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -593,6 +593,119 @@ pub fn sha256_file(p: &Path) -> Result<String> {
     Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// Bind every consumed source byte before a phase may trust its checkpoint.
+fn source_identity(dir: &Path, role: &str, repo: &str, files: &[SrcFile], fixture: bool) -> Result<Value> {
+    let mut observed = BTreeMap::new();
+    for f in files {
+        observed.insert(f.name.clone(), (f.bytes, sha256_file(&f.path)?));
+    }
+    if fixture {
+        return Ok(json!({"dataset": "test fixture", "files": observed}));
+    }
+    // The refreshed Cloud download is flat. The original downloads share a parent manifest.
+    let root = if dir.join("manifest.tsv").is_file() { dir } else {
+        dir.parent().ok_or_else(|| refused(format!("{} has no manifest directory", dir.display())))?
+    };
+    let manifest = root.join("manifest.tsv");
+    if !root.join("_DOWNLOAD.DONE").is_file() {
+        return Err(refused(format!("{}: missing completed download", root.display())));
+    }
+    let text = std::fs::read_to_string(&manifest)?;
+    let mut entries = BTreeMap::new();
+    let mut revisions = BTreeSet::new();
+    let namespace = format!("https://huggingface.co/datasets/{repo}/resolve/");
+    for line in text.lines() {
+        let fields: Vec<_> = line.split('\t').collect();
+        if fields.len() != 4 { return Err(refused(format!("{}: invalid manifest line", manifest.display()))); }
+        let local = fields[0].replace('\\', "/");
+        let Some(name) = local.strip_prefix(&format!("{role}/")) else { continue };
+        let (size, digest) = observed.get(name).ok_or_else(|| refused(format!("missing local {role}/{name}")))?;
+        let source = fields[3].strip_prefix(&namespace).and_then(|s| s.split_once('/'))
+            .ok_or_else(|| refused(format!("{name}: expected pinned URL for {repo}")))?;
+        if source.0.len() != 40 || !source.0.bytes().all(|b| b.is_ascii_hexdigit())
+            || source.1.rsplit('/').next() != Some(name) || fields[1].parse::<u64>()? != *size || fields[2] != digest {
+            return Err(refused(format!("{role}/{name}: source identity, size or SHA-256 mismatch")));
+        }
+        let marker = std::fs::read_to_string(dir.join(format!("{name}.ok")))?;
+        if marker.trim().strip_prefix("sha256 ").unwrap_or(marker.trim()) != digest {
+            return Err(refused(format!("{role}/{name}: .ok digest disagrees with the pinned manifest")));
+        }
+        revisions.insert(source.0);
+        if entries.insert(name.to_owned(), json!({"bytes": size, "sha256": digest, "url": fields[3]})).is_some() {
+            return Err(refused(format!("duplicate {role}/{name} in manifest")));
+        }
+    }
+    if entries.len() != files.len() || revisions.len() != 1 {
+        return Err(refused(format!("{role}: files do not match exactly one pinned dataset revision")));
+    }
+    Ok(json!({"dataset": format!("{repo}@{}", revisions.first().unwrap()), "files": entries}))
+}
+
+/// The per-bucket publication markers include digests over the merged keys and counts.
+fn book_publication_identity(book: &Path, fixture: bool) -> Result<Value> {
+    let mut records = BTreeMap::new();
+    for name in ["_book.meta.json", "_merge_params.json", "_BOOK.DONE"] {
+        let path = book.join(name);
+        if !fixture || path.is_file() {
+            records.insert(name.to_owned(), sha256_file(&path)?);
+        }
+    }
+    if fixture {
+        for b in 0..BUCKETS {
+            for path in book_bucket_files(book, b)? {
+                records.insert(path.strip_prefix(book)?.to_string_lossy().into_owned(), sha256_file(&path)?);
+            }
+        }
+    } else {
+        for b in 0..BUCKETS {
+            for name in [format!("_done/bkt{b:03}.DONE"), format!("_manifest/bkt{b:03}.parquet")] {
+                records.insert(name.clone(), sha256_file(&book.join(name))?);
+            }
+        }
+        records.insert("_done/term.DONE".to_owned(), sha256_file(&book.join("_done/term.DONE"))?);
+    }
+    Ok(json!(format!("{:x}", Sha256::digest(serde_json::to_vec(&records)?))))
+}
+
+#[cfg(test)]
+mod source_identity_tests {
+    use super::*;
+
+    #[test]
+    fn refreshed_and_shared_manifests_pin_payloads_and_receipts() {
+        let root = std::env::temp_dir().join(format!("eval_manifest_{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let revision = "d".repeat(40);
+        for (role, repo, flat, name) in [
+            ("cloud", "Lichess/chess-position-evaluations", true, "data_0000.parquet"),
+            ("fishnet", "Lichess/fishnet-evals", false, "standard_rated_2026_01.parquet"),
+        ] {
+            let dir = root.join(role);
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join(name);
+            std::fs::write(&path, b"abcdefgh").unwrap();
+            let digest = sha256_file(&path).unwrap();
+            let file = SrcFile { name: name.into(), path: path.clone(), bytes: 8, ym: None };
+            let files = [file];
+            let marker = dir.join(format!("{name}.ok"));
+            let mroot = if flat { &dir } else { &root };
+            std::fs::write(mroot.join("_DOWNLOAD.DONE"), "complete").unwrap();
+            let entry = format!("{role}\\{name}\t8\t{digest}\thttps://huggingface.co/datasets/{repo}/resolve/{revision}/data/{name}\n");
+            std::fs::write(mroot.join("manifest.tsv"), &entry).unwrap();
+            let receipt = if flat { format!("sha256 {digest}") } else { digest.clone() };
+            std::fs::write(&marker, &receipt).unwrap();
+            let identity = source_identity(&dir, role, repo, &files, false).unwrap();
+            assert_eq!(identity["dataset"].as_str(), Some(format!("{repo}@{revision}").as_str()));
+            std::fs::write(&marker, "incorrect").unwrap();
+            assert!(source_identity(&dir, role, repo, &files, false).is_err());
+            std::fs::write(&marker, &receipt).unwrap();
+            std::fs::write(&path, b"abcdXfgh").unwrap();
+            assert!(source_identity(&dir, role, repo, &files, false).is_err());
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
 fn describe(v: &[u32]) -> Value {
     if v.len() == BUCKETS as usize && v.iter().enumerate().all(|(i, &b)| b == i as u32) {
         json!("all")
@@ -612,14 +725,8 @@ pub struct Plan {
 }
 
 fn plan(cfg: &Config) -> Result<Plan> {
-    if !cfg.test_inputs {
-        let root = cfg.cloud.parent().ok_or_else(|| anyhow!("--cloud has no parent"))?;
-        if !root.join("_DOWNLOAD.DONE").is_file() {
-            return Err(refused(format!("{} has no _DOWNLOAD.DONE", root.display())));
-        }
-        if !cfg.book.join("_BOOK.DONE").is_file() {
-            return Err(refused(format!("{} has no _BOOK.DONE", cfg.book.display())));
-        }
+    if !cfg.test_inputs && !cfg.book.join("_BOOK.DONE").is_file() {
+        return Err(refused(format!("{} has no _BOOK.DONE", cfg.book.display())));
     }
     // The book's kind, from its settings lock (a book without one is a v1).
     let mut wide = false;
@@ -629,7 +736,10 @@ fn plan(cfg: &Config) -> Result<Plan> {
             .with_context(|| format!("parsing {}", lock.display()))?;
         match v["schema"].as_str() {
             Some("book-v1") => {}
-            Some("book-v2") => {
+            Some("book-v2" | "book-v3") => {
+                if v["schema"] == "book-v3" && (v["input_params"]["key_bits"] != 128 || v["input_params"]["term_slices"] != true) {
+                    return Err(refused(format!("{}: incomplete sliced 128-bit book header", cfg.book.display())));
+                }
                 wide = true;
                 let cap = v["input_params"]["max_ply"].as_i64().unwrap_or(i64::MAX);
                 if cap >= PLIES as i64 {
@@ -642,7 +752,7 @@ fn plan(cfg: &Config) -> Result<Plan> {
             }
             _ => {
                 return Err(refused(format!(
-                    "{} is a {} book; only book-v1 and book-v2 are known",
+                    "{} is a {} book; expected book-v1, book-v2 or book-v3",
                     cfg.book.display(),
                     v["schema"]
                 )))
@@ -662,6 +772,9 @@ fn plan(cfg: &Config) -> Result<Plan> {
         want[b as usize] = true;
     }
     let files = |v: &[SrcFile]| v.iter().map(|f| json!([f.name, f.bytes])).collect::<Vec<_>>();
+    let cloud_identity = source_identity(&cfg.cloud, "cloud", "Lichess/chess-position-evaluations", &cloud, cfg.test_inputs)?;
+    let fishnet_identity = source_identity(&cfg.fishnet, "fishnet", "Lichess/fishnet-evals", &fishnet, cfg.test_inputs)?;
+    let book_identity = book_publication_identity(&cfg.book, cfg.test_inputs)?;
     let lock = json!({
         "schema": schema_name(wide),
         "book": cfg.book.display().to_string(),
@@ -674,6 +787,8 @@ fn plan(cfg: &Config) -> Result<Plan> {
         "buckets": describe(&cfg.buckets),
         "child_sources": describe(&cfg.child_sources),
         "child_group": cfg.child_group(wide),
+        "book_publication": book_identity,
+        "source_identity": {"cloud": cloud_identity, "fishnet": fishnet_identity},
         "cloud_files": files(&cloud),
         "fishnet_files": files(&fishnet),
         "tool": {"version": sys::VERSION, "commit": sys::GIT_COMMIT, "built": sys::BUILD_DATE},
@@ -2742,12 +2857,12 @@ fn finalize(ctx: &Ctx) -> Result<()> {
     let jsecs: f64 = sents.iter().map(|v| v["secs"]["total"].as_f64().unwrap_or(0.0)).sum();
     let book_meta = cfg.book.join("_book.meta.json");
     let book_meta_sha = if book_meta.is_file() { Some(sha256_file(&book_meta)?) } else { None };
+    let sources = &ctx.plan.lock["source_identity"];
     let mut shas = serde_json::Map::new();
-    if let Some(m) = cfg.cloud.parent().map(|p| p.join("manifest.tsv")).filter(|p| p.is_file()) {
-        for line in std::fs::read_to_string(m)?.lines() {
-            let f: Vec<&str> = line.split('\t').collect();
-            if f.len() >= 3 {
-                shas.insert(f[0].to_string(), json!({"bytes": f[1].parse::<u64>().ok(), "sha256": f[2], "url": f.get(3)}));
+    for role in ["cloud", "fishnet"] {
+        if let Some(files) = sources[role]["files"].as_object() {
+            for (name, entry) in files {
+                shas.insert(format!("{role}\\{name}"), entry.clone());
             }
         }
     }
@@ -2763,8 +2878,8 @@ fn finalize(ctx: &Ctx) -> Result<()> {
             "cloud": cfg.cloud.display().to_string(), "fishnet": cfg.fishnet.display().to_string(),
             "cloud_files": ctx.plan.cloud.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
             "fishnet_files": ctx.plan.fishnet.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
-            "datasets": {"cloud": "Lichess/chess-position-evaluations@ae8ede377fc5e267ddb60f56987cf9cd963ceacb",
-                         "fishnet": "Lichess/fishnet-evals@1b6d7c91ddef44ec89efe64e47a2e313b7648ece"},
+            "datasets": {"cloud": sources["cloud"]["dataset"], "fishnet": sources["fishnet"]["dataset"]},
+            "book_publication": ctx.plan.lock["book_publication"],
             "download_manifest": shas,
         },
         "params": ctx.plan.lock,
