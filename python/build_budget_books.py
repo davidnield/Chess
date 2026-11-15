@@ -17,6 +17,11 @@ Out-of-book positions are always valued by the weak-player stop model (--weak-po
 replaced by sampled tables (--sampled-stop / --sampled-other); strict source and crack at parents
 are always on.
 
+--lookahead-floor N (default 0 = off, an exact no-op; lookahead_floor.py): the absolute gate
+checks the eval right after one move. This also vetoes a move after which a followed reply leaves
+no move that passes that gate, N of our moves ahead; a large N (99) is the fixed point, where a
+booked line can go under the floor only where the opponent can force it.
+
 Outputs one book per --budget from a single curve build. Books are
 replay_holdout/score_repertoire-compatible; `value` on booked rows is the
 BUDGETED prediction (V at the node's allocation), the source's unconstrained
@@ -564,6 +569,16 @@ def main() -> int:
                          "--engine-candidates) cannot set a gate reference. It stays a "
                          "candidate. Writes <book>.rare.json: the decisions where such a move "
                          "would have excluded a rival. Default off = the old rule exactly.")
+    ap.add_argument("--lookahead-floor", type=int, default=0, metavar="N",
+                    help="Veto a move that passes the absolute gate (--robustness-floor) when a "
+                         "reply the collector follows leaves no move that passes it. N = how many "
+                         "of our moves ahead a dead end is propagated (1 = one reply ahead; the "
+                         "walk stops at its fixed point, so a large N such as 99 prunes every "
+                         "decision that cannot avoid the floor). Also vetoes a source move under "
+                         "the bar where the node keeps a passing move. The "
+                         "vetoes join the verified exclusions and are written to "
+                         "<book>.lookahead.json. Contract in lookahead_floor.py. Default 0 = off, "
+                         "an exact no-op.")
     ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
@@ -583,6 +598,10 @@ def main() -> int:
         ap.error("--dump-engine-targets requires --max-eval-loss")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
+    if a.lookahead_floor < 0:
+        ap.error("--lookahead-floor is a number of moves, 0 or more")
+    if a.lookahead_floor and a.opponent_prior:
+        ap.error("--lookahead-floor has not been tested with --opponent-prior")
     if a.polish and a.method != "dp":
         ap.error("--polish is for --method dp (--method price always polishes)")
     if a.incumbent and a.stick_margin is None:
@@ -800,6 +819,22 @@ def main() -> int:
     if proposal_input is not None:
         log(f"  engine candidates at {len(engine_moves):,} positions; {len(engine_conflicts):,} "
             f"differ from the cached eval by more than 25 cp (the fresh eval is used)")
+
+    lookahead, lookahead_vetoes = None, {}
+    if a.lookahead_floor:
+        import lookahead_floor
+        tl = time.time()
+        lookahead_vetoes, lookahead = lookahead_floor.vetoes(
+            edf, ek, ev, our_white, slice_prior, depth=a.lookahead_floor,
+            robustness_floor=gate_settings["robustness_floor"], share_floor=a.share_floor,
+            excluded=excluded, engine_moves=engine_moves, source_moves=rep_moves)
+        excluded = lookahead_floor.merged(excluded, lookahead_vetoes)
+        log(f"lookahead floor {a.lookahead_floor}: {lookahead['dead_nodes']:,} our nodes with no "
+            f"passing move; bad moves after each step {lookahead['bad_moves_by_depth']}"
+            f"{' (fixed point)' if lookahead['fixed_point'] else ''}; "
+            f"{lookahead['vetoed_moves']:,} moves vetoed at {lookahead['vetoed_nodes']:,} nodes "
+            f"({lookahead['source_moves_vetoed']:,} of them source moves under the bar), void at "
+            f"{lookahead['void_nodes']:,} ({time.time()-tl:,.0f}s)")
 
     log("building graph...")
     track_route = bool(a.dump_stop_positions or a.sampled_stop or a.dump_other_positions
@@ -1173,6 +1208,7 @@ def main() -> int:
                 "engine_eval_conflicts": engine_conflicts}
                if a.engine_candidates else {}),
             "crack_edges": g.meta.get("crack_edges", 0),
+            **({"lookahead_floor": lookahead} if lookahead is not None else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
@@ -1200,6 +1236,11 @@ def main() -> int:
             "built": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
+        if lookahead is not None:
+            # the vetoes this book was built with (validate_book reads them back)
+            Path(str(out) + ".lookahead.json").write_text(json.dumps(
+                [{"position_hash": h, "reach": g.reach.get(h, 0.0), "moves": sorted(bs)}
+                 for h, bs in sorted(lookahead_vetoes.items())]))
         if rare_floor is not None:
             # every decision where an unverified rare move would have excluded a rival had it
             # bound, with the graph's optimistic reach: the verifier's work list

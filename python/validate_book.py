@@ -200,6 +200,12 @@ def main():
     cloud_moves = set()
     checked_moves = {}
     excluded = bc.verified_exclusions(proposal_input, limit)
+    if meta.get("lookahead_floor"):
+        # --lookahead-floor: the builder's vetoes, from the sidecar beside the recipe meta
+        import lookahead_floor
+        side = Path(str(meta_p)[:-len(".meta.json")] + ".lookahead.json")
+        excluded = lookahead_floor.merged(excluded, {
+            r["position_hash"]: set(r["moves"]) for r in json.loads(side.read_text())})
     from book_graph import rare_policy
     rare_floor, verified_at = rare_policy(
         meta, pl.read_parquet(proposal_input) if proposal_input is not None else None)
