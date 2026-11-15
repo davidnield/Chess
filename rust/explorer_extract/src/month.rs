@@ -60,7 +60,7 @@ use crate::chesspos::{pack, Key, Packed};
 use crate::fasthash::FastMap;
 use crate::game::{count_ply, drive_game, Counts, Filters, GameSink, Outcome, Walker};
 use crate::keys::{
-    band_index, bucket_of, ps_schema_with, rename_retry, san_of, san_str, term_schema_full, tmp_of,
+    band_index, bucket_of, ps_schema_with, rename_retry, san_of, san_str, term_schema_sliced, tmp_of,
     write_parquet, writer_props, PsKey, TermKey, BANDS,
 };
 use crate::partials::term_batch_with;
@@ -106,6 +106,7 @@ pub struct Config {
     pub ply_key: bool,
     /// --key128: 128-bit position keys (the high halves as extra columns).
     pub wide: bool,
+    pub term_slices: bool,
     /// Every flag, for the provenance JSON.
     pub flags: Value,
 }
@@ -127,6 +128,9 @@ pub fn params(cfg: &Config) -> Value {
         "buckets": cfg.buckets,
     });
     // Only on 128-bit months, so a 64-bit month dir's lock reads as it always did.
+    if cfg.term_slices {
+        p["term_slices"] = json!(true);
+    }
     if cfg.wide {
         p["key_bits"] = json!(128);
     }
@@ -141,6 +145,7 @@ struct ChunkSink {
     nb: u32,
     ply_key: bool,
     wide: bool,
+    term_event_id: Option<u8>,
     maps: Vec<FastMap<PsKey, Local>>,
     term: FastMap<TermKey, Counts>,
     event: u8,
@@ -198,6 +203,8 @@ impl Walker for ChunkSink {
             kind: kind as u8,
             reason: self.reason,
             end_ply: if self.ply_key { end_ply as u16 } else { 0 },
+            event_id: self.term_event_id.unwrap_or(0),
+            band: if self.term_event_id.is_some() { self.band } else { 0 },
         };
         self.term.entry(key).or_default().add(self.outcome);
     }
@@ -605,6 +612,10 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
     let tag = format!("{year}_{month}");
     // Before the sentinel test: a rerun with another cap or key into a finished
     // dir must be refused, not reported as "already done".
+    std::fs::create_dir_all(&cfg.out)?;
+    let writer = std::fs::OpenOptions::new().create(true).truncate(false).write(true)
+        .open(cfg.out.join("_month_writer.lock"))?;
+    writer.try_lock().context("another extractor owns this staging root")?;
     crate::partials::lock(&cfg.out, &params(cfg))?;
     let sentinel = cfg.out.join(format!("_month={tag}.DONE"));
     if sentinel.exists() {
@@ -693,6 +704,8 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
                 maps: (0..per).map(|_| FastMap::default()).collect(),
                 term: FastMap::default(),
                 event: f.event_idx,
+                term_event_id: cfg.term_slices.then(|| crate::merge::EVENTS.iter()
+                    .position(|&name| name == f.event).expect("validated event") as u8),
                 band: 0,
                 outcome: Outcome::Other,
                 reason: 3,
@@ -859,8 +872,8 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
     std::fs::create_dir_all(&cfg.term_dir)?;
     let term_path = cfg.term_dir.join(format!("year={year}_month={month}.term.parquet"));
     let term_tmp = tmp_of(&term_path);
-    let term_schema = term_schema_full(cfg.ply_key, cfg.wide);
-    write_parquet(&term_tmp, &term_schema, &[term_batch_with(&term_rows, cfg.ply_key, cfg.wide)?])?;
+    let term_schema = term_schema_sliced(cfg.ply_key, cfg.wide, cfg.term_slices);
+    write_parquet(&term_tmp, &term_schema, &[term_batch_with(&term_rows, cfg.ply_key, cfg.wide, cfg.term_slices)?])?;
     let back = ParquetRecordBatchReaderBuilder::try_new(std::fs::File::open(&term_tmp)?)?.build()?;
     let total_col = term_schema.index_of("total")?;
     let (mut n, mut tot) = (0u64, 0u64);
@@ -920,6 +933,8 @@ pub fn run_month(cfg: &Config, year: i32, month: u32, files: &[SourceFile]) -> R
         "commit": sys::GIT_COMMIT,
         "built": sys::BUILD_DATE,
         "flags": cfg.flags,
+        "term_slices": cfg.term_slices,
+        "source_events": cfg.events.iter().filter(|ev| files.iter().any(|f| &f.event == *ev)).collect::<Vec<_>>(),
         "max_ply": cfg.max_ply,
         "ply_key": cfg.ply_key,
         "key_bits": if cfg.wide { 128 } else { 64 },

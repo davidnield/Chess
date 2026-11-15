@@ -173,7 +173,7 @@ impl Walker for ChunkAgg {
 
     #[inline]
     fn term(&mut self, hash: i64, kind: i32, _end_ply: u32) {
-        let key = TermKey { hash, hash_hi: 0, kind: kind as u8, reason: self.reason, end_ply: 0 };
+        let key = TermKey { hash, hash_hi: 0, kind: kind as u8, reason: self.reason, end_ply: 0, event_id: 0, band: 0 };
         self.term.entry(key).or_default().add(self.outcome);
     }
 }
@@ -286,12 +286,12 @@ pub fn ps_batch(agg: &ChunkAgg, event: &str) -> Result<RecordBatch> {
 }
 
 pub fn term_batch(rows: &[(TermKey, Counts)]) -> Result<RecordBatch> {
-    term_batch_with(rows, false, false)
+    term_batch_with(rows, false, false, false)
 }
 
 /// The term rows; `end_ply` adds that column (month --ply-key), `wide` the
 /// key's high half as the last one (month --key128).
-pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool, wide: bool) -> Result<RecordBatch> {
+pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool, wide: bool, sliced: bool) -> Result<RecordBatch> {
     let i64s = |f: &dyn Fn(&TermKey, &Counts) -> i64| -> ArrayRef {
         Arc::new(Int64Array::from_iter_values(rows.iter().map(|(k, c)| f(k, c))))
     };
@@ -315,7 +315,11 @@ pub fn term_batch_with(rows: &[(TermKey, Counts)], end_ply: bool, wide: bool) ->
     if wide {
         cols.push(i64s(&|k, _| k.hash_hi));
     }
-    Ok(RecordBatch::try_new(crate::keys::term_schema_full(end_ply, wide), cols)?)
+    if sliced {
+        cols.push(i32s(&|k| i32::from(k.event_id)));
+        cols.push(i32s(&|k| BANDS[k.band as usize] as i32));
+    }
+    Ok(RecordBatch::try_new(crate::keys::term_schema_sliced(end_ply, wide, sliced), cols)?)
 }
 
 /// The partial's path for chunk k: `{stem}_c{k:03d}.{kind}.parquet`.

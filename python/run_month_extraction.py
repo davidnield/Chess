@@ -1,59 +1,17 @@
-"""Drive `explorer-extract month` over many months: extract each month into a fast staging root,
-move it to its archive root in the background, and write the archive's sentinel last.
-
-STATUS (2026-11-14): DRAFT, NEVER RUN on real months, and NOT SAFE for the full extraction until
-the migration review's finding 2 (docs/repertoire-migration-review-2026-11-14.md) is fixed:
-  - a month with an archive sentinel is skipped before the requested settings are compared with
-    either root (reproduced: an empty dest holding only `_month=2026_1.DONE`, a request for
-    --max-ply 51, exit 0);
-  - a staged month with its sentinel is published without running the extractor, so the
-    extractor's own settings check is bypassed;
-  - --stage and --dest may resolve to the same directory, and move_month then deletes the just
-    extracted month before copying it;
-  - no test covers a crash between the destination rename, the sentinel and the stage cleanup.
-The --events order check below does work (refuses Blitz Rapid Classical, exit 1).
-
-    python run_month_extraction.py --exe <explorer-extract.exe> --months 2013_1..2026_9
-        --stage D:/chess/explorer_p50_stage --dest F:/chess/explorer_brc_p50
-        --events Blitz Classical Rapid --max-ply 50 --key128
-        [--mem-gb 55] [--threads 12] [--not-before "2026-11-16 00:00"] [--dry-run]
-
-Why two roots. The extraction writes about 500 files of a month at once and re-reads each one;
-the archive is a USB hard disk. Staging on NVMe keeps the extraction at its own speed and turns
-the archive's work into one sequential copy per month.
-
-One month at a time, one `month` process each (a failed month stops the run; the months before it
-are already safe). A month is DONE when `<dest>/_month=Y_M.DONE` exists, and only then:
-
-  extract   `<exe> month --out <stage> --months Y_M ...`  (the tool's own sentinel in <stage>)
-  copy      month=Y_M/ into <dest>/_tmp_month=Y_M/, then one rename; the manifest, provenance,
-            term monthly and any conflicts through `.tmp` names; every file's size is checked
-            (--verify hash also re-reads each copy and compares SHA-256: about twice the
-            archive I/O. The merge validates every row it reads against the month's manifest
-            either way, so a bad copy cannot enter a book; it costs that month's re-extraction.)
-  sentinel  `<dest>/_month=Y_M.DONE`, a copy of the tool's, written LAST
-  release   the staged month is deleted
-
-`merge` refuses a root holding a `_tmp_month=` dir or a month without its sentinel, so an
-interrupted copy can never be merged. `_extract_params.json` (the tool's settings lock) is copied
-to <dest> with the first month and must be identical for every later one.
-
-Resuming: launch the same command again. Months with an archive sentinel are skipped, a month
-staged but not yet moved is moved, and anything else is extracted (the tool cleans up its own
-unfinished month). Back-pressure: extraction waits while more than --max-staged-gb sits unmoved.
-Exit status: 0 done, 1 a month failed or a copy did not verify, 4 out of space (resumable).
-
-The events must be a subset of the six speeds in the merge's own order (Blitz, Bullet, Classical,
-Correspondence, Rapid, UltraBullet): a month sorts its rows by an event's position in the list
-it was given, and `merge` refuses any other order -- after the extraction. Refused here, before.
-
-Every month appends a line to <dest>/_extraction_log.jsonl: games, rows, bytes, extract and copy
-seconds and the copy's MB/s (the archive's measured write speed).
+"""Extract ply-keyed months on NVMe and publish verified copies to an archive.
+Each root is bound to the request and extractor binary before a month is skipped.
+Use --source-provenance for historical months missing a requested speed. Supply
+the independent per-month provenance directory of the earlier six-speed extraction.
+The default --verify hash re-reads each archived file before releasing its stage.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import datetime
+import re
+
+import month_archive as archive
 import hashlib
 import json
 import os
@@ -129,12 +87,13 @@ def sha256(path: Path) -> str:
         return hashlib.file_digest(f, "sha256").hexdigest()
 
 
-def copy_file(src: Path, dst: Path, verify: str) -> int:
+def copy_file(src: Path, dst: Path, verify: str, hashes=None, timing=None) -> int:
     """src -> dst through dst's .tmp name; returns the bytes. Raises if the copy differs."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_name(dst.name + ".tmp")
     h = hashlib.sha256() if verify == "hash" else None
     n = 0
+    started = time.monotonic()
     with src.open("rb") as fi, tmp.open("wb") as fo:
         while chunk := fi.read(COPY_BUFFER):
             fo.write(chunk)
@@ -145,9 +104,15 @@ def copy_file(src: Path, dst: Path, verify: str) -> int:
         os.fsync(fo.fileno())
     if tmp.stat().st_size != n or n != src.stat().st_size:
         raise OSError(f"{dst}: copied {tmp.stat().st_size} of {src.stat().st_size} bytes")
+    written = time.monotonic()
     if h and sha256(tmp) != h.hexdigest():
         raise OSError(f"{dst}: the copy's SHA-256 differs from the source's")
+    if timing is not None:
+        timing[0] += written - started
+        timing[1] += time.monotonic() - written
     tmp.replace(dst)
+    if hashes is not None:
+        hashes[dst] = h.hexdigest() if h else n
     return n
 
 
@@ -155,42 +120,65 @@ def tree_files(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.is_file())
 
 
-def move_month(stage: Path, dest: Path, ym, verify: str) -> dict:
-    """Copy a staged month to the archive, sentinel last, then release the staged copy."""
+def receipt(root, ym):
+    return root / "_archive_receipts" / (tag(ym) + ".json")
+
+
+def validate_archive(a, ym, source):
+    parts = month_parts(a.dest, ym)
+    files = archive.check_month(parts, ym, a, source)
+    rec = archive.read_json(receipt(a.dest, ym))
+    if rec["source"] != source or rec["verify"] != a.verify:
+        raise ValueError(f"{tag(ym)}: archive source or verification policy changed")
+    files.append(a.dest / "_extract_params.json")
+    actual = {p.relative_to(a.dest).as_posix(): sha256(p) if a.verify == "hash" else p.stat().st_size
+              for p in files}
+    if actual != rec["files"]:
+        raise ValueError(f"{tag(ym)}: archive contents differ from publication receipt")
+
+
+def move_month(a, ym, source):
+    stage, dest, verify = a.stage, a.dest, a.verify
     s, d = month_parts(stage, ym), month_parts(dest, ym)
+    files = archive.check_month(s, ym, a, source)
     t0 = time.monotonic()
     lock_s, lock_d = stage / "_extract_params.json", dest / "_extract_params.json"
-    want = json.loads(lock_s.read_text(encoding="utf-8"))
+    hashes = {}
+    timing = [0., 0.]
+    if lock_d.exists() and archive.read_json(lock_d) != archive.read_json(lock_s):
+        raise ValueError(f"{lock_d}: extractor settings differ from staging")
     if lock_d.exists():
-        if json.loads(lock_d.read_text(encoding="utf-8")) != want:
-            raise RuntimeError(f"{lock_d} differs from {lock_s}: the archive holds months of other settings")
+        hashes[lock_d] = sha256(lock_d) if verify == "hash" else lock_d.stat().st_size
     else:
-        copy_file(lock_s, lock_d, verify)
-    tmp_dir = dest / f"_tmp_month={tag(ym)}"
-    if d["dir"].exists():                     # a copy whose sentinel was never written: redo it
-        shutil.rmtree(d["dir"])
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    files = tree_files(s["dir"])
-    if not files:
-        raise RuntimeError(f"{s['dir']}: no files")
-    nbytes = sum(copy_file(f, tmp_dir / f.relative_to(s["dir"]), verify) for f in files)
-    if [p.relative_to(tmp_dir) for p in tree_files(tmp_dir)] != [f.relative_to(s["dir"]) for f in files]:
-        raise OSError(f"{tmp_dir}: the copied tree differs from {s['dir']}")
-    tmp_dir.replace(d["dir"])
-    for k in ("manifest", "provenance", "term"):
-        nbytes += copy_file(s[k], d[k], verify)
-    if s["conflicts"].exists():
-        shutil.rmtree(d["conflicts"], ignore_errors=True)
-        for f in tree_files(s["conflicts"]):
-            nbytes += copy_file(f, d["conflicts"] / f.relative_to(s["conflicts"]), verify)
-    copy_file(s["sentinel"], d["sentinel"], verify)                # LAST
+        copy_file(lock_s, lock_d, verify, hashes)
+    # The stage remains complete through every intermediate publication state.
+    # The final marker hides an interrupted copy from the merge.
+    if d["sentinel"].exists():
+        raise ValueError(f"{tag(ym)}: already published")
+    for k in ("dir", "conflicts"):
+        archive.safe_child(dest, d[k])
+        if d[k].exists():
+            shutil.rmtree(d[k])
+    nbytes = 0
+    for p in files:
+        if p == s["sentinel"]:
+            continue
+        dst = dest / p.relative_to(stage)
+        archive.safe_child(dest, dst)
+        nbytes += copy_file(p, dst, verify, hashes, timing)
+    marker = d["sentinel"]
+    hashes[marker] = sha256(s["sentinel"]) if verify == "hash" else s["sentinel"].stat().st_size
+    rec = {"source": source, "verify": verify,
+           "bytes": nbytes, "stream_write_seconds": timing[0], "readback_seconds": timing[1],
+           "extract_seconds": archive.read_json(s["provenance"])["seconds"],
+           "files": {p.relative_to(dest).as_posix(): h for p, h in hashes.items()}}
+    archive.write_json(receipt(dest, ym), rec)
+    copy_file(s["sentinel"], marker, verify)
     secs = time.monotonic() - t0
-    shutil.rmtree(s["dir"])
-    shutil.rmtree(s["conflicts"], ignore_errors=True)
-    for k in ("manifest", "provenance", "term", "sentinel"):
-        s[k].unlink()
-    return {"files": len(files) + 3, "bytes": nbytes, "copy_seconds": round(secs, 1),
-            "copy_mb_per_s": round(nbytes / 1e6 / max(secs, 1e-9), 1)}
+    archive.release(stage, s)
+    return {"files": len(files), "bytes": nbytes, "copy_seconds": round(secs, 2),
+            "copy_mb_per_s": round(nbytes / 1e6 / max(secs, 1e-9), 2),
+            "stream_write_seconds": timing[0], "readback_seconds": timing[1]}
 
 
 def month_command(a, ym) -> list[str]:
@@ -199,6 +187,10 @@ def month_command(a, ym) -> list[str]:
            "--mem-gb", str(a.mem_gb), "--threads", str(a.threads)]
     if a.key128:
         cmd.append("--key128")
+    if a.term_slices:
+        cmd.append("--term-slices")
+    for speed in a.inventories[ym]["absent_events"]:
+        cmd.extend(["--absent-event", speed])
     return cmd + list(a.month_arg)
 
 
@@ -208,26 +200,61 @@ def drive(a) -> int:
         log(f"REFUSED: --events {a.events} is not a subset of {MERGE_EVENTS} in that order; "
             f"`merge` would refuse these months after the extraction")
         return EXIT_FAIL
-    todo = [ym for ym in months if not month_parts(a.dest, ym)["sentinel"].exists()]
-    log(f"{len(months)} months, {len(months) - len(todo)} already in {a.dest}, {len(todo)} to do")
-    for ym in todo[:3] if a.dry_run else ():
-        log("would run: " + subprocess.list2cmdline(month_command(a, ym)))
-    if a.dry_run or not todo:
-        return 0
-    if a.not_before:
+    archive.disjoint(a.source, a.stage, a.dest)
+    a.source, a.stage, a.dest = (p.resolve() for p in (a.source, a.stage, a.dest))
+    if a.term_slices and not a.key128:
+        raise ValueError("--term-slices requires --key128")
+    for arg in a.month_arg:
+        if not re.fullmatch(r"--(?:keys-per-game|bytes-per-key|passes)=[0-9]+(?:[.][0-9]+)?", arg):
+            raise ValueError(f"unsupported extra extractor argument {arg}")
+    exe = shutil.which(a.exe[0]) or a.exe[0]
+    a.exe = [str(Path(exe).resolve())] + [str(Path(x).resolve(strict=True)) for x in a.exe[1:]]
+    settings = {"version": 1, "exe": {x: sha256(Path(x)) for x in a.exe}, "source": str(a.source),
+                "stage": str(a.stage), "archive": str(a.dest), "events": a.events, "key128": a.key128,
+                "term_slices": a.term_slices, "max_ply": a.max_ply, "extra": a.month_arg, "verify": a.verify}
+    a.inventories = {ym: archive.inventory(a.source, ym, a.events, a.source_provenance) for ym in months}
+    if a.not_before and not a.dry_run:
         start = datetime.datetime.fromisoformat(a.not_before)
-        while datetime.datetime.now() < start:
-            log(f"waiting until {start} to start")
-            time.sleep(min(600, max(1, (start - datetime.datetime.now()).total_seconds())))
-    a.stage.mkdir(parents=True, exist_ok=True)
-    a.dest.mkdir(parents=True, exist_ok=True)
+        while (remaining := (start - datetime.datetime.now()).total_seconds()) > 0:
+            time.sleep(min(60, remaining))
+    with ExitStack() as locks:
+        if not a.dry_run:
+            for root in sorted((a.stage, a.dest)):
+                locks.enter_context(archive.root_lock(root))
+        for root in (a.stage, a.dest):
+            archive.root_binding(root, settings, a.dry_run)
+            if (root / "_extract_params.json").exists():
+                archive.check_root_params(root, a)
+        todo = []
+        for ym, source in a.inventories.items():
+            s = month_parts(a.stage, ym)
+            inventory_path = a.stage / "_source_inventory" / (tag(ym) + ".json")
+            if not inventory_path.exists() and any(p.exists() for p in s.values()):
+                raise ValueError(f"{tag(ym)}: staged output lacks its input inventory")
+            archive.bind(inventory_path, source, a.dry_run)
+            if month_parts(a.dest, ym)["sentinel"].exists():
+                validate_archive(a, ym, source)
+                if not a.dry_run:
+                    archive.release(a.stage, s)
+            else:
+                if s["sentinel"].exists():
+                    archive.check_month(s, ym, a, source)
+                todo.append(ym)
+        log(f"{len(months)} months, {len(months)-len(todo)} verified in archive, {len(todo)} to do")
+        if a.dry_run:
+            for ym in todo:
+                log("would run: " + subprocess.list2cmdline(month_command(a, ym)))
+            return 0
+        return run_pending(a, months, todo)
 
+
+def run_pending(a, months, todo):
     jobs: queue.Queue = queue.Queue()
     state = {"error": None, "staged_bytes": 0, "space": False}
     lock = threading.Lock()
 
     def staged_bytes(ym) -> int:
-        return sum(f.stat().st_size for f in tree_files(month_parts(a.stage, ym)["dir"]))
+        return sum(f.stat().st_size for f in archive.check_month(month_parts(a.stage, ym), ym, a, a.inventories[ym]))
 
     def mover():
         while (item := jobs.get()) is not None:
@@ -237,7 +264,7 @@ def drive(a) -> int:
                     if free_gb(a.dest) - size / 1e9 < a.min_dest_free_gb:
                         state["space"] = True
                         raise RuntimeError(f"{a.dest}: under {a.min_dest_free_gb} GB would be left")
-                    rec.update(move_month(a.stage, a.dest, ym, a.verify))
+                    rec.update(move_month(a, ym, a.inventories[ym]))
                     rec["finished"] = time.strftime("%Y-%m-%d %H:%M:%S")
                     with (a.dest / "_extraction_log.jsonl").open("a", encoding="utf-8") as f:
                         f.write(json.dumps(rec) + "\n")
@@ -259,41 +286,45 @@ def drive(a) -> int:
             state["staged_bytes"] += size
         jobs.put((ym, rec, size))
 
-    for ym in todo:
-        if state["error"]:
-            break
-        s = month_parts(a.stage, ym)
-        if s["sentinel"].exists():
-            log(f"{tag(ym)}: already staged, moving")
-            enqueue(ym, {"month": tag(ym), "resumed": True})
-            continue
-        while state["error"] is None and state["staged_bytes"] / 1e9 > a.max_staged_gb:
-            time.sleep(5)                                           # back-pressure on the archive
-        while state["error"] is None and free_gb(a.stage) < a.min_stage_free_gb and state["staged_bytes"]:
-            time.sleep(5)                                           # the mover will free space
-        if state["error"]:
-            break
-        if free_gb(a.stage) < a.min_stage_free_gb:
-            state["error"], state["space"] = f"{a.stage}: under {a.min_stage_free_gb} GB free", True
-            break
-        cmd = month_command(a, ym)
-        log(f"{tag(ym)}: " + subprocess.list2cmdline(cmd))
-        t0 = time.monotonic()
-        rc = subprocess.run(cmd).returncode
-        secs = time.monotonic() - t0
-        if rc or not s["sentinel"].exists():
-            state["error"] = f"{tag(ym)}: `month` exited {rc}" + ("" if rc else " without its sentinel")
-            break
-        prov = json.loads(s["provenance"].read_text(encoding="utf-8"))
-        rec = {"month": tag(ym), "extract_seconds": round(secs, 1), "rows": prov.get("rows"),
-               "games_kept": (prov.get("counters") or {}).get("kept"), "passes": prov.get("passes"),
-               "peak_commit_gb": round((prov.get("peak_commit_bytes") or 0) / 1e9, 1),
-               "tool_commit": prov.get("commit")}
-        log(f"{tag(ym)}: extracted in {secs:,.0f}s ({rec['rows']:,} rows, {rec['passes']} passes, "
-            f"peak commit {rec['peak_commit_gb']} GB)")
-        enqueue(ym, rec)
-    jobs.put(None)
-    worker.join()
+    try:
+        for ym in todo:
+            if state["error"]:
+                break
+            s = month_parts(a.stage, ym)
+            if s["sentinel"].exists():
+                log(f"{tag(ym)}: already staged, moving")
+                enqueue(ym, {"month": tag(ym), "resumed": True})
+                continue
+            while state["error"] is None and state["staged_bytes"] / 1e9 > a.max_staged_gb:
+                time.sleep(5)                                           # back-pressure on the archive
+            while state["error"] is None and free_gb(a.stage) < a.min_stage_free_gb and state["staged_bytes"]:
+                time.sleep(5)                                           # the mover will free space
+            if state["error"]:
+                break
+            if free_gb(a.stage) < a.min_stage_free_gb:
+                state["error"], state["space"] = f"{a.stage}: under {a.min_stage_free_gb} GB free", True
+                break
+            cmd = month_command(a, ym)
+            log(f"{tag(ym)}: " + subprocess.list2cmdline(cmd))
+            t0 = time.monotonic()
+            rc = subprocess.run(cmd).returncode
+            secs = time.monotonic() - t0
+            if rc or not s["sentinel"].exists():
+                state["error"] = f"{tag(ym)}: `month` exited {rc}" + ("" if rc else " without its sentinel")
+                break
+            if archive.inventory(a.source, ym, a.events, a.source_provenance) != a.inventories[ym]:
+                raise ValueError(f"{tag(ym)}: source inventory changed during extraction")
+            prov = json.loads(s["provenance"].read_text(encoding="utf-8"))
+            rec = {"month": tag(ym), "extract_seconds": round(secs, 1), "rows": prov.get("rows"),
+                   "games_kept": (prov.get("counters") or {}).get("kept"), "passes": prov.get("passes"),
+                   "peak_commit_gb": round((prov.get("peak_commit_bytes") or 0) / 1e9, 1),
+                   "tool_commit": prov.get("commit")}
+            log(f"{tag(ym)}: extracted in {secs:,.0f}s ({rec['rows']:,} rows, {rec['passes']} passes, "
+                f"peak commit {rec['peak_commit_gb']} GB)")
+            enqueue(ym, rec)
+    finally:
+        jobs.put(None)
+        worker.join()
     if state["error"]:
         log("STOPPED: " + state["error"] + " (relaunch the same command to resume)")
         return EXIT_SPACE if state["space"] else EXIT_FAIL
@@ -313,11 +344,13 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--events", nargs="+", required=True)
     ap.add_argument("--max-ply", type=int, required=True)
     ap.add_argument("--key128", action="store_true")
+    ap.add_argument("--term-slices", action="store_true")
+    ap.add_argument("--source-provenance", type=Path, help="independent six-speed monthly provenance directory")
     ap.add_argument("--mem-gb", type=float, default=55.0)
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--month-arg", action="append", default=[], metavar="ARG",
                     help="an extra `month` argument (repeatable), e.g. --month-arg=--keys-per-game=40")
-    ap.add_argument("--verify", choices=["size", "hash"], default="size")
+    ap.add_argument("--verify", choices=["size", "hash"], default="hash")
     ap.add_argument("--max-staged-gb", type=float, default=400.0,
                     help="extraction waits while more than this is staged and unmoved")
     ap.add_argument("--min-stage-free-gb", type=float, default=200.0)
@@ -328,4 +361,8 @@ def parser() -> argparse.ArgumentParser:
 
 
 if __name__ == "__main__":
-    sys.exit(drive(parser().parse_args()))
+    try:
+        sys.exit(drive(parser().parse_args()))
+    except (ValueError, KeyError, OSError, RuntimeError) as exc:
+        log(f"STOPPED: {exc}")
+        sys.exit(EXIT_FAIL)

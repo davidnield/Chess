@@ -19,8 +19,7 @@ a different population):
 
 plus a <file>.meta.json beside each, and <work>/_POOL.DONE last.
 
-Why the term/horizon buckets are DERIVED and not read: the book's term table is
-pooled over every event and elo band, so it describes a different population.
+The flow calculation works on both pooled and slice-aware terminal tables.
 Ply is in the book's key, so the flows answer exactly, slice by slice:
 
     A(x, p) = games that reached x on their p-th move    (rows by child_hash at ply p)
@@ -33,17 +32,16 @@ at the cap is exact. A game whose movetext failed to parse after ply p shows up 
 ended at its last parsed position (the old extract counted it nowhere). Games with
 no moves never touch a move row, so the root's end_ply-0 mass is not derivable.
 
-The termination REASON is not in the move rows, so the whole ended mass goes to
-term_other_*; term_normal_* and term_flag_* are 0 and the aux meta says
-term_reasons='pooled'. Stage 3 and budget_core refuse to exclude time-forfeit
-flags on such a sidecar (excluding them would silently drop nothing).
+In a slice-aware book, actual endings at plies 1..cap supply the normal and flag
+counts for the selected events and bands. Other endings and parse residuals stay
+in term_other_*. Legacy pooled terminal tables retain their original behavior.
 
 Collision hashes (<book>/_collisions.parquet) are dropped as pool PARENTS, like
 the eval arrays and Stage 3's hash-keyed dicts must; they stay in D and A summed
 over their EPDs, so the flow identities still balance. No twin can reach the
 floor book-wide; that is asserted, not assumed.
 
-A book-v2 (128-bit keys: parent_hash_hi / child_hash_hi beside the 64-bit columns) is
+A book-v2 or book-v3 (128-bit keys: parent_hash_hi / child_hash_hi beside the 64-bit columns) is
 read by the key's LOW half, which is the 64-bit hash, so the pool and its sidecar keep
 their schemas and every reader its keys. Its _collisions.parquet lists the 64-bit hashes
 that two or more positions share, and those are dropped as pool parents exactly as for a
@@ -200,7 +198,7 @@ def arrivals_dir(work: Path) -> Path:
 
 # The arrivals depend on the population and the cap, never on the floor or the tag,
 # so a floor variant may read another work dir's partition (--arrivals-from).
-ARRIVALS_KEYS = ("book", "events", "elo_bands", "max_ply")
+ARRIVALS_KEYS = ("book", "events", "elo_bands", "max_ply", "book_meta_sha256")
 
 
 def resolve_arrivals(a) -> Path:
@@ -348,6 +346,85 @@ def check_ended_nonnegative(con, label: str) -> None:
                            f"so the flows are wrong. Sample: {rows}")
 
 
+def split_endings(con, book, bucket, events, bands, cap):
+    """Reconcile classified endings against the independent move flows at each ply."""
+    book = Path(book)
+    lock = book / "_merge_params.json"
+    sliced = lock.exists() and json.loads(lock.read_text(encoding="utf-8")).get("input_params", {}).get("term_slices")
+    cols = ", ".join(SUMS)
+    if sliced:
+        ids = json.loads((book / "_book.meta.json").read_text(encoding="utf-8"))["term_event_ids"]
+        get_ids = ", ".join(str(ids.index(e)) for e in events)
+        get_bands = ", ".join(str(int(b)) for b in bands)
+        path = book / "term" / f"bkt{bucket:03d}.parquet"
+        con.execute(f"""
+            CREATE TEMP TABLE classified AS SELECT position_hash AS x, end_ply AS p, reason, {cols}
+            FROM read_parquet(?, hive_partitioning=false)
+            WHERE kind=0 AND end_ply BETWEEN 1 AND ? AND event_id IN ({get_ids})
+              AND elo_band IN ({get_bands})
+        """, [str(path), cap])
+    else:
+        legacy = [f"0::BIGINT AS {g}_{c}" for g in ("term_normal", "term_flag") for c in SUMS]
+        legacy.extend(f"SUM({c})::BIGINT AS term_other_{c}" for c in SUMS)
+        con.execute(f"CREATE TEMP TABLE terminal AS SELECT x,{', '.join(legacy)} FROM en GROUP BY x")
+        return
+    sums = ", ".join(f"SUM({c}) AS {c}" for c in SUMS)
+    impossible = " OR ".join(f"t.{c} > COALESCE(en.{c},0)" for c in SUMS)
+    bad = con.execute(f"""
+        WITH t AS (SELECT x,p,{sums} FROM classified GROUP BY x,p)
+        SELECT t.x,t.p FROM t LEFT JOIN en USING(x,p) WHERE {impossible} LIMIT 1
+    """).fetchone()
+    if bad:
+        raise ValueError(f"bucket {bucket}: terminal counts exceed move flows at {bad}")
+    groups = ("term_normal", "term_flag", "term_other")
+    # Subtraction leaves parse failures and unclassified endings in term_other.
+    signed = ", ".join(f"SUM({c}) AS {c}" for c in SUMS)
+    con.execute(f"""
+        CREATE TEMP TABLE terminal AS
+        WITH contributions AS (
+            SELECT x,2 AS reason,{cols} FROM en
+            UNION ALL SELECT x,reason,{cols} FROM classified WHERE reason IN (0,1)
+            UNION ALL SELECT x,2 AS reason,{', '.join('-'+c for c in SUMS)} FROM classified WHERE reason IN (0,1)
+        ), by_reason AS (SELECT x,reason,{signed} FROM contributions GROUP BY x,reason)
+        SELECT x,{', '.join(f'COALESCE(SUM({c}) FILTER (WHERE reason={i}),0)::BIGINT AS {g}_{c}'
+                             for i,g in enumerate(groups) for c in SUMS)}
+        FROM by_reason GROUP BY x
+    """)
+
+
+def check_population(book, events, bands):
+    """A missing requested speed or a missing published file is a data error."""
+    mp = book / "_book.meta.json"
+    meta = json.loads(mp.read_text(encoding="utf-8")) if mp.exists() else {}
+    inputs = meta.get("input", {})
+    configured = inputs.get("params", {}).get("events", [])
+    coverage = inputs.get("source_events_by_month", {})
+    if len(events) != len(set(events)) or len(bands) != len(set(bands)):
+        raise ValueError("duplicate speed or rating band")
+    for e in events:
+        if (configured and e not in configured) or not any((book / "ps" / f"event={e}").glob("elo_band=*/bkt*.parquet")):
+            raise ValueError(f"{book}: no source coverage for {e}")
+        if coverage and all(v is not None for v in coverage.values()) and not any(e in v for v in coverage.values()):
+            raise ValueError(f"{book}: no source month contains {e}")
+    for band in bands:
+        if band not in (0, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500):
+            raise ValueError(f"unknown rating band {band}")
+    if not meta and not (book / "_done").exists():
+        if (book / "_merge_params.json").exists():
+            raise ValueError(f"{book}: merged book lacks publication metadata")
+        return coverage  # older, explicitly capped inputs have no bucket receipts
+    if not (book / "_BOOK.DONE").exists():
+        raise ValueError(f"{book}: incomplete merged book")
+    for i in range(N_BUCKETS):
+        done = json.loads((book / "_done" / f"bkt{i:03d}.DONE").read_text(encoding="utf-8"))
+        expected = {str(book / f["path"]): f["bytes"] for f in done["files"]
+                    if f["event"] in events and f["elo_band"] in bands}
+        actual = {str(Path(p)): Path(p).stat().st_size for p in slice_files(book, events, bands, i)}
+        if actual != expected:
+            raise ValueError(f"bucket {i}: files disagree with published slice inventory")
+    return coverage
+
+
 def _bucket_task(task: tuple) -> tuple:
     (i, book, events, bands, max_ply, min_games, eval_arrays, work, adir, coll_list,
      root_hash, threads, mem, tmp, allow_coll_survivors) = task
@@ -445,7 +522,7 @@ def _bucket_task(task: tuple) -> tuple:
                    SUM(e.draws)::BIGINT       AS other_draws,
                    SUM(e.black_wins)::BIGINT  AS other_black_wins,
                    COUNT(*)::INTEGER          AS other_edges,
-                   SUM(CASE WHEN ev.cp IS NULL THEN 0 ELSE e.total * {es} END)
+                   SUM(CASE WHEN ev.cp IS NULL THEN 0 ELSE e.total * {es} END ORDER BY e.move_san)
                      / NULLIF(SUM(CASE WHEN ev.cp IS NULL THEN 0 ELSE e.total END), 0)
                                               AS other_eval_mean,
                    MIN({es})                  AS other_eval_min,
@@ -466,18 +543,16 @@ def _bucket_task(task: tuple) -> tuple:
             SELECT DISTINCT parent_hash AS position_hash FROM e
             WHERE NOT is_coll AND total >= {min_games}
         """)
-        tcols = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
-        zero = lambda g: ", ".join(f"0::BIGINT AS {g}_{c}"
-                                   for c in ("total", "white_wins", "draws", "black_wins"))
+        split_endings(con, book, i, events, bands, max_ply)
+        terminal_cols = ", ".join(f"COALESCE(t.{g}_{c}, 0)::BIGINT AS {g}_{c}"
+                                  for g in _GROUPS[:3] for c in ("total","white_wins","draws","black_wins"))
         tsel = lambda g, al: ", ".join(f"COALESCE({al}.{c}, 0)::BIGINT AS {g}_{c}"
                                        for c in ("total", "white_wins", "draws", "black_wins"))
         con.execute(f"""
             COPY (
-                WITH t AS (SELECT x, {tcols} FROM en GROUP BY x),
-                     hz AS (SELECT x, {', '.join(SUMS)} FROM d WHERE q = {max_ply + 1})
+                WITH hz AS (SELECT x, {', '.join(SUMS)} FROM d WHERE q = {max_ply + 1})
                 SELECT k.position_hash,
-                       {zero('term_normal')}, {zero('term_flag')},
-                       {tsel('term_other', 't')}, {tsel('horizon', 'hz')},
+                       {terminal_cols}, {tsel('horizon', 'hz')},
                        COALESCE(o.other_total, 0)::BIGINT      AS other_total,
                        COALESCE(o.other_white_wins, 0)::BIGINT AS other_white_wins,
                        COALESCE(o.other_draws, 0)::BIGINT      AS other_draws,
@@ -486,7 +561,7 @@ def _bucket_task(task: tuple) -> tuple:
                        o.other_eval_mean, o.other_eval_min, o.other_eval_max,
                        COALESCE(o.other_eval_cov, 0.0)::DOUBLE AS other_eval_cov
                 FROM keys k
-                LEFT JOIN t  ON t.x  = k.position_hash
+                LEFT JOIN terminal t ON t.x  = k.position_hash
                 LEFT JOIN hz ON hz.x = k.position_hash
                 LEFT JOIN o  ON o.position_hash = k.position_hash
             ) TO '{_p(tmps['aux'])}' (FORMAT PARQUET, COMPRESSION ZSTD)
@@ -504,7 +579,7 @@ def _bucket_task(task: tuple) -> tuple:
             FROM e WHERE NOT is_coll""")
         (st["aux_rows"], st["aux_other_mass"], st["aux_term_mass"],
          st["aux_horizon_mass"]) = q(f"""
-            SELECT COUNT(*), SUM(other_total), SUM(term_other_total), SUM(horizon_total)
+            SELECT COUNT(*), SUM(other_total), SUM(term_other_total + term_normal_total + term_flag_total), SUM(horizon_total)
             FROM read_parquet('{_p(tmps['aux'])}')""")
         (st["other_covered_mass"], st["aux_other_covered_mass"]) = q(f"""
             SELECT SUM(e.total),
@@ -694,8 +769,9 @@ def write_metas(a, timings: dict) -> None:
             "months": [mp["months"][0], mp["months"][-1]] if mp.get("months") else None,
             "n_months": len(mp.get("months", [])),
             "rating_gap_cap": None,
+            "source_events_by_month": getattr(a, "source_events_by_month", {}),
         },
-        "max_ply": a.max_ply, "min_games": a.min_games, "term_reasons": "pooled",
+        "max_ply": a.max_ply, "min_games": a.min_games, "term_reasons": "split" if ip.get("term_slices") else "pooled",
         "event": POOL_EVENT, "elo_band": POOL_ELO,
         "book": str(book),
         "book_schema": book_schema(book),
@@ -763,6 +839,9 @@ def lock_params(a) -> None:
     p = work / "_params.json"
     cur = {k: (str(getattr(a, k)) if isinstance(getattr(a, k), Path) else getattr(a, k))
            for k in LOCKED}
+    meta_path = Path(a.book) / "_book.meta.json"
+    if meta_path.exists():
+        cur["book_meta_sha256"] = _sha256(meta_path)
     if p.exists():
         old = json.loads(p.read_text(encoding="utf-8"))
         if old != cur:
@@ -817,15 +896,15 @@ def book_cap(book: Path) -> int | None:
 
 
 def book_schema(book: Path) -> str:
-    """'book-v1' or 'book-v2', from the book's settings lock (a book without one is a v1).
+    """The schema generation, from the book's settings lock (a book without one is a v1).
     Either is read by the 64-bit hash, which is a book-v2 key's low half; the positions
     that share one are in _collisions.parquet for both, and are dropped as pool parents."""
     mp = Path(book) / "_merge_params.json"
     schema = "book-v1"
     if mp.exists():
         schema = json.loads(mp.read_text(encoding="utf-8")).get("schema", "book-v1")
-    if schema not in ("book-v1", "book-v2"):
-        raise SystemExit(f"FATAL: {book} is a {schema} book; only book-v1 and book-v2 are known")
+    if schema not in ("book-v1", "book-v2", "book-v3"):
+        raise SystemExit(f"FATAL: {book} is a {schema} book; supported schemas are book-v1 through book-v3")
     return schema
 
 
@@ -862,6 +941,7 @@ def main() -> None:
         check_cap(Path(a.book), a.max_ply, a.book_cap)
     if "F:" in str(a.tmp_dir).upper()[:2]:
         sys.exit("FATAL: DuckDB temp on F: (USB HDD) is forbidden")
+    a.source_events_by_month = check_population(Path(a.book), a.events, a.elo_bands)
     lock_params(a)
     from eval_arrays import verify_eval_arrays
     print(f"eval arrays: {verify_eval_arrays(Path(a.eval_arrays))}", flush=True)

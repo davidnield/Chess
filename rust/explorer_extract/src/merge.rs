@@ -69,7 +69,7 @@ use serde_json::{json, Value};
 use xxhash_rust::xxh3::xxh3_64_with_seed;
 
 use crate::chesspos::{START_HASH, START_HASH_HI};
-use crate::keys::{bucket_of, ps_schema_with, rename_retry, san_of, term_schema_full, tmp_of, San, BANDS};
+use crate::keys::{bucket_of, ps_schema_with, rename_retry, san_of, term_schema_sliced, tmp_of, San, BANDS};
 use crate::stage::{self, bucket_dir_name, CopyJob, Queue, Staged};
 use crate::sys;
 
@@ -469,7 +469,8 @@ pub fn term_key_hashes(key: (i64, i32, i32, i32)) -> (u64, u64) {
 
 /// A term key in the merge: (position_hash, position_hash_hi, kind, reason,
 /// end_ply); the high half is 0 in a book-v1, so the order is unchanged there.
-type TKey = (i64, i64, i32, i32, i32);
+// The final two components are the stable event ID and the rating band (-1 in unsliced files).
+type TKey = (i64, i64, i32, i32, i32, i32, i32);
 
 /// The term digest's key hashes: book-v1's over the 4-column key, book-v2's
 /// over the same bytes followed by position_hash_hi LE.
@@ -478,13 +479,16 @@ fn tkey_hashes(key: TKey, wide: bool) -> (u64, u64) {
     if !wide {
         return term_key_hashes((key.0, key.2, key.3, key.4));
     }
-    let mut b = [0u8; 28];
+    let mut b = [0u8; 36];
     b[..8].copy_from_slice(&key.0.to_le_bytes());
     b[8..12].copy_from_slice(&key.2.to_le_bytes());
     b[12..16].copy_from_slice(&key.3.to_le_bytes());
     b[16..20].copy_from_slice(&key.4.to_le_bytes());
-    b[20..].copy_from_slice(&key.1.to_le_bytes());
-    (xxh3_64_with_seed(&b, 1), xxh3_64_with_seed(&b, 2))
+    b[20..28].copy_from_slice(&key.1.to_le_bytes());
+    b[28..32].copy_from_slice(&key.5.to_le_bytes());
+    b[32..].copy_from_slice(&key.6.to_le_bytes());
+    let bytes = if key.5 == -1 { &b[..28] } else { &b[..] };
+    (xxh3_64_with_seed(bytes, 1), xxh3_64_with_seed(bytes, 2))
 }
 
 /// The EPD's side to move: Some(true) for " w ", Some(false) for " b ".
@@ -643,6 +647,7 @@ pub struct MonthIn {
     pub term_total: u64,
     pub commit: String,
     pub source: Option<String>,
+    pub source_events: Option<Vec<String>>,
 }
 
 impl MonthIn {
@@ -680,7 +685,9 @@ pub struct Plan {
 
 impl Plan {
     pub fn schema_name(&self) -> &'static str {
-        if self.wide {
+        if self.params["term_slices"] == json!(true) {
+            "book-v3"
+        } else if self.wide {
             BOOK_SCHEMA_WIDE
         } else {
             BOOK_SCHEMA
@@ -871,7 +878,29 @@ fn preflight(cfg: &Config) -> Result<Plan> {
         if n != man.files || man.files > u64::from(BUCKETS) {
             bad.push(format!("{t}: {n} bkt=N dirs on disk, the manifest says files {}", man.files));
         }
+        let source_events = prov["files"].as_array().map(|files| {
+            let speeds: BTreeSet<_> = files.iter().filter_map(Value::as_str)
+                .flat_map(|p| p.split(['/', '\\']).filter_map(|s| s.strip_prefix("event=")))
+                .collect();
+            speeds.into_iter().map(str::to_owned).collect::<Vec<_>>()
+        });
+        if prov["term_slices"].as_bool().unwrap_or(false) != params["term_slices"].as_bool().unwrap_or(false) {
+            bad.push(format!("{t}: terminal schema disagrees with root settings"));
+        }
+        if params["term_slices"] == json!(true) {
+            let actual = source_events.as_deref().unwrap_or(&[]);
+            let missing: Vec<_> = EVENTS.iter().enumerate()
+                .filter(|(i, e)| events[*i] && !actual.iter().any(|s| s == **e))
+                .map(|(_, e)| *e).collect();
+            let declared = prov["flags"]["absent_events"].as_array()
+                .map(|v| v.iter().filter_map(Value::as_str).collect::<BTreeSet<_>>());
+            if !wide || actual.is_empty() || declared != Some(missing.into_iter().collect())
+                || actual.iter().any(|s| !EVENTS.iter().enumerate().any(|(i,e)| events[i] && s == e)) {
+                bad.push(format!("{t}: invalid per-speed source coverage"));
+            }
+        }
         months.push(MonthIn {
+            source_events,
             y,
             m,
             tag: t,
@@ -1300,7 +1329,7 @@ pub fn run(cfg: &Config) -> Result<()> {
         q: Queue::new(cfg.stage_bytes),
         props,
         schema: book_ps_schema_with(plan.wide),
-        term_schema: term_schema_full(true, plan.wide),
+        term_schema: term_schema_sliced(true, plan.wide, plan.params["term_slices"] == json!(true)),
         t0,
         todo: todo.len(),
         st: Mutex::new(RunState { done_before, bytes_before, ..Default::default() }),
@@ -1922,7 +1951,8 @@ impl<'a> BucketMerge<'a> {
         let Some(ev) = EVENTS.iter().position(|e| *e == ev_s) else {
             bail!("{}: event {ev_s:?} is not one of {EVENTS:?}", at());
         };
-        if !self.ctx.plan.events[ev] {
+        if !self.ctx.plan.events[ev] || self.ctx.plan.months[inp.mi].source_events.as_ref()
+            .is_some_and(|speeds| !speeds.is_empty() && !speeds.iter().any(|s| s == ev_s)) {
             bail!("{}: event {ev_s:?} is not one of the months' events {}", at(), self.ctx.plan.params["events"]);
         }
         let band_v = bt.band.value(i);
@@ -2493,6 +2523,7 @@ struct TermBatch {
     kind: Int32Array,
     reason: Int32Array,
     end: Int32Array,
+    slices: Option<(Int32Array, Int32Array)>,
     c: [Int64Array; 4],
     /// position_hash_hi (book-v2 months).
     hi: Option<Int64Array>,
@@ -2511,6 +2542,7 @@ struct TermIn {
     acc: Stats,
     bytes: u64,
     wide: bool,
+    allowed_events: [bool; EVENTS.len()],
     max_ply: i32,
 }
 
@@ -2525,7 +2557,7 @@ impl TermIn {
         let reader = bld.with_batch_size(READ_BATCH).build()?;
         let mut s = TermIn {
             mi, path: path.to_path_buf(), reader, cur: None, i: 0, footer, read: 0, prev: None,
-            acc: Stats::default(), bytes, wide, max_ply,
+            acc: Stats::default(), bytes, wide, allowed_events: [false; EVENTS.len()], max_ply,
         };
         s.load()?;
         Ok(s)
@@ -2549,6 +2581,7 @@ impl TermIn {
             let i64c = |k: usize| b.column(k).as_primitive::<Int64Type>().clone();
             self.cur = Some(TermBatch {
                 hash: i64c(0), kind: i32c(1), reason: i32c(2), end: i32c(3),
+                slices: (b.num_columns() == 11).then(|| (i32c(9), i32c(10))),
                 c: [i64c(4), i64c(5), i64c(6), i64c(7)], hi: self.wide.then(|| i64c(8)), n,
             });
             return Ok(());
@@ -2563,7 +2596,8 @@ impl TermIn {
     fn key(&self) -> Option<TKey> {
         self.cur.as_ref().map(|c| {
             let i = self.i;
-            (c.hash.value(i), c.hi.as_ref().map_or(0, |a| a.value(i)), c.kind.value(i), c.reason.value(i), c.end.value(i))
+            (c.hash.value(i), c.hi.as_ref().map_or(0, |a| a.value(i)), c.kind.value(i), c.reason.value(i), c.end.value(i),
+             c.slices.as_ref().map_or(-1, |s| s.0.value(i)), c.slices.as_ref().map_or(-1, |s| s.1.value(i)))
         })
     }
 
@@ -2571,10 +2605,10 @@ impl TermIn {
     fn take(&mut self, sum: &mut [u64; 4], dg: &mut Digest, tag: &str) -> Result<()> {
         let bt = self.cur.as_ref().expect("a current row");
         let i = self.i;
-        let key: TKey = (
-            bt.hash.value(i), bt.hi.as_ref().map_or(0, |a| a.value(i)), bt.kind.value(i), bt.reason.value(i),
-            bt.end.value(i),
-        );
+        let key = self.key().expect("current term key");
+        if bt.slices.is_some() && (!(0..EVENTS.len() as i32).contains(&key.5) || !self.allowed_events[key.5 as usize] || !BANDS.contains(&i64::from(key.6))) {
+            bail!("term, month {tag}: invalid event or band in {key:?}");
+        }
         let at = || format!("term, month {tag}, row {}", self.read);
         if let Some(p) = self.prev {
             if key <= p {
@@ -2631,6 +2665,10 @@ impl TermOut {
         if wide {
             cols.push(Arc::new(Int64Array::from_iter_values(r.iter().map(|x| x.0 .1))));
         }
+        if schema.fields().len() == 11 {
+            cols.push(Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .5))));
+            cols.push(Arc::new(Int32Array::from_iter_values(r.iter().map(|x| x.0 .6))));
+        }
         self.w.write(&RecordBatch::try_new(schema.clone(), cols)?)?;
         self.rows.clear();
         Ok(())
@@ -2659,7 +2697,9 @@ fn verify_term_file(b: u32, path: &Path, schema: &SchemaRef, dg: &mut Digest, wi
         let cs = [i64c(4), i64c(5), i64c(6), i64c(7)];
         let his = wide.then(|| i64c(8));
         for i in 0..batch.num_rows() {
-            let key: TKey = (h.value(i), his.map_or(0, |a| a.value(i)), kind.value(i), reason.value(i), end.value(i));
+            let sliced = batch.num_columns() == 11;
+            let key: TKey = (h.value(i), his.map_or(0, |a| a.value(i)), kind.value(i), reason.value(i), end.value(i),
+                if sliced { i32c(9).value(i) } else { -1 }, if sliced { i32c(10).value(i) } else { -1 });
             if bucket_of(key.0, BUCKETS) != b {
                 bail!("{p} row {}: position_hash {} is not in bucket {b}", st.rows, key.0);
             }
@@ -2695,7 +2735,11 @@ fn do_term(ctx: &Ctx, staged: Staged) -> Result<()> {
     let schema = &ctx.term_schema;
     let mut ins = Vec::with_capacity(staged.files.len());
     for (mi, path, bytes) in &staged.files {
-        ins.push(TermIn::open(*mi, path, *bytes, schema, ctx.plan.wide, ctx.plan.max_ply)?);
+        let mut input = TermIn::open(*mi, path, *bytes, schema, ctx.plan.wide, ctx.plan.max_ply)?;
+        if let Some(speeds) = &ctx.plan.months[*mi].source_events {
+            input.allowed_events = EVENTS.map(|e| speeds.iter().any(|s| s == e));
+        }
+        ins.push(input);
     }
     let tags: Vec<String> = ins.iter().map(|x| ctx.plan.months[x.mi].tag.clone()).collect();
     let mut outs: Vec<Option<TermOut>> = (0..BUCKETS).map(|_| None).collect();
@@ -2897,12 +2941,13 @@ pub const READ_CONTRACT_WIDE: [&str; 10] = [
     "white_score_avg = (white_wins + 0.5 * draws) / total, in IEEE doubles.",
 ];
 
-fn read_contract(plan: &Plan) -> &'static [&'static str; 10] {
-    if plan.wide {
-        &READ_CONTRACT_WIDE
-    } else {
-        &READ_CONTRACT
+fn read_contract(plan: &Plan) -> [&'static str; 10] {
+    let mut contract = if plan.wide { READ_CONTRACT_WIDE } else { READ_CONTRACT };
+    if plan.params["term_slices"] == json!(true) {
+        let line = contract.iter_mut().find(|s| s.starts_with("Term is pooled")).unwrap();
+        *line = "Term is keyed by the full position key, kind, reason, end_ply, event_id and elo_band. event_id is the zero-based index in _book.meta.json term_event_ids. kind 0 records an ending, kind 1 the extraction horizon.";
     }
+    contract
 }
 
 fn population(plan: &Plan) -> String {
@@ -3121,6 +3166,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
             "months_root": plan.months_root.display().to_string(),
             "months": plan.months.iter().map(|m| m.tag.clone()).collect::<Vec<_>>(),
             "params": plan.params,
+            "source_events_by_month": plan.months.iter().map(|m| (&m.tag, &m.source_events)).collect::<BTreeMap<_,_>>(),
             "producer_commit": plan.producer,
         },
         "writer": writer_settings(&ctx.props),
@@ -3138,6 +3184,7 @@ fn finalize(ctx: &Ctx) -> Result<()> {
                     "finalize_secs": t0.elapsed().as_secs_f64(), "this_run_wall_secs": ctx.t0.elapsed().as_secs_f64()},
         "peak_commit_bytes_this_run": sys::peak_commit(),
         "ps_schema": ctx.schema.fields().iter().map(|f| format!("{}: {} (required)", f.name(), f.data_type())).collect::<Vec<_>>(),
+        "term_event_ids": EVENTS,
         "term_schema": ctx.term_schema.fields().iter().map(|f| format!("{}: {}", f.name(), f.data_type())).collect::<Vec<_>>(),
         "read_contract": read_contract(plan),
         "population": population(plan),

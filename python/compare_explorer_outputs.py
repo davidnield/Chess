@@ -440,31 +440,33 @@ def _book_schema_ok(f: Path, wide: bool = False) -> str | None:
     return None if got == want else f"{f}: schema {got}"
 
 
-def book_is_wide(book: Path) -> bool:
+def book_generation(book: Path) -> str:
     """A book-v2 (128-bit keys), by the book's settings lock; a book without one is a v1."""
     lock = book / "_merge_params.json"
     if not lock.exists():
-        return False
+        return 'book-v1'
     schema = json.loads(lock.read_text(encoding="utf-8")).get("schema", "book-v1")
-    if schema not in ("book-v1", "book-v2"):
-        raise SystemExit(f"FATAL: {lock} says schema {schema!r}: only book-v1 and book-v2 are known")
-    return schema == "book-v2"
+    if schema not in ("book-v1", "book-v2", "book-v3"):
+        raise SystemExit(f"FATAL: {lock} says schema {schema!r}: supported schemas are book-v1 through book-v3")
+    return schema
 
 
 def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | None) -> int:
     t0 = time.time()
     bad = 0
-    wide = book_is_wide(book)
+    generation = book_generation(book)
+    wide = generation != "book-v1"
+    sliced = generation == "book-v3"
     # The position within a 64-bit hash: its EPD in a book-v1, the key's high half in a book-v2.
     BOOK_COLS = globals()["BOOK_COLS"] + (BOOK_WIDE_COLS if wide else ())
-    BOOK_TERM_COLS = globals()["BOOK_TERM_COLS"] + (BOOK_WIDE_TERM_COLS if wide else ())
+    BOOK_TERM_COLS = globals()["BOOK_TERM_COLS"] + (BOOK_WIDE_TERM_COLS if wide else ()) + (("event_id","elo_band") if sliced else ())
     hi_key = "parent_hash_hi, " if wide else ""
     hi_child = ("MIN(child_hash_hi) AS child_hash_hi, MAX(child_hash_hi) AS child_hi_max, "
                 if wide else "0 AS child_hi_max, ")
     hi_sel = ", parent_hash_hi, child_hash_hi" if wide else ""
     by_bucket = book_ps_files(book)
     files = [f for v in by_bucket.values() for f in v]
-    print(f"[book] {book} ({'book-v2, 128-bit keys' if wide else 'book-v1'}): {len(files):,} ps files "
+    print(f"[book] {book} ({generation}): {len(files):,} ps files "
           f"over {len(by_bucket)} buckets; months {tags[0]}..{tags[-1]} ({len(tags)})", flush=True)
     for f in files:
         err = _book_schema_ok(f, wide)
@@ -549,7 +551,7 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
                 print(f"  FAIL  no {p}")
             refs.append(p)
         tcols = ", ".join(BOOK_TERM_COLS)
-        thi = ", position_hash_hi" if wide else ""
+        thi = (", position_hash_hi" if wide else "") + (", event_id, elo_band" if sliced else "")
         tref = f"""(SELECT position_hash, kind, reason, end_ply, SUM(white_wins)::BIGINT AS white_wins,
                            SUM(draws)::BIGINT AS draws, SUM(black_wins)::BIGINT AS black_wins,
                            SUM(total)::BIGINT AS total{thi}

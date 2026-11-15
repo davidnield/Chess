@@ -194,6 +194,12 @@ struct MonthArgs {
     /// parent_hash_hi / child_hash_hi / position_hash_hi (the last columns).
     #[arg(long)]
     key128: bool,
+    /// Split terminal counts by speed and game-mean rating band.
+    #[arg(long, requires_all = ["ply_key", "key128"])]
+    term_slices: bool,
+    /// Requested speed known to be absent this month (repeat for each exception).
+    #[arg(long)]
+    absent_event: Vec<String>,
 }
 
 #[derive(Args)]
@@ -469,7 +475,7 @@ fn run() -> Result<ExitCode> {
                 "below_normal": a.common.below_normal, "out": a.out, "term_dir": a.term_dir,
                 "passes": a.passes, "mem_gb": a.mem_gb, "keys_per_game": a.keys_per_game,
                 "bytes_per_key": a.bytes_per_key, "buckets": a.buckets, "ply_key": a.ply_key,
-                "key128": a.key128,
+                "key128": a.key128, "term_slices": a.term_slices, "absent_events": a.absent_event,
             });
             let cfg = month::Config {
                 out: a.out.clone(),
@@ -486,12 +492,21 @@ fn run() -> Result<ExitCode> {
                 threads,
                 ply_key: a.ply_key,
                 wide: a.key128,
+                term_slices: a.term_slices,
                 flags,
             };
             for (y, m) in a.common.months()? {
                 let files = discover(&a.common.source, &[(y, m)], &a.common.events)?;
                 if files.is_empty() {
                     bail!("no source files for {y}_{m} under {}", a.common.source.display());
+                }
+                if a.term_slices || !a.absent_event.is_empty() {
+                    merge::months_events(&serde_json::json!(a.common.events)).map_err(anyhow::Error::msg)?;
+                    let missing: std::collections::BTreeSet<_> = a.common.events.iter()
+                        .filter(|ev| !files.iter().any(|f| &f.event == *ev)).collect();
+                    if missing != a.absent_event.iter().collect() {
+                        bail!("{y}_{m}: missing source events {missing:?}, declared {:?}", a.absent_event);
+                    }
                 }
                 month::run_month(&cfg, y, m, &files)?;
             }

@@ -83,6 +83,8 @@ pub struct TermKey {
     pub kind: u8,
     pub reason: u8,
     pub end_ply: u16,
+    pub event_id: u8,
+    pub band: u8,
 }
 
 impl Hash for TermKey {
@@ -93,7 +95,9 @@ impl Hash for TermKey {
                 ^ (self.hash_hi as u64).rotate_left(23)
                 ^ (u64::from(self.kind) << 3)
                 ^ (u64::from(self.reason) << 5)
-                ^ (u64::from(self.end_ply) << 8),
+                ^ (u64::from(self.end_ply) << 8)
+                ^ (u64::from(self.event_id) << 40)
+                ^ (u64::from(self.band) << 48),
         );
     }
 }
@@ -150,6 +154,10 @@ pub fn term_schema_with(end_ply: bool) -> SchemaRef {
 /// `reason`, so the first three columns keep their meaning; with `wide`
 /// (month --key128) `position_hash_hi` is the last column.
 pub fn term_schema_full(end_ply: bool, wide: bool) -> SchemaRef {
+    term_schema_sliced(end_ply, wide, false)
+}
+
+pub fn term_schema_sliced(end_ply: bool, wide: bool, sliced: bool) -> SchemaRef {
     let mut f = vec![
         Field::new("position_hash", DataType::Int64, true),
         Field::new("kind", DataType::Int32, true),
@@ -166,6 +174,10 @@ pub fn term_schema_full(end_ply: bool, wide: bool) -> SchemaRef {
     ]);
     if wide {
         f.push(Field::new("position_hash_hi", DataType::Int64, true));
+    }
+    if sliced {
+        f.push(Field::new("event_id", DataType::Int32, true));
+        f.push(Field::new("elo_band", DataType::Int32, true));
     }
     Arc::new(Schema::new(f))
 }
