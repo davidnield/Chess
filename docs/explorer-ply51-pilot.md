@@ -19,6 +19,16 @@ The launcher checks partition names against the reference, records file sizes, m
 
 The `book-v3` terminal key contains both halves of the position key, terminal kind, reason, end ply, event ID, and rating band. Event IDs index `term_event_ids` in the book metadata. For games with at least one parsed move, the pool assigns real endings at or before its cap to normal, time forfeit, or other. A parse failure after a recorded move contributes to other. A game with a recorded next move contributes to horizon at the cap. The move statistics still include earlier moves of games that eventually ended on time. The existing pool exporter still emits 64-bit keys and excludes known collision parents. End-to-end 128-bit repertoire selection is separate work.
 
+## Verification and launch record
+
+The release executable identifies its Rust source as `57412e594039`. The launcher and coordinator are pinned at `cf0ac1e3572e`. The executable and all three runtime scripts have SHA-256 fingerprints in `pin.json`.
+
+The restart tests interrupted publication on both sides of the destination marker, resumed from the stage, and detected same-size archive corruption. A six-game end-to-end fixture exercised all three speeds, two rating bands, a flag on ply 50, continuation on ply 51, and a parse failure on move 51. The filtered Blitz/1800 result at the ply-50 position was one White flag win, one Black win in the other-ending bucket and one continuing draw.
+
+An independent python-chess replay used the first 100 rows of the first Parquet partition of each pilot speed in March 2026. Of the 300 sampled games, 295 passed the extraction filters. Every terminal key and outcome count agreed with the release executable, including both hash halves, speed, band, terminal kind, reason and end ply. This was a source-format and correctness check. Use the full months to estimate production costs.
+
+The coordinator started on 14 November at 20:53 Pacific. Its first live status recorded 16 active builder, scorer or engine processes. Current status is in the pinned directory's `pilot.log` and `pilot.err.log`.
+
 ## Run and resume on David's PC
 
 The approved pilot covers only the three modern months, in the order above. The coordinator waits for the existing builders, scorers and Stockfish work to finish, then checks CPU, available physical memory and commit headroom. It runs one month at a time with 12 threads and a 55 GB extraction budget. Staging, copying and readback finish for each month before it times the next one.
