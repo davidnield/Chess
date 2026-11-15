@@ -46,7 +46,7 @@ pawn) hashes WITH its ep file (polyglot's rule) while its EPD omits it
 (python-chess prints only legal ep squares). The hash test tries the ep file
 back on such EPDs and counts those rows separately; they are not failures.
 
-A book-v2 (the lock's schema; months built with `month --key128`) carries the
+A book-v2 or book-v3 (the lock's schema; months built with `month --key128`) carries the
 128-bit key: parent_hash_hi / child_hash_hi beside the 64-bit columns. Then the
 digests cover both halves of both keys, the unique key is (parent_hash,
 parent_hash_hi, move_san, event, elo_band, ply), a key must have one EPD (and an
@@ -145,9 +145,10 @@ class Book:
         self.lock = json.loads(lock.read_text(encoding="utf-8"))
         self.months: list[str] = self.lock["months"]
         schema = self.lock.get("schema", "book-v1")
-        if schema not in ("book-v1", "book-v2"):
-            raise SystemExit(f"FATAL: {lock} says schema {schema!r}: only book-v1 and book-v2 are known")
-        self.wide = schema == "book-v2"
+        self.schema = schema
+        if schema not in ("book-v1", "book-v2", "book-v3"):
+            raise SystemExit(f"FATAL: {lock} says schema {schema!r}: expected book-v1, book-v2 or book-v3")
+        self.wide = schema in ("book-v2", "book-v3")
         self.max_ply = int(self.lock.get("input_params", {}).get("max_ply", 30))
         if Path(self.lock["months_root"]).resolve() != root.resolve():
             print(f"  note: the book was built from {self.lock['months_root']}; reading {root}")
@@ -170,10 +171,11 @@ class Book:
 
 # ── digests and duplicates ────────────────────────────────────────────────────
 
-def _digest(con, files: list[Path], wide: bool = False) -> tuple:
+def _digest(con, files: list[Path], wide: bool = False, *, key: str | None = None) -> tuple:
     if not files:
         return (0,) * 9
-    key = KEY_TUPLE_WIDE if wide else KEY_TUPLE
+    if key is None:
+        key = KEY_TUPLE_WIDE if wide else KEY_TUPLE
     parts = [f"COALESCE(SUM(hash({key})::HUGEINT * {c}), 0)" for c in COUNTS]
     parts += [f"COALESCE(SUM(hash({key}, '{SALT}')::HUGEINT * {c}), 0)" for c in COUNTS]
     row = con.execute(f"SELECT COALESCE(SUM(total), 0), {', '.join(parts)} FROM read_parquet("
@@ -204,6 +206,26 @@ def check_digests(con, bk: Book, buckets: list[int]) -> None:
         print(f"    {s}")
     check(not bad and n > 0, f"the 8 hash-weighted sums (two salts x 4 counts{', both key halves' if bk.wide else ''}) "
                              f"are equal in {n} bucket(s) with sentinels")
+
+
+def check_term_digest(con, bk: Book) -> None:
+    if bk.schema != "book-v3":
+        raise ValueError("the sliced terminal digest requires book-v3")
+    meta = json.loads((bk.book / "_book.meta.json").read_text(encoding="utf-8"))
+    events = ["Blitz", "Bullet", "Classical", "Correspondence", "Rapid", "UltraBullet"]
+    if meta.get("term_event_ids") != events:
+        raise ValueError("unexpected terminal event ID mapping")
+    key = "position_hash, position_hash_hi, kind, reason, end_ply, event_id, elo_band"
+    inputs = []
+    for month in bk.months:
+        year, number = month.split("_")
+        inputs.append(bk.root / "_term" / f"year={year}_month={number}.term.parquet")
+    outputs = sorted((bk.book / "term").glob("*.parquet"))
+    if outputs != [bk.book / "term" / f"bkt{b:03d}.parquet" for b in range(BUCKETS)]:
+        raise ValueError("expected exactly 512 terminal bucket files")
+    source = _digest(con, inputs, key=key)
+    merged = _digest(con, outputs, key=key)
+    check(source == merged, f"terminal counts and sliced key digests agree over {len(inputs)} months ({source[0]:,} outcomes)")
 
 
 def check_dups(con, bk: Book, buckets: list[int]) -> None:
@@ -484,6 +506,7 @@ def main() -> int:
     ap.add_argument("months_root", type=Path)
     ap.add_argument("--digest-buckets", default=None, metavar="SPEC")
     ap.add_argument("--dup-buckets", default=None, metavar="SPEC")
+    ap.add_argument("--term-digest", action="store_true", help="compare book-v3 terminal rows to the months, including speed, band and both key halves")
     ap.add_argument("--sums", action="store_true")
     ap.add_argument("--scan", action="store_true")
     ap.add_argument("--collisions", action="store_true")
@@ -497,12 +520,12 @@ def main() -> int:
     t0 = time.time()
     bk = Book(a.book, a.months_root)
     con = connect(a.threads, a.mem, a.tmp_dir)
-    print(f"book {a.book} ({'book-v2, 128-bit keys' if bk.wide else 'book-v1'}, ply cap {bk.max_ply}): "
+    print(f"book {a.book} ({bk.schema}, ply cap {bk.max_ply}): "
           f"{len(bk.done)}/{BUCKETS} buckets done, {sum(map(len, bk.ps.values())):,} "
           f"ps files, {'complete' if bk.complete else 'incomplete'}; {len(bk.months)} months under "
           f"{a.months_root}\nduckdb: {a.threads} threads, {a.mem}, temp {a.tmp_dir}", flush=True)
     named = any(x is not None and x is not False for x in
-                (a.digest_buckets, a.dup_buckets, a.sums or None, a.scan or None,
+                (a.digest_buckets, a.dup_buckets, a.term_digest or None, a.sums or None, a.scan or None,
                  a.collisions or None, a.sample))
     try:
         if a.digest_buckets:
@@ -511,6 +534,8 @@ def main() -> int:
             check_dups(con, bk, parse_buckets(a.dup_buckets))
         if a.sums or (not named and bk.complete):
             check_sums(con, bk)
+        if a.term_digest or (not named and bk.complete and bk.schema == "book-v3"):
+            check_term_digest(con, bk)
         if a.scan or not named:
             check_scan(con, bk)
         if a.collisions or not named:

@@ -3,6 +3,7 @@ import json
 import os
 import random
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -124,6 +125,13 @@ class PilotTest(unittest.TestCase):
                                "--min-free-gb", "0", "--stage-gb", ".1", "--threads", "2"],
                               capture_output=True, text=True, errors="replace")
         self.assertEqual(proc.returncode, 0, proc.stderr[-3500:])
+        def verify_terms():
+            return subprocess.run([sys.executable, str(Path(__file__).with_name("verify_book.py")),
+                                   str(book), str(self.dest), "--sums", "--term-digest",
+                                   "--tmp-dir", str(self.tmp / "verify")],
+                                  capture_output=True, text=True, errors="replace")
+        outcome = verify_terms()
+        self.assertEqual(outcome.returncode, 0, outcome.stdout + outcome.stderr)
         self.assertEqual(pool.book_schema(book), "book-v3")
         self.assertEqual(pool.check_population(book, ["Blitz"], [1800])["2026_3"], ["Blitz","Classical","Rapid"])
         board = chess.Board()
@@ -143,6 +151,16 @@ class PilotTest(unittest.TestCase):
             self.assertEqual(db.execute("SELECT total,draws FROM d WHERE x=? AND q=51",[h]).fetchone(), (1,1))
             parquet = str(book / "term" / f"bkt{bk:03d}.parquet")
             self.assertEqual(db.execute("SELECT event_id,elo_band,reason,total FROM read_parquet(?) WHERE end_ply=50 AND kind=0 ORDER BY ALL",[parquet]).fetchall(), [(0,1800,1,1),(0,2200,0,1),(4,1800,0,1)])
+        # Change only the rating label, preserving every outcome and both hash halves.
+        path = Path(parquet)
+        table = pq.ParquetFile(path).read()
+        bands = table["elo_band"].to_pylist()
+        bands[0] = 1600 if bands[0] != 1600 else 1800
+        index = table.schema.get_field_index("elo_band")
+        pq.write_table(table.set_column(index, table.schema.field(index), pa.array(bands, type=pa.int32())), path)
+        outcome = verify_terms()
+        self.assertNotEqual(outcome.returncode, 0)
+        self.assertIn("FAIL  terminal counts", outcome.stdout)
         with self.assertRaisesRegex(ValueError, "coverage"):
             pool.check_population(book, ["Bullet"], [1800])
 
