@@ -2972,6 +2972,11 @@ fn read_contract(plan: &Plan) -> [&'static str; 10] {
         let line = contract.iter_mut().find(|s| s.starts_with("Term is pooled")).unwrap();
         *line = "Term is keyed by the full position key, kind, reason, end_ply, event_id and elo_band. event_id is the zero-based index in _book.meta.json term_event_ids. kind 0 records an ending, kind 1 the extraction horizon.";
     }
+    if plan.compact {
+        contract[0] = "Read move slices with explorer_storage.relation(files) in DuckDB or explorer_storage.read_columns(file, columns) in PyArrow. Both expose logical book columns and support projection.";
+        contract[3] = "The logical child key is xor(parent_hash, move_xor_lo), xor(parent_hash_hi, move_xor_hi). Join rank8 through rank1 with '/' and append a space and epd_state to reconstruct the exact parent_epd.";
+        contract[6] = "The unique key is (parent_hash, parent_hash_hi, move_san, event, elo_band, ply). Within a slice the order is parent_hash, parent_hash_hi, move_san, ply.";
+    }
     contract
 }
 

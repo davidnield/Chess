@@ -62,6 +62,8 @@ Usage:
 """
 from __future__ import annotations
 
+from explorer_storage import RANKS, relation
+
 import argparse
 import json
 import re
@@ -433,10 +435,14 @@ def book_ps_files(book: Path) -> dict[int, list[Path]]:
     return out
 
 
-def _book_schema_ok(f: Path, wide: bool = False) -> str | None:
+def _book_schema_ok(f: Path, wide: bool = False, compact: bool = False) -> str | None:
     s = pq.read_schema(f)
     got = [(x.name, str(x.type), x.nullable) for x in s]
     want = [(n, t, False) for n, t in BOOK_SCHEMA] + [(n, "int64", False) for n in BOOK_WIDE_COLS if wide]
+    if compact:
+        want = [c for c in want if c[0] not in ("parent_epd", "child_hash", "child_hash_hi")]
+        want += [(n, "string", False) for n in (*RANKS, "epd_state")]
+        want += [(n, "int64", False) for n in ("move_xor_lo", "move_xor_hi")]
     return None if got == want else f"{f}: schema {got}"
 
 
@@ -446,8 +452,8 @@ def book_generation(book: Path) -> str:
     if not lock.exists():
         return 'book-v1'
     schema = json.loads(lock.read_text(encoding="utf-8")).get("schema", "book-v1")
-    if schema not in ("book-v1", "book-v2", "book-v3"):
-        raise SystemExit(f"FATAL: {lock} says schema {schema!r}: supported schemas are book-v1 through book-v3")
+    if schema not in ("book-v1", "book-v2", "book-v3", "book-v4"):
+        raise SystemExit(f"FATAL: {lock} says schema {schema!r}: supported schemas are book-v1 through book-v4")
     return schema
 
 
@@ -456,7 +462,7 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
     bad = 0
     generation = book_generation(book)
     wide = generation != "book-v1"
-    sliced = generation == "book-v3"
+    sliced = generation in ("book-v3", "book-v4")
     # The position within a 64-bit hash: its EPD in a book-v1, the key's high half in a book-v2.
     BOOK_COLS = globals()["BOOK_COLS"] + (BOOK_WIDE_COLS if wide else ())
     BOOK_TERM_COLS = globals()["BOOK_TERM_COLS"] + (BOOK_WIDE_TERM_COLS if wide else ()) + (("event_id","elo_band") if sliced else ())
@@ -469,7 +475,7 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
     print(f"[book] {book} ({generation}): {len(files):,} ps files "
           f"over {len(by_bucket)} buckets; months {tags[0]}..{tags[-1]} ({len(tags)})", flush=True)
     for f in files:
-        err = _book_schema_ok(f, wide)
+        err = _book_schema_ok(f, wide, generation == "book-v4")
         if err:
             bad += 1
             print(f"  FAIL  {err}")
@@ -508,7 +514,7 @@ def cmd_book(root: Path, book: Path, tags: list[str], con, only: list[int] | Non
                          SUM(black_wins)::BIGINT AS black_wins, SUM(total)::BIGINT AS total
                   FROM {_src(ref_files)}
                   GROUP BY parent_hash, {hi_key}parent_epd, move_san, event, elo_band, ply)""")
-        b_rel = f"(SELECT {cols} FROM read_parquet({_lit(bk)}, hive_partitioning=false))"
+        b_rel = f"(SELECT {cols} FROM {relation(bk)})"
         n_ref, n_child = con.execute(
             "SELECT COUNT(*), COUNT(*) FILTER (WHERE child_hash <> child_max"
             + (" OR child_hash_hi <> child_hi_max" if wide else "") + ") FROM ref").fetchone()
