@@ -72,14 +72,18 @@ def wait_pilot(pid):
     return results
 
 
-def extract(months, *, dry=False):
+def extract_command(months, *, dry=False):
     args = [sys.executable, "-u", PIN / "run_month_extraction.py", "--exe", EXE, "--source", SOURCE,
             "--source-provenance", REFERENCE, "--months", *months, "--stage", STAGE, "--dest", ARCHIVE,
             "--events", "Blitz", "Classical", "Rapid", "--max-ply", "51", "--key128", "--term-slices",
             "--threads", "12", "--mem-gb", "55", "--verify", "hash"]
     if dry:
         args.append("--dry-run")
-    run(*args)
+    return args
+
+
+def extract(months, *, dry=False):
+    run(*extract_command(months, dry=dry))
 
 
 def receipt(month, inventory):
