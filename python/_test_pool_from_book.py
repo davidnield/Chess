@@ -31,6 +31,7 @@ from collections import defaultdict
 from pathlib import Path
 
 import chess
+import duckdb
 import numpy as np
 import polars as pl
 
@@ -313,6 +314,27 @@ def main() -> int:
         except SystemExit:
             ok = False
         check(ok, "a book-v2 capped above the pool cap is accepted")
+        book4 = td / "book-v4"
+        shutil.copytree(book2, book4)
+        with duckdb.connect() as con:
+            ranks = ", ".join(f"split_part(split_part(parent_epd, ' ', 1), '/', {i}) AS rank{9-i}"
+                              for i in range(1, 9))
+            for f in book4.glob("ps/*/*/bkt*.parquet"):
+                # Use a SQL encoder independent of the Rust writer and the production decoder.
+                src = f.as_posix().replace("'", "''")
+                dest = f.with_suffix(".tmp").as_posix().replace("'", "''")
+                con.execute(f"""COPY (SELECT * EXCLUDE(parent_epd,child_hash,child_hash_hi),
+                    {ranks}, substr(parent_epd, strpos(parent_epd, ' ')+1) AS epd_state,
+                    xor(parent_hash, child_hash) AS move_xor_lo,
+                    xor(parent_hash_hi, child_hash_hi) AS move_xor_hi
+                    FROM read_parquet('{src}',hive_partitioning=false)) TO '{dest}' (FORMAT PARQUET)""")
+                f.with_suffix(".tmp").replace(f)
+        (book4 / "_merge_params.json").write_text(json.dumps(
+            {"schema":"book-v4","input_params":{"max_ply":CAP+1, "key_bits":128, "term_slices":True}}))
+        P.check_cap(book4, CAP)
+        e4, a4, _ = run_build(td, book4, td / "ev", [thin], None, "w4")
+        check(e4.sort(key).equals(e2.sort(key)) and a4.sort("position_hash").equals(a2.sort("position_hash")),
+              "materialized edges and auxiliary values match for compact and ordinary 128-bit books")
         (book2 / "_merge_params.json").write_text(json.dumps({"schema": "book-v9", "input_params": {"max_ply": 9}}))
         try:
             P.check_cap(book2, CAP)

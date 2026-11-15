@@ -194,20 +194,28 @@ def rehearse(results, inventory):
 
 
 
+def compact_identity():
+    return {"pin": sha(COMPACT_PIN/"pin.json"), "original_certificate": sha(OPS/"pilot-verified.json"),
+            "pilot_meta": sha(COMPACT_BOOK/"_book.meta.json"), "comparison": sha(OPS/"compact-comparison.json"),
+            "forecast": sha(OPS/"compact-forecast.json"), "eval_benchmark": sha(OPS/"compact-eval-benchmark.json")}
+
+
+def certified_compact_forecast():
+    certificate = OPS/"compact-verified.json"
+    if not certificate.is_file():
+        raise ValueError("all monthly archives retained; compact merge requires the pilot verification receipt")
+    check_book(COMPACT_BOOK, PILOTS, compact=True)
+    if read_json(certificate) != compact_identity():
+        raise ValueError("compact pilot validation inputs changed")
+    return read_json(OPS/"compact-forecast.json")
+
+
 def compact_prediction(results, inventory):
-    # The new output, certificates and measurements are separate from the original pilot.
     report = OPS / "compact-comparison.json"
     prediction = OPS / "compact-forecast.json"
     certificate = OPS / "compact-verified.json"
-    def identity():
-        return {"pin": sha(COMPACT_PIN/"pin.json"), "original_certificate": sha(OPS/"pilot-verified.json"),
-                "pilot_meta": sha(COMPACT_BOOK/"_book.meta.json"), "comparison": sha(report),
-                "forecast": sha(prediction), "eval_benchmark": sha(OPS/"compact-eval-benchmark.json")}
     if certificate.exists():
-        check_book(COMPACT_BOOK, PILOTS, compact=True)
-        if read_json(certificate) != identity():
-            raise ValueError("compact pilot validation inputs changed")
-        return read_json(prediction)
+        return certified_compact_forecast()
     stage_gb = max(25, math.ceil(term_size(PILOTS)/GB) + 10)
     # Stage and the second pilot share D:. Keep the production destination on E: free.
     if free(COMPACT_BOOK) + size_tree(COMPACT_BOOK) < size_tree(PILOT_BOOK) + (stage_gb+150)*GB:
@@ -228,7 +236,7 @@ def compact_prediction(results, inventory):
     r["original_pilot_bytes"] = size_tree(PILOT_BOOK)
     r["measured_whole_book_saving"] = 1 - r["pilot_book_bytes"]/r["original_pilot_bytes"]
     write_json(prediction, r)
-    write_json(certificate, identity())
+    write_json(certificate, compact_identity())
     return r
 
 def production(inventory, prediction, *, compact=False):
@@ -247,7 +255,9 @@ def production(inventory, prediction, *, compact=False):
     if free(ARCHIVE) < estimate + 100*GB:
         raise ValueError(f"F: free {free(ARCHIVE)/GB:.0f} GB, estimated remaining archive {estimate/GB:.0f} GB plus 100 GB reserve")
     status("ready for training extraction", scheduled=START.isoformat(),
-           remaining_months=len(todo), forecast=str(OPS/("compact-forecast.json" if compact else "forecast.json")))
+           remaining_months=len(todo), forecast=str(OPS/"forecast.json"),
+           production_layout="book-v4" if compact else "book-v3",
+           merge_forecast=str(OPS/("compact-forecast.json" if compact else "forecast.json")))
     while dt.datetime.now() < START:
         time.sleep(min(60, max(0, (START-dt.datetime.now()).total_seconds())))
     # Batches allow the existing launcher to overlap D: extraction and F: archival.
@@ -271,6 +281,8 @@ def production(inventory, prediction, *, compact=False):
             receipt(m, inventory)
         todo = todo[len(batch):]
     status("all training months archived; checking merge capacity")
+    if compact:
+        prediction = certified_compact_forecast()
     actual = sum(receipt(m, inventory)["bytes"] for m in TRAIN)
     needed = actual * prediction["pilot_book_to_archive_ratio"] * 1.10
     if free(TRAIN_BOOK)+size_tree(TRAIN_BOOK) < needed + 150*GB:
@@ -289,11 +301,15 @@ def production(inventory, prediction, *, compact=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    global PIN, EXE, PILOT_ONLY
+    global PIN, EXE, PILOT_ONLY, COMPACT_PIN
     parser.add_argument("--pilot-pid", type=int)
     parser.add_argument("--compact", action="store_true", help="use the separately pinned compact merger and retain the original extraction producer")
     parser.add_argument("--compact-pilot-only", action="store_true", help="rehearse separately while the original scheduler waits")
+    parser.add_argument("--compact-release", type=Path, help="immutable compact merge/eval release used by the pilot")
     args = parser.parse_args()
+    if args.compact_release:
+        COMPACT_PIN = args.compact_release.resolve()
+        args.compact = True
     PILOT_ONLY = args.compact_pilot_only
     if PILOT_ONLY:
         args.compact = True
@@ -304,9 +320,10 @@ def main():
         try:
             check_pins()
             if args.compact:
-                for name, digest in read_json(COMPACT_PIN/"pin.json")["files"].items():
-                    if sha(COMPACT_PIN/name) != digest:
-                        raise ValueError(f"compact pin mismatch: {name}")
+                for release in {Path(__file__).resolve().parent, COMPACT_PIN}:
+                    for name, digest in read_json(release/"pin.json")["files"].items():
+                        if sha(release/name) != digest:
+                            raise ValueError(f"compact pin mismatch: {release/name}")
             data = read_json(PIN / "training-inputs.json")
             inventory = data["months"]
             if set(inventory) != set(TRAIN) or Path(data["source"]).resolve() != SOURCE.resolve():
@@ -324,9 +341,8 @@ def main():
                 prediction = read_json(OPS/"forecast.json")
             else:
                 prediction = rehearse(results, inventory)
-            if args.compact:
-                prediction = compact_prediction(results, inventory)
             if PILOT_ONLY:
+                compact_prediction(results, inventory)
                 status("compact pilot verified", book=str(COMPACT_BOOK), forecast=str(OPS/"compact-forecast.json"))
                 return
             production(inventory, prediction, compact=args.compact)
