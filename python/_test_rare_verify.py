@@ -798,6 +798,18 @@ with tempfile.TemporaryDirectory() as td:
         closed = False
     check("driver: a final book that does not name the last overlay is refused", not closed)
 
+    # --seed-overlay: round 0 is already built with another run's evidence, and names it
+    seeded = ns("f")
+    seeded.seed_overlay = Path(final["overlay"])
+    n0 = len(log)
+    fs = rrb.drive(seeded, build, verify, source=src)
+    r0 = json.loads((td / "f" / "round-00" / "build.receipt.json").read_text())["identity"]
+    check("driver: a seeded run builds round 0 with the seed and records it",
+          log[n0:] == ["build+overlay", "verify", "build+overlay", "verify"]
+          and r0["overlay_in"] == rrb.sha(final["overlay"])
+          and str(final["overlay"]) in r0["command"] and fs["seed_overlay"] == str(final["overlay"])
+          and final.get("seed_overlay") is None, f"{log[n0:]} {fs}")
+
     # the default stages run the snapshot's files, not the working tree's
     final = rrb.drive(ns("c"), None, lambda b_, o_, f_, l_: (
         pl.DataFrame({"x": [1]}).write_parquet(o_),

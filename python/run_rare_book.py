@@ -14,6 +14,13 @@ line worth a place in it. The run ends when a pass asks for nothing, and only if
 meta names the last overlay that carried new evidence. The frontier is searched in round 0 only
 (reach threshold and batch limit are flags); what is left of it is reported in final.json.
 
+Starting from earlier evidence (--seed-overlay). A verified score is a fact about a position, not
+about a book, and the position searches are cached. Without a seed a new run still rebuilds once
+per round to rediscover which of those scores its book rests on. With the last overlay of another
+run of the same colour and cap as the seed, round 0 is built with that evidence already applied
+(so it is no longer the bare expanded menu), and the run needs only the rounds its own new
+decisions call for. The seed is part of round 0's receipt; final.json names it.
+
 The code a stage runs. The build and the verifier are run from a SNAPSHOT of python/*.py (and the
 Rust extension, if built) taken at launch (<out>/code-<hash>/), never from the working tree, so an edit made while a run is live
 cannot execute under an old identity. The snapshot is re-hashed before and after every stage.
@@ -179,7 +186,8 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
         [py, "-X", "utf8", "-u", kept / "rare_verify.py", "--book", book, "--colour", a.colour,
          "--cache", a.searches, "--out", out, "--nodes", a.nodes, "--deep-nodes", a.deep_nodes,
          "--band", a.band, "--threads", a.threads, *front], log, kept))
-    rounds, overlay = [], None
+    seed = getattr(a, "seed_overlay", None)
+    rounds, overlay = [], seed
     for r in range(a.max_rounds):
         rd = a.out / f"round-{r:02d}"
         rd.mkdir(exist_ok=True)
@@ -240,6 +248,7 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
                 "book": str(book), "round": r, "overlay": str(overlay) if overlay else None,
                 "applied_overlay_sha256": applied, "code_sha256": code,
                 "code_snapshot": str(kept), "lookup": lookup,
+                "seed_overlay": str(seed) if seed else None,
                 "receipts": [x for rec in rounds for x in rec["receipts"]],
                 "frontier": {"searched_in_round_0_only": True, "reach_threshold": a.frontier_reach,
                              "batch_limit": a.frontier, "unbooked_disputes_left": len(left),
@@ -273,6 +282,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--frontier", type=int, default=300)
     ap.add_argument("--max-rounds", type=int, default=8)
     ap.add_argument("--wait", action="store_true", help="wait for the lookup's ready.json")
+    ap.add_argument("--seed-overlay", type=Path, metavar="PARQUET",
+                    help="the last overlay of another run of this colour and cap: round 0 starts "
+                         "from its verified scores (see the header)")
     ap.add_argument("--build-arg", action="append", default=[], metavar="ARG",
                     help="an extra build_budget_books argument (repeatable), e.g. "
                          "--build-arg=--rs-core")
