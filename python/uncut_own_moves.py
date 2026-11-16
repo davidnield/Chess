@@ -6,7 +6,7 @@ Keep native opponent edges. Restore all native observations at our positions,
 including positions without a single move above the original cutoff.
 """
 
-from explorer_storage import relation
+from explorer_storage import moves_with_keys, position_key_sql
 import argparse
 import hashlib
 import json
@@ -157,19 +157,35 @@ def source_parts(stats):
     raise ValueError(f"No uncut source for {meta['producer']}")
 
 
-def domain(con, stats, aux, colour, overlay, collisions):
+def domain(con, stats, aux, colour, overlay, collisions, wide=False):
     theirs = "b" if colour == "white" else "w"
     possible = (
         f"SELECT child_hash h FROM {parquet(stats)} "
         f"WHERE split_part(parent_epd,' ',2)='{theirs}' AND child_hash IS NOT NULL"
     )
     if colour == "white":
-        possible += f" UNION ALL SELECT {zobrist_int64(chess.Board())}::BIGINT h"
+        if wide:
+            from zobrist128 import zobrist128
+            lo, hi = zobrist128(chess.Board())
+            root = f"struct_pack(lo := {lo}::BIGINT, hi := {hi}::BIGINT)"
+        else:
+            root = f"{zobrist_int64(chess.Board())}::BIGINT"
+        possible += f" UNION ALL SELECT {root} h"
     if overlay:
         # Include the whole overlay support, independent of the pseudocount.
-        possible += f" UNION ALL SELECT child_hash h FROM {parquet(overlay)} WHERE child_hash IS NOT NULL"
+        if wide:
+            schema = pl.read_parquet_schema(overlay)
+            if schema["child_hash"] == pl.Struct({"lo": pl.Int64, "hi": pl.Int64}):
+                key = "child_hash"
+            elif schema.get("child_hash_hi") == pl.Int64 and schema["child_hash"] == pl.Int64:
+                key = position_key_sql("child_hash", True)
+            else:
+                raise ValueError("opponent overlay must identify children by both Zobrist halves")
+        else:
+            key = "child_hash"
+        possible += f" UNION ALL SELECT {key} h FROM {parquet(overlay)} WHERE child_hash IS NOT NULL"
     omit = (
-        f" ANTI JOIN {parquet(collisions)} c ON c.parent_hash=p.h" if collisions else ""
+        f" ANTI JOIN {parquet(collisions)} c ON c.parent_hash=p.h" if collisions and not wide else ""
     )
     # Parents whose native sidecar already accounts for every move need no patch.
     con.execute(f"""CREATE TEMP TABLE wanted AS SELECT DISTINCT p.h,
@@ -178,9 +194,9 @@ def domain(con, stats, aux, colour, overlay, collisions):
         WHERE a.position_hash IS NULL OR a.other_total>0""")
 
 
-def partial(con, files, term_files, cap, target):
+def partial(con, files, term_files, cap, target, wide=False):
     """One independently resumable month or group of banded archive slices."""
-    src = parquet(files) if cap is None else relation(files)
+    src = parquet(files) if cap is None else moves_with_keys(files, wide)
     # For a raw-only parent reconstruct the native sidecar. The banded exporter
     # defines endings as arrivals through the cap minus departures on plies
     # 2..cap+1, with departures on cap+1 also recorded as horizon observations.
@@ -235,7 +251,7 @@ def merge_job(path):
     tmp.replace(j["out"])
 
 
-def recovered_in_slices(con, parts, work, slices, workers, threads, memory):
+def recovered_in_slices(con, parts, work, slices, workers, threads, memory, wide=False):
     """The same table as one GROUP BY, built from K disjoint parent_hash slices.
 
     parent_hash is a column of the grouping key, so the union of the slices' results is exactly
@@ -251,7 +267,8 @@ def recovered_in_slices(con, parts, work, slices, workers, threads, memory):
     if not rows.exists():
         tmp = work / "rows.tmp"
         shutil.rmtree(tmp, ignore_errors=True)
-        con.execute(f"""COPY (SELECT *, (parent_hash & {slices - 1})::INTEGER AS b
+        low = "parent_hash.lo" if wide else "parent_hash"
+        con.execute(f"""COPY (SELECT *, ({low} & {slices - 1})::INTEGER AS b
             FROM {parquet(parts / "*.moves.parquet")}) TO {literal(tmp)}
             (FORMAT PARQUET, PARTITION_BY (b), COMPRESSION ZSTD)""")
         tmp.replace(rows)
@@ -270,13 +287,48 @@ def recovered_in_slices(con, parts, work, slices, workers, threads, memory):
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [pool.submit(one, b) for b in todo]
     made = [f.result() for f in futures]
-    con.execute(f"CREATE TEMP TABLE recovered AS SELECT * FROM {parquet(made)}")
+    if made:
+        con.execute(f"CREATE TEMP TABLE recovered AS SELECT * FROM {parquet(made)}")
+    else:
+        con.execute("CREATE TEMP TABLE recovered AS "
+                    + RECOVERED.format(sums=sums(), src=parquet(parts / "*.moves.parquet")))
 
 
-def finalize(con, folder, stats, aux, colour, slices=1, workers=1, threads=2, memory="6GB"):
+def reclassify_endings(con, meta, terms, wide):
+    """Restore flags and normal endings for positions missing from the native aux."""
+    if not terms:
+        return
+    low = "h.lo" if wide else "h"
+    buckets = con.execute(f"SELECT DISTINCT (({low} % ? + ?) % ?) FROM wanted WHERE needs_term",
+                          [len(terms)] * 3).fetchall()
+    if not buckets:
+        return
+    book = Path(meta["book"])
+    events = read_json(book / "_book.meta.json")["term_event_ids"]
+    ids = ",".join(str(events.index(e)) for e in meta["population"]["events"])
+    bands = ",".join(str(int(b)) for b in meta["population"]["elo_bands"])
+    # Move flows already include these games under term_other. Restrict the
+    # independently recorded endings to the same positions, population and cap.
+    source = parquet([terms[b] for (b,) in buckets])
+    key = position_key_sql("s.position_hash", wide)
+    con.execute(f"""CREATE TEMP TABLE classified AS SELECT {key} AS h,
+        CASE reason WHEN 0 THEN 'term_normal' ELSE 'term_flag' END AS category,{sums()}
+        FROM {source} s SEMI JOIN wanted w ON {key}=w.h AND w.needs_term
+        WHERE kind=0 AND end_ply BETWEEN 1 AND {int(meta["max_ply"])}
+          AND reason IN (0,1) AND event_id IN ({ids}) AND elo_band IN ({bands})
+        GROUP BY h,category""")
+    con.execute(f"""CREATE OR REPLACE TEMP TABLE flows AS
+        SELECT h,category,{sums()} FROM (
+            SELECT * FROM flows UNION ALL SELECT * FROM classified UNION ALL
+            SELECT h,'term_other',{','.join('-'+c for c in SUMS)} FROM classified)
+        GROUP BY h,category""")
+
+
+def finalize(con, folder, stats, aux, colour, slices=1, workers=1, threads=2, memory="6GB",
+             wide=False, terms=()):
     parts = folder / "parts"
     if slices > 1:
-        recovered_in_slices(con, parts, folder / "merge", slices, workers, threads, memory)
+        recovered_in_slices(con, parts, folder / "merge", slices, workers, threads, memory, wide)
     else:
         con.execute("CREATE TEMP TABLE recovered AS "
                     + RECOVERED.format(sums=sums(), src=parquet(parts / "*.moves.parquet")))
@@ -334,6 +386,8 @@ def finalize(con, folder, stats, aux, colour, slices=1, workers=1, threads=2, me
     # only after the exact W/D/L conservation check above. Opponents pass through.
     con.execute(f"""CREATE TEMP TABLE flows AS SELECT h,category,{sums()}
         FROM {parquet(parts / "*.flow.parquet")} GROUP BY h,category""")
+    if terms:
+        reclassify_endings(con, read_json(str(stats) + ".meta.json"), terms, wide)
     bad = con.execute(
         "SELECT h FROM flows WHERE least(white_wins,draws,black_wins)<0 OR white_wins+draws+black_wins!=total LIMIT 1"
     ).fetchone()
@@ -377,6 +431,7 @@ def finalize(con, folder, stats, aux, colour, slices=1, workers=1, threads=2, me
         folder / "aux.parquet.meta.json",
         {
             "producer": "uncut_own_moves",
+            "key_bits": 128 if wide else 64,
             "native_aux": str(Path(aux).resolve()),
             "term_reasons": read_json(str(aux) + ".meta.json").get(
                 "term_reasons", "split"
@@ -390,12 +445,23 @@ def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB", m
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     identity = contract(stats, aux, colour, overlay)
+    meta = read_json(str(stats) + ".meta.json")
+    wide = meta.get("key_bits", 64) == 128
+    if wide and read_json(str(aux) + ".meta.json").get("key_bits") != 128:
+        raise ValueError("full-key pool requires a full-key sidecar")
     mode, parts, cap, collisions = source_parts(stats)
     sources = [stamp(p) for fs, ts in parts for p in [*fs, *ts]]
+    terms = []
+    if mode == "archive" and meta.get("term_reasons") == "split":
+        book = Path(meta["book"])
+        n = read_json(book / "_book.meta.json")["input"]["params"]["buckets"]
+        terms = [book / "term" / f"bkt{b:03d}.parquet" for b in range(n)]
+        sources.extend(stamp(p) for p in terms)
     recipe = {
         "contract": identity,
         "source_digest": hashlib.sha256(json.dumps(sources).encode()).hexdigest(),
         "producer": digest(__file__),
+        "key_bits": 128 if wide else 64,
         "mode": mode,
         "cap": cap,
     }
@@ -410,17 +476,17 @@ def prepare(stats, aux, colour, folder, overlay=None, threads=2, memory="6GB", m
         if (folder / "ready.json").exists():
             return load(folder, stats, aux, colour, overlay)
         (folder / "parts").mkdir(exist_ok=True)
-        domain(con, stats, aux, colour, overlay, collisions)
+        domain(con, stats, aux, colour, overlay, collisions, wide)
         t0 = time.monotonic()
         for i, (files, term_files) in enumerate(parts):
-            partial(con, files, term_files, cap, folder / "parts" / f"part-{i:04d}")
+            partial(con, files, term_files, cap, folder / "parts" / f"part-{i:04d}", wide)
             if i % 10 == 0 or i + 1 == len(parts):
                 print(
                     f"Prepared {i + 1}/{len(parts)} source parts ({time.monotonic() - t0:.0f}s)",
                     flush=True,
                 )
         finalize(con, folder, stats, aux, colour, merge_slices, merge_workers, merge_threads,
-                 merge_memory)
+                 merge_memory, wide, terms)
         done = {
             "contract": identity,
             "recipe_sha256": digest(manifest),

@@ -38,7 +38,7 @@ Usage (same population flags as the build; --work is the build's work dir):
 """
 from __future__ import annotations
 
-from explorer_storage import relation, read_columns
+from explorer_storage import KEY_SQL_TYPE, moves_with_keys, position_key_sql, relation, read_columns
 import argparse
 import json
 import math
@@ -46,6 +46,7 @@ import random
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -89,23 +90,26 @@ def _duck(a):
 
 # ── gate 1: the derivation against the book's term table ──────────────────────
 
-def _term_bucket(task: tuple) -> dict:
+def _term_bucket(task: tuple, *, wide=False) -> dict:
     import pool_from_book as P
     i, book, max_ply, adir, threads, mem, tmp = task
     t0 = time.time()
     files = P.slice_files(Path(book), ALL_EVENTS, ALL_BANDS, i)
     con = P._duck(threads, mem, Path(tmp))
     try:
-        P.derive_flows(con, files, _p(Path(adir) / "g*" / f"cb={i}" / "*.parquet"), max_ply)
+        arrivals = Path(adir)
+        pattern = f"g*/cb={i}/*.parquet"
+        P.derive_flows(con, files, _p(arrivals / pattern) if any(arrivals.glob(pattern)) else None,
+                       max_ply, wide)
         neg_en = con.execute("SELECT COUNT(*) FROM en WHERE " +
                              " OR ".join(f"{c} < 0" for c in SUMS)).fetchone()[0]
         s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
         con.execute(f"""
             CREATE TEMP TABLE bt AS
-            SELECT position_hash AS x, end_ply AS p, {s}
+            SELECT {position_key_sql("position_hash", wide)} AS x, end_ply AS p, {s}
             FROM read_parquet('{_p(Path(book) / 'term' / f'bkt{i:03d}.parquet')}')
             WHERE kind = 0 AND end_ply BETWEEN 1 AND {max_ply}
-            GROUP BY position_hash, end_ply
+            GROUP BY x, end_ply
         """)
         diff = ", ".join(f"COALESCE(en.{c}, 0) - COALESCE(bt.{c}, 0) AS {c}" for c in SUMS)
         con.execute(f"""
@@ -135,7 +139,7 @@ def _term_bucket(task: tuple) -> dict:
             "residual": {c: int(v or 0) for c, v in zip(SUMS, r[2:6])},
             "max_cell_residual": int(r[6] or 0), "book_term_total": int(book_term),
             "derived_term_total": int(derived), "book_end_ply0_total": int(end0),
-            "neg_sample": [list(map(int, x)) for x in sample],
+            "neg_sample": [list(x) for x in sample],
             "secs": round(time.time() - t0, 1)}
 
 
@@ -147,6 +151,7 @@ def gate_term_vs_book(a) -> bool:
     gdir = work / "gate1"
     adir = gdir / "arrivals"
     ns = SimpleNamespace(book=Path(prm["book"]), events=ALL_EVENTS, elo_bands=ALL_BANDS,
+                         eval_lookup128=prm.get("eval_lookup128"),
                          max_ply=max_ply, threads=a.threads, mem=a.mem,
                          tmp_dir=a.tmp_dir, workers=a.workers)
     t0 = time.time()
@@ -156,7 +161,7 @@ def gate_term_vs_book(a) -> bool:
     rdir.mkdir(parents=True, exist_ok=True)
     tasks = [(i, prm["book"], max_ply, str(adir), a.threads, a.mem, str(a.tmp_dir))
              for i in a.buckets if not (rdir / f"b{i:03d}.json").exists()]
-    for r in P._pool_run(_term_bucket, tasks, a.workers,
+    for r in P._pool_run(partial(_term_bucket, wide=bool(ns.eval_lookup128)), tasks, a.workers,
                          lambda r: f"bucket {r['bucket']}: neg {r['neg_diff_cells']}, "
                                    f"residual {r['residual']['total']:,} of "
                                    f"{r['book_term_total']:,} ({r['secs']:.0f}s)"):
@@ -174,9 +179,10 @@ def gate_term_vs_book(a) -> bool:
            "book_end_ply0_total_in_buckets": sum(r["book_end_ply0_total"] for r in res),
            "arrivals_s": round(t_arr, 1), "per_bucket": res}
     record(work, "term_vs_book", out)
+    share = f"{out['residual_share']:.3e}" if bt else "no book endings"
     print(f"\nGATE 1 term-vs-book: {'PASS' if ok else 'FAIL'}  negative cells {neg}, "
           f"residual {resid['total']:,} of {bt:,} book term games "
-          f"({out['residual_share']:.3e}), nonzero cells {out['nonzero_cells']:,}")
+          f"({share}), nonzero cells {out['nonzero_cells']:,}")
     return ok
 
 
@@ -192,6 +198,34 @@ def _rem(x: int) -> int:
     return x % 512
 
 
+def audit_wide_cp(children, lookup):
+    """Independent lookup: bisect only the low column, then compare high halves."""
+    from eval_arrays import MISSING
+    lo = children.struct.field("lo").to_numpy()
+    hi = children.struct.field("hi").to_numpy()
+    cp = np.full(len(lo), np.nan)
+    buckets = lo % 512
+    for b in np.unique(buckets):
+        arr = np.load(Path(lookup) / f"bkt{b:03d}.npy", mmap_mode="r", allow_pickle=False)
+        indices = np.flatnonzero(buckets == b)
+        first = np.searchsorted(arr["lo"], lo[indices])
+        last = np.searchsorted(arr["lo"], lo[indices], side="right")
+        single = last == first + 1
+        candidates = indices[single]
+        rows = first[single]
+        match = arr["hi"][rows] == hi[candidates]
+        cp[candidates[match]] = arr["cp"][rows[match]]
+        for i, start, stop in zip(indices[last > first + 1], first[last > first + 1], last[last > first + 1]):
+            hits = arr[start:stop]
+            result = hits["cp"][hits["hi"] == hi[i]]
+            if len(result) == 1:
+                cp[i] = result[0]
+            elif len(result) > 1:
+                raise ValueError("duplicate full key in the evaluation lookup")
+    cp[cp == MISSING] = np.nan
+    return cp
+
+
 def gate_reimpl(a) -> bool:
     import polars as pl
     import pyarrow.parquet as pq
@@ -203,22 +237,29 @@ def gate_reimpl(a) -> bool:
     book, cap, floor = Path(prm["book"]), int(prm["max_ply"]), int(prm["min_games"])
     events, bands = prm["events"], prm["elo_bands"]
     pool_f, aux_f = out_files(work, Path(a.out_dir))
-    coll = set(pl.read_parquet(book / "_collisions.parquet")["parent_hash"].to_list())
+    wide = prm.get("key_bits", 64) == 128
+    coll = [] if wide else pl.read_parquet(book / "_collisions.parquet")["parent_hash"].to_list()
+    from pool_from_book import N_BUCKETS
+    def bucket(name):
+        lo = pl.col(name).struct.field("lo") if wide else pl.col(name)
+        return lo % N_BUCKETS
     t0 = time.time()
 
     # Arrivals for the gate's buckets: ONE plain scan of the population.
     con = _duck(a)
-    pop = relation(_slice_globs(book, events, bands))
+    pop = moves_with_keys(_slice_globs(book, events, bands), wide)
+    lo = "child_hash.lo" if wide else "child_hash"
     bl = ", ".join(map(str, a.buckets))
     arr = pl.from_arrow(duck_arrow(con, f"""
         SELECT child_hash, SUM(white_wins) w, SUM(draws) d, SUM(black_wins) b, SUM(total) t
         FROM {pop}
-        WHERE ply <= {cap} AND ((child_hash % 512) + 512) % 512 IN ({bl})
+        WHERE ply <= {cap} AND (({lo} % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS} IN ({bl})
         GROUP BY child_hash"""))
     con.close()
     print(f"  arrivals scan: {arr.height:,} children ({time.time()-t0:.0f}s)", flush=True)
 
-    mm_h, mm_c = open_eval_arrays(Path(prm["eval_arrays"]))
+    if not wide:
+        mm_h, mm_c = open_eval_arrays(Path(prm["eval_arrays"]))
     pool_all = pl.scan_parquet(pool_f)
     aux_all = pl.scan_parquet(aux_f)
     bad = []
@@ -233,16 +274,30 @@ def gate_reimpl(a) -> bool:
                     # Polars' own reader rejects the book's parquet-rs files
                     # ("Invalid thrift: bad data", polars 1.40); pyarrow's
                     # ParquetFile reads them (README: partitioning stays off).
-                    frames.append(pl.from_arrow(read_columns(f, ["parent_hash", "parent_epd", "move_san", "child_hash",
-                                 "ply", *SUMS])))
+                    cols = ["parent_hash", "parent_epd", "move_san", "child_hash", "ply", *SUMS]
+                    if wide:
+                        cols.extend(["parent_hash_hi", "child_hash_hi"])
+                    source = pl.from_arrow(read_columns(f, cols))
+                    if wide:
+                        source = source.with_columns(pl.struct(lo=pl.col(c), hi=pl.col(c + "_hi")).alias(c)
+                                                     for c in ("parent_hash", "child_hash"))
+                    frames.append(source)
+        if not frames:
+            n_pool = pool_all.filter(bucket("parent_hash") == i).select(pl.len()).collect().item()
+            n_aux = aux_all.filter(bucket("position_hash") == i).select(pl.len()).collect().item()
+            if n_pool or n_aux:
+                bad.append(f"b{i}: output for empty source bucket")
+            stats.append({"bucket": i, "pool_rows": n_pool, "aux_rows": n_aux,
+                          "pool_equal": n_pool == 0, "aux_equal": n_aux == 0, "max_double_diff": 0.0})
+            continue
         rows = pl.concat(frames)
         le = rows.filter(pl.col("ply") <= cap)
-        edges = (le.filter(~pl.col("parent_hash").is_in(list(coll)))
+        edges = ((le.filter(~pl.col("parent_hash").is_in(coll)) if coll else le)
                  .group_by("parent_hash", "move_san")
                  .agg(pl.col("parent_epd").first(), pl.col("parent_epd").n_unique().alias("ne"),
                       pl.col("child_hash").first(), pl.col("child_hash").n_unique().alias("nc"),
                       pl.col("ply").min(), *[pl.col(c).sum() for c in SUMS]))
-        assert edges["ne"].max() == 1 and edges["nc"].max() == 1, "edge not single-valued"
+        assert edges.is_empty() or (edges["ne"].max() == 1 and edges["nc"].max() == 1), "edge not single-valued"
         surv = (edges.filter(pl.col("total") >= floor)
                 .with_columns(pl.lit("Pooled").alias("event"),
                               pl.lit(0, dtype=pl.Int64).alias("elo_band"),
@@ -252,21 +307,22 @@ def gate_reimpl(a) -> bool:
                         pl.col("ply").cast(pl.Int32), *SUMS, "event", "elo_band",
                         "white_score_avg")
                 .sort("parent_hash", "move_san"))
-        mine_pool = (pool_all.filter(((pl.col("parent_hash") % 512) + 512) % 512 == i)
+        mine_pool = (pool_all.filter(bucket("parent_hash") == i)
                      .sort("parent_hash", "move_san").collect())
         pool_eq = surv.equals(mine_pool)
 
         # other_*: own vectorised search into the arrays (not lookup_evals).
         below = edges.filter(pl.col("total") < floor)
-        keys = below["child_hash"].to_numpy()
-        uk = np.unique(keys)
-        pos = np.searchsorted(mm_h, uk)
-        pos = np.minimum(pos, mm_h.shape[0] - 1)
-        found = np.asarray(mm_h[pos]) == uk
-        cpv = np.where(found, np.asarray(mm_c[pos]).astype(np.float64), np.nan)
-        cpv[np.asarray(mm_c[pos]) == MISSING] = np.nan
-        cp_of = np.full(keys.shape[0], np.nan)
-        cp_of[:] = cpv[np.searchsorted(uk, keys)]
+        if wide:
+            cp_of = audit_wide_cp(below["child_hash"], prm["eval_lookup128"])
+        else:
+            keys = below["child_hash"].to_numpy()
+            uk = np.unique(keys)
+            pos = np.minimum(np.searchsorted(mm_h, uk), mm_h.shape[0] - 1)
+            found = np.asarray(mm_h[pos]) == uk
+            cpv = np.where(found, np.asarray(mm_c[pos]).astype(np.float64), np.nan)
+            cpv[np.asarray(mm_c[pos]) == MISSING] = np.nan
+            cp_of = cpv[np.searchsorted(uk, keys)]
         es = 1.0 / (1.0 + np.exp(-LICHESS_CP_SCALE * cp_of))
         below = below.with_columns(pl.Series("es", es).fill_nan(None))
         oth = below.group_by("parent_hash").agg(
@@ -290,7 +346,7 @@ def gate_reimpl(a) -> bool:
             *[pl.col(c).sum().alias("d_" + c) for c in SUMS])
         hor = rows.filter(pl.col("ply") == cap + 1).group_by("parent_hash").agg(
             *[pl.col(c).sum().alias("horizon_" + c) for c in SUMS])
-        ab = arr.filter(((pl.col("child_hash") % 512) + 512) % 512 == i).rename(
+        ab = arr.filter(bucket("child_hash") == i).rename(
             {"child_hash": "parent_hash", "w": "a_white_wins", "d": "a_draws",
              "b": "a_black_wins", "t": "a_total"})
         keys_df = surv.select("parent_hash").unique()
@@ -307,14 +363,31 @@ def gate_reimpl(a) -> bool:
             *[pl.lit(0, dtype=pl.Int64).alias(f"{g}_{c}") for g in ("term_normal", "term_flag")
               for c in SUMS])
         cols = pl.scan_parquet(aux_f).collect_schema().names()
+        settings = book / "_merge_params.json"
+        if settings.exists() and json.loads(settings.read_text()).get("input_params", {}).get("term_slices"):
+            events_index = json.loads((book / "_book.meta.json").read_text())["term_event_ids"]
+            terminal = pl.read_parquet(book / "term" / f"bkt{i:03d}.parquet")
+            terminal = terminal.filter(pl.col("kind") == 0, pl.col("end_ply").is_between(1, cap),
+                                       pl.col("event_id").is_in([events_index.index(e) for e in events]),
+                                       pl.col("elo_band").is_in(bands))
+            ident = (pl.struct(lo="position_hash", hi="position_hash_hi") if wide else pl.col("position_hash"))
+            for reason, group in enumerate(("term_normal", "term_flag")):
+                names = [group + "_" + c for c in SUMS]
+                typed = (terminal.filter(pl.col("reason") == reason).group_by(ident.alias("parent_hash"))
+                         .agg(pl.col(c).sum().cast(pl.Int64).alias(n) for c, n in zip(SUMS, names)))
+                aux = aux.drop(names).join(typed, on="parent_hash", how="left").with_columns(pl.col(names).fill_null(0))
+                aux = aux.with_columns((pl.col("term_other_" + c) - pl.col(n)).alias("term_other_" + c)
+                                       for c, n in zip(SUMS, names))
         aux = (aux.rename({"parent_hash": "position_hash"})
                .with_columns(pl.col("other_edges").cast(pl.Int32),
                              pl.col("other_eval_cov").cast(pl.Float64))
                .select(cols).sort("position_hash"))
-        mine_aux = (aux_all.filter(((pl.col("position_hash") % 512) + 512) % 512 == i)
+        mine_aux = (aux_all.filter(bucket("position_hash") == i)
                     .sort("position_hash").collect())
         aux_ok = aux.height == mine_aux.height and \
             (aux["position_hash"] == mine_aux["position_hash"]).all()
+        if not aux_ok:
+            bad.append(f"b{i}: sidecar position keys differ")
         worst = 0.0
         if aux_ok:
             for c in cols:
@@ -357,9 +430,15 @@ def gate_conservation(a) -> bool:
     book, cap = Path(prm["book"]), int(prm["max_ply"])
     pool_f, aux_f = out_files(work, Path(a.out_dir))
     root = int(zobrist_int64(chess.Board()))
+    wide = prm.get("key_bits", 64) == 128
+    if wide:
+        from zobrist128 import zobrist128
+        lo, hi = zobrist128(chess.Board())
+        root = f"struct_pack(lo := {lo}::BIGINT, hi := {hi}::BIGINT)"
     con = _duck(a)
-    pop = relation(_slice_globs(book, prm["events"], prm["elo_bands"]))
-    coll = f"(SELECT DISTINCT parent_hash FROM read_parquet('{_p(book / '_collisions.parquet')}'))"
+    pop = moves_with_keys(_slice_globs(book, prm["events"], prm["elo_bands"]), wide)
+    coll = (f"(SELECT NULL::{KEY_SQL_TYPE} WHERE FALSE)" if wide else
+            f"(SELECT DISTINCT parent_hash FROM read_parquet('{_p(book / '_collisions.parquet')}'))")
     t0 = time.time()
     pool_t = con.execute(f"SELECT SUM(total) FROM read_parquet('{_p(pool_f)}')").fetchone()[0]
     oth_t = con.execute(f"SELECT SUM(other_total) FROM read_parquet('{_p(aux_f)}')").fetchone()[0]
@@ -375,7 +454,8 @@ def gate_conservation(a) -> bool:
                SUM(total) FILTER (WHERE parent_hash NOT IN {coll}
                                   AND parent_hash NOT IN (SELECT x FROM pp0))
         FROM {pop} WHERE ply <= {cap}""").fetchone()
-    mass_ok = int(pool_t) + int(oth_t) + int(outside) == int(pop_t)
+    pool_t, oth_t, outside, pop_t, pop_coll = (int(v or 0) for v in (pool_t, oth_t, outside, pop_t, pop_coll))
+    mass_ok = pool_t + oth_t + outside == pop_t
     print(f"  mass: pool {pool_t:,} + other {oth_t:,} + outside (non-pool parents) "
           f"{outside:,} = {pool_t + oth_t + outside:,} vs population {pop_t:,} "
           f"(collision parents {pop_coll:,}) -> {'OK' if mass_ok else 'MISMATCH'} "
@@ -477,49 +557,58 @@ def gate_evals(a) -> bool:
 
     # 10,000 random below-floor edges of pool parents, from a few random buckets.
     rng = random.Random(a.seed)
-    bks = sorted(rng.sample(range(512), a.sample_buckets))
-    coll = set(pl.read_parquet(book / "_collisions.parquet")["parent_hash"].to_list())
-    pp = set(aux["position_hash"].to_list())
+    from pool_from_book import N_BUCKETS
+    bks = sorted(rng.sample(range(N_BUCKETS), a.sample_buckets))
+    wide = prm.get("key_bits", 64) == 128
     con = _duck(a)
     below = []
     for i in bks:
         files = [_p(book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet")
                  for e in prm["events"] for b in prm["elo_bands"]
                  if (book / "ps" / f"event={e}" / f"elo_band={b}" / f"bkt{i:03d}.parquet").exists()]
+        if not files:
+            continue
         below.append(pl.from_arrow(duck_arrow(con, f"""
             SELECT parent_hash, move_san, MIN(child_hash) AS child_hash, SUM(total)::BIGINT AS total
-            FROM {relation(files)} WHERE ply <= {cap}
+            FROM {moves_with_keys(files, wide)} WHERE ply <= {cap}
             GROUP BY parent_hash, move_san HAVING SUM(total) < {floor}""")))
     con.close()
-    below = pl.concat(below).filter(pl.col("parent_hash").is_in(list(pp))
-                                    & ~pl.col("parent_hash").is_in(list(coll)))
+    if not below:
+        raise ValueError("no input files in the sampled eval audit buckets")
+    below = pl.concat(below).join(aux.select(pl.col("position_hash").alias("parent_hash")),
+                                  on="parent_hash", how="semi")
     samp = below.sample(n=min(a.n, below.height), seed=a.seed)
     parents = samp["parent_hash"].unique()
     edges = below.filter(pl.col("parent_hash").is_in(parents.to_list()))
     print(f"  sampled {samp.height:,} edges from buckets {bks}; {parents.len():,} parents, "
           f"{edges.height:,} below-floor edges to evaluate", flush=True)
-    db = EvalDB(prm["eval_arrays"])
+    if wide:
+        edges = edges.with_columns(pl.Series("cp", audit_wide_cp(edges["child_hash"], prm["eval_lookup128"])).fill_nan(None))
+    else:
+        db = EvalDB(prm["eval_arrays"])
+    def key(h):
+        return (h["lo"], h["hi"]) if wide else int(h)
     t0 = time.time()
     exp = {}
     for (h,), g in edges.group_by(["parent_hash"]):
         num = cov = tot = 0.0
         mn, mx = math.inf, -math.inf
-        for c, t in zip(g["child_hash"].to_list(), g["total"].to_list()):
+        cps = g["cp"].to_list() if wide else (db.get_cp(int(c)) for c in g["child_hash"])
+        for cp, t in zip(cps, g["total"]):
             tot += t
-            cp = db.get_cp(int(c))
             if cp is None or cp == -32768:
                 continue
             es = 1.0 / (1.0 + math.exp(-LICHESS_CP_SCALE * cp))
             num += t * es
             cov += t
             mn, mx = min(mn, es), max(mx, es)
-        exp[int(h)] = (num / cov if cov else None, mn if cov else None,
+        exp[key(h)] = (num / cov if cov else None, mn if cov else None,
                        mx if cov else None, cov / tot, int(tot), g.height)
     got = aux.filter(pl.col("position_hash").is_in(parents.to_list())).to_dicts()
     bad = []
     worst = 0.0
     for r in got:
-        e = exp[r["position_hash"]]
+        e = exp[key(r["position_hash"])]
         if (r["other_total"], r["other_edges"]) != (e[4], e[5]):
             bad.append((r["position_hash"], "mass/edges", r["other_total"], e[4]))
             continue
@@ -546,21 +635,23 @@ def gate_evals(a) -> bool:
 
 # ── report helper: the mass split by ply, for several floors at once ───────────
 
-def _split_bucket(task: tuple) -> dict:
+def _split_bucket(task: tuple, *, wide=False) -> dict:
     import pool_from_book as P
     i, book, events, bands, cap, floors, adir, coll, threads, mem, tmp = task
     files = P.slice_files(Path(book), events, bands, i)
     con = P._duck(threads, mem, Path(tmp))
     out = {}
     try:
-        con.execute("CREATE TEMP TABLE coll (h BIGINT)")
+        con.execute(f"CREATE TEMP TABLE coll (h {KEY_SQL_TYPE if wide else 'BIGINT'})")
         if coll:
             con.executemany("INSERT INTO coll VALUES (?)", [(int(h),) for h in coll])
         con.execute(f"""CREATE TEMP TABLE r AS SELECT parent_hash, move_san, ply, total
-            FROM {P._read(files, 'parent_hash, move_san, ply, total', f'ply <= {cap}')}""")
+            FROM {P._read(files, 'parent_hash, move_san, ply, total', f'ply <= {cap}', wide)}""")
         con.execute("""CREATE TEMP TABLE e AS SELECT parent_hash, move_san, SUM(total) AS t,
             parent_hash IN (SELECT h FROM coll) AS c FROM r GROUP BY parent_hash, move_san""")
-        P.derive_flows(con, files, _p(Path(adir) / "g*" / f"cb={i}" / "*.parquet"), cap)
+        pattern = f"g*/cb={i}/*.parquet"
+        arrivals = Path(adir)
+        P.derive_flows(con, files, _p(arrivals / pattern) if any(arrivals.glob(pattern)) else None, cap, wide)
         for F in floors:
             con.execute(f"""CREATE OR REPLACE TEMP TABLE pp AS SELECT DISTINCT parent_hash AS x
                 FROM e WHERE NOT c AND t >= {F}""")
@@ -598,13 +689,14 @@ def report_mass_split(a) -> bool:
     work = Path(a.work)
     prm = load_params(work)
     adir = Path(a.arrivals) if a.arrivals else work / "arrivals"
-    coll = pl.read_parquet(Path(prm["book"]) / "_collisions.parquet")["parent_hash"].unique().to_list()
+    wide = prm.get("key_bits", 64) == 128
+    coll = [] if wide else P.read_collisions(Path(prm["book"]))
     rdir = work / "mass_split"
     rdir.mkdir(exist_ok=True)
     tasks = [(i, prm["book"], prm["events"], prm["elo_bands"], int(prm["max_ply"]), a.floors,
               str(adir), coll, a.threads, a.mem, str(a.tmp_dir))
              for i in range(512) if not (rdir / f"b{i:03d}.json").exists()]
-    for r in P._pool_run(_split_bucket, tasks, a.workers, lambda r: f"bucket {r['bucket']}"):
+    for r in P._pool_run(partial(_split_bucket, wide=wide), tasks, a.workers, lambda r: f"bucket {r['bucket']}"):
         (rdir / f"b{r['bucket']:03d}.json").write_text(json.dumps(r))
     tot: dict = {}
     for i in range(512):

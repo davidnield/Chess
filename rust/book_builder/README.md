@@ -22,6 +22,25 @@ pwsh rust/book_builder/build.ps1 -Test    # also cargo test and python/_test_boo
 
 ## Exactness contract
 
+### 128-bit consumer migration
+
+For an explorer with full keys, `python/pool_from_book.py --eval-lookup128 <lookup-dir>`
+groups edges, arrivals, endings, horizon counts and below-floor evaluations by both signed
+halves. The lookup manifest must match the source explorer. Choose a separate pool tag
+and work directory. In its derived pool and aux Parquets, each hash column is a struct
+with signed `lo` and `hi` fields. The same names in legacy pools are signed int64s.
+`uncut_own_moves.py` reads the width from the pool metadata for either colour.
+
+`python/_test_pool128.py` plants collisions, runs all four pool acceptance gates and
+checks both uncut outputs. `cargo test --test full_keys` exercises full-key move selection
+and its realized value in the native optimizer, starting with a constructed graph.
+The production collector, Python/Rust graph bindings, weak-player model and rollout
+referee still take low-half keys. Before running a replacement 2,000-position book,
+connect the full-key pool to those consumers and replay the twins through one continuous
+build and scoring run. A cap-30 comparison on identical inputs follows that test.
+
+### Numerical agreement
+
 Every exported function equals the Python it names, bit for bit. The test
 `python/_test_book_builder_rs.py` compares floats by their bits, so NaN, -0.0 and the last ulp
 all count. These rules keep that true:

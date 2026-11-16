@@ -319,10 +319,10 @@ class TestUncut(unittest.TestCase):
             cache = folder / "cache"
             run_part = lookup.partial
 
-            def interrupt(con, files, terms, cap, target):
+            def interrupt(con, files, terms, cap, target, wide=False):
                 if target.name == "part-0001":
                     raise InterruptedError("second month")
-                run_part(con, files, terms, cap, target)
+                run_part(con, files, terms, cap, target, wide)
 
             with (
                 patch.object(lookup, "partial", side_effect=interrupt),

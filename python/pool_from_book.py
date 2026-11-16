@@ -41,11 +41,10 @@ the eval arrays and Stage 3's hash-keyed dicts must; they stay in D and A summed
 over their EPDs, so the flow identities still balance. No twin can reach the
 floor book-wide; that is asserted, not assumed.
 
-A book-v2 or book-v3 (128-bit keys: parent_hash_hi / child_hash_hi beside the 64-bit columns) is
-read by the key's LOW half, which is the 64-bit hash, so the pool and its sidecar keep
-their schemas and every reader its keys. Its _collisions.parquet lists the 64-bit hashes
-that two or more positions share, and those are dropped as pool parents exactly as for a
-book-v1; the high halves are not read. The pool's meta records the book's schema.
+Legacy eval arrays select the original 64-bit pool. With --eval-lookup128 the input
+must be a wide explorer and its matching published lookup. Every pool key is a
+struct of two signed int64s (lo, hi), including in the sidecar and arrival shards.
+Positions sharing a low half remain distinct through the floor, evals and flows.
 
 Phases, each resumable (atomic .tmp -> rename, sentinel per unit):
   arrivals   rows at ply <= max_ply, pre-summed by (child_hash, ply) within groups
@@ -71,7 +70,7 @@ Usage (pin a copy under D:/chess/bin first; never run long jobs from a worktree)
 """
 from __future__ import annotations
 
-from explorer_storage import relation
+from explorer_storage import KEY_SQL_TYPE, moves_with_keys, position_key_sql
 import argparse
 import hashlib
 import json
@@ -81,6 +80,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -118,8 +118,9 @@ AUX_SCHEMA = ([("position_hash", "int64")]
                  ("other_eval_cov", "double")])
 
 
-def bucket_of(col: str, n: int = N_BUCKETS) -> str:
+def bucket_of(col: str, n: int | None = None) -> str:
     """rem_euclid(col, n) in SQL: the book's bucket rule."""
+    n = N_BUCKETS if n is None else n
     return f"((({col}) % {n}) + {n}) % {n}"
 
 
@@ -179,14 +180,15 @@ _BOOK_TYPES = {"parent_hash": "BIGINT", "parent_epd": "VARCHAR", "move_san": "VA
                "draws": "BIGINT", "black_wins": "BIGINT", "total": "BIGINT"}
 
 
-def _read(files: list[str], cols: str, where: str) -> str:
+def _read(files: list[str], cols: str, where: str, wide=False) -> str:
     if not files:
         # A bucket no chosen slice reaches (small populations): an empty, typed
         # relation, so every later step runs unchanged and writes empty outputs.
-        return "(SELECT " + ", ".join(f"NULL::{_BOOK_TYPES[c.strip()]} AS {c.strip()}"
+        types = dict(_BOOK_TYPES, parent_hash=KEY_SQL_TYPE, child_hash=KEY_SQL_TYPE) if wide else _BOOK_TYPES
+        return "(SELECT " + ", ".join(f"NULL::{types[c.strip()]} AS {c.strip()}"
                                       for c in cols.split(",")) + " WHERE FALSE)"
     # hive_partitioning off: event/elo_band are in-file columns too (README).
-    return (f"(SELECT {cols} FROM {relation(files)} "
+    return (f"(SELECT {cols} FROM {moves_with_keys(files, wide)} "
             f"WHERE {where})")
 
 
@@ -198,7 +200,7 @@ def arrivals_dir(work: Path) -> Path:
 
 # The arrivals depend on the population and the cap, never on the floor or the tag,
 # so a floor variant may read another work dir's partition (--arrivals-from).
-ARRIVALS_KEYS = ("book", "events", "elo_bands", "max_ply", "book_meta_sha256")
+ARRIVALS_KEYS = ("book", "events", "elo_bands", "max_ply", "book_meta_sha256", "key_bits")
 
 
 def resolve_arrivals(a) -> Path:
@@ -218,7 +220,7 @@ def resolve_arrivals(a) -> Path:
     return arrivals_dir(src)
 
 
-def _arrivals_group(task: tuple) -> tuple:
+def _arrivals_group(task: tuple, *, wide=False) -> tuple:
     """One group of source buckets: their rows at ply <= max_ply, summed by
     (child_hash, ply), COPYed partitioned by the child's bucket. Fresh process."""
     (book, events, bands, src_buckets, max_ply, child_buckets, out_tmp, out,
@@ -234,15 +236,16 @@ def _arrivals_group(task: tuple) -> tuple:
         out_tmp.replace(out)
         return out.name, 0, time.time() - t0
     where = f"ply <= {int(max_ply)}"
+    bucket = bucket_of("child_hash.lo" if wide else "child_hash")
     if child_buckets is not None:
-        where += f" AND {bucket_of('child_hash')} IN ({', '.join(map(str, child_buckets))})"
+        where += f" AND {bucket} IN ({', '.join(map(str, child_buckets))})"
     s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
     con = _duck(threads, mem, Path(tmp))
     try:
         n = con.execute(f"""
             COPY (
-                SELECT {bucket_of('child_hash')} AS cb, child_hash, ply::INTEGER AS ply, {s}
-                FROM {_read(files, 'child_hash, ply, ' + ', '.join(SUMS), where)}
+                SELECT {bucket} AS cb, child_hash, ply::INTEGER AS ply, {s}
+                FROM {_read(files, 'child_hash, ply, ' + ', '.join(SUMS), where, wide)}
                 GROUP BY child_hash, ply
             ) TO '{_p(out_tmp)}' (FORMAT PARQUET, COMPRESSION ZSTD, PARTITION_BY (cb))
         """).fetchone()[0]
@@ -270,7 +273,7 @@ def phase_arrivals(a, child_buckets: list[int] | None = None,
     n_groups = N_BUCKETS // GROUP_SIZE
     print(f"arrivals: {n_groups} groups of {GROUP_SIZE} source buckets, "
           f"{len(tasks)} to build -> {adir}", flush=True)
-    _pool_run(_arrivals_group, tasks, a.workers,
+    _pool_run(partial(_arrivals_group, wide=bool(getattr(a, "eval_lookup128", None))), tasks, a.workers,
               lambda r: f"  {r[0]}: {r[1]:,} (child, ply) rows ({r[2]:.0f}s)")
 
 
@@ -300,7 +303,7 @@ def bucket_paths(work: Path, i: int) -> dict[str, Path]:
             "stats": d / f"b{i:03d}.stats.json"}   # renamed LAST: the sentinel
 
 
-def derive_flows(con, files: list[str], arrivals_glob: str | None, max_ply: int) -> None:
+def derive_flows(con, files: list[str], arrivals_glob: str | None, max_ply: int, wide=False) -> None:
     """Create TEMP tables d (departures), a (arrivals) and en (ended) on `con`.
 
     d(x, q): parent_hash x, ply q <= max_ply+1, summed over every EPD and move.
@@ -312,11 +315,11 @@ def derive_flows(con, files: list[str], arrivals_glob: str | None, max_ply: int)
     con.execute(f"""
         CREATE OR REPLACE TEMP TABLE d AS
         SELECT parent_hash AS x, ply::INTEGER AS q, {s}
-        FROM {_read(files, 'parent_hash, ply, ' + ', '.join(SUMS), f'ply <= {max_ply + 1}')}
+        FROM {_read(files, 'parent_hash, ply, ' + ', '.join(SUMS), f'ply <= {max_ply + 1}', wide)}
         GROUP BY parent_hash, ply
     """)
     if arrivals_glob is None:
-        con.execute(f"CREATE OR REPLACE TEMP TABLE a AS SELECT 0::BIGINT AS x, "
+        con.execute(f"CREATE OR REPLACE TEMP TABLE a AS SELECT NULL::{KEY_SQL_TYPE if wide else 'BIGINT'} AS x, "
                     f"0::INTEGER AS p, {', '.join(f'0::BIGINT AS {c}' for c in SUMS)} "
                     f"WHERE FALSE")
     else:
@@ -346,7 +349,7 @@ def check_ended_nonnegative(con, label: str) -> None:
                            f"so the flows are wrong. Sample: {rows}")
 
 
-def split_endings(con, book, bucket, events, bands, cap):
+def split_endings(con, book, bucket, events, bands, cap, wide=False):
     """Reconcile classified endings against the independent move flows at each ply."""
     book = Path(book)
     lock = book / "_merge_params.json"
@@ -358,7 +361,7 @@ def split_endings(con, book, bucket, events, bands, cap):
         get_bands = ", ".join(str(int(b)) for b in bands)
         path = book / "term" / f"bkt{bucket:03d}.parquet"
         con.execute(f"""
-            CREATE TEMP TABLE classified AS SELECT position_hash AS x, end_ply AS p, reason, {cols}
+            CREATE TEMP TABLE classified AS SELECT {position_key_sql('position_hash', wide)} AS x, end_ply AS p, reason, {cols}
             FROM read_parquet(?, hive_partitioning=false)
             WHERE kind=0 AND end_ply BETWEEN 1 AND ? AND event_id IN ({get_ids})
               AND elo_band IN ({get_bands})
@@ -425,7 +428,7 @@ def check_population(book, events, bands):
     return coverage
 
 
-def _bucket_task(task: tuple) -> tuple:
+def _bucket_task(task: tuple, *, wide=False) -> tuple:
     (i, book, events, bands, max_ply, min_games, eval_arrays, work, adir, coll_list,
      root_hash, threads, mem, tmp, allow_coll_survivors) = task
     t0 = time.time()
@@ -447,7 +450,7 @@ def _bucket_task(task: tuple) -> tuple:
     st: dict = {"bucket": i, "files": len(files)}
     con = _duck(threads, mem, Path(tmp))
     try:
-        con.execute("CREATE TEMP TABLE coll (h BIGINT)")
+        con.execute(f"CREATE TEMP TABLE coll (h {KEY_SQL_TYPE if wide else 'BIGINT'})")
         if coll_list:
             con.executemany("INSERT INTO coll VALUES (?)", [(int(h),) for h in coll_list])
         s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
@@ -460,7 +463,7 @@ def _bucket_task(task: tuple) -> tuple:
                    MIN(child_hash) AS child_hash, MAX(child_hash) AS child_max,
                    MIN(ply)::INTEGER AS ply, {s}
             FROM {_read(files, 'parent_hash, parent_epd, move_san, child_hash, ply, '
-                        + ', '.join(SUMS), f'ply <= {max_ply}')}
+                        + ', '.join(SUMS), f'ply <= {max_ply}', wide)}
             GROUP BY parent_hash, move_san
         """)
         con.execute("ALTER TABLE e ADD COLUMN is_coll BOOLEAN")
@@ -496,17 +499,21 @@ def _bucket_task(task: tuple) -> tuple:
         """)
 
         # Below-floor children's evals, one batched lookup for the bucket.
-        ch = con.execute(f"SELECT DISTINCT child_hash FROM e "
-                         f"WHERE NOT is_coll AND total < {min_games}").fetchnumpy()["child_hash"]
-        ch = np.asarray(ch, dtype=np.int64)
         t_ev = time.time()
-        mm_h, mm_c = open_eval_arrays(Path(eval_arrays))
-        cp = lookup_evals(ch, mm_h, mm_c)
+        children = con.execute(f"SELECT DISTINCT child_hash FROM e "
+                               f"WHERE NOT is_coll AND total < {min_games}").to_arrow_table()
+        if wide:
+            from eval_lookup128 import WideEvalLookup
+            halves = children.column("child_hash").flatten()
+            cp, _ = WideEvalLookup(eval_arrays).lookup(halves[0].to_numpy(), halves[1].to_numpy())
+        else:
+            mm_h, mm_c = open_eval_arrays(Path(eval_arrays))
+            cp = lookup_evals(children.column("child_hash").to_numpy(), mm_h, mm_c)
         st["eval_lookup_s"] = round(time.time() - t_ev, 1)
         hit = cp != MISSING                       # MISSING is masked, never a value
-        st["other_children"] = int(ch.shape[0])
+        st["other_children"] = children.num_rows
         st["other_children_covered"] = int(hit.sum())
-        ev = pa.table({"child_hash": pa.array(ch[hit], pa.int64()),
+        ev = pa.table({"child_hash": children.column("child_hash").filter(hit),
                        "cp": pa.array(cp[hit].astype(np.int32), pa.int32())})
         con.register("ev_arrow", ev)
         con.execute("CREATE TEMP TABLE ev AS SELECT * FROM ev_arrow")
@@ -535,7 +542,7 @@ def _bucket_task(task: tuple) -> tuple:
         """)
 
         # Flows: departures, arrivals, ended. The gate is part of the build.
-        derive_flows(con, files, _p(agl) if has_arr else None, max_ply)
+        derive_flows(con, files, _p(agl) if has_arr else None, max_ply, wide)
         check_ended_nonnegative(con, f"bucket {i}")
 
         con.execute(f"""
@@ -543,7 +550,7 @@ def _bucket_task(task: tuple) -> tuple:
             SELECT DISTINCT parent_hash AS position_hash FROM e
             WHERE NOT is_coll AND total >= {min_games}
         """)
-        split_endings(con, book, i, events, bands, max_ply)
+        split_endings(con, book, i, events, bands, max_ply, wide)
         terminal_cols = ", ".join(f"COALESCE(t.{g}_{c}, 0)::BIGINT AS {g}_{c}"
                                   for g in _GROUPS[:3] for c in ("total","white_wins","draws","black_wins"))
         tsel = lambda g, al: ", ".join(f"COALESCE({al}.{c}, 0)::BIGINT AS {g}_{c}"
@@ -590,8 +597,9 @@ def _bucket_task(task: tuple) -> tuple:
         st["horizon_mass_all"] = q(f"SELECT SUM(total) FROM d WHERE q = {max_ply + 1}")[0]
         st["arrivals_mass"] = q("SELECT SUM(total) FROM a")[0]
         st["departures_mass_le_cap"] = q(f"SELECT SUM(total) FROM d WHERE q <= {max_ply}")[0]
-        if root_hash is not None and int(root_hash) % N_BUCKETS == i:   # Python % = rem_euclid
-            r = int(root_hash)
+        if root_hash is not None and (root_hash[0] if wide else root_hash) % N_BUCKETS == i:
+            r = (f"struct_pack(lo := {int(root_hash[0])}::BIGINT, hi := {int(root_hash[1])}::BIGINT)"
+                 if wide else str(int(root_hash)))
             st["root_ply1_games"] = q(f"SELECT SUM(total) FROM d WHERE x = {r} AND q = 1")[0]
             st["root_departures_le_cap"] = q(
                 f"SELECT SUM(total) FROM d WHERE x = {r} AND q <= {max_ply}")[0]
@@ -630,17 +638,23 @@ def root_hash() -> int:
 def phase_buckets(a, buckets: list[int]) -> None:
     work = Path(a.work)
     (work / "buckets").mkdir(parents=True, exist_ok=True)
-    coll = read_collisions(Path(a.book))
-    rh = root_hash()
+    wide = bool(a.eval_lookup128)
+    coll = [] if wide else read_collisions(Path(a.book))
+    if wide:
+        import chess
+        from zobrist128 import zobrist128
+        rh = zobrist128(chess.Board())
+    else:
+        rh = root_hash()
     adir = resolve_arrivals(a)
     todo = [i for i in buckets if not bucket_done(work, i)]
     print(f"buckets: {len(buckets)} requested, {len(todo)} to build "
           f"({len(coll)} collision hashes dropped as parents)", flush=True)
     tasks = [(i, str(a.book), a.events, a.elo_bands, a.max_ply, a.min_games,
-              str(a.eval_arrays), str(work), str(adir), coll, rh, a.threads, a.mem,
+              str(a.eval_lookup128 or a.eval_arrays), str(work), str(adir), coll, rh, a.threads, a.mem,
               str(a.tmp_dir), a.allow_collision_survivors)
              for i in todo]
-    _pool_run(_bucket_task, tasks, a.workers,
+    _pool_run(partial(_bucket_task, wide=wide), tasks, a.workers,
               lambda r: (f"bucket {r[0]:3d}: {r[1]['survivors']:,} survivors / "
                          f"{r[1]['edges_prefloor']:,} edges, {r[1]['pool_parents']:,} parents, "
                          f"eval {r[1]['eval_lookup_s']}s ({r[1]['secs']:.0f}s)"))
@@ -661,6 +675,22 @@ def meta_path(p: Path) -> Path:
 def _schema_list(path: Path) -> list[tuple[str, str]]:
     import pyarrow.parquet as pq
     return [(f.name, str(f.type)) for f in pq.read_schema(path)]
+
+
+def output_schema(schema, wide):
+    if not wide:
+        return schema
+    return [(name, "struct<lo: int64, hi: int64>" if name in
+             ("position_hash", "parent_hash", "child_hash") else dtype) for name, dtype in schema]
+
+
+def check_export(path, schema, recipe):
+    if _schema_list(path) != schema:
+        raise ValueError(f"{path} uses a different position-key schema; use another tag")
+    if recipe:
+        import pyarrow.parquet as pq
+        if (pq.read_metadata(path).metadata or {}).get(b"pool_recipe") != recipe["pool_recipe"].encode():
+            raise ValueError(f"{path} belongs to another pool recipe; use another tag")
 
 
 def git_commit() -> str:
@@ -692,6 +722,12 @@ def phase_finalize(a, timings: dict) -> None:
     if missing:
         sys.exit(f"finalize: {len(missing)} buckets not built (first: {missing[:10]})")
     pool_out, aux_out = out_paths(a)
+    pool_schema = output_schema(POOL_SCHEMA, bool(a.eval_lookup128))
+    aux_schema = output_schema(AUX_SCHEMA, bool(a.eval_lookup128))
+    recipe = {"pool_recipe": _sha256(work / "_params.json")} if a.eval_lookup128 else None
+    for output, schema in ((pool_out, pool_schema), (aux_out, aux_schema)):
+        if output.exists():
+            check_export(output, schema, recipe)
     done = work / "_POOL.DONE"
     if done.exists() and pool_out.exists() and aux_out.exists():
         print(f"SKIP finalize: {done} exists")
@@ -707,9 +743,9 @@ def phase_finalize(a, timings: dict) -> None:
                 .select([c for c, _ in POOL_SCHEMA])
                 .sort(["parent_hash", "move_san"]))
         tmp = pool_out.with_name(pool_out.name + ".tmp")
-        df.write_parquet(tmp, compression="zstd")
+        df.write_parquet(tmp, compression="zstd", metadata=recipe)
         got = _schema_list(tmp)
-        if got != POOL_SCHEMA:
+        if got != pool_schema:
             tmp.unlink()
             raise RuntimeError(f"pool schema drift: {got}")
         tmp.replace(pool_out)
@@ -721,9 +757,9 @@ def phase_finalize(a, timings: dict) -> None:
         if df["position_hash"].n_unique() != df.height:
             raise RuntimeError("aux: duplicate position_hash rows")
         tmp = aux_out.with_name(aux_out.name + ".tmp")
-        df.write_parquet(tmp, compression="zstd")
+        df.write_parquet(tmp, compression="zstd", metadata=recipe)
         got = _schema_list(tmp)
-        if got != AUX_SCHEMA:
+        if got != aux_schema:
             tmp.unlink()
             raise RuntimeError(f"aux schema drift: {got}")
         tmp.replace(aux_out)
@@ -744,6 +780,10 @@ def write_metas(a, timings: dict) -> None:
     import pyarrow.parquet as pq
     n_pool = pq.ParquetFile(pool_out).metadata.num_rows
     n_aux = pq.ParquetFile(aux_out).metadata.num_rows
+    wide = bool(a.eval_lookup128)
+    recipe = {"pool_recipe": _sha256(work / "_params.json")} if wide else None
+    for output, schema in ((pool_out, POOL_SCHEMA), (aux_out, AUX_SCHEMA)):
+        check_export(output, output_schema(schema, wide), recipe)
     if n_pool != st["survivors"] or n_aux != st["aux_rows"] or n_aux != st["pool_parents"]:
         raise RuntimeError(f"row counts disagree with the bucket stats: pool {n_pool:,} vs "
                            f"{st['survivors']:,}, aux {n_aux:,} vs {st['aux_rows']:,} / "
@@ -775,11 +815,14 @@ def write_metas(a, timings: dict) -> None:
         "event": POOL_EVENT, "elo_band": POOL_ELO,
         "book": str(book),
         "book_schema": book_schema(book),
-        "position_keys": "64-bit (a book-v2 key's low half); _collisions hashes dropped as parents",
+        "key_bits": 128 if wide else 64,
+        "position_keys": ("128-bit struct(lo, hi); both halves signed int64" if wide else
+                          "64-bit (a book-v2 key's low half); _collisions hashes dropped as parents"),
         "book_meta_sha256": _sha256(book / "_book.meta.json"),
         "collisions_sha256": _sha256(book / "_collisions.parquet"),
-        "eval_arrays": str(a.eval_arrays),
-        "eval_arrays_fingerprint": read_meta(Path(a.eval_arrays)),
+        **({"eval_lookup128": str(a.eval_lookup128),
+            "eval_lookup_sha256": _sha256(a.eval_lookup128 / "lookup.json")} if wide else
+           {"eval_arrays": str(a.eval_arrays), "eval_arrays_fingerprint": read_meta(Path(a.eval_arrays))}),
         "params": json.loads((work / "_params.json").read_text(encoding="utf-8")),
         "arrivals_from": str(a.arrivals_from) if a.arrivals_from else None,
         "timings_s": timings,
@@ -842,6 +885,19 @@ def lock_params(a) -> None:
     meta_path = Path(a.book) / "_book.meta.json"
     if meta_path.exists():
         cur["book_meta_sha256"] = _sha256(meta_path)
+    if a.eval_lookup128:
+        from eval_lookup128 import WideEvalLookup
+        if book_schema(Path(a.book)) == "book-v1":
+            raise ValueError("128-bit pooling requires a wide explorer")
+        manifest = a.eval_lookup128 / "lookup.json"
+        meta = json.loads(manifest.read_text(encoding="utf-8"))
+        if not meta.get("book_meta_sha256") or meta["book_meta_sha256"] != cur.get("book_meta_sha256"):
+            raise ValueError("128-bit eval lookup belongs to another explorer")
+        if set(WideEvalLookup(a.eval_lookup128).files) != {f"bkt{i:03d}.npy" for i in range(512)}:
+            raise ValueError("128-bit pooling requires a published lookup covering every bucket")
+        del cur["eval_arrays"]
+        cur.update(key_bits=128, eval_lookup128=str(a.eval_lookup128.resolve()),
+                   eval_lookup_sha256=_sha256(manifest))
     if p.exists():
         old = json.loads(p.read_text(encoding="utf-8"))
         if old != cur:
@@ -862,7 +918,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--elo-bands", nargs="+", type=int, required=True)
     ap.add_argument("--max-ply", type=int, required=True)
     ap.add_argument("--min-games", type=int, required=True)
-    ap.add_argument("--eval-arrays", type=Path, default=EVAL_ARRAYS)
+    evals = ap.add_mutually_exclusive_group()
+    evals.add_argument("--eval-arrays", type=Path, default=EVAL_ARRAYS)
+    evals.add_argument("--eval-lookup128", type=Path,
+                       help="Build full-key pools using this explorer's published 128-bit eval lookup.")
     ap.add_argument("--tag", required=True,
                     help="Output names: position_stats[_aux]_pooled_<tag>.parquet")
     ap.add_argument("--work", type=Path, required=True, help="Scratch (H:/chess/pool_work/...)")
@@ -896,9 +955,7 @@ def book_cap(book: Path) -> int | None:
 
 
 def book_schema(book: Path) -> str:
-    """The schema generation, from the book's settings lock (a book without one is a v1).
-    Either is read by the 64-bit hash, which is a book-v2 key's low half; the positions
-    that share one are in _collisions.parquet for both, and are dropped as pool parents."""
+    """The schema generation from the book's settings lock. Unversioned books are v1."""
     mp = Path(book) / "_merge_params.json"
     schema = "book-v1"
     if mp.exists():
@@ -948,8 +1005,9 @@ def main() -> None:
         if absent:
             print(f"{event} has no source partitions in {len(absent)} months: {', '.join(absent)}", flush=True)
     lock_params(a)
-    from eval_arrays import verify_eval_arrays
-    print(f"eval arrays: {verify_eval_arrays(Path(a.eval_arrays))}", flush=True)
+    if not a.eval_lookup128:
+        from eval_arrays import verify_eval_arrays
+        print(f"eval arrays: {verify_eval_arrays(Path(a.eval_arrays))}", flush=True)
     tpath = Path(a.work) / "_timings.json"
     timings = json.loads(tpath.read_text(encoding="utf-8")) if tpath.exists() else {}
     if a.phase in ("arrivals", "all") and not a.arrivals_from:

@@ -62,3 +62,23 @@ def read_columns(file, columns):
         else:
             out[name] = raw[name]
     return pa.table(out)
+
+
+KEY_SQL_TYPE = "STRUCT(lo BIGINT, hi BIGINT)"
+
+
+def position_key_sql(column, wide):
+    """Use the two signed BIGINTs as one equality/grouping key inside DuckDB."""
+    if not wide:
+        return column
+    return (f"CASE WHEN {column} IS NULL OR {column}_hi IS NULL "
+            f"THEN error('incomplete 128-bit {column}') "
+            f"ELSE struct_pack(lo := {column}, hi := {column}_hi) END")
+
+
+def moves_with_keys(files, wide):
+    src = relation(files)
+    if not wide:
+        return src
+    pairs = ", ".join(f"{position_key_sql(c, True)} AS {c}" for c in ("parent_hash", "child_hash"))
+    return f"(SELECT * EXCLUDE(parent_hash_hi, child_hash_hi) REPLACE ({pairs}) FROM {src})"

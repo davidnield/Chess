@@ -23,6 +23,11 @@ pub fn pk(k: Key) -> i64 {
     k as u64 as i64
 }
 
+/// Match the signed (lo, hi) order of the pool. Legacy keys all have hi=0.
+pub fn key_order(k: Key) -> (i64, i64) {
+    (pk(k), (k >> 64) as i64)
+}
+
 /// Python's `<`/`==` on floats inside a tuple: IEEE, so -0.0 == 0.0 (NaN: treated as equal).
 #[inline]
 pub fn fcmp(a: f64, b: f64) -> Ordering {
@@ -31,11 +36,11 @@ pub fn fcmp(a: f64, b: f64) -> Ordering {
 
 /// heapq's min-heap of (f64, key) tuples on a BinaryHeap (which pops the greatest).
 #[derive(PartialEq)]
-pub struct MinFK(pub f64, pub i64, pub u32);
+pub struct MinFK(pub f64, pub (i64, i64), pub u32);
 impl Eq for MinFK {}
 impl Ord for MinFK {
     fn cmp(&self, o: &Self) -> Ordering {
-        fcmp(o.0, self.0).then(o.1.cmp(&self.1))
+        fcmp(o.0, self.0).then(o.1.cmp(&self.1)).then(o.2.cmp(&self.2))
     }
 }
 impl PartialOrd for MinFK {
@@ -304,7 +309,7 @@ impl Core {
         by_reach.sort_by(|&a, &b| {
             let (ia, ib) = (nodes[a], nodes[b]);
             fcmp(self.node_reach[ia as usize], self.node_reach[ib as usize])
-                .then(self.pyk(ia).cmp(&self.pyk(ib)))
+                .then_with(|| key_order(self.keys[ia as usize]).cmp(&key_order(self.keys[ib as usize])))
         });
         let mut k = 0usize;
         while done.len() < scc.len() {
@@ -348,7 +353,7 @@ impl Core {
         let mut placed = vec![false; n];
         let mut remaining = n;
         let mut heap: BinaryHeap<MinFK> = self.set_order.iter()
-            .map(|&h| MinFK(-self.node_reach[h as usize], self.pyk(h), h)).collect();
+            .map(|&h| MinFK(-self.node_reach[h as usize], key_order(self.keys[h as usize]), h)).collect();
         loop {
             while let Some(h) = q.pop_front() {
                 if placed[h as usize] {
@@ -401,8 +406,8 @@ impl Core {
         xs.extend(self.f_key.iter().copied());
         let mut x: Vec<Key> = xs.into_iter().collect();
         let mut y: Vec<Key> = ys.into_iter().collect();
-        x.sort_by_key(|&k| pk(k));
-        y.sort_by_key(|&k| pk(k));
+        x.sort_by_key(|&k| key_order(k));
+        y.sort_by_key(|&k| key_order(k));
         (x, y)
     }
 
