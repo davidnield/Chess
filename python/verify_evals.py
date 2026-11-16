@@ -527,6 +527,22 @@ def main() -> int:
         print(f"    {name}: {len(rows):,} rows", flush=True)
         for r in rows:
             samp[(r["position_hash"], r["epd"])] = r
+    target = min(a.positive, sum(mb[b]["rows"] for b in picks if b in mb))
+    if len(samp) < target:
+        # Sparse or overlapping strata can leave fewer distinct checks than requested.
+        con.register("positive_keys", pa.table({
+            "h": pa.array((h for h, _ in samp), type=pa.int64()),
+            "e": pa.array((e for _, e in samp), type=pa.string()),
+        }))
+        rest = f"""SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket
+                   FROM read_parquet({fl}) o ANTI JOIN positive_keys k
+                   ON o.position_hash = k.h AND o.epd = k.e"""
+        extra = duck_arrow(con, f"SELECT * FROM ({rest}) USING SAMPLE reservoir({target - len(samp)} ROWS) "
+                                f"REPEATABLE ({a.seed})").to_pylist()
+        con.unregister("positive_keys")
+        for r in extra:
+            samp[(r["position_hash"], r["epd"])] = r
+        print(f"    additional distinct positives: {len(extra):,}", flush=True)
     pos = list(samp.values())
     print(f"    positive sample: {len(pos):,} distinct rows", flush=True)
     ok_n, var_n, bad = check_identity(pos)
@@ -534,8 +550,7 @@ def main() -> int:
                    f"{'zobrist128 gives (position_hash, position_hash_hi)' if wide else 'zobrist_int64 gives position_hash'} "
                    f"({var_n} via an ep square the EPD cannot show) {bad[:SHOW]}")
     check(var_n >= n_var_found, f"every ep-variant row found ({n_var_found:,}) hashes via an ep square its EPD cannot show")
-    check(len(pos) >= a.positive or sum(mb[b]["rows"] for b in picks if b in mb) < a.positive,
-          f"the positive sample has >= {a.positive:,} rows (or all the sampled buckets hold fewer)")
+    check(len(pos) >= target, f"the positive sample covers at least {target:,} distinct available rows")
 
     # Negative sample: book parents of the sampled buckets with no output row.
     neg = []

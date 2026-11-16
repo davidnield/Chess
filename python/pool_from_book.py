@@ -722,6 +722,7 @@ def phase_finalize(a, timings: dict) -> None:
     if missing:
         sys.exit(f"finalize: {len(missing)} buckets not built (first: {missing[:10]})")
     pool_out, aux_out = out_paths(a)
+    pool_out.parent.mkdir(parents=True, exist_ok=True)
     pool_schema = output_schema(POOL_SCHEMA, bool(a.eval_lookup128))
     aux_schema = output_schema(AUX_SCHEMA, bool(a.eval_lookup128))
     recipe = {"pool_recipe": _sha256(work / "_params.json")} if a.eval_lookup128 else None

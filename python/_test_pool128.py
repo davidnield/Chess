@@ -77,7 +77,8 @@ def make_inputs(folder):
         pl.DataFrame(term_rows).filter(pl.col("position_hash") % 2 == i).write_parquet(
             book / "term" / f"bkt{i:03d}.parquet")
     games = sum(r["total"] for r in move_rows if r["ply"] == 1)
-    pl.DataFrame([dict(event="Rapid", elo_band=1800, files=2, bytes=size, ply1_games=games)]).write_parquet(book / "_slices.parquet")
+    pl.DataFrame([dict(event="Rapid", elo_band=1800, files=2, bytes=size, ply1_games=games),
+                  dict(event="Rapid", elo_band=2000, files=0, bytes=0, ply1_games=0)]).write_parquet(book / "_slices.parquet")
     pl.DataFrame({"parent_hash": [-17, 4, 1]}).write_parquet(book / "_collisions.parquet")
     settings = {"events": ["Rapid"], "buckets": 2, "max_ply": 6, "key_bits": 128, "term_slices": True}
     write_json(book / "_merge_params.json", {"schema": "book-v3", "input_params": settings})
@@ -106,8 +107,8 @@ class Pool128Test(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             folder = Path(td)
             book, lookup = make_inputs(folder)
-            args = ["pool_from_book", "--book", str(book), "--out-dir", td, "--work", str(folder / "work"),
-                    "--eval-lookup128", str(lookup), "--events", "Rapid", "--elo-bands", "1800",
+            args = ["pool_from_book", "--book", str(book), "--out-dir", str(folder / "fresh-exports"), "--work", str(folder / "work"),
+                    "--eval-lookup128", str(lookup), "--events", "Rapid", "--elo-bands", "1800", "2000",
                     "--max-ply", "5", "--min-games", "5", "--tag", "twins", "--tmp-dir", str(folder / "spill")]
             def serial(fn, tasks, workers, fmt):
                 return [fn(t) for t in tasks]
@@ -164,6 +165,13 @@ class Pool128Test(unittest.TestCase):
                 if colour == "black":
                     raw = rows_for(pl.read_parquet(cache / "aux.parquet"), "position_hash", "c4").row(0, named=True)
                     self.assertEqual((raw["term_flag_total"], raw["term_other_total"]), (5, 0))
+            # An absent file reported with nonzero bytes must still fail validation.
+            index = book / "_slices.parquet"
+            pl.read_parquet(index).with_columns(
+                pl.when(pl.col("files") == 0).then(1).otherwise(pl.col("bytes")).alias("bytes")
+            ).write_parquet(index)
+            with self.assertRaisesRegex(ValueError, "published file counts or sizes"):
+                uncut.source_parts(stats)
 
 
 if __name__ == "__main__":

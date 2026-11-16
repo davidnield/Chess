@@ -84,6 +84,14 @@ On November 15 David authorized a bounded training batch after the compact pilot
 
 On Monday, sign in and run `D:/chess/bin/ply51-sunday-20261115/Resume-Trip.cmd` once. It checks the pinned releases and attached drives, recovers the compact pilot if needed, and starts missing training and eval workers in the background. It also resumes the independent August–September audit if its receipts are incomplete. The training coordinator counts and revalidates the months already published. The command can be run again after an interruption during the reserved window. `Resume-Trip.cmd --check` validates the paths and pins without starting jobs.
 
+### End-to-end rehearsal on the July archives
+
+On November 15 the complete July 2013 extraction was repeated from its 217,505 raw games. The 512 move files and one terminal file all matched the published archive byte for byte. A separate sample took 4,656 games across all 221 source partitions in the 14 July months. Of these, 4,634 passed the production filters. Python-chess replay agreed with all 192,858 compact move rows and 4,632 terminal rows, including both hash halves, outcomes, speed and rating band. Raw game lengths reconciled with every usable cap from 1 to 50. At cap 50 there were 3,056 continuations and 1,578 real endings. The production input inventory was also reconciled for all 163 months and 2,525 files.
+
+The shortened Cloud and Fishnet inputs produced 6,004 eval rows and 6,413 lookup entries. The separate production preflight used all 20 Cloud and 144 Fishnet files and their original receipts. The rehearsal built a 50-ply 1800+ pool, ran all four pool acceptance checks, recovered uncut moves for both colors, and built and scored two small books to ply 30. The referee used separate July games, one seed, one sampled continuation per branch, and no fresh Stockfish searches. The builder used an empirical seed, a 30-decision budget and a three-observation move threshold. The Black 0.30 pilot, full-size timing, disk high-water marks, and production book comparisons remain separate.
+
+Three downstream corrections came from this run. The eval verifier fills overlapping sample strata with distinct additional positions. The pool exporter creates a fresh output directory before publishing. Uncut move recovery accepts index rows that record zero files and zero bytes, and still checks each nonempty slice. The corrected verifier is in the eval release used by the Monday launcher. The source sample, replay scripts, logs and machine-readable results are in [the rehearsal directory](D:/chess/ply51-migration-20261115/headstart-e2e).
+
 ### After interruption
 
 Check the three status files and active process command lines. Use the command for the stopped worker in a separate PowerShell window. A completed compact pilot has `compact-verified.json`. The queue reuses verified months and published merge buckets. Its configured extraction window ends at midnight Pacific on November 20.
@@ -91,7 +99,7 @@ Check the three status files and active process command lines. Use the command f
 ```powershell
 $compactPin = 'D:/chess/bin/ply51-compact-20261115'
 $queuePin = 'D:/chess/bin/ply51-queue-20261115'
-$evalPin = 'D:/chess/bin/ply51-evals-fallback-20261115'
+$evalPin = 'D:/chess/bin/ply51-evals-rehearsed-20261115'
 $venvPython = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 
 # Three-month rehearsal

@@ -16,7 +16,7 @@ from run_ply51_sunday import COMPACT, RELEASE, check_release
 from month_archive import read_json, root_lock, sha
 
 QUEUE = Path("D:/chess/bin/ply51-queue-20261115")
-EVAL_RELEASE = Path("D:/chess/bin/ply51-evals-fallback-20261115")
+EVAL_RELEASE = Path("D:/chess/bin/ply51-evals-rehearsed-20261115")
 HOLDOUT = m.OPS/"holdout-inputs"
 CACHE = Path(os.environ["LOCALAPPDATA"])/"Temp/chess-holdout-pgn-20261115"
 RECIPE = Path("C:/Users/David/Documents/Chess/python/process_pgn_parquets.py")

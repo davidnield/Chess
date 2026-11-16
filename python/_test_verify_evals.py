@@ -105,11 +105,12 @@ def run_v2(tmp: Path, gs: list, cmd: list[str]) -> bool:
     last = pq.read_schema(sorted(out2.glob("bkt*.parquet"))[0]).names[-1]
     check(same and his and last == "position_hash_hi",
           f"the eval-db-v2 has the same {len(b)} rows with position_hash_hi last, every one zobrist128's")
-    ver = [sys.executable, str(HERE / "verify_evals.py"), str(out2), "--buckets", "512", "--positive", "100000",
+    ver = [sys.executable, str(HERE / "verify_evals.py"), str(out2), "--buckets", "512", "--positive", "39",
            "--negative", "5", "--threads", "2", "--mem", "2GB", "--tmp-dir", str(tmp / "duck"), "--no-sha"]
     r = subprocess.run(ver, capture_output=True, text=True)
     check(r.returncode == 0 and "ALL PASS" in r.stdout and "zobrist128 gives" in r.stdout
-          and "child_hash_hi) keys" in r.stdout,
+          and "child_hash_hi) keys" in r.stdout and "additional distinct positives:" in r.stdout
+          and "positive sample: 39 distinct rows" in r.stdout,
           "verify_evals.py passes the eval-db-v2, keys held on both halves")
     if r.returncode:
         print(r.stdout[-3000:], r.stderr[-2000:])

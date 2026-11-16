@@ -132,6 +132,7 @@ def source_parts(stats):
             for e, b, count, size in index.select(
                 "event", "elo_band", "files", "bytes"
             ).iter_rows()
+            if count or size  # The published index also lists slices with zero files and bytes.
         }
         if not expected or actual != expected:
             raise ValueError(
