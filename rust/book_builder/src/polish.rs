@@ -600,7 +600,7 @@ pub fn polish_book(g: &Core, moves: &HashMap<u32, i64>, target: usize, order: &[
         let mut nonleaf: Vec<(f64, u32)> = reg.booked.iter().filter(|x| !leafset.contains(&x.0))
             .map(|&(u, _)| (pl.loss(&reg, u), u)).collect();
         nonleaf.sort_by(|a, b| fcmp(a.0, b.0).then_with(|| {
-            crate::core::key_order(g.keys[a.1 as usize]).cmp(&crate::core::key_order(g.keys[b.1 as usize]))
+            g.sorted_key(g.keys[a.1 as usize]).cmp(&g.sorted_key(g.keys[b.1 as usize]))
         }));
         for &(lo, u) in nonleaf.iter().take(p.max_exchange) {
             let freed = pl.freed(&reg, u);

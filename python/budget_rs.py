@@ -454,7 +454,7 @@ AUX_OTHER = ("other_total", "other_white_wins", "other_draws", "other_eval_mean"
 
 
 def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verified=None,
-                 strict_source=False, aux_frame=None) -> dict:
+                 strict_source=False, aux_frame=None, keys=None) -> dict:
     """build_graph_rs's input arrays straight from the collector's frame (parent_hash,
     move_san, child_hash, parent_epd, total, white_score_avg; each parent's edges contiguous,
     parents in first-appearance order, as the collector returns them): the same arrays bit for
@@ -544,7 +544,7 @@ def frame_inputs(edf, *, rep_moves=None, engine_moves=None, excluded=None, verif
         se = src_eff[idx]
         ch = None
         if se and epd[idx] is not None and not (strict_source and idx in recorded):
-            ch = build_baseline_books.child_of(epd[idx], se)
+            ch = keys.child(epd[idx], se) if keys else build_baseline_books.child_of(epd[idx], se)
         sc.append(0 if ch is None else ch)
         sh.append(ch is not None)
         for san, mch in engine_moves.get(h, ()):
@@ -669,7 +669,7 @@ class GraphView:
                       for h, share, v, e in out["other"]}
 
 
-def rs_graph_from_out(out: dict, san_list, root, *, crack_at_parents, stick=None):
+def rs_graph_from_out(out: dict, san_list, root, *, crack_at_parents, stick=None, positions=None):
     """(RsGraph, SAN table) straight from build_graph_csr's output, as rs_graph(graph_from_csr
     (...)) gives without the Graph: c_bare from the SAN table, stickiness as rs_graph sets it."""
     extra = list(stick[0].values()) if stick else []
@@ -683,7 +683,8 @@ def rs_graph_from_out(out: dict, san_list, root, *, crack_at_parents, stick=None
     csr = {k: out[k] for k in keys}
     csr["c_bare"] = sb[out["c_san"]] if len(out["c_san"]) else np.zeros(0, np.int64)
     nk, no = out["node_keys"], out["node_our"]
-    r = rs.RsGraph(csr, set_order(nk[no].tolist(), nk[~no].tolist()), root, crack_at_parents)
+    r = rs.RsGraph(csr, set_order(nk[no].tolist(), nk[~no].tolist()), root, crack_at_parents,
+                   **({"position_ids": positions.native} if positions else {}))
     if stick:
         moves, margin = stick
         r.set_stick(np.fromiter(moves.keys(), np.int64, len(moves)),

@@ -73,7 +73,13 @@ def in_sample(game_id, frac: float) -> bool:
 
 
 def one_file(args):
-    path, our_white, lo, hi, opp_min, max_ply, frac, folds = args
+    path, our_white, lo, hi, opp_min, max_ply, frac, folds = args[:8]
+    wide = len(args) > 8 and args[8]
+    if wide:
+        from zobrist128 import zobrist128
+        start_key = zobrist128(chess.Board())
+    else:
+        start_key = START
     cols = ["movetext", "white_elo", "black_elo", "white_score", "white_title",
             "black_title", "termination", "game_id"]
     edges: dict[tuple, list] = {}
@@ -99,7 +105,7 @@ def one_file(args):
             r = (1, 0, 0) if ws == 1.0 else (0, 1, 0) if ws == 0.5 else (0, 0, 1)
             board.reset()
             hasher.reset(board)
-            h = START
+            h = start_key
             ply = 0
             ok, more = True, False
             for san in iter_san_moves(mt or ""):
@@ -111,8 +117,12 @@ def one_file(args):
                 except ValueError:
                     ok = False
                     break
-                hasher.push_move(board, mv)
-                c = hasher.current(board)
+                if wide:
+                    board.push(mv)
+                    c = zobrist128(board)
+                else:
+                    hasher.push_move(board, mv)
+                    c = hasher.current(board)
                 k = (h, san, c, f)
                 e = edges.get(k)
                 if e is None:
@@ -136,13 +146,14 @@ def one_file(args):
                 t[1] += r[1]
                 t[2] += r[2]
                 t[3] += 1
+    pos_type = pl.Struct({"lo": pl.Int64, "hi": pl.Int64}) if wide else pl.Int64
     ps = pl.DataFrame([(p, s, c, f, w, d, b, n) for (p, s, c, f), (w, d, b, n) in edges.items()],
-                      schema={"parent_hash": pl.Int64, "move_san": pl.Utf8,
-                              "child_hash": pl.Int64, "fold": pl.Int16, "white_wins": pl.Int64,
+                      schema={"parent_hash": pos_type, "move_san": pl.Utf8,
+                              "child_hash": pos_type, "fold": pl.Int16, "white_wins": pl.Int64,
                               "draws": pl.Int64, "black_wins": pl.Int64, "total": pl.Int64},
                       orient="row")
     tm = pl.DataFrame([(p, k, 0, f, w, d, b, n) for (p, k, f), (w, d, b, n) in term.items()],
-                      schema={"position_hash": pl.Int64, "kind": pl.Int32,
+                      schema={"position_hash": pos_type, "kind": pl.Int32,
                               "reason": pl.Int32, "fold": pl.Int16, "white_wins": pl.Int64,
                               "draws": pl.Int64, "black_wins": pl.Int64, "total": pl.Int64},
                       orient="row")
@@ -161,7 +172,7 @@ def file_to_part(job) -> None:
     Path(part + ".json").write_text(json.dumps([kept, failed]), encoding="utf-8")
 
 
-def merge_parts(parts: Path, ps_out: Path, tm_out: Path, tmp_dir: str, mem: str):
+def merge_parts(parts: Path, ps_out: Path, tm_out: Path, tmp_dir: str, mem: str, wide=False):
     """Sum the month's per-file parts into its ps and term files with DuckDB (2026-10-31).
     Holding the frames in the parent and merging them with polars peaked near 95 GB for a
     64-fold movers table; DuckDB spills instead. Returns (ps rows, term rows, term total)."""
@@ -172,12 +183,13 @@ def merge_parts(parts: Path, ps_out: Path, tm_out: Path, tmp_dir: str, mem: str)
     con.execute(f"SET memory_limit='{mem}'; SET threads=8; SET preserve_insertion_order=false; "
                 f"SET temp_directory='{Path(tmp_dir).as_posix()}'")
     g = parts.as_posix()
+    key_type = "STRUCT(lo BIGINT, hi BIGINT)" if wide else "BIGINT"
     for src, dst, key, types in (
             ("ps", ps_out, "parent_hash, move_san, child_hash, fold",
-             "parent_hash::BIGINT parent_hash, move_san::VARCHAR move_san, "
-             "child_hash::BIGINT child_hash, fold::SMALLINT fold"),
+             f"parent_hash::{key_type} parent_hash, move_san::VARCHAR move_san, "
+             f"child_hash::{key_type} child_hash, fold::SMALLINT fold"),
             ("tm", tm_out, "position_hash, kind, reason, fold",
-             "position_hash::BIGINT position_hash, kind::INTEGER kind, "
+             f"position_hash::{key_type} position_hash, kind::INTEGER kind, "
              "reason::INTEGER reason, fold::SMALLINT fold")):
         tmp = dst.with_suffix(".parquet.tmp")
         con.execute(f"""COPY (SELECT {types}, SUM(white_wins)::BIGINT white_wins,
@@ -192,7 +204,8 @@ def merge_parts(parts: Path, ps_out: Path, tm_out: Path, tmp_dir: str, mem: str)
 
 def params_of(a) -> dict:
     """What a table dir is locked to (and what convertibility_eval checks across tables)."""
-    return {"folds": a.folds, "fold_rule": FOLD_RULE, "sample": a.sample,
+    return {**({"key_bits": 128} if getattr(a, "key128", False) else {}),
+            "folds": a.folds, "fold_rule": FOLD_RULE, "sample": a.sample,
             "sample_rule": SAMPLE_RULE, "months": a.months, "events": a.events,
             "our_colour": a.our_colour, "our_elo": a.our_elo, "opp_min_elo": a.opp_min_elo,
             "max_ply": a.max_ply}
@@ -204,6 +217,8 @@ def lock_params(out: Path, a) -> None:
     pf = out / "_explorer_params.json"
     if pf.exists():
         have = json.loads(pf.read_text(encoding="utf-8"))
+        if have.get("key_bits", 64) != want.get("key_bits", 64):
+            raise SystemExit(f"{out}: holdout position-key width changed; use a separate directory")
         diff = {k: (have.get(k), v) for k, v in want.items() if have.get(k) != v}
         if diff:
             raise SystemExit(f"FATAL: {out} was built with other settings: {diff}")
@@ -229,6 +244,7 @@ def main():
     ap.add_argument("--opp-min-elo", type=int, default=1800)
     ap.add_argument("--max-ply", type=int, default=30)
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--key128", action="store_true", help="Preserve full position keys in holdout move counts.")
     ap.add_argument("--sample", type=float, default=1.0, help="fraction of kept games to replay")
     ap.add_argument("--folds", type=int, default=1,
                     help="split games into F folds by blake2b(game_id) %% F and keep `fold` in the "
@@ -253,7 +269,7 @@ def main():
         parts = out / "_parts" / f"month={m}"
         parts.mkdir(parents=True, exist_ok=True)
         jobs = [((str(f), a.our_colour == "white", lo, hi, a.opp_min_elo, a.max_ply, a.sample,
-                  a.folds), str(parts / f"p{i:04d}")) for i, f in enumerate(files)]
+                  a.folds, a.key128), str(parts / f"p{i:04d}")) for i, f in enumerate(files)]
         todo = [j for j in jobs if not Path(j[1] + ".json").exists()]
         if todo:
             with Pool(a.workers) as pool:
@@ -268,7 +284,7 @@ def main():
         (out / "_term").mkdir(parents=True, exist_ok=True)
         n_ps, n_tm, term_total = merge_parts(parts, out / f"month={m}" / "bkt=0" / "part-0000.parquet",
                                              out / "_term" / f"year={y}_month={mo}.term.parquet",
-                                             a.tmp_dir, a.mem)
+                                             a.tmp_dir, a.mem, a.key128)
         assert term_total == kept - failed, "term total != kept - failed"
         done.write_text("ok\n")
         shutil.rmtree(parts)

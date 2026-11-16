@@ -112,10 +112,13 @@ class GateAdmit:
     the eval_ws the graph is built from afterwards."""
 
     def __init__(self, rep_moves, our_white: bool, slice_prior: float,
-                 gates: bool = True, max_eval_loss: float | None = None, **gate_settings):
+                 gates: bool = True, max_eval_loss: float | None = None, score_lookup=None, **gate_settings):
         from eval_arrays import MISSING, lookup_evals, open_eval_arrays
-        self._lookup, self._missing = lookup_evals, MISSING
-        self._mm = open_eval_arrays()
+        self._missing = MISSING
+        if score_lookup is None:
+            mm = open_eval_arrays()
+            score_lookup = lambda hs: lookup_evals(hs, *mm)
+        self.lookup = score_lookup
         self.rep_moves, self.our_white = rep_moves, our_white
         self.slice_prior, self.gates = slice_prior, gates
         self.max_eval_loss = max_eval_loss
@@ -130,7 +133,7 @@ class GateAdmit:
         if not len(new):
             return
         self._seen.update(new.tolist())
-        for h, c in zip(new.tolist(), self._lookup(new, *self._mm).tolist()):
+        for h, c in zip(new.tolist(), self.lookup(new).tolist()):
             if c != self._missing:
                 self.eval_ws[h] = cp_to_expected_score(int(c))
 
@@ -343,7 +346,7 @@ class SanCoder:
 def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                               eps: float, max_ply: int, share_floor: float,
                               min_games: int, admit=None, engine_moves=None, reply_overlay=None,
-                              uncut_own: bool = False) -> pl.DataFrame:
+                              uncut_own: bool = False, keys=None) -> pl.DataFrame:
     """collect_subgraph_edges with the walk and the gates in Rust (book_builder_rs.RsCollector):
     the same DuckDB scans, the same sorted rows, the same frames returned. With an opponent
     prior (reply_overlay) each level's rows are replaced as in collect_subgraph_edges, and the
@@ -389,7 +392,10 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
         frontier = col.frontier()
         if not len(frontier):
             break
-        _set_frontier(con, frontier.tolist())
+        if keys is None:
+            _set_frontier(con, frontier.tolist())
+        else:
+            keys.register(con, "frontier", frontier)
         df = duck_pl(con, f"""
             SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd,
                    s.total, s.white_wins, s.draws, s.black_wins,
@@ -398,8 +404,12 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             JOIN frontier f ON f.h = s.parent_hash
             WHERE {floor}
         """)
+        if keys is not None:
+            df = keys.encode(df.sort("parent_hash", "move_san", "child_hash", nulls_last=True),
+                             "parent_hash", "child_hash")
         if reply_overlay is not None:
             df = reply_overlay.attach(df, frontier.tolist())
+        # RsCollector binary-searches these rows by their internal parent ID.
         df = df.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
         fresh = col.begin_level()
         if df.height and len(fresh):
@@ -411,9 +421,8 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             chs = df["child_hash"].cast(pl.Int64)
             has, ch = chs.is_not_null().to_numpy(), chs.fill_null(0).to_numpy()
             if admit is not None:
-                from eval_arrays import lookup_evals
                 new = col.unseen(par, ch, has)
-                col.store(new, np.asarray(lookup_evals(new, *admit._mm), np.int16))
+                col.store(new, np.asarray(admit.lookup(new), np.int16))
             col.walk(par, ch, has, df["total"].cast(pl.Int64).to_numpy(),
                      coder.sans(df["move_san"]), coder.bares(df["move_san"]),
                      None if reply_overlay is None else
@@ -568,11 +577,15 @@ def main() -> int:
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
     a = ap.parse_args()
+    from consumer_keys import ConsumerKeys, is_wide
     # the builder runs on its Rust core (2026-11-12); budget_core.py is the tests' reference
     import budget_rs
     if not budget_rs.available():
         print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
         return 1
+    keys = ConsumerKeys.for_pool(a.stats)
+    if Path(a.weak_pool).is_file() and is_wide(a.weak_pool, "parent_hash") != bool(keys):
+        ap.error("--weak-pool and --stats must use matching position-key widths")
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
         ap.error("gate tolerances must be between 0 and 1 expected-score units")
@@ -634,7 +647,10 @@ def main() -> int:
     for dest in outs.values():
         if dest.exists() and not a.force:
             mp = Path(str(dest) + ".meta.json")
-            old = json.loads(mp.read_text()).get("uncut_own_recipe") if mp.exists() else None
+            old_meta = json.loads(mp.read_text()) if mp.exists() else {}
+            old = old_meta.get("uncut_own_recipe")
+            if old_meta.get("eval_lookup_sha256") != (keys.sha if keys else None):
+                ap.error("existing output uses a different key width or evaluation generation")
             if old != uncut_recipe:
                 ap.error("Existing output uses another move lookup; choose a fresh output prefix")
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
@@ -644,28 +660,38 @@ def main() -> int:
     outs[budgets[0]].parent.mkdir(parents=True, exist_ok=True)
 
     import chess
-    root = zobrist_int64(chess.Board())
+    root = keys.board(chess.Board()) if keys else zobrist_int64(chess.Board())
     stats = a.stats.replace("\\", "/")
     con = duckdb.connect()
     con.execute(f"SET memory_limit='{a.mem}'; SET threads={a.threads};")
 
     slice_prior = a.slice_prior
     if slice_prior is None:
+        if keys:
+            keys.register(con, "root_position", [root])
+        root_sql = "(SELECT h FROM root_position)" if keys else str(root)
         slice_prior = con.execute(f"""
             SELECT SUM(white_score_avg * total) / SUM(total)
-            FROM read_parquet('{stats}') WHERE parent_hash = {root}
+            FROM read_parquet('{stats}') WHERE parent_hash = {root_sql}
         """).fetchone()[0] or 0.5
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
         f"method {a.method}")
 
     admit = None
     if a.gated_reach:
-        from stage3_backwards_induction import load_incumbent
+        from stage3_backwards_induction import IncumbentMoves, load_incumbent
         _sl0 = (pl.scan_parquet(a.rep).select(["event", "elo_band"]).unique().collect())
-        src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0],
-                                 _sl0["elo_band"][0])
+        if keys:
+            src = keys.book_rows(a.rep, ["position_hash", "best_move"], predicate=(
+                (pl.col("side_to_move") == a.perspective) & pl.col("best_move").is_not_null() &
+                (pl.col("event") == _sl0["event"][0]) & (pl.col("elo_band") == _sl0["elo_band"][0])))
+            src_all = IncumbentMoves(src["position_hash"].to_numpy(), src["best_move"].to_list())
+            del src
+        else:
+            src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0], _sl0["elo_band"][0])
         log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
-        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss, **gate_settings)
+        admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss,
+                          score_lookup=keys.scores if keys else None, **gate_settings)
     pool_floor = _pool_min_games(stats)
     if a.min_games is None:
         a.min_games = pool_floor if pool_floor is not None else 50
@@ -686,6 +712,12 @@ def main() -> int:
         # Pin both graph passes and the output provenance to exactly one snapshot.
         proposal_input = Path(a.engine_candidates).read_bytes()
         proposal_sha = hashlib.sha256(proposal_input).hexdigest()
+        if keys:
+            from io import BytesIO
+            proposal_frame = keys.encode(pl.read_parquet(proposal_input), "position_hash", "child_hash")
+            buffer = BytesIO()
+            proposal_frame.write_parquet(buffer)
+            proposal_input = buffer.getvalue()
         fresh = {}
         excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
@@ -705,7 +737,7 @@ def main() -> int:
     if a.opponent_prior:
         from opponent_prior import ReplyOverlay
         reply_overlay = ReplyOverlay(a.opponent_prior,a.opponent_pseudogames,stats,aux_path,
-                                     a.perspective,a.min_games)
+                                     a.perspective,a.min_games, keys=keys)
     elif a.opponent_pseudogames != 0:
         ap.error("--opponent-pseudogames requires --opponent-prior")
     graph_stats = (a.uncut_own_moves / "graph.parquet").as_posix() if uncut else stats
@@ -714,7 +746,7 @@ def main() -> int:
         log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
     edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
-                                 reply_overlay, uncut_own=bool(uncut))
+                                 reply_overlay, uncut_own=bool(uncut), keys=keys)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -740,11 +772,11 @@ def main() -> int:
     src_elo_band = _sl["elo_band"][0]
     log(f"slice: event={src_event!r} elo_band={src_elo_band}")
 
-    rep = (pl.scan_parquet(a.rep)
-           .filter(pl.col("position_hash").is_in(pl.Series(want_np).implode()))
-           .select(["position_hash", "side_to_move", "value", "best_move",
-                    "value_robust", "value_worst", "eval_score"])
-           .collect())
+    columns = ["position_hash", "side_to_move", "value", "best_move",
+               "value_robust", "value_worst", "eval_score"]
+    want = pl.col("position_hash").is_in(pl.Series(want_np).implode())
+    rep = (keys.book_rows(a.rep, columns, subset=want_np) if keys else
+           pl.scan_parquet(a.rep).filter(want).select(columns).collect())
     # the source book's moves (the last qualifying row of a position wins); its rows stay in
     # `rep`, and the output reads only the visited positions' (src_rows_for)
     mv = (rep.filter((pl.col("side_to_move") == a.perspective)
@@ -762,9 +794,8 @@ def main() -> int:
 
     log("evals (mmap)...")
     from eval_arrays import MISSING, lookup_evals, open_eval_arrays
-    mm_hash, mm_cp = open_eval_arrays()
     import book_builder_rs
-    cps = lookup_evals(want_np, mm_hash, mm_cp)
+    cps = keys.scores(want_np) if keys else lookup_evals(want_np, *open_eval_arrays())
     hit = cps != MISSING
     ek = want_np[hit]
     ev = book_builder_rs.cp_to_expected_score(cps[hit].astype(np.float64))
@@ -774,9 +805,12 @@ def main() -> int:
     aux_frame = None
     if aux_path:
         bc.check_aux_term_flags(graph_aux, True)
-        aux_frame = (pl.scan_parquet(graph_aux)
-                     .filter(pl.col("position_hash").is_in(pl.Series(parents, dtype=pl.Int64).implode()))
-                     .collect())
+        wanted = pl.Series("position_hash", parents, dtype=pl.Int64)
+        if keys:
+            wanted = keys.external(wanted)
+        aux_frame = pl.scan_parquet(graph_aux).filter(pl.col("position_hash").is_in(wanted.implode())).collect()
+        if keys:
+            aux_frame = keys.encode(aux_frame, "position_hash")
         if reply_overlay is not None:
             aux_frame = reply_overlay.extend_aux(aux_frame, parents)
         log(f"  aux rows for {aux_frame['position_hash'].n_unique():,} subgraph nodes")
@@ -807,7 +841,7 @@ def main() -> int:
     t1 = time.time()
     fi = budget_rs.frame_inputs(edf, rep_moves=rep_moves, engine_moves=engine_moves,
                                 excluded=excluded, verified=verified_at, strict_source=True,
-                                aux_frame=aux_frame)
+                                aux_frame=aux_frame, keys=keys)
     del edf, aux_frame
     terminal = None
     if a.dump_stop_positions or a.sampled_stop:
@@ -837,6 +871,8 @@ def main() -> int:
     if a.dump_engine_targets:
         from engine_candidates import target_rows
         targets = target_rows(g, a.perspective)
+        if keys:
+            targets = keys.restore(targets, "position_hash")
         target_path = Path(a.dump_engine_targets)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = Path(str(target_path) + ".tmp")
@@ -861,6 +897,11 @@ def main() -> int:
             return 1
     if a.dump_other_positions:
         dump = so.other_positions_view(g)
+        if keys:
+            nested = dump["children"].to_arrow()
+            children = keys.external(pl.from_arrow(nested.values)).to_arrow()
+            dump = keys.restore(dump, "hash").with_columns(pl.from_arrow(
+                type(nested).from_arrays(nested.offsets, children, mask=nested.is_null())).alias("children"))
         tmp = Path(a.dump_other_positions + ".tmp")
         dump.write_parquet(tmp)
         tmp.replace(a.dump_other_positions)
@@ -871,7 +912,12 @@ def main() -> int:
         return 0
     incumbent = None
     if a.incumbent:
-        incumbent = load_incumbent_moves(a.incumbent, a.perspective)
+        if keys:
+            inc = keys.book_rows(a.incumbent, ["position_hash", "best_move"], predicate=(
+                (pl.col("side_to_move") == a.perspective) & pl.col("best_move").is_not_null()))
+            incumbent = {h: m.rstrip("+#") for h, m in inc.iter_rows() if m}
+        else:
+            incumbent = load_incumbent_moves(a.incumbent, a.perspective)
         g.meta["stick"] = (incumbent, a.stick_margin)
         on_graph = sum(1 for h in incumbent if h in g.our)
         log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
@@ -883,7 +929,7 @@ def main() -> int:
     # the graph, owned by Rust from here: every stage below runs on it (g keeps the meta,
     # plies and EPDs the output rows read)
     rsg, rs_sans = budget_rs.rs_graph_from_out(rs_out, rs_sans, root, crack_at_parents=True,
-                                               stick=g.meta.get("stick"))
+                                               stick=g.meta.get("stick"), positions=keys)
     del rs_out
     stop_counts = None
     sampled_fit = None
@@ -894,9 +940,9 @@ def main() -> int:
         from weak_stop import EvalSource, weak_stop_values
         xs, ys = rsg.stop_positions()
         W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white, overrides=verified_cp),
+                                    evals=EvalSource(our_white, lookup=keys.scores if keys else None, overrides=verified_cp),
                                     min_weak=a.weak_min_games,
-                                    min_share=WEAK_MIN_SHARE, log=log)
+                                    min_share=WEAK_MIN_SHARE, log=log, positions=keys)
         if a.dump_stop_positions or a.sampled_stop:
             info = ss.stop_positions_rs(rsg, g)
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
@@ -915,7 +961,7 @@ def main() -> int:
                 pl.col("hash").map_elements(lambda h: terminal.get(h), return_dtype=pl.Float64)
                 .alias("exact"))
             tmp = Path(a.dump_stop_positions + ".tmp")
-            dump.write_parquet(tmp)
+            (keys.restore(dump, "hash") if keys else dump).write_parquet(tmp)
             tmp.replace(a.dump_stop_positions)
             Path(a.dump_stop_positions + ".meta.json").write_text(json.dumps(dump_key, indent=1),
                                                                   encoding="utf-8")
@@ -945,10 +991,13 @@ def main() -> int:
             if not bp.exists():
                 log(f"FATAL: {bp} is missing: the stored evals for horizon positions")
                 return 1
-            fills = dict(pl.read_parquet(bp).select("hash", "cp").iter_rows())
-            W, R, sampled_report = ss.apply(W, R, info, pl.read_parquet(a.sampled_stop),
+            boundary, sample = pl.read_parquet(bp), pl.read_parquet(a.sampled_stop)
+            if keys:
+                boundary, sample = (keys.encode(f, "hash") for f in (boundary, sample))
+            fills = dict(boundary.select("hash", "cp").iter_rows())
+            W, R, sampled_report = ss.apply(W, R, info, sample,
                                             horizon=a.max_ply + 1, terminal=terminal,
-                                            evals=EvalSource(our_white, boundary=True, fills=fills,
+                                            evals=EvalSource(our_white, lookup=keys.scores if keys else None, boundary=True, fills=fills,
                                                              overrides=verified_cp))
             sampled_fit = {k: sampled_report.get(k) for k in
                            ("model", "cross_ply_refused", "multi_ply_reach_share", "terminal",
@@ -977,7 +1026,8 @@ def main() -> int:
             log(f"FATAL: --sampled-other {a.sampled_other} does not match this build (table, "
                 f"build): {bad}")
             return 1
-        other_report = so.apply_rs(g, rsg, pl.read_parquet(a.sampled_other))
+        sample = pl.read_parquet(a.sampled_other)
+        other_report = so.apply_rs(g, rsg, keys.encode(sample, "hash") if keys else sample)
         log(f"  sampled other buckets: {other_report}")
     g.other = {}
 
@@ -1123,7 +1173,8 @@ def main() -> int:
                    if lexc is not None else {}),
             })
         tmp = out.with_suffix(".parquet.tmp")
-        book_frame(rows).write_parquet(tmp, compression="zstd")
+        frame = book_frame(rows)
+        (keys.restore(frame, "position_hash") if keys else frame).write_parquet(tmp, compression="zstd")
         tmp.replace(out)
         meta = {
             "budget_requested": b,
@@ -1163,6 +1214,8 @@ def main() -> int:
             # means both off (the old defaults)
             "strict_source": True,
             "core": "rust",
+            **({"key_bits": 128, "eval_lookup128": str(keys.evals.root.resolve()),
+                "eval_lookup_sha256": keys.sha} if keys else {}),
             "src_rejected": g.meta.get("src_rejected", 0),
             **({"loss_exceptions_booked": {
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))
@@ -1170,7 +1223,8 @@ def main() -> int:
             "crack_at_parents": True,
             **({"engine_candidates": a.engine_candidates, "engine_candidates_sha256": proposal_sha,
                 "engine_cands_added": g.meta.get("engine_cands", 0),
-                "engine_eval_conflicts": engine_conflicts}
+                "engine_eval_conflicts": (keys.records(engine_conflicts, ["position_hash", "child_hash"])
+                                          if keys else engine_conflicts)}
                if a.engine_candidates else {}),
             "crack_edges": g.meta.get("crack_edges", 0),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
@@ -1203,10 +1257,14 @@ def main() -> int:
         if rare_floor is not None:
             # every decision where an unverified rare move would have excluded a rival had it
             # bound, with the graph's optimistic reach: the verifier's work list
-            Path(str(out) + ".rare.json").write_text(json.dumps(
-                [{"position_hash": h, "reach": g.reach.get(h, 0.0), "ply": g.ply.get(h),
+            disputes = [{"position_hash": h, "reach": g.reach.get(h, 0.0), "ply": g.ply.get(h),
                   "booked": res["booked"].get(h), **d}
-                 for h, d in sorted(g.meta.get("rare_disputes", {}).items())]))
+                        for h, d in sorted(g.meta.get("rare_disputes", {}).items())]
+            if keys and disputes:
+                hashes = keys.external(pl.Series("position_hash", [r["position_hash"] for r in disputes]))
+                for row, pair in zip(disputes, hashes.to_list()):
+                    row["position_hash"] = pair
+            Path(str(out) + ".rare.json").write_text(json.dumps(disputes))
         rvr, rvc = res["root_value_realized"], meta["root_value_curve"]
         log(f"b={b}: booked {res['spent_distinct']:,} distinct "
             f"({res['spent_paths']:,} path-charged), root value "

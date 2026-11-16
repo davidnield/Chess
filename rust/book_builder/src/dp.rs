@@ -9,7 +9,7 @@
 
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
-use crate::core::{fcmp, key_order, Core, MinFK, NONE};
+use crate::core::{fcmp, Core, MinFK, NONE};
 use crate::reach::{Key, OrderedMap};
 
 #[derive(Clone, Debug)]
@@ -241,7 +241,7 @@ pub fn build_curves(g: &Core, bmax: i64, k_atoms: usize) -> (Vec<Curve>, i64) {
     let mut remaining: Vec<bool> = curves.iter().map(|c| c.is_none()).collect();
     let mut n_rem = remaining.iter().filter(|&&r| r).count();
     let mut heap: BinaryHeap<MinFK> = (0..n as u32).filter(|&h| remaining[h as usize])
-        .map(|h| MinFK(g.node_reach[h as usize], key_order(g.keys[h as usize]), h)).collect();
+        .map(|h| MinFK(g.node_reach[h as usize], g.sorted_key(g.keys[h as usize]), h)).collect();
     let mut flattened = 0i64;
     while n_rem > 0 {
         let mut victim = NONE;

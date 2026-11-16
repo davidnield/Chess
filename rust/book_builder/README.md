@@ -34,10 +34,30 @@ with signed `lo` and `hi` fields. The same names in legacy pools are signed int6
 `python/_test_pool128.py` plants collisions, runs all four pool acceptance gates and
 checks both uncut outputs. `cargo test --test full_keys` exercises full-key move selection
 and its realized value in the native optimizer, starting with a constructed graph.
-The production collector, Python/Rust graph bindings, weak-player model and rollout
-referee still take low-half keys. Before running a replacement 2,000-position book,
-connect the full-key pool to those consumers and replay the twins through one continuous
-build and scoring run. A cap-30 comparison on identical inputs follows that test.
+The budget builder detects the full-key pool and loads its pinned eval lookup. Supply
+a full-key weak pool and matching aux and uncut files. The Rust collector and solver
+use reversible per-run IDs internally. Books, engine targets and referee caches store
+both halves. A legacy source or comparison book needs a stored EPD for each imported
+position so its low half can be verified and its high half recovered.
+
+Build held-out mover tables with `side_explorer.py --key128`. The referee reads the
+lookup named in the wide book's metadata, or a common `--eval-lookup128` when comparing
+generations. Supply full-key `--our-moves` and `--opp-moves` for that comparison.
+Wide rollouts derive the random stream from both halves of the starting position.
+Score comparison books together in one key mode to pair their random streams.
+
+`python/_test_full_key_book.py` builds a two-decision Black book from a planted collision,
+scores it by enumeration and native rollouts to ply 30, changes one high half, and
+checks that only that branch loses its booked move. It also compares 64-bit and 128-bit
+scoring on identical deterministic continuations. Production-scale parity and the
+2,000-position pilot require the verified explorer, lookup, pools, and holdout tables.
+For a bounded check on local games, run `python/_test_full_key_real_slice.py <source.parquet>`.
+It compares move and termination counts, then builds Black books with the same cap-30
+sample and the same measured engine scores in both key formats.
+
+The independent engine-proposal and rare-move verification tools still read scalar
+hashes at this revision. Exercise their cache, resume and promotion paths with full
+keys before starting a production pilot that relies on them.
 
 ### Numerical agreement
 

@@ -18,12 +18,13 @@ pub struct RsRollouts {
 impl RsRollouts {
     /// starts as columns (cp: MISSING = None); book: our moves by position (SAN)
     #[new]
+    #[pyo3(signature = (h, epd, pr, ply, cp, ws, f, our_white, k_games, max_ply, seed, recall, book_keys, book_sans, want_exits, want_weak, position_ids=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(h: PyReadonlyArray1<i64>, epd: Vec<String>, pr: PyReadonlyArray1<f64>,
            ply: PyReadonlyArray1<i64>, cp: PyReadonlyArray1<i64>, ws: PyReadonlyArray1<f64>,
            f: PyReadonlyArray1<f64>, our_white: bool, k_games: usize, max_ply: i64, seed: i64,
            recall: f64, book_keys: Vec<i64>, book_sans: Vec<String>, want_exits: bool,
-           want_weak: bool)
+           want_weak: bool, position_ids: Option<PyRef<'_, crate::position_ids::RsPositionIds>>)
            -> PyResult<Self> {
         let (h, pr, ply, cp, ws, f) = (h.as_slice()?, pr.as_slice()?, ply.as_slice()?,
                                        cp.as_slice()?, ws.as_slice()?, f.as_slice()?);
@@ -34,7 +35,7 @@ impl RsRollouts {
         }).collect();
         let book: HashMap<i64, String> = book_keys.into_iter().zip(book_sans).collect();
         let r = Rollouts::new(&starts, our_white, k_games, max_ply, seed, recall, book, want_exits,
-                              want_weak)
+                              want_weak, position_ids.map(|keys| keys.inner.clone()))
             .map_err(PyValueError::new_err)?;
         Ok(RsRollouts { r })
     }

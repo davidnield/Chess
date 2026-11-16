@@ -15,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 
 use shakmaty::fen::{Epd, Fen};
 use shakmaty::san::SanPlus;
-use shakmaty::zobrist::Zobrist64;
+use shakmaty::zobrist::{Zobrist128, Zobrist64};
+use crate::position_ids::{PositionIds, SharedIds};
 use shakmaty::{CastlingMode, Chess, Color, EnPassantMode, KnownOutcome, Position};
 
 pub const MISSING: i64 = -32768;
@@ -37,12 +38,22 @@ pub fn hash(pos: &Chess) -> i64 {
     z.0 as i64
 }
 
-pub fn epd(pos: &Chess) -> String {
-    Epd::from_position(pos, EnPassantMode::Legal).to_string()
+fn position_id(pos: &Chess, keys: Option<&mut PositionIds>) -> i64 {
+    match keys {
+        None => hash(pos),
+        Some(ids) => {
+            let z: Zobrist128 = pos.zobrist_hash(EnPassantMode::PseudoLegal);
+            ids.intern(z.0 as i64, (z.0 >> 64) as i64)
+        }
+    }
+}
+
+fn epd(pos: &Chess, mode: EnPassantMode) -> String {
+    Epd::from_position(pos, mode).to_string()
 }
 
 pub fn from_epd(epd: &str) -> Result<Chess, String> {
-    let fen: Fen = format!("{epd} 0 1").parse().map_err(|e| format!("{epd}: {e}"))?;
+    let fen: Fen = epd.parse().map_err(|e| format!("{epd}: {e}"))?;
     fen.into_position(CastlingMode::Standard).map_err(|e| format!("{epd}: {e}"))
 }
 
@@ -83,6 +94,8 @@ pub struct Leaf {
 }
 
 pub struct Rollouts {
+    ids: Option<SharedIds>,
+    ep_mode: EnPassantMode,
     our_white: bool,
     max_ply: i64,
     seed: i64,
@@ -116,13 +129,28 @@ pub struct Start<'a> {
 impl Rollouts {
     #[allow(clippy::too_many_arguments)]
     pub fn new(starts: &[Start], our_white: bool, k_games: usize, max_ply: i64, seed: i64,
-               recall: f64, book: HashMap<i64, String>, want_exits: bool, want_weak: bool)
+               recall: f64, book: HashMap<i64, String>, want_exits: bool, want_weak: bool,
+               ids: Option<SharedIds>)
                -> Result<Rollouts, String> {
         let kf = k_games as f64;
+        let mut key_map = ids.as_ref().map(|x| x.lock().unwrap());
+        let mut start_h = Vec::with_capacity(starts.len());
+        for s in starts {
+            let stream = match &key_map {
+                Some(m) => {
+                    let (lo, hi) = m.pair(s.h).ok_or("unknown rollout start ID")?;
+                    lo ^ hi.rotate_left(23)
+                }
+                None => s.h,
+            };
+            start_h.push(stream);
+        }
         let mut r = Rollouts {
+            ids: ids.clone(),
+            ep_mode: if ids.is_some() { EnPassantMode::PseudoLegal } else { EnPassantMode::Legal },
             our_white, max_ply, seed, recall, book, want_exits, want_weak, games: Vec::new(),
             weak: Vec::new(),
-            start_h: starts.iter().map(|s| s.h).collect(),
+            start_h,
             start_ply: starts.iter().map(|s| s.ply).collect(),
             leaves: Vec::new(), book_mass: 0.0, exits: Vec::new(), dists: HashMap::new(),
         };
@@ -138,9 +166,10 @@ impl Rollouts {
                 }
                 continue;
             }
+            let initial = position_id(&b0, key_map.as_deref_mut());
             for k in 0..k_games {
                 r.games.push(Game { pos: b0.clone(), h: s.h, w: s.pr / kf, ply: s.ply, cp: s.cp,
-                                    wk: s.ws / kf, si, k: k as i64, f: s.f, seen: vec![hash(&b0)],
+                                    wk: s.ws / kf, si, k: k as i64, f: s.f, seen: vec![initial],
                                     remembered: false });
             }
         }
@@ -182,7 +211,7 @@ impl Rollouts {
             }
             let h = g.h;
             if !rem && !self.dists.contains_key(&(h, us)) && seen.insert((h, us)) {
-                let e = epd(&g.pos);
+                let e = epd(&g.pos, self.ep_mode);
                 if us { out.0.push((h, e)) } else { out.1.push((h, e)) }
             }
             self.games[i].remembered = rem;
@@ -196,6 +225,8 @@ impl Rollouts {
 
     /// One ply of every game
     pub fn advance(&mut self) {
+        let ids = self.ids.clone();
+        let mut key_map = ids.as_ref().map(|x| x.lock().unwrap());
         let games = std::mem::take(&mut self.games);
         let mut nxt = Vec::with_capacity(games.len());
         for mut g in games {
@@ -205,7 +236,7 @@ impl Rollouts {
                 san = self.book[&g.h].clone();
             } else {
                 if us && self.want_exits && g.f > 0.0 {
-                    self.exits.push((g.h, g.ply, g.w * g.f, epd(&g.pos)));
+                    self.exits.push((g.h, g.ply, g.w * g.f, epd(&g.pos, self.ep_mode)));
                 }
                 if us {
                     g.f = 0.0;
@@ -240,12 +271,12 @@ impl Rollouts {
             if g.remembered {
                 self.book_mass += g.w;
             }
-            let before = if self.want_weak && us && !g.remembered { Some((g.h, epd(&g.pos))) } else { None };
+            let before = if self.want_weak && us && !g.remembered { Some((g.h, epd(&g.pos, self.ep_mode))) } else { None };
             g.pos.play_unchecked(mv);
             g.ply += 1;
-            g.h = hash(&g.pos);
+            g.h = position_id(&g.pos, key_map.as_deref_mut());
             if let Some((h0, e0)) = before {
-                self.weak.push((g.si, g.k, h0, e0, g.h, epd(&g.pos)));
+                self.weak.push((g.si, g.k, h0, e0, g.h, epd(&g.pos, self.ep_mode)));
             }
             g.seen.push(g.h);
             let rep5 = g.seen.iter().filter(|&&x| x == g.h).count() >= 5;
@@ -265,7 +296,7 @@ impl Rollouts {
     }
 
     fn leaf(&mut self, g: &Game, us: bool, exact: f64, pos: &Chess) {
-        self.leaves.push(Leaf { w: g.w, h: g.h, cp: g.cp, us, exact, epd: epd(pos), ply: g.ply,
+        self.leaves.push(Leaf { w: g.w, h: g.h, cp: g.cp, us, exact, epd: epd(pos, self.ep_mode), ply: g.ply,
                                 wk: g.wk, si: g.si, k: g.k });
     }
 }

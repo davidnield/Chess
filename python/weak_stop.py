@@ -53,11 +53,14 @@ def uniform_score(cp_us):
 EVAL_CLIP = 1000          # fit_eval_curve.CLIP: the fitted curves' cp domain
 
 
-def _edges(con, path: str, keys: np.ndarray, name: str) -> pl.DataFrame:
+def _edges(con, path: str, keys: np.ndarray, name: str, positions=None) -> pl.DataFrame:
     """(parent, child, n) for every recorded move out of `keys`, summed over rows."""
     if not len(keys):
         return pl.DataFrame(schema={"parent": pl.Int64, "child": pl.Int64, "n": pl.Float64})
-    con.register(name, pa.table({"h": pa.array(np.unique(keys), pa.int64())}))
+    if positions is None:
+        con.register(name, pa.table({"h": pa.array(np.unique(keys), pa.int64())}))
+    else:
+        positions.register(con, name, np.unique(keys))
     df = duck_pl(con, f"""
         SELECT s.parent_hash AS parent, s.child_hash AS child,
                SUM(s.total)::DOUBLE AS n
@@ -68,7 +71,8 @@ def _edges(con, path: str, keys: np.ndarray, name: str) -> pl.DataFrame:
     con.unregister(name)
     # a fixed row order: the per-parent float sums below run in it (DuckDB's join
     # order varies run to run, and with it their last bits)
-    return df.sort("parent", "child")
+    df = df.sort("parent", "child")
+    return positions.encode(df, "parent", "child") if positions is not None else df
 
 
 def _shares(df: pl.DataFrame, min_share: float) -> pl.DataFrame:
@@ -118,7 +122,7 @@ class EvalSource:
 
 def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
                      evals: EvalSource, min_weak: float = 20.0,
-                     min_share: float = 0.01, log=print
+                     min_share: float = 0.01, log=print, positions=None
                      ) -> tuple[dict[int, float], dict[int, float], Counter]:
     """W for our-turn positions `x_hashes`, R for opponent-turn `y_hashes`.
     Returns (W, R, counts)."""
@@ -126,26 +130,26 @@ def weak_stop_values(con, x_hashes, y_hashes, *, pool: str, weak_pool: str,
     pool, weak_pool = pool.replace("\\", "/"), weak_pool.replace("\\", "/")
     y = np.unique(np.asarray(list(y_hashes), dtype=np.int64))
     # R(y) needs W at y's replies, so those join the x set first
-    py = _shares(_edges(con, pool, y, "_ky"), min_share)
+    py = _shares(_edges(con, pool, y, "_ky", positions), min_share)
     x = np.unique(np.concatenate([np.asarray(list(x_hashes), dtype=np.int64),
                                   py["child"].to_numpy() if py.height else
                                   np.empty(0, np.int64)]))
     log(f"  weak stop: {len(x):,} our-turn and {len(y):,} opponent-turn positions")
 
     # our moves: the weak pool where it has >= min_weak games, else the main pool
-    qw = _edges(con, weak_pool, x, "_kxw")
+    qw = _edges(con, weak_pool, x, "_kxw", positions)
     wt = qw.group_by("parent").agg(pl.col("n").sum().alias("tot"))
     ok = set(wt.filter(pl.col("tot") >= min_weak)["parent"].to_list())
     counts["x_weak"] = len(ok)
     fb = np.array([h for h in x.tolist() if h not in ok], dtype=np.int64)
     counts["x_fallback_pool"] = len(fb)
     q = pl.concat([qw.filter(pl.col("parent").is_in(list(ok))),
-                   _edges(con, pool, fb, "_kxp")])
+                   _edges(con, pool, fb, "_kxp", positions)])
     q = _shares(q, min_share)
 
     # their replies after each of our moves, then the engine
     m = q["child"].unique().to_numpy() if q.height else np.empty(0, np.int64)
-    pr = _shares(_edges(con, pool, m, "_km"), min_share)
+    pr = _shares(_edges(con, pool, m, "_km", positions), min_share)
     if pr.height:
         pr = pr.with_columns(pl.Series("e", evals(pr["child"].to_numpy())))
         r1 = (pr.filter(pl.col("e").is_not_nan())

@@ -9,6 +9,7 @@ pub mod dp;
 pub mod gates;
 pub mod graph;
 pub mod polish;
+mod position_ids;
 pub mod price;
 mod py_collect;
 mod py_core;
@@ -305,6 +306,7 @@ fn reach_batch<'py>(
 
 #[pymodule]
 fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<position_ids::RsPositionIds>()?;
     m.add_function(wrap_pyfunction!(cp_to_expected_score, m)?)?;
     m.add_function(wrap_pyfunction!(ws_to_cp, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_edge_values, m)?)?;

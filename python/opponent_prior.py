@@ -8,7 +8,7 @@ import polars as pl
 
 
 class ReplyOverlay:
-    def __init__(self, path, weight, pool, aux_path, colour, floor):
+    def __init__(self, path, weight, pool, aux_path, colour, floor, keys=None):
         path = Path(path)
         meta = json.loads(Path(str(path)+".json").read_text())
         with path.open("rb") as fp:
@@ -20,6 +20,8 @@ class ReplyOverlay:
             raise ValueError("Opponent prior does not match these pool, perspective, or weight settings")
         self.recipe = {"file":str(path.resolve()), "sha256":sha, "K":weight, "scope":meta["scope"]}
         self.rows = pl.read_parquet(path)
+        if keys:
+            self.rows = keys.encode(self.rows, "parent_hash", "child_hash")
         mass = pl.col("reply_observed") + weight*pl.col("maia_p")
         if meta["schema"] == 2 and weight:
             # The prior predicts which move is played conditional on a move.
@@ -36,7 +38,10 @@ class ReplyOverlay:
             with extra.open("rb") as fp:
                 if hashlib.file_digest(fp, "sha256").hexdigest() != meta["extra_aux_sha256"]:
                     raise ValueError("Expanded reply termination data changed")
-            self.extra_aux = {r["position_hash"]: r for r in pl.read_parquet(extra).to_dicts()}
+            frame = pl.read_parquet(extra)
+            if keys:
+                frame = keys.encode(frame, "position_hash")
+            self.extra_aux = {r["position_hash"]: r for r in frame.to_dicts()}
 
     def extend_aux(self, aux_frame, parents):
         """The aux sidecar's rows plus the expanded parents' real termination mass (the

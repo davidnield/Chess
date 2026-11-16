@@ -2,7 +2,7 @@
 //!
 //! Built from the CSR dict build_graph_csr returns (or budget_rs.graph_to_csr makes from any
 //! budget_core.Graph), plus c_bare (bare SAN codes) and Python's set order. Keys come and go
-//! as int64 (the low half; 128-bit keys arrive with phase 5).
+//! as int64 handles; position_ids restores full-key ordering for colliding low halves.
 
 use std::collections::HashMap;
 
@@ -62,8 +62,9 @@ impl RsGraph {
     /// k_has_child, k_in_sub, k_lv, f_ptr, f_p, f_child, f_lv, reach_keys, reach_vals);
     /// set_order: list(set(g.our) | set(g.opp)).
     #[new]
+    #[pyo3(signature=(csr, set_order, root, crack_at_parents, position_ids=None))]
     fn new(csr: &Bound<'_, PyDict>, set_order: PyReadonlyArray1<i64>, root: i64,
-           crack_at_parents: bool) -> PyResult<Self> {
+           crack_at_parents: bool, position_ids: Option<PyRef<'_, crate::position_ids::RsPositionIds>>) -> PyResult<Self> {
         let nk: Vec<i64> = get(csr, "node_keys")?;
         let no: Vec<bool> = get(csr, "node_our")?;
         crate::same_len(nk.len(), &[no.len()])?;
@@ -115,6 +116,7 @@ impl RsGraph {
             .ok_or_else(|| PyValueError::new_err("set_order holds a key that is not a node")))
             .collect::<PyResult<Vec<u32>>>()?;
         let mut core = Core {
+            sort_aliases: position_ids.map(|p| p.inner.lock().unwrap().ordering_exceptions()).unwrap_or_default(),
             keys, n_our, id, root: key(root), l_node,
             crack: cc.into_iter().zip(cm).map(|(a, b)| if b.is_nan() { None } else { Some((a, b)) }).collect(),
             c_ptr, c_san, c_bare, c_key, c_in, c_lv, c_node: Vec::new(),

@@ -100,9 +100,12 @@ class MaiaCache:
 
     FLUSH_EVERY = 500_000
 
-    def __init__(self, path, ident: dict):
+    def __init__(self, path, ident: dict, positions=None):
         import numpy as np
         self.np = np
+        self.positions = positions
+        if positions is not None:
+            ident = {**ident, "key_bits": 128}
         self.dir = Path(path)
         self.dir.mkdir(parents=True, exist_ok=True)
         ip = self.dir / "identity.json"
@@ -122,7 +125,7 @@ class MaiaCache:
             local = [str(x) for x in z["sans"]]
             remap = np.array([sans.setdefault(m, len(sans)) for m in local] or [0], np.int64)
             off = sum(len(x) for x in codes)
-            hs.append(z["h"])
+            hs.append(positions.native.encode(z["h"], z["hi"]) if positions else z["h"])
             se.append(z["se"])
             oe.append(z["oe"])
             ptr = z["ptr"]
@@ -180,7 +183,9 @@ class MaiaCache:
         import os
         name = f"part-{time.strftime('%Y%m%d%H%M%S')}-{os.getpid()}-{len(list(self.dir.glob('part-*.npz')))}"
         tmp = self.dir / f"{name}.tmp.npz"
-        np.savez(tmp, h=np.array([x[0] for x in self.new], np.int64),
+        ids = np.array([x[0] for x in self.new], np.int64)
+        halves = self.positions.halves(ids) if self.positions else None
+        np.savez(tmp, h=halves[0] if halves else ids, **({"hi": halves[1]} if halves else {}),
                  se=np.array([x[1] for x in self.new], np.int16),
                  oe=np.array([x[2] for x in self.new], np.int16),
                  ptr=np.array(ptr, np.int64), code=np.array(code, np.int32),
@@ -195,13 +200,13 @@ class Maia:
     retries, so one GPU hiccup no longer ends a multi-hour run. cache: a MaiaCache directory
     (default None: answers are kept for this run only)."""
 
-    def __init__(self, cache: str | None = None):
+    def __init__(self, cache: str | None = None, positions=None):
         self.cache: dict[tuple, dict] = {}
         self.store = None
         if cache:
             ident = {k: v for k, v in identity().items()
                      if k in ("maia_server", "maia_batch", "maia_python", "maia_models")}
-            self.store = MaiaCache(cache, ident)
+            self.store = MaiaCache(cache, ident, positions)
         self.p = None
         if self.store is None:
             self.start()           # with a cache, the server starts on the first real request
@@ -244,14 +249,14 @@ class Maia:
         raise RuntimeError("maia server failed 4 times")
 
     def probs(self, epds, self_elo, oppo_elo, keys):
-        todo = [(k, e) for k, e in zip(keys, epds) if (k, self_elo) not in self.cache]
+        todo = [(k, e) for k, e in zip(keys, epds) if (k, self_elo, oppo_elo) not in self.cache]
         if self.store is not None and todo:
             rest = []
             for (k, e), d in zip(todo, self.store.get([k for k, _e in todo], self_elo, oppo_elo)):
                 if d is None:
                     rest.append((k, e))
                 else:
-                    self.cache[(k, self_elo)] = d
+                    self.cache[(k, self_elo, oppo_elo)] = d
             todo = rest
         for s in range(0, len(todo), 20000):
             part = todo[s:s + 20000]
@@ -259,10 +264,10 @@ class Maia:
                                        "self": [self_elo] * len(part),
                                        "oppo": [oppo_elo] * len(part)}) + "\n")
             for (k, _e), d in zip(part, out):
-                self.cache[(k, self_elo)] = d
+                self.cache[(k, self_elo, oppo_elo)] = d
                 if self.store is not None:
                     self.store.put(k, self_elo, oppo_elo, d)
-        return [self.cache[(k, self_elo)] for k in keys]
+        return [self.cache[(k, self_elo, oppo_elo)] for k in keys]
 
 
 FOLD_PARAMS = "_explorer_params.json"
@@ -302,7 +307,7 @@ class Counts:
     """Move counts by position from explorer month dirs, fetched a frontier at a time."""
 
     def __init__(self, con, roots, name, seed: int = 1, use_folds: int | None = None,
-                 weights: str = "normalized", fold_half: int | None = None):
+                 weights: str = "normalized", fold_half: int | None = None, positions=None):
         """roots: one explorer dir, or several comma-separated (their counts are summed).
         use_folds G: bootstrap over G folds, fold % G (G must divide the tables' F; folds
         nest when F is a power of two). Default F.
@@ -317,9 +322,41 @@ class Counts:
         self.fcache: dict[int, dict] = {}
         # move_index.py's index of every root, if all are current (else the DuckDB query)
         from move_index import MoveIndex
-        idx = [MoveIndex.open(r, fold_half) for r in roots.split(",")]
-        self.index = idx if all(x is not None for x in idx) else None
+        self.positions = positions
         params = [table_params(r) for r in roots.split(",")]
+        if positions is None and any((p or {}).get("key_bits") == 128 for p in params):
+            raise ValueError("full-key holdouts require a wide book or an explicit --eval-lookup128")
+        idx = [] if positions else [MoveIndex.open(r, fold_half) for r in roots.split(",")]
+        self.index = idx if idx and all(x is not None for x in idx) else None
+        self.source = f"read_parquet({self.glob})"
+        if positions:
+            from consumer_keys import PAIR
+            sources = []
+            for root, glob in zip(roots.split(","), globs):
+                files = sorted(Path(root).glob("month=*/bkt=*/*.parquet"))
+                if not files:
+                    raise ValueError(f"no holdout move files in {root}")
+                # Every file contributes to the score. A legacy shard in a
+                # wide generation must never be silently assigned a high half.
+                layouts = set()
+                for file in files:
+                    schema = pl.read_parquet_schema(file)
+                    if schema["parent_hash"] == PAIR:
+                        key_expr = "parent_hash"
+                    elif schema["parent_hash"] == pl.Int64 and schema.get("parent_hash_hi") == pl.Int64:
+                        key_expr = "struct_pack(lo := parent_hash, hi := parent_hash_hi)"
+                    else:
+                        raise ValueError(f"{file}: scoring full-key books requires full-key holdout counts")
+                    layouts.add((key_expr, "fold" in schema))
+                if len(layouts) != 1:
+                    raise ValueError(f"inconsistent key schema in {root}")
+                raw = "read_parquet('" + glob.replace("'", "''") + "')"
+                key_expr, has_fold = layouts.pop()
+                if not has_fold and (table_params(root) or {}).get("folds", 0) > 1:
+                    raise ValueError(f"{root}: declared game folds are missing from the holdout")
+                sources.append(f"SELECT {key_expr} AS parent_hash, move_san, total, "
+                               + ("fold" if has_fold else "0 AS fold") + f" FROM {raw}")
+            self.source = "(" + " UNION ALL ".join(sources) + ")"
         self.contract = None
         if all(p is not None for p in params):
             cs = {tuple(p.get(k) for k in CONTRACT_KEYS) for p in params}
@@ -359,11 +396,13 @@ class Counts:
             raise SystemExit(f"{self.roots}: no bootstrap: {why}")
         need = [h for h in set(hashes) if h not in self.fcache]
         if need:
-            self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
+            self._register_need(need)
             df = duck_pl(self.con, f"""SELECT parent_hash, move_san, fold % {self.folds} f,
-                SUM(total)::DOUBLE n FROM read_parquet({self.glob})
+                SUM(total)::DOUBLE n FROM {self.source}
                 WHERE parent_hash IN (SELECT h FROM need){self._half} GROUP BY 1, 2, 3""")
             self.con.unregister("need")
+            if self.positions:
+                df = self.positions.encode(df, "parent_hash")
             for h in need:
                 self.fcache[h] = {}
             for h, m, f, n in df.iter_rows():
@@ -387,6 +426,12 @@ class Counts:
             out.append(d)
         return out
 
+    def _register_need(self, need):
+        if self.positions:
+            self.positions.register(self.con, "need", need)
+        else:
+            self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
+
     def get(self, hashes, rep: int = 0):
         if rep:
             return self._rep(hashes, rep)
@@ -408,11 +453,13 @@ class Counts:
                         d[k] = d.get(k, 0.0) + float(n)
             need = []
         if need:
-            self.con.register("need", pl.DataFrame({"h": need}, schema={"h": pl.Int64}).to_arrow())
+            self._register_need(need)
             df = duck_pl(self.con, f"""SELECT parent_hash, move_san, SUM(total)::DOUBLE n
-                FROM read_parquet({self.glob}) WHERE parent_hash IN (SELECT h FROM need){self._half}
+                FROM {self.source} WHERE parent_hash IN (SELECT h FROM need){self._half}
                 GROUP BY 1, 2""")
             self.con.unregister("need")
+            if self.positions:
+                df = self.positions.encode(df, "parent_hash")
             for h in need:
                 self.cache[h] = {}
             for h, m, n in df.iter_rows():
@@ -468,12 +515,15 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
     position's in-book share separately, so paths that merge there are split correctly)."""
     recall = getattr(a, "recall", 1.0)
     start = chess.Board()
+    positions = getattr(a, "position_keys", None)
+    board_key = positions.board if positions else zobrist_int64
+    ep_mode = "xfen" if positions else "legal"
     # With imperfect recall, "first exit" means the first unaided decision,
     # including a forgotten move at a covered position.
     # frontier: hash -> [epd, prob, last known cp (white view) or None, weak-move sum]
     # (weak-move sum = sum over the paths merged here of prob x our out-of-book moves)
     # (ib = the part of prob whose paths have not yet left the book: exits are counted on it)
-    frontier = {zobrist_int64(start): [start.epd(), 1.0, None, 0.0, 1.0]}
+    frontier = {board_key(start): [start.epd(en_passant=ep_mode), 1.0, None, 0.0, 1.0]}
     leaves, starts = [], []
     book_mass = 0.0
     nodes = 0
@@ -521,7 +571,7 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
                 if recall > 0:
                     book_mass += pr * recall
                     b.push(mv)
-                    put(nxt, zobrist_int64(b), b.epd(), pr * recall, cp, ws * recall, ib * recall)
+                    put(nxt, board_key(b), b.epd(en_passant=ep_mode), pr * recall, cp, ws * recall, ib * recall)
                 if recall == 1:
                     continue
                 # Forgetting draws from the same human policy as playing out of book.
@@ -546,7 +596,7 @@ def enumerate_book(book, our_white, rep, a, our_counts, opp_counts, maia, lookup
                 b = chess.Board(epd + " 0 1")
                 for san, p in dist.items():
                     b.push(b.parse_san(san))
-                    put(nxt, zobrist_int64(b), b.epd(), pr * p, cp,
+                    put(nxt, board_key(b), b.epd(en_passant=ep_mode), pr * p, cp,
                         p * (ws + (pr if weak else 0.0)), 0.0 if weak else ib * p)
                     b.pop()
         frontier = nxt
@@ -571,6 +621,13 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
     differences stay paired (common random numbers). exits: as enumerate_book's, from the
     sampled games (each game's first our-turn position out of book)."""
     K = a.rollouts
+    positions = getattr(a, "position_keys", None)
+    board_key = positions.board if positions else zobrist_int64
+    ep_mode = "xfen" if positions else "legal"
+    seed_keys = [s[0] for s in starts]
+    if positions:
+        lo, hi = (arr.view(np.uint64) for arr in positions.halves(seed_keys))
+        seed_keys = (lo ^ ((hi << 23) | (hi >> 41))).view(np.int64).tolist()
     recall = getattr(a, "recall", 1.0)
     # one state per sampled game: [board, hash, weight, ply, cp, weak, start_id, k, in-book
     # share f]: a game from a start whose paths are partly in book carries that share, and its
@@ -604,7 +661,7 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
             b = r[0]
             us = (b.turn == chess.WHITE) == our_white
             if us and r[1] in book and (recall == 1 or u01(
-                    seed, starts[r[6]][0], starts[r[6]][3], r[7], r[3], 0x524543) < recall):
+                    seed, seed_keys[r[6]], starts[r[6]][3], r[7], r[3], 0x524543) < recall):
                 remembered.add((r[6], r[7]))
                 continue
             (ours if us else theirs).add(r[1])
@@ -618,7 +675,7 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
             want, epd_of = set(need), {}
             for r in R:
                 if r[1] in want and r[1] not in epd_of:
-                    epd_of[r[1]] = r[0].epd()
+                    epd_of[r[1]] = r[0].epd(en_passant=ep_mode)
             cs = cnt.get(need, rep)
             ms = maia.probs([epd_of[h] for h in need], se, oe, need)
             for h, c, m in zip(need, cs, ms):
@@ -632,19 +689,19 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
                 try:
                     mv = b.parse_san(book[h])
                 except ValueError:
-                    leaves.append((w, h, cp, us, None, b.epd(), ply, wk, si, k))
+                    leaves.append((w, h, cp, us, None, b.epd(en_passant=ep_mode), ply, wk, si, k))
                     continue
                 book_mass += w
             else:
                 if us and exits is not None and f > 0.0:
-                    exits.setdefault((h, ply), [0.0, b.epd()])[0] += w * f
+                    exits.setdefault((h, ply), [0.0, b.epd(en_passant=ep_mode)])[0] += w * f
                 if us:
                     f = 0.0
                 d = dists[(h, "o" if us else "t")]
                 if not d:
-                    leaves.append((w, h, cp, us, None, b.epd(), ply, wk, si, k))
+                    leaves.append((w, h, cp, us, None, b.epd(en_passant=ep_mode), ply, wk, si, k))
                     continue
-                u, acc, san = u01(seed, starts[si][0], starts[si][3], k, ply), 0.0, d[-1][0]
+                u, acc, san = u01(seed, seed_keys[si], starts[si][3], k, ply), 0.0, d[-1][0]
                 for s, p in d:
                     acc += p
                     if u < acc:
@@ -653,18 +710,18 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
                 mv = b.parse_san(san)
                 if us:
                     wk += w
-            before = b.epd() if weak_edges is not None and us and not use_book else None
+            before = b.epd(en_passant=ep_mode) if weak_edges is not None and us and not use_book else None
             b.push(mv)
             ply += 1
-            h2 = zobrist_int64(b)
+            h2 = board_key(b)
             if before is not None:
-                weak_edges.append((si, k, h, before, h2, b.epd()))
+                weak_edges.append((si, k, h, before, h2, b.epd(en_passant=ep_mode)))
             if b.is_game_over(claim_draw=False):
                 leaves.append((w, h2, cp, (b.turn == chess.WHITE) == our_white,
-                               _outcome(b, our_white), b.epd(), ply, wk, si, k))
+                               _outcome(b, our_white), b.epd(en_passant=ep_mode), ply, wk, si, k))
             elif ply >= a.max_ply:
                 leaves.append((w, h2, cp, (b.turn == chess.WHITE) == our_white, None,
-                               b.epd(), ply, wk, si, k))
+                               b.epd(en_passant=ep_mode), ply, wk, si, k))
             else:
                 nxt.append([b, h2, w, ply, cp, wk, si, k, f])
         R = nxt
@@ -690,7 +747,8 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
         np.array([MISSING if s[4] is None else int(s[4]) for s in starts], i64),
         np.array([s[5] for s in starts], f64), np.array([s[6] for s in starts], f64),
         bool(our_white), int(a.rollouts), int(a.max_ply), int(seed), float(getattr(a, "recall", 1.0)),
-        list(book.keys()), list(book.values()), exits is not None, weak_edges is not None)
+        list(book.keys()), list(book.values()), exits is not None, weak_edges is not None,
+        **({"position_ids": a.position_keys.native} if getattr(a, "position_keys", None) else {}))
     while st.alive():
         st.set_cp(np.asarray(lookup(st.hashes()), dtype=i64))
         oh, oe, th, te = st.needed()
@@ -830,6 +888,8 @@ def config_key(a, books, tables, engine: str | None = None) -> str:
                                         "opp_elo", "stockfish_depth", "our_moves", "opp_moves",
                                         "use_folds", "fold_weights", "boot_seed")}
     opts["recall"] = getattr(a, "recall", 1.0)
+    if getattr(a, "position_keys", None):
+        opts["eval_lookup_sha256"] = a.position_keys.sha
     if getattr(a, "fold_half", None) is not None:      # absent = every fold: older keys stand
         opts["fold_half"] = a.fold_half
     bks = []
@@ -839,7 +899,13 @@ def config_key(a, books, tables, engine: str | None = None) -> str:
         bks.append([label, colour, str(path), st.st_size, st.st_mtime_ns])
     tbs = {r: {"params": c.params, "files": [table_manifest(x) for x in r.split(",")]}
            for r, c in tables.items()}
-    blob = json.dumps({"opts": opts, "books": bks, "tables": tbs, "code": identity(),
+    code = identity()
+    if getattr(a, "position_keys", None):
+        import book_builder_rs
+        code.pop("eval_arrays", None)
+        code.update(key_adapter=_sha(Path(__file__).with_name("consumer_keys.py")),
+                    native=_sha(book_builder_rs.__file__))
+    blob = json.dumps({"opts": opts, "books": bks, "tables": tbs, "code": code,
                        "engine": [SF_PATH, engine]}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
@@ -850,26 +916,42 @@ class StockfishFill:
     The cache's sidecar <cache>.meta.json records the engine that filled it; a different
     engine refuses the cache (its numbers would not be this engine's)."""
 
-    def __init__(self, cache: str | None, depth: int, procs: int = 4):
+    def __init__(self, cache: str | None, depth: int, procs: int = 4, positions=None):
         import chess.engine
         self.depth, self.path = depth, Path(cache) if cache else None
+        self.positions = positions
         self.engines = []
-        for _ in range(max(1, procs)):
-            e = chess.engine.SimpleEngine.popen_uci(SF_PATH)
-            e.configure({"Threads": 2, "Hash": 128})
-            self.engines.append(e)
-        self.engine = self.engines[0].id.get("name", "stockfish")
+        try:
+            for _ in range(max(1, procs)):
+                e = chess.engine.SimpleEngine.popen_uci(SF_PATH)
+                self.engines.append(e)
+                e.configure({"Threads": 2, "Hash": 128})
+            self.engine = self.engines[0].id.get("name", "stockfish")
+            self._load_cache()
+        except BaseException:
+            self.close()
+            raise
+
+    def _load_cache(self):
+        depth, positions = self.depth, self.positions
         self.cache: dict[int, int] = {}
         if self.path is not None:
             mp = Path(str(self.path) + ".meta.json")
             if mp.exists():
-                have = json.loads(mp.read_text(encoding="utf-8")).get("engine")
+                meta = json.loads(mp.read_text(encoding="utf-8"))
+                if meta.get("key_bits", 64) != (128 if positions else 64):
+                    raise ValueError(f"{self.path}: Stockfish cache has a different position-key width")
+                have = meta.get("engine")
                 if have != self.engine:
                     raise SystemExit(f"FATAL: {self.path} was filled by {have}, not {self.engine}")
             elif self.path.exists():      # filled before 2026-10-31 by the engine in use since
+                if positions:
+                    raise ValueError(f"{self.path}: full-key Stockfish cache needs full-key metadata")
                 mp.write_text(json.dumps({"engine": self.engine, "assumed": True}), encoding="utf-8")
             if self.path.exists():
                 c = pl.read_parquet(self.path).filter(pl.col("depth") == depth)
+                if positions:
+                    c = positions.encode(c, "hash")
                 self.cache = dict(zip(c["hash"].to_list(), c["cp"].to_list()))
                 print(f"stockfish cache: {len(self.cache):,} positions at depth {depth}", flush=True)
         self._n0 = len(self.cache)
@@ -880,6 +962,8 @@ class StockfishFill:
         new = pl.DataFrame({"hash": list(self.cache), "cp": list(self.cache.values())},
                            schema={"hash": pl.Int64, "cp": pl.Int32}).with_columns(
             pl.lit(self.depth, pl.Int32).alias("depth"))
+        if self.positions:
+            new = self.positions.restore(new, "hash")
         if self.path.exists():
             old = pl.read_parquet(self.path).filter(pl.col("depth") != self.depth)
             new = pl.concat([old, new.select(old.columns)])
@@ -887,7 +971,8 @@ class StockfishFill:
         tmp = self.path.with_suffix(".tmp")
         new.write_parquet(tmp)
         tmp.replace(self.path)
-        Path(str(self.path) + ".meta.json").write_text(json.dumps({"engine": self.engine}),
+        Path(str(self.path) + ".meta.json").write_text(json.dumps({"engine": self.engine,
+                                                                  "key_bits": 128 if self.positions else 64}),
                                                          encoding="utf-8")
         self._n0 = len(self.cache)
 
@@ -919,6 +1004,7 @@ SF_PATH = "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--book", action="append", required=True, metavar="LABEL=COLOUR=PATH")
+    ap.add_argument("--eval-lookup128", help="Full-key eval generation; wide books default to their build generation.")
     ap.add_argument("--tau", type=float, default=1e-4,
                     help="branches under this probability are continued by sampling (--rollouts) "
                          "instead of being enumerated")
@@ -984,10 +1070,25 @@ def main():
         raise SystemExit(f"FATAL: no such book: {missing}")
     con = duckdb.connect()
     con.execute("SET threads=8; SET memory_limit='16GB'")
-    mm = open_eval_arrays()
-
-    def lookup(hs):
-        return lookup_evals(hs, *mm)
+    from consumer_keys import ConsumerKeys, is_wide
+    wide_books = [path for spec in a.book if is_wide(path := spec.split("=", 2)[2], "position_hash")]
+    expected = None
+    if wide_books and not a.eval_lookup128:
+        metas = [json.loads(Path(p + ".meta.json").read_text(encoding="utf8")) for p in wide_books]
+        gens = {(m["eval_lookup128"], m["eval_lookup_sha256"]) for m in metas}
+        if len(gens) != 1:
+            ap.error("select a common --eval-lookup128 for books from different generations")
+        a.eval_lookup128, expected = gens.pop()
+    a.position_keys = positions = ConsumerKeys(a.eval_lookup128, expected_sha=expected) if a.eval_lookup128 else None
+    if positions:
+        lookup = positions.scores
+        if a.maia_cache == MAIA_CACHE:
+            a.maia_cache += "-128"
+        if a.sf_cache == "E:/chess/calibration/convertibility_sf_cache.parquet":
+            a.sf_cache = "E:/chess/calibration/convertibility_sf_cache128.parquet"
+    else:
+        mm = open_eval_arrays()
+        lookup = lambda hs: lookup_evals(hs, *mm)
 
     tables: dict[str, Counts] = {}    # one cache per explorer dir set, shared across books
     for spec in a.book:
@@ -996,7 +1097,7 @@ def main():
                       (a.opp_moves.format(colour="black" if colour == "white" else "white"), "opp")):
             if r not in tables:
                 tables[r] = Counts(con, r, nm, a.boot_seed, a.use_folds, a.fold_weights,
-                                   a.fold_half)
+                                   a.fold_half, **({"positions": positions} if positions else {}))
     if a.replicates:
         # every problem up front, not after hours of replicate 0 (follow-up review R2a)
         bad = {r: c.bootstrap_problem() for r, c in tables.items() if c.bootstrap_problem()}
@@ -1007,11 +1108,13 @@ def main():
         if len(cs) != 1:
             raise SystemExit(f"FATAL: the tables disagree on the fold contract: {sorted(cs)} -- a "
                              f"game must carry one weight in every table")
-    maia = Maia(cache=a.maia_cache) if a.maia_cache else Maia()
+    maia_args = {"cache": a.maia_cache} if a.maia_cache else {}
+    maia = Maia(**maia_args, **({"positions": positions} if positions else {}))
     sf = None
     try:
-      sf = StockfishFill(a.sf_cache, a.stockfish_depth, a.sf_procs)
-      cfg = config_key(a, a.book, tables, sf.engine)
+      if a.stockfish_depth > 0:
+          sf = StockfishFill(a.sf_cache, a.stockfish_depth, a.sf_procs, **({"positions": positions} if positions else {}))
+      cfg = config_key(a, a.book, tables, sf.engine if sf else None)
       cv = {r["cell"]: (r["a"], r["k"]) for r in pl.read_parquet(CURVES).iter_rows(named=True)}
       curves = (cv["stm1000-1799_vs_opp1800+"], cv["stm1800+_vs_opp1000-1799"])
       rows = []
@@ -1058,7 +1161,9 @@ def main():
             our_white = colour == "white"
             our_counts = tables[a.our_moves.format(colour=colour)]
             opp_counts = tables[a.opp_moves.format(colour="black" if our_white else "white")]
-            bd = pl.read_parquet(path, columns=["position_hash", "side_to_move", "best_move"])
+            cols = ["position_hash", "side_to_move", "best_move"]
+            bd = (positions.book_rows(path, cols, predicate=(pl.col("side_to_move") == colour) &
+                                      pl.col("best_move").is_not_null()) if positions else pl.read_parquet(path, columns=cols))
             book = {h: m for h, s, m in bd.iter_rows() if s == colour and m}
             exact_exits = {} if a.exits_out and rep == 0 else None
             ex_leaves, starts, ex_book, nodes = enumerate_book(
@@ -1090,6 +1195,8 @@ def main():
                         "hash": v["hs"], "epd": [l[5] for l in leaves],
                         "stockfish": v["missing_sf"]})
                     lp = leaf_part(label, seed)
+                    if positions:
+                        lf = positions.restore(lf, "hash", "start_hash")
                     lf.write_parquet(lp.with_suffix(".tmp"))
                     lp.with_suffix(".tmp").replace(lp)
                 if exits is not None:
@@ -1099,6 +1206,8 @@ def main():
                         orient="row").with_columns(pl.lit(label).alias("book"), pl.lit(seed).alias("seed"),
                             pl.lit(colour).alias("colour"), pl.lit(cfg).alias("config"))
                     dest = exit_part(label, seed)
+                    if positions:
+                        frame = positions.restore(frame, "hash")
                     tmp = dest.with_suffix(".tmp")
                     frame.write_parquet(tmp, metadata={"exit_job": json.dumps([label, colour, seed, cfg])})
                     tmp.replace(dest)

@@ -61,6 +61,7 @@ pub fn our_blend(value: f64, cont: f64, crack: f64) -> f64 {
 
 #[derive(Default, Clone)]
 pub struct Core {
+    pub sort_aliases: HashMap<i64, (i64, i64)>,
     pub keys: Vec<Key>,
     pub n_our: usize,
     pub id: HashMap<Key, u32>,
@@ -98,6 +99,10 @@ pub struct Core {
 }
 
 impl Core {
+    pub fn sorted_key(&self, k: Key) -> (i64, i64) {
+        if self.sort_aliases.is_empty() { return key_order(k); }
+        self.sort_aliases.get(&pk(k)).copied().unwrap_or_else(|| key_order(k))
+    }
     pub fn n(&self) -> usize {
         self.keys.len()
     }
@@ -309,7 +314,7 @@ impl Core {
         by_reach.sort_by(|&a, &b| {
             let (ia, ib) = (nodes[a], nodes[b]);
             fcmp(self.node_reach[ia as usize], self.node_reach[ib as usize])
-                .then_with(|| key_order(self.keys[ia as usize]).cmp(&key_order(self.keys[ib as usize])))
+                .then_with(|| self.sorted_key(self.keys[ia as usize]).cmp(&self.sorted_key(self.keys[ib as usize])))
         });
         let mut k = 0usize;
         while done.len() < scc.len() {
@@ -353,7 +358,7 @@ impl Core {
         let mut placed = vec![false; n];
         let mut remaining = n;
         let mut heap: BinaryHeap<MinFK> = self.set_order.iter()
-            .map(|&h| MinFK(-self.node_reach[h as usize], key_order(self.keys[h as usize]), h)).collect();
+            .map(|&h| MinFK(-self.node_reach[h as usize], self.sorted_key(self.keys[h as usize]), h)).collect();
         loop {
             while let Some(h) = q.pop_front() {
                 if placed[h as usize] {
@@ -406,8 +411,8 @@ impl Core {
         xs.extend(self.f_key.iter().copied());
         let mut x: Vec<Key> = xs.into_iter().collect();
         let mut y: Vec<Key> = ys.into_iter().collect();
-        x.sort_by_key(|&k| key_order(k));
-        y.sort_by_key(|&k| key_order(k));
+        x.sort_by_key(|&k| self.sorted_key(k));
+        y.sort_by_key(|&k| self.sorted_key(k));
         (x, y)
     }
 
