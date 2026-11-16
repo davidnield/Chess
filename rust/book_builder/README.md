@@ -55,9 +55,21 @@ For a bounded check on local games, run `python/_test_full_key_real_slice.py <so
 It compares move and termination counts, then builds Black books with the same cap-30
 sample and the same measured engine scores in both key formats.
 
-The independent engine-proposal and rare-move verification tools still read scalar
-hashes at this revision. Exercise their cache, resume and promotion paths with full
-keys before starting a production pilot that relies on them.
+`engine_candidates.py` reads the key width from the target Parquet. It saves each
+completed search and replays cached parent/move/child triples before resuming.
+`rare_verify.py` reads the eval generation pinned by the book and looks up the full
+parent and child keys in its move menu. Its base and deep caches each keep wide
+records in a `key128` subdirectory. An existing scalar-key search is reusable when
+the search settings match and its saved board matches the requested full position.
+The output overlay, including any carried-forward deep verdict, retains both halves.
+
+Run `python/_test_full_key_verification.py --stockfish-smoke` with the configured
+Stockfish binary. Two historical Lichess positions share the same low hash, and
+`...h6` also gives their children the same low hash. The test exercises interrupted
+proposals, base and deep searches, reuse across runs, and rejection of swapped cache
+evidence. A separate two-prescription Black build tests rebuilding to closure and
+resuming from round receipts. The real-engine check uses 5,000 and 20,000 nodes
+to exercise the code paths; pilot search budgets are configured separately.
 
 ### Numerical agreement
 

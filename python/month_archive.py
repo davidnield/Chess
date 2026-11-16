@@ -1,10 +1,12 @@
 """Validation and publication receipts for the month extraction launcher."""
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
 import shutil
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -30,20 +32,32 @@ def sha(path):
         return hashlib.file_digest(f, "sha256").hexdigest()
 
 
-@contextmanager
 def root_lock(root):
-    root.mkdir(parents=True, exist_ok=True)
-    with (root / "_launcher.lock").open("a+b") as f:
+    return file_lock(root / "_launcher.lock")
+
+
+@contextmanager
+def file_lock(path, *, wait=False):
+    """An OS-owned lock; interrupted processes release it when the file closes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+b") as f:
         if f.tell() == 0:
             f.write(b"0")
             f.flush()
         f.seek(0)
         if os.name == "nt":
             import msvcrt
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            while True:
+                try:
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if not wait or exc.errno not in (errno.EACCES, errno.EAGAIN):
+                        raise
+                    time.sleep(0.1)
         else:
             import fcntl
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_EX if wait else fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
 
 

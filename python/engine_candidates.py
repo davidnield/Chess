@@ -32,7 +32,8 @@ import chess.engine
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from zobrist import zobrist_int64  # noqa: E402
+from consumer_keys import PAIR, checked_board, full_column, stored_key
+from month_archive import file_lock, sha
 
 SF = "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe"
 SCHEMA = {"position_hash": pl.Int64, "position_epd": pl.Utf8, "move_san": pl.Utf8,
@@ -56,6 +57,26 @@ def target_rows(graph, colour):
         ["reach", "position_hash"], descending=[True, False])
 
 
+def check_edges(frame, wide):
+    """Verify the persisted parent and child against the engine's board and move."""
+    if wide:
+        frame = frame.with_columns(full_column(frame, key) for key in ("position_hash", "child_hash"))
+    for parent, epd, san, child in frame.select(
+            "position_hash", "position_epd", "move_san", "child_hash").iter_rows():
+        if parent is None:
+            raise ValueError("proposal lacks its parent position")
+        board = checked_board(epd, parent)
+        board.push_san(san)
+        if stored_key(board, wide) != child:
+            raise ValueError(f"proposal child hash disagrees with {epd} {san}")
+
+
+def publish(frame, dest):
+    tmp = Path(str(dest) + ".tmp")
+    frame.write_parquet(tmp)
+    tmp.replace(dest)
+
+
 def main():
     ap = argparse.ArgumentParser()
     inputs = ap.add_mutually_exclusive_group(required=True)
@@ -69,49 +90,83 @@ def main():
     a = ap.parse_args()
     if a.nodes < 1 or a.threads < 1 or (a.limit is not None and a.limit < 1):
         ap.error("nodes, threads and limit must be positive")
+    out = Path(a.out)
+    with file_lock(Path(str(out) + ".lock"), wait=True):
+        generate(a, out)
+
+
+def generate(a, out):
+    snapshot = Path(a.targets or a.rows).read_bytes()
+    rows = pl.read_parquet(snapshot)
+    wide = rows.schema["position_hash"] == PAIR or "position_hash_hi" in rows.columns
+    if wide:
+        rows = rows.with_columns(full_column(rows, "position_hash")).drop("position_hash_hi", strict=False)
+    elif rows.schema["position_hash"] != pl.Int64:
+        raise ValueError("invalid target position-key type")
     if a.targets:
-        rows = pl.read_parquet(a.targets)
         if rows.filter(pl.col("colour") != a.colour).height:
-            ap.error("target colour differs from --colour")
+            raise ValueError("target colour differs from --colour")
         rows = rows.sort(["reach", "position_hash"], descending=[True, False])
     else:
-        rows = pl.read_parquet(a.rows).filter(
+        rows = rows.filter(
             pl.col("legal") & ~pl.col("extension")
             & (pl.col("status").is_in(["fallback", "unknown"]) | pl.col("flagged")))
     if a.limit is not None:
         rows = rows.head(a.limit)
-    out = Path(a.out)
+    if rows["position_hash"].null_count():
+        raise ValueError("target has no position key")
+    if rows.select("position_hash", "epd").unique()["position_hash"].is_duplicated().any():
+        raise ValueError("one target key names different boards")
     out.parent.mkdir(parents=True, exist_ok=True)
     meta = Path(str(out) + ".meta.json")
-    contract = {"input_sha256": hashlib.sha256(Path(a.targets or a.rows).read_bytes()).hexdigest(),
+    pending = Path(str(out) + ".partial.parquet")
+    contract = {"input_sha256": hashlib.sha256(snapshot).hexdigest(),
                 "nodes": a.nodes, "colour": a.colour, "threads": a.threads, "limit": a.limit,
-                "engine_sha256": hashlib.sha256(Path(SF).read_bytes()).hexdigest()}
+                "engine_sha256": sha(Path(SF))}
+    if wide:
+        contract["key_bits"] = 128
     if ((meta.exists() and json.loads(meta.read_text()) != contract)
-            or (out.exists() and not meta.exists())):
+            or ((out.exists() or pending.exists()) and not meta.exists())):
         raise SystemExit(f"Use a fresh output for this search configuration: {out}")
     temp_meta = Path(str(meta) + ".tmp")
     temp_meta.write_text(json.dumps(contract))
     temp_meta.replace(meta)
-    have = pl.read_parquet(out) if out.exists() else pl.DataFrame(schema=SCHEMA)
-    done = set(have["position_hash"].to_list())
-    todo = rows.filter(~pl.col("position_hash").is_in(list(done)))
-    print(f"{rows.height:,} positions to propose for, {len(done):,} cached, {todo.height:,} to search",
+    schema = SCHEMA | ({"position_hash": PAIR, "child_hash": PAIR} if wide else {})
+    have = pl.read_parquet(out) if out.exists() else pl.DataFrame(schema=schema)
+    if have.schema != schema:
+        raise ValueError(f"{out}: proposal cache has the wrong schema")
+    if pending.exists():
+        # A crash after publishing the batch may leave identical rows in both files.
+        tail = pl.read_parquet(pending)
+        if tail.schema != schema:
+            raise ValueError(f"{pending}: proposal checkpoint has the wrong schema")
+        have = pl.concat([have, tail]).unique(maintain_order=True)
+    if have.height:
+        check_edges(have, wide)
+        targets = rows.select("position_hash", pl.col("epd").alias("position_epd"))
+        if (have["position_hash"].n_unique() != have.height or
+                have.join(targets, on=["position_hash", "position_epd"], how="anti").height):
+            raise ValueError(f"{out}: duplicate or unrequested cached position")
+    if pending.exists():
+        publish(have, out)
+        pending.unlink()
+    todo = rows.unique("position_hash", maintain_order=True).join(have, on="position_hash", how="anti",
+                                                                 maintain_order="left")
+    print(f"{rows.height:,} positions to propose for, {have.height:,} cached, {todo.height:,} to search",
           flush=True)
     if not todo.height:
         if not out.exists():
-            tmp = out.with_suffix(".parquet.tmp")
-            have.write_parquet(tmp)
-            tmp.replace(out)
+            publish(have, out)
         return
     eng = chess.engine.SimpleEngine.popen_uci(SF)
-    eng.configure({"Threads": a.threads, "Hash": 2048})
-    name = eng.id.get("name", "stockfish")
     new = []
     try:
+        eng.configure({"Threads": a.threads, "Hash": 2048})
+        name = eng.id.get("name", "stockfish")
         for i, r in enumerate(todo.iter_rows(named=True)):
-            b = chess.Board(r["epd"] + " 0 1")
-            if b.turn != (a.colour == "white") or zobrist_int64(b) != r["position_hash"]:
-                raise ValueError("target EPD, hash or side to move disagree")
+            b = checked_board(r["epd"], r["position_hash"])
+            if b.turn != (a.colour == "white"):
+                raise ValueError("target side to move disagrees")
             eng.configure({"Clear Hash": None})
             info = eng.analyse(b, chess.engine.Limit(nodes=a.nodes))
             mv = info["pv"][0]
@@ -119,18 +174,20 @@ def main():
             b.push(mv)
             reason = r["status"] if r["status"] in ("fallback", "unknown", "empty") else "flagged"
             new.append({"position_hash": r["position_hash"], "position_epd": r["epd"],
-                        "move_san": san, "child_hash": zobrist_int64(b),
+                        "move_san": san, "child_hash": stored_key(b, wide),
                         "child_cp_white": info["score"].white().score(mate_score=2000),
                         "nodes": info.get("nodes", a.nodes), "depth": info.get("depth"),
                         "engine": name, "searched": dt.date.today().isoformat(),
                         "reason": reason})
-            if len(new) % 25 == 0 or i == todo.height - 1:
-                df = pl.concat([have, pl.DataFrame(new, schema=SCHEMA)])
-                tmp = out.with_suffix(".parquet.tmp")
-                out.parent.mkdir(parents=True, exist_ok=True)
-                df.write_parquet(tmp)
-                tmp.replace(out)
+            batch = pl.DataFrame(new, schema=schema)
+            if len(new) == 25 or i == todo.height - 1:
+                have = pl.concat([have, batch])
+                publish(have, out)
+                pending.unlink(missing_ok=True)
+                new.clear()
                 print(f"  {i + 1:,}/{todo.height:,}", flush=True)
+            else:
+                publish(batch, pending)
     finally:
         eng.quit()
     # a proposal equal to the book's own move adds nothing; keep it anyway (cache), but say so

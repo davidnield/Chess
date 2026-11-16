@@ -9,6 +9,7 @@ import polars as pl
 
 from eval_lookup128 import WideEvalLookup
 from zobrist128 import zobrist128
+from zobrist import zobrist_int64
 
 PAIR = pl.Struct({"lo": pl.Int64, "hi": pl.Int64})
 
@@ -16,6 +17,53 @@ PAIR = pl.Struct({"lo": pl.Int64, "hi": pl.Int64})
 def is_wide(path, column):
     schema = pl.read_parquet_schema(path)
     return schema[column] == PAIR or column + "_hi" in schema
+
+
+def stored_key(board, wide):
+    if not wide:
+        return zobrist_int64(board)
+    lo, hi = zobrist128(board)
+    return {"lo": lo, "hi": hi}
+
+
+def checked_board(epd, expected):
+    """Recover the search board, including a pinned EP target omitted by older EPD writers."""
+    wide = isinstance(expected, dict)
+    board = chess.Board(epd)
+    board.halfmove_clock, board.fullmove_number = 0, 1
+    if board.is_valid() and stored_key(board, wide) == expected:
+        return board
+    if board.is_valid() and board.ep_square is None:
+        candidates = board.pieces(chess.PAWN, not board.turn)
+        rank = 5 if board.turn else 2
+        for file in range(8):
+            pawn = chess.square(file, 4 if board.turn else 3)
+            if pawn not in candidates:
+                continue
+            board.ep_square = chess.square(file, rank)
+            if (board.is_valid() and board.has_pseudo_legal_en_passant()
+                    and not board.has_legal_en_passant() and stored_key(board, wide) == expected):
+                return board
+    raise ValueError(f"Position and hash disagree at {expected}: {epd}")
+
+
+def full_column(frame, name):
+    """Normalize the struct and split-column storage layouts, rejecting incomplete pairs."""
+    if frame.schema[name] == PAIR:
+        series = frame[name]
+        if name + "_hi" in frame.columns and not series.struct.field("hi").equals(frame[name + "_hi"]):
+            raise ValueError(f"conflicting Zobrist high halves in {name}")
+    elif frame.schema[name] == pl.Int64 and frame.schema.get(name + "_hi") == pl.Int64:
+        high = frame[name + "_hi"]
+        if not frame[name].is_null().equals(high.is_null()):
+            raise ValueError(f"incomplete Zobrist halves in {name}")
+        series = frame.select(pl.when(pl.col(name).is_not_null()).then(
+            pl.struct(lo=pl.col(name), hi=pl.col(name + "_hi"))).alias(name)).to_series()
+    else:
+        raise ValueError(f"{name} requires both signed Zobrist halves")
+    if any(series.struct.field(k).null_count() != series.null_count() for k in ("lo", "hi")):
+        raise ValueError(f"incomplete Zobrist halves in {name}")
+    return series
 
 
 class ConsumerKeys:
@@ -68,21 +116,12 @@ class ConsumerKeys:
         """Convert full external keys at one boundary, including nullable children."""
         for name in columns:
             companion = name + "_hi"
-            if frame.schema[name] == PAIR:
-                series = frame[name]
-            elif frame.schema[name] == pl.Int64 and frame.schema.get(companion) == pl.Int64:
-                if not frame[name].is_null().equals(frame[companion].is_null()):
-                    raise ValueError(f"incomplete Zobrist halves in {name}")
-                series = frame.select(pl.when(pl.col(name).is_not_null()).then(
-                    pl.struct(lo=pl.col(name), hi=pl.col(companion))).alias(name)).to_series()
+            series = full_column(frame, name)
+            if companion in frame.columns:
                 frame = frame.drop(companion)
-            else:
-                raise ValueError(f"{name} requires both signed Zobrist halves")
             valid = series.is_not_null()
             pair = series.drop_nulls()
             lo, hi = (pair.struct.field(k) for k in ("lo", "hi"))
-            if lo.null_count() or hi.null_count():
-                raise ValueError(f"incomplete Zobrist halves in {name}")
             ids = self.native.encode(np.ascontiguousarray(lo, np.int64), np.ascontiguousarray(hi, np.int64))
             if pair.len() == series.len():
                 encoded = pl.Series(name, ids)

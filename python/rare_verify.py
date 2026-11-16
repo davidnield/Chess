@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -69,9 +70,10 @@ import budget_core as bc
 import cloud_feedback as fb
 import engine_candidates as ec
 from book_graph import edges_at
+from consumer_keys import ConsumerKeys, checked_board, is_wide
 from eval_arrays import MISSING, lookup_evals, open_eval_arrays
 from hybrid_candidates import sha, write_frame, write_json
-from zobrist import zobrist_int64
+from month_archive import file_lock
 
 THREATS = 3
 BAND = 10            # cp either side of the limit that a deeper search must settle
@@ -81,7 +83,7 @@ def bare(san: str) -> str:
     return san.rstrip("+#")
 
 
-def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, frontier=0):
+def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, frontier=0, keys=None):
     """{parent hash: (reason, epd, moves to order)}; moves are bare SANs of observed moves.
     cps: White-view stored or overridden cp by position hash."""
     floor = meta["rare_floor"]
@@ -92,9 +94,11 @@ def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, f
               ours.select("position_hash", "position_epd", "best_move").iter_rows()}
     src = {}
     if meta.get("source_rep"):
-        s = (pl.scan_parquet(meta["source_rep"]).filter(
-            pl.col("position_hash").is_in(list(booked)) & (pl.col("side_to_move") == colour))
-            .select("position_hash", "best_move").collect())
+        cols = ["position_hash", "best_move"]
+        side = pl.col("side_to_move") == colour
+        s = (keys.book_rows(meta["source_rep"], cols, predicate=side, subset=list(booked)) if keys else
+             pl.scan_parquet(meta["source_rep"]).filter(
+                 pl.col("position_hash").is_in(list(booked)) & side).select(cols).collect())
         src = {h: bare(m) for h, m in s.iter_rows() if m}
     dis = {d["position_hash"]: d for d in disputes}
 
@@ -138,7 +142,7 @@ def plan(book, meta, frame, colour, cps, edges, disputes, frontier_reach=None, f
     if frontier and frontier_reach is not None:
         extra = [d for d in disputes if d["position_hash"] not in booked and d["at_risk"]
                  and d["reach"] >= frontier_reach and d.get("epd")]
-        for d in sorted(extra, key=lambda d: (-d["reach"], d["position_hash"]))[:frontier]:
+        for d in sorted(extra, key=lambda d: (-d["reach"], d.get("_order", d["position_hash"])))[:frontier]:
             h = d["position_hash"]
             want = {bare(m) for m, _ in sorted(d["threats"], key=lambda t: -t[1])[:THREATS]}
             want |= {bare(m) for m in d["at_risk"]}
@@ -154,17 +158,26 @@ class Searches:
     """Per-parent cache of an unrestricted search and restricted searches, one node budget."""
 
     def __init__(self, cache: Path, nodes: int, threads: int, hash_mb: int = 1024,
-                 free: bool = True):
+                 free: bool = True, wide: bool = False):
         """free=False: restricted searches only (the deeper retry tier, its own directory)."""
-        self.dir, self.nodes, self.free = cache, nodes, free
-        cache.mkdir(parents=True, exist_ok=True)
+        self.nodes, self.free, self.wide = nodes, free, wide
+        self.dir = cache / "key128" if wide else cache
         self.contract = {"engine": sha(ec.SF), "nodes": nodes, "threads": threads,
                          "hash_mb": hash_mb, "mate_cp": 2000,
                          "kind": "rare_verify-1" if free else "rare_verify-deep-1"}
-        cfg = cache / "config.json"
-        if cfg.exists() and json.loads(cfg.read_text()) != self.contract:
-            raise ValueError("Rare-move search cache was made with other settings")
-        write_json(self.contract, cfg)
+        self.legacy = None
+        if wide:
+            legacy_cfg = cache / "config.json"
+            if legacy_cfg.is_file() and json.loads(legacy_cfg.read_text()) == self.contract:
+                self.legacy = cache
+            self.contract["key_bits"] = 128
+        cfg = self.dir / "config.json"
+        with file_lock(self.dir / ".locks" / "config", wait=True):
+            if cfg.exists():
+                if json.loads(cfg.read_text()) != self.contract:
+                    raise ValueError("Rare-move search cache was made with other settings")
+            else:
+                write_json(self.contract, cfg)
         self.engine = None
         self.stats = {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0,
                       "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}
@@ -181,21 +194,44 @@ class Searches:
         self.stats["nodes"] += r["nodes"]
         return r
 
-    def get(self, h: int, epd: str, moves, count: bool = True) -> dict:
+    def get(self, h, epd: str, moves, count: bool = True) -> dict:
         """count=False: a repeat call for the same parent in the same pass; its cache hits are
         not counted, so the cost report shows real reuse only."""
-        file = self.dir / f"{h}.json"
+        if self.wide != isinstance(h, dict):
+            raise ValueError("wrong position-key width for this search cache")
+        board = checked_board(epd, h)
+        lo = h["lo"] if self.wide else h
+        name = f"{lo}_{h['hi']}" if self.wide else str(lo)
+        file = self.dir / f"{name}.json"
+        with file_lock(self.dir / ".locks" / str(lo % 64), wait=True):
+            return self._get(file, h, board, moves, count)
+
+    def _get(self, file, h, board, moves, count):
         saved = json.loads(file.read_text()) if file.exists() else None
-        board = chess.Board(epd + " 0 1")
-        if zobrist_int64(board) != h or not board.is_valid():
-            raise ValueError(f"Position and hash disagree at {h}")
-        if saved and saved["epd"] != epd:
+        epd = board.epd(en_passant="xfen")
+        if saved and self.wide and saved.get("position_hash") != h:
+            raise ValueError(f"Cached search key disagrees at {h}")
+        if saved and checked_board(saved["epd"], h).epd(en_passant="xfen") != epd:
             raise ValueError(f"Cached search belongs to another position at {h}")
+        if saved is None and self.legacy:
+            old = self.legacy / f"{h['lo']}.json"
+            if old.is_file():
+                candidate = json.loads(old.read_text())
+                # Prove the full board before importing a legacy cache hit. The
+                # other member of a genuine Polyglot collision has the same filename.
+                old_board = checked_board(candidate["epd"], h["lo"])
+                if old_board.epd(en_passant="xfen") == epd:
+                    saved = {**candidate, "epd": epd, "position_hash": h}
+                    write_json(saved, file)
+                    self.stats["legacy_parents_reused"] = self.stats.get("legacy_parents_reused", 0) + 1
         if saved is None:
             first = self._one(board) if self.free else None
             saved = {"epd": epd, "free": first, "moves": {},
                      "engine": self.name if first else None,
                      "date": datetime.date.today().isoformat()}
+            if self.wide:
+                saved["position_hash"] = h
+            write_json(saved, file)
             self.stats["parents_searched"] += 1
         elif count:
             self.stats["parent_cache_hits"] += 1
@@ -203,7 +239,6 @@ class Searches:
         todo = set(moves)
         if saved["free"]:
             todo.add(bare(saved["free"]["san"]))      # a comparable score for the engine's choice
-        changed = False
         for m in sorted(todo):
             if m in saved["moves"]:
                 self.stats["restricted_cache_hits"] += count
@@ -213,8 +248,6 @@ class Searches:
             saved["moves"][m] = self._one(board, legal[m])
             saved["engine"] = saved["engine"] or self.name
             self.stats["restricted_searched"] += 1
-            changed = True
-        if changed or not file.exists():
             write_json(saved, file)
         return saved
 
@@ -295,37 +328,63 @@ def rows_for(h, saved, menu, limit, nodes, engine_sha, reason, deep=None, deep_n
 
 def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=None, frontier=0,
         deep_nodes=20_000_000, band=BAND):
+    with file_lock(Path(str(out) + ".lock"), wait=True):
+        return _verify(Path(book), colour, cache, Path(out), nodes, threads, frontier_reach,
+                       frontier, deep_nodes, band)
+
+
+def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, deep_nodes, band):
     t0 = time.monotonic()
-    book, out = Path(book), Path(out)
     meta = json.loads(Path(str(book) + ".meta.json").read_text())
     if meta.get("rare_floor") is None:
         raise ValueError("The book was not built with --rare-verification")
+    if meta.get("perspective", colour) != colour:
+        raise ValueError("Book perspective differs from verification colour")
+    wide = is_wide(book, "position_hash")
+    if meta.get("key_bits", 64) != (128 if wide else 64):
+        raise ValueError("Book and verification metadata disagree on position-key width")
+    keys = ConsumerKeys(meta["eval_lookup128"], expected_sha=meta["eval_lookup_sha256"]) if wide else None
     prior = meta.get("engine_candidates")
-    if prior and sha(prior) != meta["engine_candidates_sha256"]:
-        raise ValueError("The book's proposal overlay changed after the build")
-    frame = (fb.normalize(pl.read_parquet(prior)) if prior
-             else pl.DataFrame(schema=fb.SCHEMA))
+    if out.resolve() == book.resolve() or (prior and out.resolve() == Path(prior).resolve()):
+        raise ValueError("Verification output must be separate from its input book and overlay")
+    if prior:
+        snapshot = Path(prior).read_bytes()
+        if hashlib.sha256(snapshot).hexdigest() != meta["engine_candidates_sha256"]:
+            raise ValueError("The book's proposal overlay changed after the build")
+        frame = pl.read_parquet(snapshot)
+        if keys:
+            ec.check_edges(frame, True)
+            frame = keys.encode(frame, "position_hash", "child_hash")
+        frame = fb.normalize(frame)
+    else:
+        frame = pl.DataFrame(schema=fb.SCHEMA)
     b = pl.read_parquet(book)
     disputes = json.loads(Path(str(book) + ".rare.json").read_text())
+    if keys:
+        b = keys.encode(b, "position_hash")
+        for d in disputes:
+            pair = d["position_hash"]
+            d["_order"] = (pair["lo"], pair["hi"])
+            d["position_hash"] = keys.native.encode_one(*d["_order"])
     parents = set(b.filter((pl.col("side_to_move") == colour)
                            & pl.col("best_move").is_not_null())["position_hash"])
     parents |= {d["position_hash"] for d in disputes}
     with duckdb.connect() as con:
         con.execute("SET threads=4; SET memory_limit='8GB'")
-        edges = edges_at(con, meta, colour, parents)
-        epds = dict(con.execute(
-            f"""SELECT DISTINCT s.parent_hash, s.parent_epd FROM read_parquet(?) s
-            WHERE s.parent_hash IN ({",".join(map(str, sorted({d["position_hash"] for d in disputes}))) or "NULL"})""",
-            [__import__("book_graph").edge_source(meta, colour)[0]]).fetchall())
+        edges = edges_at(con, meta, colour, parents, **({"keys": keys} if keys else {}))
     for d in disputes:
-        d["epd"] = epds.get(d["position_hash"])
-    keys = np.array(sorted(parents | {e["child_hash"] for es in edges.values() for e in es
-                                      if e["child_hash"] is not None}), dtype=np.int64)
-    cps = {int(h): int(v) for h, v in zip(keys, lookup_evals(keys, *open_eval_arrays()))
+        menu = edges.get(d["position_hash"])
+        if not menu:
+            raise ValueError(f"Disputed position is absent from the book's move menu: {d.get('_order', d['position_hash'])}")
+        d["epd"] = menu[0]["parent_epd"]
+    ids = np.array(sorted(parents | {e["child_hash"] for es in edges.values() for e in es
+                                     if e["child_hash"] is not None}), dtype=np.int64)
+    scores = keys.scores(ids) if keys else lookup_evals(ids, *open_eval_arrays())
+    cps = {int(h): int(v) for h, v in zip(ids, scores)
            if v != MISSING}
     stored = dict(cps)
     cps.update(bc.proposal_cp(frame))
-    wanted = plan(b, meta, frame, colour, cps, edges, disputes, frontier_reach, frontier)
+    wanted = plan(b, meta, frame, colour, cps, edges, disputes, frontier_reach, frontier, keys)
     verified = bc.verified_moves(frame)
     sign = 1 if colour == "white" else -1
     # the deepest budget already applied at each parent, from the overlay this book was built with
@@ -334,18 +393,34 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
     print(f"{len(wanted)} parents to verify: "
           f"{dict(pl.Series([w[0] for w in wanted.values()]).value_counts().iter_rows()) if wanted else {}}",
           flush=True)
-    searches = Searches(Path(cache), nodes, threads)
-    deeper = Searches(Path(cache) / f"deep-{deep_nodes}", deep_nodes, threads, free=False)
+    searches = Searches(Path(cache), nodes, threads, wide=wide)
+    deeper = Searches(Path(cache) / f"deep-{deep_nodes}", deep_nodes, threads, free=False, wide=wide)
     records, unplayed, retried = [], [], []
     limit = meta["max_eval_loss"]
     try:
-        for i, (h, (reason, epd, moves)) in enumerate(sorted(wanted.items()), 1):
+        order = sorted(wanted)
+        if keys:
+            pairs = keys.external(pl.Series("id", order, dtype=pl.Int64)).to_list()
+            public = dict(zip(order, pairs))
+            order.sort(key=lambda h: (public[h]["lo"], public[h]["hi"]))
+        for i, h in enumerate(order, 1):
+            reason, epd, moves = wanted[h]
+            parent = public[h] if keys else h
             menu = {bare(e["move_san"]): e for e in edges.get(h, ())}
+            if keys:
+                board = checked_board(epd, parent)
+                if board.turn != (colour == "white"):
+                    raise ValueError(f"Wrong side to verify at {parent}")
+                for e in menu.values():
+                    board.push_san(e["move_san"])
+                    if keys.board(board) != e["child_hash"]:
+                        raise ValueError(f"Move menu child disagrees with {epd} {e['move_san']}")
+                    board.pop()
             use, saved = comparison_set(
-                lambda ms, first: searches.get(h, epd, ms, count=first), moves,
+                lambda ms, first: searches.get(parent, epd, ms, count=first), moves,
                 verified.get(h, ()), menu, stored, meta["rare_floor"], limit, sign, band)
             if bare(saved["free"]["san"]) not in menu:
-                unplayed.append({"position_hash": h, "epd": epd, "engine_move": saved["free"]["san"],
+                unplayed.append({"position_hash": parent, "epd": epd, "engine_move": saved["free"]["san"],
                                  "cp_white": saved["free"]["cp"]})
             again = boundary(saved, limit, band, use) if limit is not None else []
             was = applied.get(h, 0)
@@ -356,11 +431,11 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
             deep = None
             if again or carried:
                 before = dict(deeper.stats)
-                deep = deeper.get(h, epd, sorted(use))
+                deep = deeper.get(parent, epd, sorted(use))
             new = list(rows_for(h, saved, menu, limit, nodes, searches.contract["engine"], reason,
                                 deep, deep_nodes, use))
             if deep:
-                retried.append({"position_hash": h,
+                retried.append({"position_hash": parent,
                                 "why": "boundary" if again else "carried forward",
                                 "previously_deep": carried, "moves": again,
                                 "compared": sorted(use), "budget": deep_nodes,
@@ -391,14 +466,19 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
             pl.when(pl.col("verified_loss_cp").is_not_null() & pl.col("position_hash").is_in(list(roots)))
             .then(sign * (pl.col("parent_cp_white") - pl.col("child_cp_white")))
             .otherwise(pl.col("verified_loss_cp")).cast(pl.Int32).alias("verified_loss_cp"))
-        result = pl.concat([keep, update]).sort("position_hash", "child_hash")
+        result = pl.concat([keep, update])
     else:
         result = frame
+    if keys:
+        result = keys.restore(result, "position_hash", "child_hash")
+    if records:
+        result = result.sort("position_hash", "child_hash")
     write_frame(result, out)
     reasons = {}
     for reason, _, _ in wanted.values():
         reasons[reason] = reasons.get(reason, 0) + 1
-    write_json({"book_sha256": sha(book), "input_sha256": sha(prior) if prior else None,
+    write_json({"book_sha256": sha(book), "input_sha256": meta.get("engine_candidates_sha256"),
+                **({"key_bits": 128, "eval_lookup_sha256": keys.sha} if keys else {}),
                 "output_sha256": sha(out), "requested_parents": len(wanted), "by_reason": reasons,
                 "rows": len(records), "engine_choice_unplayed": unplayed,
                 "contract": searches.contract, "searches": searches.stats,

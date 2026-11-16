@@ -39,19 +39,27 @@ def edge_source(meta: dict, colour: str) -> tuple[str, str]:
             f"(s.total >= {floor} OR split_part(s.parent_epd, ' ', 2) = '{turn}')")
 
 
-def edges_at(con, meta: dict, colour: str, parents) -> dict[int, list[dict]]:
+def edges_at(con, meta: dict, colour: str, parents, keys=None) -> dict[int, list[dict]]:
     """parent hash -> its edge dicts (move_san, child_hash, total, white_score_avg), in the
     collector's order."""
     import polars as pl
     from duck_compat import duck_pl
     source, where = edge_source(meta, colour)
-    con.register("book_graph_keys",
-                 pl.DataFrame({"h": sorted(set(parents))}, schema={"h": pl.Int64}).to_arrow())
-    e = duck_pl(con, f"""SELECT s.parent_hash, s.move_san, s.child_hash, s.total, s.white_score_avg
-        FROM read_parquet('{source}') s SEMI JOIN book_graph_keys k ON k.h = s.parent_hash
-        WHERE {where}""")
-    con.unregister("book_graph_keys")
+    source = source.replace("'", "''")
+    if keys:
+        keys.register(con, "book_graph_keys", sorted(set(parents)))
+    else:
+        con.register("book_graph_keys",
+                     pl.DataFrame({"h": sorted(set(parents))}, schema={"h": pl.Int64}).to_arrow())
+    try:
+        e = duck_pl(con, f"""SELECT s.parent_hash, s.parent_epd, s.move_san, s.child_hash, s.total, s.white_score_avg
+            FROM read_parquet('{source}') s SEMI JOIN book_graph_keys k ON k.h = s.parent_hash
+            WHERE {where}""")
+    finally:
+        con.unregister("book_graph_keys")
     e = e.sort("parent_hash", "move_san", "child_hash", nulls_last=True)
+    if keys:
+        e = keys.encode(e, "parent_hash", "child_hash")
     out: dict[int, list[dict]] = {}
     for h, group in e.group_by("parent_hash", maintain_order=True):
         out[h[0]] = group.to_dicts()
