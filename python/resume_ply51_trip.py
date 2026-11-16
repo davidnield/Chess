@@ -16,6 +16,7 @@ from run_ply51_sunday import COMPACT, RELEASE, check_release
 from month_archive import read_json, root_lock, sha
 
 QUEUE = Path("D:/chess/bin/ply51-queue-20261115")
+EVAL_RELEASE = Path("D:/chess/bin/ply51-evals-fallback-20261115")
 HOLDOUT = m.OPS/"holdout-inputs"
 CACHE = Path(os.environ["LOCALAPPDATA"])/"Temp/chess-holdout-pgn-20261115"
 RECIPE = Path("C:/Users/David/Documents/Chess/python/process_pgn_parquets.py")
@@ -53,9 +54,12 @@ def main(check_only):
     manifest = read_json(QUEUE/"pin.json")
     if manifest["compact_pin"] != sha(COMPACT/"pin.json"):
         raise ValueError("training queue points to another compact release")
-    for name,digest in manifest["files"].items():
-        if sha(QUEUE/name) != digest:
-            raise ValueError(f"training pin mismatch: {name}")
+    if sha(EVAL_RELEASE/"pin.json") != read_json(RELEASE/"pin.json")["eval_pin"]:
+        raise ValueError("eval worker release differs from the launcher pin")
+    for release, pin in ((QUEUE, manifest), (EVAL_RELEASE, read_json(EVAL_RELEASE/"pin.json"))):
+        for name, digest in pin["files"].items():
+            if sha(release/name) != digest:
+                raise ValueError(f"pin mismatch: {release/name}")
     for path in (m.ARCHIVE/"_extract_params.json", m.SOURCE, m.TRAIN_BOOK.parent,
                  Path("H:/chess/evals/cloud_2026-10-07"), Path("H:/chess/evals/fishnet"), RECIPE):
         if not path.exists():
@@ -99,7 +103,7 @@ def main(check_only):
                     raise RuntimeError("training coordinator stopped; inspect compact-training.err")
                 time.sleep(3)
         if read_json(m.OPS/"evals/status.json").get("stage") != "eval DB and lookup verified":
-            launch(COMPACT/"run_ply51_evals.py", [], "compact-eval-worker")
+            launch(EVAL_RELEASE/"run_ply51_evals.py", [], "compact-eval-worker")
         print("The workers run in the background. The training queue revalidates published Sunday months.")
 
 

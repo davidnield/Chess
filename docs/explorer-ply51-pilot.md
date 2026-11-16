@@ -66,7 +66,7 @@ March's 51,436,065 raw input games took 1,192 seconds to extract. The archive re
 
 1. The three original pilot months publish individually with SHA-256 readback. The migration coordinator repeats a real March invocation, merges the three months, verifies all move/outcome sums and sliced terminal digests, checks selected move digests and replays sampled positions, then writes the forecast and pilot verification receipt.
 2. Capacity permitting, the remaining training extraction starts after sign-in on Monday, November 16, with new batches bounded by the reserved window through Thursday, November 19. It skips and revalidates previously published months. If the window runs out, the coordinator records the remaining work. The production merge checks E: against measured output and D: against actual terminal staging. Existing repertoire artifacts can continue to use the previous generation.
-3. The independent eval worker waits for `training explorer verified` and the matching book metadata digest. It first measures eight distributed eval buckets against all 512 child-source buckets. It chooses scratch placement using those measurements and remaining D:, H: and E: space. The whole generation uses refreshed October Cloud and the original Fishnet dump. The executable checks payload SHA-256, individual receipts, the exact pinned revisions and explorer publication on resume. The completed DB is independently checked against the raw sources. The separate lookup retains both hash halves, authoritative mate overrides and source labels. Its production report checks scores, source and mates against the published arrays.
+3. The independent eval worker waits for `training explorer verified` and the matching book metadata digest. It first measures eight distributed eval buckets against all 512 child-source buckets. For temporary child files it tries H:, D:, E:, then F:. The measured forecast adds 20%, reserves 150 GB on each drive and first allocates the source shards on H: and the DB and lookup on D:. If F: is selected, the files go under `F:/chess/eval-work-p51-20261115-child`. The worker monitors the selected drive with the existing 80 GB runtime stop. The whole generation uses refreshed October Cloud and the original Fishnet dump. The executable checks payload SHA-256, individual receipts, the exact pinned revisions and explorer publication on resume. The completed DB is independently checked against the raw sources. The separate lookup retains both hash halves, authoritative mate overrides and source labels. Its production report checks scores, source and mates against the published arrays.
 4. WSL 2 and Ubuntu are available. ChessDB's empty LOCK has been restored and all 291 declared sizes and recorded digests have been matched to the exact remote revision. The fresh 1.188 TB readback publishes its own completion receipt. The offline probe then opens the snapshot read-only and tests the fixed 1,000 previously missing parent positions. ChessDB integration depends on interpreting this report. It does not block Cloud/Fishnet.
 5. The official August–September PGNs have a separate checksum and event-header audit. The local ingestion accepts specific rated event labels and can exclude tournament-labelled games. The audit reconciles each speed against the local Parquet footers and each full official month against the published total. The holdouts never enter the training merge.
 
@@ -91,6 +91,7 @@ Check the three status files and active process command lines. Use the command f
 ```powershell
 $compactPin = 'D:/chess/bin/ply51-compact-20261115'
 $queuePin = 'D:/chess/bin/ply51-queue-20261115'
+$evalPin = 'D:/chess/bin/ply51-evals-fallback-20261115'
 $venvPython = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 
 # Three-month rehearsal
@@ -100,7 +101,7 @@ $venvPython = 'C:/Users/David/Documents/Chess/.venv/Scripts/python.exe'
 & $venvPython -X utf8 -u "$queuePin/run_ply51_migration.py" --compact-release $compactPin
 
 # Cloud/Fishnet eval generation and 128-bit lookup
-& $venvPython -X utf8 -u "$compactPin/run_ply51_evals.py"
+& $venvPython -X utf8 -u "$evalPin/run_ply51_evals.py"
 ```
 
 The workers write separate logs under `D:/chess/ply51-migration-20261115` with the prefixes `compact-pilot`, `compact-training`, and `compact-eval-worker`. Their release directories contain their SHA-256 manifests. The active playing repertoires and the corrected Black 0.30 experiment have their own release and validation process.

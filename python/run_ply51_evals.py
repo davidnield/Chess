@@ -29,6 +29,7 @@ PILOT_WORK = WORK.with_name(WORK.name + "-sample")
 PILOT_DB = DB.with_name(DB.name + "-sample")
 BUCKETS = list(range(7, 512, 64))
 GB = 10**9
+CHILD_DRIVES = ("H:", "D:", "E:", "F:")
 
 
 def status(stage, **details):
@@ -97,10 +98,10 @@ def choose_drive(available, e, c, final):
     remaining["D:"] -= final
     if min(remaining["D:"], remaining["H:"]) < 0:
         raise ValueError(f"capacity shortfall after source shards and output: {remaining}")
-    choices = [drive for drive in ("H:", "D:", "E:") if remaining[drive] >= c]
-    if not choices:
-        raise ValueError(f"child shards need {c/GB:.0f} GB; remaining bytes after reserves: {remaining}")
-    return choices[0]
+    for drive in CHILD_DRIVES:
+        if remaining.get(drive, -1) >= c:
+            return drive
+    raise ValueError(f"child shards need {c/GB:.0f} GB; remaining bytes after reserves: {remaining}")
 
 
 def size(path):
@@ -114,7 +115,14 @@ def forecast():
     c = math.ceil(size(PILOT_WORK/"c") * scale)
     # DB plus full-key lookup (19 bytes/row), mate-only rows and temporary sorting/spill.
     final = math.ceil(sum(r["bytes"] + ROW.itemsize*r["rows"] for r in counts) * scale + 90*GB)
-    amounts = {drive: space(Path(drive+"/")) - 150*GB for drive in ("D:", "E:", "H:")}
+    amounts = {}
+    for drive in CHILD_DRIVES:
+        try:
+            amounts[drive] = space(Path(drive+"/")) - 150*GB
+        except OSError:
+            # The archive drive is optional once the explorer has been verified.
+            if drive != "F:":
+                raise
     report = {"pilot_buckets": BUCKETS, "all_child_sources": True, "proportional_margin": 0.20,
               "phase_e_bytes": e, "phase_c_bytes": c, "db_lookup_and_spill_bytes": final,
               "available_after_150GB_reserve": amounts, "book_meta_sha256": sha(BOOK/"_book.meta.json")}
