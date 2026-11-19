@@ -1,0 +1,20 @@
+{
+  "rows": 1000000,
+  "seconds": 2.405999999959022,
+  "memory_limit": "32MB",
+  "threads": 1,
+  "peak_spill_bytes": 94109696,
+  "output_bytes": 37407036,
+  "independent_check": [
+    [
+      1000000,
+      1,
+      1000000,
+      0
+    ]
+  ],
+  "row_groups": 16,
+  "duckdb_version": "1.5.2",
+  "query": "SELECT struct_pack(lo := (1000000-i)::BIGINT, hi := (i%7)::BIGINT) position_hash, sha256(i::VARCHAR) payload FROM range(1000000) t(i) ORDER BY position_hash",
+  "scope": "Synthetic external-sort/Arrow-stream correctness and spill smoke; not a production throughput forecast."
+}

@@ -54,7 +54,7 @@ Phases, each resumable (atomic .tmp -> rename, sentinel per unit):
              GROUP BYs in one process): edges, survivors, below-floor rows with
              batched eval lookups, D, ended, horizon, the aux rows. Any negative
              ended(x, p) component raises.                <work>/buckets/bNNN.*
-  finalize   concatenate, sort, schema-check, write the two outputs and their
+  finalize   external sort, stream/schema-check, write the two outputs and their
              metas, then <work>/_POOL.DONE.
 
 Every parameter is on the command line and locked in <work>/_params.json: a re-run
@@ -715,8 +715,70 @@ def sum_stats(work: Path) -> dict:
     return tot
 
 
+def _arrow_schema(columns, recipe=None):
+    """Keep the consumer schema independent of DuckDB's inferred nullability/types."""
+    import pyarrow as pa
+    key = pa.struct([("lo", pa.int64()), ("hi", pa.int64())])
+    schema = pa.schema([(name, key if dtype == "struct<lo: int64, hi: int64>"
+                        else pa.type_for_alias(dtype)) for name, dtype in columns])
+    return schema.with_metadata(recipe) if recipe else schema
+
+
+def _unique_batch(values, previous):
+    """Check sorted full keys, including a duplicate straddling Arrow batches."""
+    import pyarrow as pa
+    import pyarrow.compute as pc
+    if not len(values):
+        return previous
+    fields = [values.field(i) for i in range(values.type.num_fields)] if pa.types.is_struct(values.type) else [values]
+    if values.null_count or any(col.null_count for col in fields):
+        raise ValueError("aux: null position_hash")
+    if previous is not None and values[0].as_py() == previous:
+        raise ValueError("aux: duplicate position_hash rows")
+    equal = None
+    for col in fields:
+        same = pc.equal(col.slice(1), col.slice(0, len(col)-1))
+        equal = same if equal is None else pc.and_(equal, same)
+    if pc.any(equal).as_py():
+        raise ValueError("aux: duplicate position_hash rows")
+    return values[-1].as_py()
+
+
+def write_sorted_export(con, query, output, columns, recipe=None, *, unique=None,
+                        batch_rows=65536):
+    """External sort in DuckDB; bounded Arrow batches into an atomic Parquet file.
+
+    Never materialize the full result as a frame/table. DuckDB obeys the caller's
+    memory/spill settings. Arrow supplies fixed OPTIONAL fields and large_string
+    even on DuckDB versions whose native Parquet writer infers REQUIRED fields.
+    The caller's ORDER BY makes adjacent-key uniqueness checks exact.
+    """
+    import pyarrow.parquet as pq
+    output = Path(output)
+    tmp = output.with_name(output.name + ".tmp")
+    schema = _arrow_schema(columns, recipe)
+    count, previous = 0, None
+    try:
+        # Relation API works on DuckDB 1.5 and 2.x; execute().fetch_* does not.
+        with con.sql(query).to_arrow_reader(batch_rows) as reader:
+            with pq.ParquetWriter(tmp, schema, compression="zstd") as writer:
+                for batch in reader:
+                    batch = batch.cast(schema)
+                    if unique is not None:
+                        previous = _unique_batch(batch.column(schema.get_field_index(unique)), previous)
+                    writer.write_batch(batch, row_group_size=batch_rows)
+                    count += len(batch)
+        check_export(tmp, columns, recipe)
+        if pq.ParquetFile(tmp).metadata.num_rows != count:
+            raise RuntimeError("finalize: row count changed during export")
+        tmp.replace(output)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+    return count
+
+
 def phase_finalize(a, timings: dict) -> None:
-    import polars as pl
     work = Path(a.work)
     missing = [i for i in range(N_BUCKETS) if not bucket_done(work, i)]
     if missing:
@@ -734,38 +796,27 @@ def phase_finalize(a, timings: dict) -> None:
         print(f"SKIP finalize: {done} exists")
         return
     t0 = time.time()
-    if not pool_out.exists():
-        df = pl.read_parquet([str(bucket_paths(work, i)["edges"]) for i in range(N_BUCKETS)])
-        df = (df.with_columns(
-                  pl.lit(POOL_EVENT).alias("event"),
-                  pl.lit(POOL_ELO, dtype=pl.Int64).alias("elo_band"),
-                  ((pl.col("white_wins") + 0.5 * pl.col("draws")) / pl.col("total"))
-                  .alias("white_score_avg"))
-                .select([c for c, _ in POOL_SCHEMA])
-                .sort(["parent_hash", "move_san"]))
-        tmp = pool_out.with_name(pool_out.name + ".tmp")
-        df.write_parquet(tmp, compression="zstd", metadata=recipe)
-        got = _schema_list(tmp)
-        if got != pool_schema:
-            tmp.unlink()
-            raise RuntimeError(f"pool schema drift: {got}")
-        tmp.replace(pool_out)
-        print(f"  {pool_out.name}: {df.height:,} edges", flush=True)
-        del df
-    if not aux_out.exists():
-        df = pl.read_parquet([str(bucket_paths(work, i)["aux"]) for i in range(N_BUCKETS)])
-        df = df.select([c for c, _ in AUX_SCHEMA]).sort("position_hash")
-        if df["position_hash"].n_unique() != df.height:
-            raise RuntimeError("aux: duplicate position_hash rows")
-        tmp = aux_out.with_name(aux_out.name + ".tmp")
-        df.write_parquet(tmp, compression="zstd", metadata=recipe)
-        got = _schema_list(tmp)
-        if got != aux_schema:
-            tmp.unlink()
-            raise RuntimeError(f"aux schema drift: {got}")
-        tmp.replace(aux_out)
-        print(f"  {aux_out.name}: {df.height:,} positions", flush=True)
-        del df
+    for output, schema, kind, order, unique in (
+            (pool_out, pool_schema, "edges", "parent_hash, move_san", None),
+            (aux_out, aux_schema, "aux", "position_hash", "position_hash")):
+        if output.exists():
+            continue
+        files = [str(bucket_paths(work, i)[kind]) for i in range(N_BUCKETS)]
+        source = "read_parquet([" + ",".join("'" + _p(f).replace("'", "''") + "'" for f in files) + "])"
+        if kind == "edges":
+            projection = ", ".join(name for name, _ in POOL_SCHEMA[:-3])
+            projection += (f", '{POOL_EVENT}' AS event, {POOL_ELO}::BIGINT AS elo_band, "
+                           "(white_wins::DOUBLE + 0.5::DOUBLE * draws::DOUBLE) "
+                           "/ total::DOUBLE AS white_score_avg")
+        else:
+            projection = ", ".join(name for name, _ in AUX_SCHEMA)
+        con = _duck(a.threads, a.mem, Path(a.tmp_dir) / ("finalize-" + kind))
+        try:
+            rows = write_sorted_export(con, f"SELECT {projection} FROM {source} ORDER BY {order}",
+                                       output, schema, recipe, unique=unique)
+        finally:
+            con.close()
+        print(f"  {output.name}: {rows:,} rows", flush=True)
     timings["finalize_s"] = round(time.time() - t0, 1)
     write_metas(a, timings)
     done.write_text(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), encoding="utf-8")
