@@ -228,6 +228,14 @@ def check_term_digest(con, bk: Book) -> None:
     check(source == merged, f"terminal counts and sliced key digests agree over {len(inputs)} months ({source[0]:,} outcomes)")
 
 
+def mapping_conflicts(con, source: str, key: str, value: str) -> int:
+    # COUNT(DISTINCT text) keeps a second high-cardinality aggregate state. We only
+    # need to know whether any two nonnull values differ: MIN != MAX is exact,
+    # spillable, and the two mapping directions run sequentially.
+    return int(con.execute(f"SELECT COUNT(*) FROM (SELECT 1 FROM {source} "
+                           f"GROUP BY {key} HAVING MIN({value}) != MAX({value}))").fetchone()[0])
+
+
 def check_dups(con, bk: Book, buckets: list[int]) -> None:
     print(f"\nduplicate keys, {len(buckets)} bucket(s)", flush=True)
     dup, rows, two = 0, 0, 0
@@ -246,12 +254,11 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
             # A 128-bit key is a position: one EPD per key, and within a 64-bit hash one key
             # per EPD. (Across hashes one EPD can have two keys: a pinned en-passant capture
             # hashes with its ep file, which the EPD cannot show.)
-            t = bcon.execute(f"""
-                SELECT (SELECT COUNT(*) FROM (SELECT 1 FROM {relation(outs)}
-                          GROUP BY parent_hash, parent_hash_hi HAVING COUNT(DISTINCT parent_epd) > 1))
-                     + (SELECT COUNT(*) FROM (SELECT 1 FROM {relation(outs)}
-                          GROUP BY parent_hash, parent_epd HAVING COUNT(DISTINCT parent_hash_hi) > 1))
-                """).fetchone()[0]
+            for key, value in (("parent_hash, parent_hash_hi", "parent_epd"),
+                               ("parent_hash, parent_epd", "parent_hash_hi")):
+                bcon.close()
+                bcon = connect(*_CONNECT_ARGS)
+                t += mapping_conflicts(bcon, relation(outs), key, value)
         bcon.close()
         dup += int(r[0] or 0)
         rows += int(r[1] or 0)
