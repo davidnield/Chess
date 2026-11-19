@@ -426,3 +426,16 @@ repetition; full keys deduplicate memory cost. The approved maximum-covered-risk
 a documented late-equal-risk masking problem; the proposed remaining-risk alternative is
 implemented for comparison but does not silently replace the approved default. See the
 November 19 progress entry for the pending user decision and production cost limitations.
+
+
+Production verification recovery (2026-11-19): the finished merge failed the old 4 GB
+mapping check. `python/resume_explorer_verification.py` is pinned separately under
+D:/chess/bin/ply51-verification-recovery-20261119, runs independent checks with 32 GB,
+receipts each successful stage, and resumes the original eval launcher only on all-pass.
+Read its live status under D:/chess/ply51-migration-20261115/verification-recovery-20261119.
+Do not restart extraction or merge to repair this check. Sweep shared-pool preparation
+requires completed matching publication receipts; `_BOOK.DONE` alone is insufficient.
+Selective count reads prune Parquet row groups conservatively and always compare full keys.
+The completed Allie Rust-backend tests passed quality margins. Modal-history equivalence
+is still unproven because its atlas almost always fell back to actual histories; retain
+actual histories and the calibrated Maia construction ensemble. See the third-pass notes.

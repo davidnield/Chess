@@ -88,3 +88,55 @@ The remaining-risk variant uses the entire unresolved route mass as a conservati
 3. Resolve the extension-metric choice and benchmark a bounded continuation sample. Add hybrid screening/shared tactical evidence before the four-anchor extension calibration.
 4. Finish evaluator/backend and population-panel bindings when the Allie investigations publish; connect final reports and ladder/PGN publication.
 5. Release the full matrix only after the documented pilot checks pass.
+
+
+## November 19 third pass: production recovery, selective lookup, completed model evidence
+
+### Prerequisite recovery
+
+The production merge completed at 01:29 PST: 163 months, 512 buckets, 129,759,758,235 output rows, approximately 4,503 GB. Its three sampled source-to-book digests passed. Independent publication verification then failed at 01:47 in DuckDB's 4 GB duplicate/mapping check; the downstream eval launcher correctly stopped. Neither a completed merge marker nor an extant metadata file was sufficient to release sweep inputs.
+
+Commit `4a6a64e` replaces the two simultaneous distinct-value aggregations with sequential exact minimum/maximum conflict checks, using fresh connections. The recovery command explicitly allows 32 GB. This retains both invariants: one EPD per full key, and one high half per low-half/EPD pair. Exact parity, failed-stage resumption and corrupted-receipt rejection pass unit tests. The new immutable release is `D:/chess/bin/ply51-verification-recovery-20261119`; it does not edit any earlier pinned release.
+
+The recovery began at 06:40 PST. It first checks duplicate/mapping invariants for buckets 000, 251 and 511 separately, then repeats the original three digests, book-wide sums, terminal digest, collision audit and sample replay. Each successful stage gets a hashed log/receipt, so a later failure does not discard earlier successes. The complete approved 163-month generation, all 512 publication manifests, code hashes and input metadata are checked. The previous stopped status is retained. Only all-pass completion publishes `training explorer verified`; the original pinned eval workflow then resumes automatically, with its eight-bucket capacity pilot, H:/D:/E:/F: fallback ordering and existing reserves unchanged.
+
+Operational status and receipts: `D:/chess/ply51-migration-20261115/verification-recovery-20261119/`. Top-level stdout/stderr use the same directory name with `.log`/`.err` under the migration root. Running code remains frozen while this branch continues preparation work. See the latest status there rather than treating this historical entry as a live completion claim.
+
+Shared-pool preparation now **enforces completed publication receipts**. Its bindings must pin matching explorer, eval DB and full-key lookup generations, terminal corrections, all 512 lookup bucket entries and completed independent status receipts. The recovery check bundle is pinned when present. Tests reject a still-running verifier and a lookup from another explorer even when their metadata files exist and are freshly hashed.
+
+### Selective count lookup and real model smoke
+
+`keyed_parquet.py` uses existing Parquet row-group low-half bounds to skip impossible groups, then joins on both key halves. Missing statistics retain all groups; equal low halves never substitute for full-key identity. It streams selected groups and uses the native reader when no pruning is possible. No additional full-data index or production-data rewrite is required. The selective builder adapter records groups/rows/compressed bytes selected, and includes this implementation in cache identity.
+
+An OS-warm, sorted one-million-row synthetic benchmark returned exactly the same rows as the old complete-file join. For batches of 1/16/128 keys it selected 1/16/128 of 245 groups and median lookup times were 4.34/5.41/19.81 ms versus 32.63/28.08/35.82 ms. These are microbenchmarks, **not a forecast of production speedup**. The real headstart fixture has only 531 rows and one group; exact results matched, with 4.17 ms versus 3.45 ms. Production pool group sizes, frontier sizes and disk behavior remain to measure. `python -m sweep.benchmark_counts` provides the bounded repeatable measurement.
+
+The actual Maia-3 79M checkpoint loaded through the new explicit-checkpoint adapter and its frozen runtime fingerprint. Seven legal positions (both turns) returned complete normalized vectors and exactly repeated predictions. Startup plus the first batch took 10.03 s, the warm batch 0.047 s. This confirms real runtime/checkpoint plumbing and the single temperature transform; it is not a calibration or model-quality experiment. The detailed benchmark and smoke records are retained in `sweep-runtime-checks-2026-11-19.json`.
+
+The focused regression run passed 24 tests, plus the separate publication-readiness test. This includes both-color native collection/publication, exact frozen replay, warm cache reuse, source identity, complete key matching, missing Parquet statistics, receipt failures, continuation accounting and joint verification/coordinator behavior. The pre-existing full native explorer regression was also launched; record its final outcome below when available.
+
+### Completed Allie findings and next model decisions
+
+The backend validation jobs have finished. `sweep-model-evidence-2026-11-19.json` records source paths/hashes, runtime/native identities, metrics and history coverage.
+
+| Panel | Positions / games | Rust minus reference Brier | Measured speedup |
+|---|---:|---:|---:|
+| OTB | 2,639 / 664 | -0.0000496 | 1.732x |
+| Online 1000–1799 | 2,276 / 600 | +0.0000791 | 1.744x |
+| Online 1800+ | 2,327 / 600 | +0.0000367 | 1.748x |
+| Online 2200+ | 2,331 / 600 | +0.0002768 | 1.750x |
+
+All four pass the agreed noninferiority screens (Brier .002, log loss .005, top-one accuracy .005). Use the validated Rust backend for further Allie work; bind its tested weights, native binary, quantization settings and runtime. Predictions are close, not identical, and quantized inference has some query-order effects. Use a frozen first-writer prediction cache. These tests compare **Allie's two backends**, not Allie versus Maia model accuracy. They do not authorize replacing the construction ensemble's calibrated Maia component.
+
+The separate 256-game rollout/history pilot does **not** establish modal-history equivalence. Position-mode history was available for only 5 of 4,278 White queries and 9 of 4,451 Black queries, all single-observation contexts; zero histories were replaced. The identical position-mode scores resulted from actual-history fallback for almost everything. Exit-mode replaced only 3 White and 10 Black histories. Its score differences (+.00596 White, -.00312 Black) have intervals wider than the .002 equivalence margin.
+
+Actual-history Allie cold rollouts took about 87 minutes for White and 94 minutes for Black (128 games each); Maia took 9.2 and 4.4 minutes, much of that count lookup. Allie used CPU while Maia used GPU, and this pilot used the slower Allie backend. Actual-history storage was only 24,628 packed bytes across 256 games (about 96 bytes/game), whereas inference and the 18.4 GB model dominate costs. The atlas took approximately 89 minutes to prepare and occupied under 1 MB. A modal shortcut has not shown a meaningful storage benefit here.
+
+Keep actual sampled histories for further Allie rollout validation. Before a modal shortcut can be accepted, test positions with independently supported alternative histories, report actual substitutions and fallback rates, and compare at least two different frozen books. Fix the backend, query ordering and cache conditions while timing. The displayed Maia/Allie rollout-score differences are model-dependent predictions, not observed human improvement or a move-prediction-accuracy result.
+
+### Still pending before the matrix
+
+1. Finish the production verification recovery and the queued eval DB/lookup rebuild, then bind their verified receipts.
+2. Publish the full-key OTB training split and measured shared-pool exports; benchmark count lookup on the actual frontier sizes.
+3. Run the Black stricter 2,000-position pilot and its full quality-closure, candidate-menu, pruning and clean-rebuild checks.
+4. Extension metric comparison, efficient hybrid tactical screening and production convergence/cost calibration remain unfinished. No 20M-per-visited-position prototype is being queued as a full extension run. The sum-of-unresolved-route bound is conservative and may be prohibitively expensive with full legal reply support; it needs measured convergence, not an assumed production guarantee. The existing metric default is unchanged pending that comparison.
+5. Finish evaluator population bindings, final extension/ladder/PGN publication and ECO stability exports. The model-independent rollout and report contracts remain available, but are not labeled an end-to-end released evaluator.

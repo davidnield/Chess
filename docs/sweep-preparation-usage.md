@@ -2,7 +2,7 @@
 
 Branch: codex/sweep-preparation-20261118. Worktree: C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation.
 
-This branch integrates codex/full-key-consumers (34ace88) with lookahead-floor (4d7c945). The running migration and Allie investigations use their existing pinned snapshots. Nothing in this preparation launches a repertoire sweep or replaces a canonical book.
+This branch integrates codex/full-key-consumers (34ace88) with lookahead-floor (4d7c945). Production work uses immutable deployment snapshots. The November 19 recovery uses its separately pinned verifier and resumes the original eval launcher after verification; the Allie investigations have finished. Nothing in this preparation launches a repertoire sweep or replaces a canonical book.
 
 ## What is usable now
 
@@ -34,7 +34,7 @@ With no source bindings this prints a waiting-for-publication report and starts 
 
 ## Prepare a shared pool after publication
 
-A bindings JSON supplies code (this worktree or its immutable deployment snapshot), python, explorer, eval_lookup and artifacts. Each artifact is a path plus its SHA-256. Pin the published explorer _book.meta.json and matching lookup.json, their verification receipts, and any other source identity needed for the deployment. The tool adds hashes of its Python implementation.
+A bindings JSON supplies code (this worktree or its immutable deployment snapshot), python, explorer, eval_lookup and artifacts, plus publications={explorer: COMPLETED_STATUS_PATH, eval_lookup: COMPLETED_STATUS_PATH}. Each artifact is a path plus its SHA-256. Pin the published explorer _book.meta.json and matching lookup.json, their verification receipts, and any other source identity needed for the deployment. The bindings validator requires completed status values, matching source generations, terminal corrections and all 512 lookup bucket entries. Include the eval DB _build.meta.json and the explorer recovery verification_receipt when present among the pinned artifacts. These checks do not rehash the whole multi-terabyte dataset; the producer/verification receipts and lookup manifests carry that identity. The tool adds hashes of its Python implementation.
 
 Use --pool brc1800-p30 and --bindings PATH to inspect one concrete command. Only adding --execute runs it. The work directory is persistent: interrupted arrivals/buckets resume through pool_from_book.py. A failed process or validator never writes a successful receipt. Resume checks the recipe and every listed artifact. Outputs are restricted to the designated workspace.
 
@@ -93,3 +93,12 @@ Default is read-only readiness. --execute --steps 1000 performs bounded work, sa
 The default metric remains the approved covered maximum. --metric remaining-maximum enables the proposed alternative described in the progress log; use a separate output directory for a different metric. The complete engine/policy history is retained in checkpoint.json and its hash appears in the report. The adapter is deliberately not a production speed claim: its independent 20M MultiPV top-three searches still need hybrid screening and cost calibration. A bounded result creates extensions.json, preserving base and additional prescriptions separately; automatic PGN/ladder publication is not wired in.
 
 Both entrypoints are ready for controlled pilots, not an instruction to launch the production matrix now.
+
+
+## Selective lookup benchmark and model evidence
+
+From the Python directory, run `python -m sweep.benchmark_counts --source POOL.parquet --out RESULT.json`. This compares exact full-key results with a complete-file join and records row-group selection and timings. It does not rebuild a pool. Defaults are 16 requested keys and three alternating-order repetitions. Results are OS-warm; measure production batches before deriving an ETA.
+
+The selective count adapter now prunes row groups using existing low-half statistics, performs the final join on both halves, and retains groups whose statistics are missing. Frozen overlay sidecars include count_lookup metrics. The real Maia adapter/checkpoint smoke and microbenchmarks are in `docs/sweep-runtime-checks-2026-11-19.json`.
+
+Allie backend/history results and frozen evidence paths are in `docs/sweep-model-evidence-2026-11-19.json`; interpretation and limitations are in the third-pass progress entry. Rust passed the backend quality screen, but modal-history substitution has not passed equivalence. This does not change the calibrated Maia construction prior.

@@ -8,6 +8,8 @@ from . import spec, stages
 
 def pool_stage(recipe, bindings, root):
     """Production paths are supplied only after migration publication; no guessed ready markers."""
+    from .publications import validate
+    validate(bindings)
     code=Path(bindings["code"]).resolve()
     python=bindings.get("python",sys.executable)
     root=Path(root).resolve()

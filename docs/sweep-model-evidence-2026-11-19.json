@@ -1,0 +1,426 @@
+{
+  "sources": [
+    {
+      "role": "otb_backend",
+      "path": "D:\\chess\\allie\\backend-validation-20261118\\comparison.json",
+      "sha256": "b81958e98701c709e5f0ff4a681f8823036511cc20878531e60c5851a85959d7"
+    },
+    {
+      "role": "online_backend",
+      "path": "D:\\chess\\allie\\online-backend-validation-20261118\\comparison.json",
+      "sha256": "848d6d0b9bfe42bbbd5f212cbf84d2d42be9eed7b2aad9a5e4b5c00209b59be5"
+    },
+    {
+      "role": "history",
+      "path": "D:\\chess\\allie\\history-20261118\\pilot01\\comparison.json",
+      "sha256": "f1e9bf309610e3c20ab8bf60afff915eea2ac39ab24780f88f27c000d728230d"
+    }
+  ],
+  "decision": {
+    "allie_backend_for_followup": "rust",
+    "history_default": "actual-sampled-history",
+    "construction_prior": "unchanged-maia3-79m-position",
+    "full_sweep_backend": "not-yet-released"
+  },
+  "backend_identity": {
+    "protocol": "backend-quality-v1",
+    "inputs_sha256": "498529182e66d18d0d1b434f1dc73a499e5fcf23e470ee5566ea60059b82361e",
+    "weight_revision": "d2545701ff5af46a51ac947911844f779b355a08",
+    "weight_sha256": "bbe0c394711dcb02ee1630340aa758c82b982ab1a084e7c772cb3a7f799e95df",
+    "torch": "2.10.0+cpu",
+    "python": "3.12.13",
+    "threads": 2,
+    "int8": true,
+    "temperature": 1,
+    "clock": null,
+    "time_control": null,
+    "keep_sessions": 4,
+    "code": {
+      "validate_backends.py": "387f03dd65cef7dacedeab77fb4a3015696a84e45938fe7469a002b81cbc17c4",
+      "quality.py": "736e719cd1de88d56cdd928e60633942a7a70bf8363758b070b1bdb37087f1d5"
+    },
+    "source": {
+      "api.py": "98b9bb0280366b742b87a1b6ca958db1f5eb35a10e5b5e9f795c647271c3eb52",
+      "model.py": "46da9bdc29fa71e6bb08e8afa313d28c5a72e3f4bb6dce657e00ecc38ab8b7d2",
+      "fastrs.py": "96b0f3d74534c3ce61cbd1ca7c18e342e1f1b77173085fea63e2042bb8d229c5"
+    },
+    "native": {
+      "/home/allie-pilot-20261118/.venv/lib/python3.12/site-packages/allie_fast/allie_fast.abi3.so": "9c7a74d4b5d0101e2815d4bdc1d80b17755bda9c10c3868113a81cb15de08e64"
+    },
+    "margins": {
+      "brier": 0.002,
+      "log_loss_nats": 0.005,
+      "top1_accuracy": 0.005
+    }
+  },
+  "backend_panels": {
+    "otb": {
+      "positions": 2639,
+      "games": 664,
+      "scores": {
+        "torch": [
+          0.5318685347730369,
+          1.1869896650918175,
+          0.5888594164456233
+        ],
+        "rust": [
+          0.5318189459421606,
+          1.1871173495473395,
+          0.5899962106858658
+        ]
+      },
+      "native_minus_reference": [
+        -4.958883087723257e-05,
+        0.00012768445552453916,
+        0.0011367942402425162
+      ],
+      "criteria": {
+        "brier": {
+          "margin": 0.002,
+          "largest_upper95": 0.0002073647091767039,
+          "noninferior": true
+        },
+        "log_loss_nats": {
+          "margin": 0.005,
+          "largest_upper95": 0.0008036170382012432,
+          "noninferior": true
+        },
+        "top1_accuracy": {
+          "margin": 0.005,
+          "game_lower95": -0.0005683971201212581,
+          "noninferior": true
+        }
+      },
+      "quality_noninferiority_screen": true,
+      "speedup": 1.732191819746721
+    },
+    "online_1000_1799": {
+      "positions": 2276,
+      "games": 600,
+      "scores": {
+        "torch": [
+          0.6219696713568514,
+          1.4792033854486002,
+          0.515817223198594
+        ],
+        "rust": [
+          0.6220488158597589,
+          1.4795666990150702,
+          0.515597539543058
+        ]
+      },
+      "native_minus_reference": [
+        7.91445029089194e-05,
+        0.0003633135664711974,
+        -0.0002196836555360281
+      ],
+      "criteria": {
+        "brier": {
+          "margin": 0.002,
+          "largest_upper95": 0.0003094783929462958,
+          "noninferior": true
+        },
+        "log_loss_nats": {
+          "margin": 0.005,
+          "largest_upper95": 0.0009996548225851172,
+          "noninferior": true
+        },
+        "top1_accuracy": {
+          "margin": 0.005,
+          "game_lower95": -0.0015277338322160572,
+          "noninferior": true
+        }
+      },
+      "quality_noninferiority_screen": true,
+      "speedup": 1.7441844972966212
+    },
+    "online_1800_plus": {
+      "positions": 2327,
+      "games": 600,
+      "scores": {
+        "torch": [
+          0.5592849081630461,
+          1.2758758763986744,
+          0.5846583584013751
+        ],
+        "rust": [
+          0.5593216228360055,
+          1.2761280340804178,
+          0.5835840137516115
+        ]
+      },
+      "native_minus_reference": [
+        3.6714672961816916e-05,
+        0.0002521576817450107,
+        -0.0010743446497636442
+      ],
+      "criteria": {
+        "brier": {
+          "margin": 0.002,
+          "largest_upper95": 0.0002897147872149225,
+          "noninferior": true
+        },
+        "log_loss_nats": {
+          "margin": 0.005,
+          "largest_upper95": 0.0008511083661960925,
+          "noninferior": true
+        },
+        "top1_accuracy": {
+          "margin": 0.005,
+          "game_lower95": -0.003010752688172043,
+          "noninferior": true
+        }
+      },
+      "quality_noninferiority_screen": true,
+      "speedup": 1.7476917880837881
+    },
+    "online_2200_plus": {
+      "positions": 2331,
+      "games": 600,
+      "scores": {
+        "torch": [
+          0.5225989704087926,
+          1.138272517224616,
+          0.6068211068211068
+        ],
+        "rust": [
+          0.5228757413449101,
+          1.1389224801117435,
+          0.6053196053196053
+        ]
+      },
+      "native_minus_reference": [
+        0.0002767709361160666,
+        0.0006499628871313757,
+        -0.0015015015015015015
+      ],
+      "criteria": {
+        "brier": {
+          "margin": 0.002,
+          "largest_upper95": 0.0006847729788238569,
+          "noninferior": true
+        },
+        "log_loss_nats": {
+          "margin": 0.005,
+          "largest_upper95": 0.0015695086780228274,
+          "noninferior": true
+        },
+        "top1_accuracy": {
+          "margin": 0.005,
+          "game_lower95": -0.0036356248625067857,
+          "noninferior": true
+        }
+      },
+      "quality_noninferiority_screen": true,
+      "speedup": 1.7503976297298747
+    }
+  },
+  "history": {
+    "white_canonical": {
+      "games": 128,
+      "mean_scores": {
+        "maia_position": 0.41467671380969157,
+        "allie_sampled": 0.4958412367887347,
+        "allie_exit_mode": 0.5018002907582135,
+        "allie_position_mode": 0.4958412367887347
+      },
+      "paired": {
+        "allie_exit_mode_minus_allie_sampled": {
+          "mean": 0.005959053969478866,
+          "ci95_mc": [
+            0.0,
+            0.016596066003767295
+          ],
+          "discordant_games": 3,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        },
+        "allie_position_mode_minus_allie_sampled": {
+          "mean": 0.0,
+          "ci95_mc": [
+            -0.023132405251746757,
+            0.023132405251746757
+          ],
+          "discordant_games": 0,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        },
+        "maia_position_minus_allie_sampled": {
+          "mean": -0.08116452297904311,
+          "ci95_mc": [
+            -0.16041865810478964,
+            -0.0032060543394361696
+          ],
+          "discordant_games": 122,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        }
+      },
+      "costs": {
+        "maia_position": {
+          "cold_wall_s": 552.6941650999943,
+          "warm_wall_s": 2.3080433000286575,
+          "counts_s": 515.4344181999331,
+          "packed_history_bytes": 12258,
+          "game_file_bytes": 16035,
+          "actual_contexts": 0,
+          "position_contexts": 0
+        },
+        "allie_sampled": {
+          "cold_wall_s": 5234.0750979,
+          "warm_wall_s": 5.41070460001356,
+          "counts_s": 494.33095369974035,
+          "packed_history_bytes": 12380,
+          "game_file_bytes": 16150,
+          "actual_contexts": 4278,
+          "position_contexts": 4263
+        },
+        "allie_exit_mode": {
+          "cold_wall_s": 5617.0871756999695,
+          "warm_wall_s": 5.816181000001961,
+          "counts_s": 87.08653690025676,
+          "packed_history_bytes": 12374,
+          "game_file_bytes": 16156,
+          "actual_contexts": 4275,
+          "position_contexts": 4260
+        },
+        "allie_position_mode": {
+          "cold_wall_s": 4413.283721099986,
+          "warm_wall_s": 4.690339600027073,
+          "counts_s": 0.3294784003228415,
+          "packed_history_bytes": 12380,
+          "game_file_bytes": 16150,
+          "actual_contexts": 4278,
+          "position_contexts": 4263
+        }
+      },
+      "history_coverage": {
+        "allie_position_mode": {
+          "available": 5,
+          "missing": 4273,
+          "replaced": 0,
+          "tied": 0,
+          "single_observation": 5
+        },
+        "allie_exit_mode": {
+          "available": 35,
+          "missing": 93,
+          "replaced": 3,
+          "tied": 0,
+          "single_observation": 0
+        }
+      }
+    },
+    "black_canonical": {
+      "games": 128,
+      "mean_scores": {
+        "maia_position": 0.3039020320081741,
+        "allie_sampled": 0.37737634480072824,
+        "allie_exit_mode": 0.3742518653801284,
+        "allie_position_mode": 0.37737634480072824
+      },
+      "paired": {
+        "allie_exit_mode_minus_allie_sampled": {
+          "mean": -0.0031244794205997958,
+          "ci95_mc": [
+            -0.013275133665426625,
+            0.007003962720078099
+          ],
+          "discordant_games": 8,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        },
+        "allie_position_mode_minus_allie_sampled": {
+          "mean": 0.0,
+          "ci95_mc": [
+            -0.023132405251746757,
+            0.023132405251746757
+          ],
+          "discordant_games": 0,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        },
+        "maia_position_minus_allie_sampled": {
+          "mean": -0.07347431279255406,
+          "ci95_mc": [
+            -0.1449483677082858,
+            -0.0028025460549345933
+          ],
+          "discordant_games": 117,
+          "interval_inside_0_002_margin": false,
+          "decision": "pilot screen only"
+        }
+      },
+      "costs": {
+        "maia_position": {
+          "cold_wall_s": 264.6340807999659,
+          "warm_wall_s": 2.517469499958679,
+          "counts_s": 230.37870530007058,
+          "packed_history_bytes": 12088,
+          "game_file_bytes": 16197,
+          "actual_contexts": 0,
+          "position_contexts": 0
+        },
+        "allie_sampled": {
+          "cold_wall_s": 5659.535309799976,
+          "warm_wall_s": 5.727421400049934,
+          "counts_s": 236.4988778999541,
+          "packed_history_bytes": 12248,
+          "game_file_bytes": 16310,
+          "actual_contexts": 4447,
+          "position_contexts": 4443
+        },
+        "allie_exit_mode": {
+          "cold_wall_s": 4912.652855399996,
+          "warm_wall_s": 5.639196500007529,
+          "counts_s": 117.71576920035295,
+          "packed_history_bytes": 12258,
+          "game_file_bytes": 16358,
+          "actual_contexts": 4452,
+          "position_contexts": 4448
+        },
+        "allie_position_mode": {
+          "cold_wall_s": 3603.783114299993,
+          "warm_wall_s": 3.7311039000051096,
+          "counts_s": 0.25413539994042367,
+          "packed_history_bytes": 12248,
+          "game_file_bytes": 16310,
+          "actual_contexts": 4447,
+          "position_contexts": 4443
+        }
+      },
+      "history_coverage": {
+        "allie_position_mode": {
+          "available": 9,
+          "missing": 4442,
+          "replaced": 0,
+          "tied": 0,
+          "single_observation": 9
+        },
+        "allie_exit_mode": {
+          "available": 54,
+          "missing": 74,
+          "replaced": 10,
+          "tied": 1,
+          "single_observation": 0
+        }
+      }
+    }
+  },
+  "history_fixed_costs": {
+    "atlas_preparation_wall_s": 5344.32409160005,
+    "atlas_bytes": 970752,
+    "engine_new_wall_s": 178.09699219989125,
+    "engine_cache_bytes": 81920,
+    "limits": [
+      "Pilot fixed model ratings, no calibration or OTB ensemble. Legacy empirical counts extend through ply30.",
+      "Modal routes are estimated from independent reference simulations, not claimed exact population modes.",
+      "Unseen modal contexts use actual history, keyed by that actual history; report this fallback rate.",
+      "Monte Carlo intervals condition on the policies and leaf engine. They do not measure model or human-population uncertainty.",
+      "Both colors use one canonical book; repertoire ranking stability needs additional frozen books.",
+      "Cold prediction caches are separate by arm; model weights, opening priors, and empirical counts are shared.",
+      "Worker peak RSS is lifetime peak, not isolated per-arm peak; GPU/CPU devices differ.",
+      "Small paired pilot cannot establish equivalence merely because a difference is nonsignificant."
+    ]
+  }
+}

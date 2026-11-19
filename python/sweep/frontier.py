@@ -16,6 +16,7 @@ import duckdb
 from consumer_keys import PAIR, checked_board, stored_key
 from .policy import ensemble, overlay_rows, validate_overlay_rows, write_overlay
 from .spec import POLICY, digest
+from .keyed_parquet import KeyedParquet
 from .stages import artifacts, file_sha, atomic_json
 
 def pair(k):
@@ -32,34 +33,28 @@ class Counts:
         self.aux=str(Path(aux).resolve())
         self.db=duckdb.connect(config={"threads":threads,"memory_limit":"4GB"})
         self.queries=0
-        for path,column in [(p,"parent_hash") for p in self.sources.values()]+[(self.aux,"position_hash")]:
-            if pl.read_parquet_schema(path)[column]!=PAIR:
-                raise ValueError(f"policy counts require full struct keys: {path}")
+        self.readers={n:KeyedParquet(p,"parent_hash") for n,p in self.sources.items()}
+        self.readers["aux"]=KeyedParquet(self.aux,"position_hash")
 
     def fetch(self, boards):
         ks=[stored_key(b,True) for b in boards]
-        query=pl.DataFrame({"h":ks},schema={"h":PAIR})
-        self.db.register("policy_keys",query.to_arrow())
         out={pair(k):{n:[] for n in self.names}|{"aux":{}} for k in ks}
-        try:
-            for name,path in self.sources.items():
-                self.queries+=1
-                rows=pl.from_arrow(self.db.execute(
-                                 "SELECT s.* FROM read_parquet(?) s SEMI JOIN policy_keys k ON s.parent_hash=k.h",[path]).to_arrow_table())
-                for row in rows.to_dicts():
-                    out[pair(row["parent_hash"])][name].append(row)
+        for name,reader in self.readers.items():
             self.queries+=1
-            rows=pl.from_arrow(self.db.execute(
-                "SELECT s.* FROM read_parquet(?) s SEMI JOIN policy_keys k ON s.position_hash=k.h",[self.aux]).to_arrow_table())
-            for row in rows.to_dicts():
-                target=out[pair(row["position_hash"])]
-                if target["aux"]: raise ValueError("duplicate aux position")
-                target["aux"]=row
-        finally:
-            self.db.unregister("policy_keys")
+            for row in reader.fetch(self.db,ks).to_dicts():
+                target=out[pair(row[reader.column])]
+                if name=="aux":
+                    if target["aux"]:raise ValueError("duplicate aux position")
+                    target["aux"]=row
+                else:target[name].append(row)
         return out
 
-    def close(self): self.db.close()
+    def metrics(self):return {n:dict(r.stats) for n,r in self.readers.items()}
+
+    def close(self):
+        self.db.close()
+        for r in self.readers.values():r.close()
+
 
 def vectors(board, record):
     legal=sorted(m.uci() for m in board.legal_moves)
@@ -210,7 +205,8 @@ class FrontierOverlay:
                          cache_identity=self.identity,materialization=dict(self.stats))
         meta_path=Path(str(path)+".json")
         meta=json.loads(meta_path.read_text(encoding="utf8"))
-        meta.update(cache_identity=self.identity,materialization=dict(self.stats))
+        meta.update(cache_identity=self.identity,materialization=dict(self.stats),
+                    count_lookup=self.counts.metrics() if hasattr(self.counts,"metrics") else {})
         atomic_json(meta_path,meta)
         return self.recipe
 
@@ -232,7 +228,7 @@ def from_config(path,*,colour,keys,pool,aux):
     # Pin inference and preprocessing code too; checkpoint identity alone is insufficient.
     bound=list(cfg["artifacts"])
     code=Path(__file__).resolve().parents[1]
-    for p in (Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),
+    for p in (Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),Path(__file__).with_name("keyed_parquet.py"),
               code/"maia_server.py",code/"maia_batch.py"):
         bound.append(dict(path=str(p),sha256=file_sha(p)))
     runtime=runtime_identity(cfg["model"]["python"])
