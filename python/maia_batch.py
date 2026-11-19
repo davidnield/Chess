@@ -58,11 +58,11 @@ def prep(chunk):
     return hs, np.stack(toks) if toks else np.zeros((0, 64, 12), np.uint8), mv
 
 
-def load(model_name: str, cache_dir: str):
+def load(model_name: str, cache_dir: str, checkpoint: str | None = None):
     from maia3.model_registry import resolve_checkpoint_path
     from maia3.uci import load_model, parse_args
     cfg = parse_args(["--model", f"maia3-{model_name}", "--local-files-only", "--cache-dir", cache_dir])
-    cfg.checkpoint_path = resolve_checkpoint_path(
+    cfg.checkpoint_path = checkpoint or resolve_checkpoint_path(
         cfg.model_spec, checkpoint_filename=None, cache_dir=cache_dir, revision=None,
         local_files_only=True, force_download=False, token=None)
     return cfg, load_model(cfg)

@@ -405,7 +405,15 @@ def run(book, colour, cache, out, nodes=5_000_000, threads=6, frontier_reach=Non
                        frontier, deep_nodes, band)
 
 
-def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, deep_nodes, band):
+def request_plan(book, colour, deep_nodes=20_000_000, band=BAND):
+    """Read-only request export; no engine/cache mutations."""
+    book=Path(book)
+    return _verify(book,colour,None,Path(str(book)+".request-only"),5_000_000,1,
+                   None,0,deep_nodes,band,plan_only=True)
+
+
+def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, deep_nodes, band,
+            plan_only=False):
     t0 = time.monotonic()
     meta = json.loads(Path(str(book) + ".meta.json").read_text())
     if meta.get("rare_floor") is None:
@@ -430,6 +438,12 @@ def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, 
         frame = fb.normalize(frame)
     else:
         frame = pl.DataFrame(schema=fb.SCHEMA)
+    quality_frontier=[]
+    if meta.get("quality_frontier"):
+        spec=meta["quality_frontier"]
+        if sha(spec["file"])!=spec["sha256"]:
+            raise ValueError("Quality-frontier evidence changed after the build")
+        quality_frontier=json.loads(Path(spec["file"]).read_text(encoding="utf8"))
     b = pl.read_parquet(book)
     disputes = json.loads(Path(str(book) + ".rare.json").read_text())
     if keys:
@@ -438,9 +452,13 @@ def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, 
             pair = d["position_hash"]
             d["_order"] = (pair["lo"], pair["hi"])
             d["position_hash"] = keys.native.encode_one(*d["_order"])
+    if keys:
+        for row in quality_frontier:
+            row["position_hash"]=keys.native.encode_one(row["position_hash"]["lo"],row["position_hash"]["hi"])
     parents = set(b.filter((pl.col("side_to_move") == colour)
                            & pl.col("best_move").is_not_null())["position_hash"])
     parents |= {d["position_hash"] for d in disputes}
+    parents |= {r["position_hash"] for r in quality_frontier}
     with duckdb.connect() as con:
         con.execute("SET threads=4; SET memory_limit='8GB'")
         edges = edges_at(con, meta, colour, parents, **({"keys": keys} if keys else {}))
@@ -466,11 +484,38 @@ def _verify(book, colour, cache, out, nodes, threads, frontier_reach, frontier, 
             raise ValueError("Quality verification needs independent evidence from the frozen engine")
     wanted = plan(b, meta, frame, colour, cps, edges, disputes, frontier_reach, frontier,
                   deep_nodes=deep_nodes, band=band, keys=keys)
+    for row in quality_frontier:
+        h=row["position_hash"]
+        old=wanted.get(h)
+        if old:
+            wanted[h]=(old[0]+"; "+row["reason"],old[1],sorted(set(old[2])|set(row["moves"])))
+        else:
+            wanted[h]=(row["reason"],row["epd"],row["moves"])
     verified = bc.verified_moves(frame)
     sign = 1 if colour == "white" else -1
     # the deepest budget already applied at each parent, from the overlay this book was built with
     applied = dict(frame.filter(pl.col("verification_nodes").is_not_null())
                    .group_by("position_hash").agg(pl.col("verification_nodes").max()).iter_rows())
+    if plan_only:
+        if meta.get("max_score_loss") is None:
+            raise ValueError("joint sweep verification requires score gates")
+        if not keys:
+            raise ValueError("joint sweep verification requires full keys")
+        public = dict(zip(sorted(parents), keys.external(pl.Series("h",sorted(parents),dtype=pl.Int64)).to_list()))
+        child_ids=sorted({e["child_hash"] for es in edges.values() for e in es if e["child_hash"] is not None})
+        public.update(zip(child_ids,keys.external(pl.Series("h",child_ids,dtype=pl.Int64)).to_list()))
+        requests=[]
+        for h,(reason,epd,moves) in sorted(wanted.items()):
+            menu=[dict(san=bare(e["move_san"]),child=public.get(e["child_hash"]),total=e["total"],
+                       stored_cp=stored.get(e["child_hash"])) for e in edges.get(h,())]
+            requests.append(dict(key=public[h],epd=epd,moves=moves,reason=reason,
+                                 done=sorted(verified.get(h,())),menu=menu,
+                                 previous_nodes=applied.get(h,0)))
+        return dict(book=str(book),book_sha256=sha(book),colour=colour,
+                    overlay_sha256=meta.get("engine_candidates_sha256"),
+                    policy=dict(limit=meta["max_score_loss"],floor=bc.score_floor_from_meta(meta,colour=="white"),
+                                band=meta.get("verification_score_band",.01)),
+                    requests=requests)
     print(f"{len(wanted)} parents to verify: "
           f"{dict(pl.Series([w[0] for w in wanted.values()]).value_counts().iter_rows()) if wanted else {}}",
           flush=True)

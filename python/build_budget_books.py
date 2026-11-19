@@ -458,6 +458,9 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             if source_moves is not None and (lvl % 2 == 0) == our_white and lvl < max_ply:
                 restored = unrecorded_sources(df, source_moves, admit.excluded if admit else {}, keys=keys)
                 col.set_source_children(np.fromiter(restored, np.int64), np.fromiter(restored.values(), np.int64))
+                if hasattr(reply_overlay, "origins"):
+                    for h,ch in restored.items():
+                        reply_overlay.origins.setdefault(ch,(h,source_moves.get(h)))
             col.walk(par, ch, has, df["total"].cast(pl.Int64).to_numpy(),
                      coder.sans(df["move_san"]), coder.bares(df["move_san"]),
                      None if reply_overlay is None else
@@ -481,6 +484,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rep", required=True, help="Unconstrained source rep parquet.")
     ap.add_argument("--stats", required=True)
+    ap.add_argument("--opponent-policy-config",
+                    help="Selective OTB ensemble config; queries only reached full-key opponent positions")
     ap.add_argument("--opponent-prior", help="Frozen named replies and Maia probabilities at opponent positions")
     ap.add_argument("--opponent-pseudogames", type=float, default=0.0)
     ap.add_argument("--perspective", choices=["white", "black"], required=True)
@@ -651,6 +656,10 @@ def main() -> int:
         a.robustness_floor = bc.ROBUSTNESS_FLOOR if legacy else bc.SCORE_ABSOLUTE_TOLERANCE[a.perspective]
     if a.verification_policy == "quality" and legacy:
         ap.error("quality verification requires the expected-score policy")
+    if a.opponent_policy_config and (a.opponent_prior or a.opponent_pseudogames or a.uncut_own_moves):
+        ap.error("selective policy uses uncut min-games-1 pools, with no second opponent overlay")
+    policy_config_sha = (hashlib.sha256(Path(a.opponent_policy_config).read_bytes()).hexdigest()
+                         if a.opponent_policy_config else None)
     allowed_sha = hashlib.sha256(Path(a.allowed_book).read_bytes()).hexdigest() if a.allowed_book else None
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
     if not legacy:
@@ -730,6 +739,12 @@ def main() -> int:
                 artifacts(dest, previous)
             if previous.get("uncut_own_recipe") != uncut_recipe:
                 ap.error("Existing output uses another move lookup; choose a fresh output prefix")
+            if previous.get("quality_frontier"):
+                q = previous["quality_frontier"]
+                if hashlib.sha256(Path(q["file"]).read_bytes()).hexdigest() != q["sha256"]:
+                    ap.error("Existing output has changed quality-frontier evidence")
+            if previous.get("opponent_policy_config_sha256") != policy_config_sha:
+                ap.error("Existing output uses another selective opponent policy")
             if previous.get("allowed_book_sha256") != allowed_sha:
                 ap.error("Existing output uses another fixed-prescription parent")
             if (previous.get("verification_policy", "legacy-rare") != a.verification_policy
@@ -834,7 +849,17 @@ def main() -> int:
         if admit is not None:
             admit.rare_floor, admit.verified = rare_floor, verified_at
     reply_overlay = None
-    if a.opponent_prior:
+    if a.opponent_policy_config:
+        if not keys or a.min_games != 1 or not aux_path:
+            ap.error("selective opponent policy requires full-key min-games-1 pool and aux")
+        from sweep.frontier import from_config
+        reply_overlay = from_config(a.opponent_policy_config, colour=a.perspective,
+                                    keys=keys, pool=stats, aux=aux_path)
+        for h, moves in (proposal_moves or {}).items():
+            for san,ch in moves:
+                if ch is not None:
+                    reply_overlay.origins.setdefault(ch,(h,san))
+    elif a.opponent_prior:
         from opponent_prior import ReplyOverlay
         reply_overlay = ReplyOverlay(a.opponent_prior,a.opponent_pseudogames,stats,aux_path,
                                      a.perspective,a.min_games, keys=keys)
@@ -844,10 +869,21 @@ def main() -> int:
     graph_aux = str(a.uncut_own_moves / "aux.parquet") if uncut else aux_path
     if uncut:
         log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
-    edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
-                                 a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
-                                 reply_overlay, uncut_own=bool(uncut), keys=keys, source_moves=src_all)
+    try:
+        edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
+                                     a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
+                                     reply_overlay, uncut_own=bool(uncut), keys=keys, source_moves=src_all)
+        if a.opponent_policy_config:
+            reply_overlay.publish(str(a.out_prefix)+".opponent.parquet")
+    finally:
+        if a.opponent_policy_config:
+            reply_overlay.close()
     del src_all, admit
+    if a.opponent_policy_config:
+        # Reopen the frozen artifact for downstream assembly/audits.
+        from opponent_prior import ReplyOverlay
+        reply_overlay = ReplyOverlay(str(a.out_prefix)+".opponent.parquet",0,stats,aux_path,
+                                     a.perspective,a.min_games,keys=keys)
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -940,6 +976,10 @@ def main() -> int:
     track_route = bool(a.dump_stop_positions or a.sampled_stop or a.dump_other_positions
                        or a.sampled_other)
     t1 = time.time()
+    quality_edges = (edf.filter(pl.col("parent_epd").str.split(" ").list.get(1)
+                       == ("w" if our_white else "b"))
+                       .select("parent_hash","parent_epd","move_san","child_hash")
+                     if a.verification_policy == "quality" else None)
     fi = budget_rs.frame_inputs(edf, rep_moves=rep_moves, engine_moves=engine_moves,
                                 excluded=excluded, verified=verified_at, strict_source=True,
                                 aux_frame=aux_frame, keys=keys)
@@ -1009,6 +1049,20 @@ def main() -> int:
                             max_ply=a.max_ply, share_floor=a.share_floor,
                             slice_prior=slice_prior, our_white=our_white,
                             strict_source=True, crack_at_parents=True)
+    quality_frontier = None
+    if quality_edges is not None:
+        from sweep.candidates import requests as candidate_requests
+        from sweep.stages import atomic_json, file_sha
+        qrows = candidate_requests(quality_edges,g.reach,keys.scores if keys else
+                                  lambda h: lookup_evals(h,mm_hash,mm_cp),
+                                  white=our_white,floor=absolute_score_floor,limit=a.max_score_loss,
+                                  verified_frame=pl.read_parquet(proposal_input) if proposal_input else None,
+                                  overrides=verified_cp,band=a.verification_score_band)
+        if keys: qrows=keys.records(qrows,["position_hash"])
+        qpath=Path(str(a.out_prefix)+".quality-frontier.json")
+        atomic_json(qpath,qrows)
+        quality_frontier=dict(file=str(qpath.resolve()),sha256=file_sha(qpath),parents=len(qrows))
+        del quality_edges
     del fi, ek, ev
     budget_rs.LAST_TIMING.update(convert_in=t2 - t1, rust=t3 - t2, convert_out=time.time() - t3)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes "
@@ -1395,7 +1449,10 @@ def main() -> int:
                if a.method == "price" else {}),
             **({"price": price_info} if price_info is not None else {}),
             **({"polish": polish_info} if polish_info is not None else {}),
+            "opponent_policy_config": a.opponent_policy_config,
+            "opponent_policy_config_sha256": policy_config_sha,
             "allowed_book": a.allowed_book, "allowed_book_sha256": allowed_sha,
+            "quality_frontier": quality_frontier,
             "verification_policy": a.verification_policy,
             "verification_score_band": a.verification_score_band,
             "objective_components": {

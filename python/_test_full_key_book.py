@@ -140,7 +140,8 @@ class BookTest(unittest.TestCase):
             "--weak-min-games", 1, "--rep", source, "--out-prefix", path/"black",
             "--budget", 2, "--max-ply", 2, "--epsilon", .0001, "--eval-weight", 1,
                         "--gated-reach", *(["--max-score-loss", .06, "--robustness-floor", .05,
-                                "--lookahead-floor", 2, "--slice-prior", .5195669627673518]
+                                 "--lookahead-floor", 2, "--slice-prior", .5195669627673518,
+                                "--verification-policy", "quality"]
                                if modern else ["--max-eval-loss", 30]),
             "--uncut-own-moves", path/"uncut",
             "--perspective", "black", "--tmp-dir", path/"spill")
@@ -159,6 +160,15 @@ class BookTest(unittest.TestCase):
             self.assertEqual(proof.schema["child"], consumer_keys.PAIR)
             report = lookahead_audit.audit(built, meta, check_receipt=False)
             self.assertEqual(report["checked_decisions"], 2)
+            import rare_verify
+            request = rare_verify.request_plan(built, "black")
+            self.assertEqual(len(request["requests"]), 3)
+            missing = [r for r in request["requests"] if r["reason"]=="missing-candidate-evidence"]
+            self.assertEqual(len(missing), 1)
+            self.assertEqual(missing[0]["key"], pair(key(board("c4"))))
+            self.assertEqual(missing[0]["moves"], ["e5"])
+            self.assertTrue(all(set(row["key"])=={"lo","hi"} for row in request["requests"]))
+
             allowed = path/"allowed.parquet"
             frame.filter(pl.col("best_move")=="e5").write_parquet(allowed)
             run(builder.main, "--stats", stats, "--aux-stats", aux, "--weak-pool", weak,

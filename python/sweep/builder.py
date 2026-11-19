@@ -23,15 +23,18 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
     """No paths are inferred from an old canonical/experimental book."""
     r=arm["recipe"]
     if arm["id"]!=digest(r)[:20]: raise ValueError("changed arm recipe")
-    required=("source","stats","aux","weak","opponent_overlay","engine_overlay")
+    required=("source","stats","aux","weak")
     if any(not inputs.get(k) for k in required): raise ValueError("shared inputs are not bound")
     if r["mode"]=="reduced" and not inputs.get("allowed_book"):
         raise ValueError("reduced arm needs its fixed-prescription parent")
-    args=[str(python),"-X","utf8","-u",str(Path(code)/"python/build_budget_books.py"),
+    if bool(inputs.get("opponent_overlay"))==bool(inputs.get("opponent_policy_config")):
+        raise ValueError("bind exactly one static or selective opponent policy")
+    module=Path(code)/"build_budget_books.py"
+    if not module.exists(): module=Path(code)/"python/build_budget_books.py"
+    args=[str(python),"-X","utf8","-u",str(module),
           "--rep",str(inputs["source"]),"--stats",str(inputs["stats"]),
           "--aux-stats",str(inputs["aux"]),"--weak-pool",str(inputs["weak"]),
-          "--opponent-prior",str(inputs["opponent_overlay"]),"--opponent-pseudogames","0",
-          "--engine-candidates",str(inputs["engine_overlay"]),"--perspective",r["colour"],
+          "--opponent-pseudogames","0","--perspective",r["colour"],
           "--out-prefix",str(out_prefix),"--tmp-dir",str(tmp),"--budget",str(r["budget"]),
           "--max-ply",str(r["max_ply"]),"--min-games","1","--eval-weight",str(r["eval_weight"]),
           "--weak-min-games",str(r["weak_min_games"]),"--grid-cap",str(r["grid_cap"]),
@@ -41,6 +44,9 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
           "--lookahead-floor",str(r["lookahead_floor"]),"--gated-reach",
           "--verification-policy","quality","--verification-score-band",str(r["verification"]["score_band"]),
           "--method","price" if r["colour"]=="white" else "dp"]
+    if inputs.get("engine_overlay"): args.extend(["--engine-candidates",str(inputs["engine_overlay"])])
+    if inputs.get("opponent_overlay"): args.extend(["--opponent-prior",str(inputs["opponent_overlay"])])
+    else: args.extend(["--opponent-policy-config",str(inputs["opponent_policy_config"])])
     if r["opponent_policy"]["name"]!="otb-ensemble-v1":
         # The control overlay uses the existing schema-2 conditional recipe.
         args[args.index("--opponent-pseudogames")+1]=str(r["opponent_policy"]["pseudogames"])

@@ -80,3 +80,27 @@ def checked_terminal(board):
     # Automatic outcomes are exact. Claimable repetition/draw is a separate player decision.
     outcome=board.outcome(claim_draw=False)
     return None if outcome is None else outcome.result()
+
+
+def residual_exposure(routes,risks,added,base=()):
+    """Expected maximum risk left at or after the first uncovered prescription.
+
+    Experimental alternative: covering an earlier equal-risk position cannot
+    hide a later uncovered risk. Only a continuous prescribed prefix counts.
+    """
+    validate(routes,risks)
+    cover=set(added)|set(base);result=0.
+    for route in routes:
+        uncovered=False;peak=0.
+        for k in route.positions:
+            uncovered |= k not in cover
+            if uncovered and k not in base: peak=max(peak,risks[k])
+        result+=route.probability*peak
+    return result
+
+def residual_package_value(routes,risks,package,selected=(),base=()):
+    new=set(package)-set(base)-set(selected)
+    before=residual_exposure(routes,risks,selected,base)
+    after=residual_exposure(routes,risks,set(selected)|new,base)
+    return dict(new_positions=len(new),marginal_exposure=before-after,
+                density=(before-after)/len(new) if new else 0.)

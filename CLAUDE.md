@@ -405,3 +405,24 @@ Windows Task Scheduler has been unreliable; don't build on it.
 `python/notify.py`: stdlib-only SMTP. Creds in `%USERPROFILE%/.chess_pipeline_notify.json` (outside
 the repo; `notify_config.example.json` is the template) or `CHESS_NOTIFY_*` env vars. Silently
 no-ops if unconfigured — pipelines run identically without it.
+
+
+## Isolated sweep execution preparation (2026-11-19)
+
+The maintained experimental entrypoints are `python -m sweep.prepare`, `sweep.coordinator`,
+`sweep.verify`, and `sweep.extend` from the python directory. Read
+`docs/sweep-preparation-progress.md` and `docs/sweep-preparation-usage.md` before executing.
+They do not replace running deployment snapshots. Coordinator/extension CLIs default to
+readiness; production matrix release requires the separate Black pilot acceptance artifact.
+
+Selective OTB policy uses full legal vectors and preserves counts/nonmove mass; do not add
+Maia pseudogames a second time. Pin source/model/runtime identities. A changed shared engine
+overlay requires all affected arms to rebuild. A round/work cap is unfinished, never closure.
+Keep 20M or stronger independent evidence. Material transposition conflicts use a full-key
+direct-child search without erasing incoming edge evidence or previously resolved children.
+
+Extensions have no four-move/depth or nonzero reply-frequency cap. Actual histories determine
+repetition; full keys deduplicate memory cost. The approved maximum-covered-risk metric has
+a documented late-equal-risk masking problem; the proposed remaining-risk alternative is
+implemented for comparison but does not silently replace the approved default. See the
+November 19 progress entry for the pending user decision and production cost limitations.

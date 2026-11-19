@@ -50,9 +50,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="79m")
     ap.add_argument("--cache-dir", default="D:/chess/maia/hf_cache/hub")
+    ap.add_argument("--checkpoint", help="Explicit locally pinned model checkpoint")
     a = ap.parse_args()
-    cfg, model = mb.load(a.model, a.cache_dir)
-    print(json.dumps({"ready": True}), flush=True)
+    cfg, model = mb.load(a.model, a.cache_dir, a.checkpoint)
+    ready = {"ready": True}
+    if a.checkpoint:
+        import hashlib
+        with open(a.checkpoint, "rb") as stream:
+            ready["checkpoint_sha256"] = hashlib.file_digest(stream, "sha256").hexdigest()
+    print(json.dumps(ready), flush=True)
     for line in sys.stdin:
         if not line.strip():
             continue

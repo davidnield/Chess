@@ -13,7 +13,7 @@ import polars as pl
 
 from engine_candidates import SF
 from hybrid_candidates import sha, write_frame, write_json
-from zobrist import zobrist_int64
+from consumer_keys import PAIR, checked_board, stored_key
 
 
 def material_children(frame, spread_cp):
@@ -27,11 +27,9 @@ def material_children(frame, spread_cp):
 def child_epd(group, child_hash):
     positions = set()
     for parent, epd, san in group.select("position_hash", "position_epd", "move_san").iter_rows():
-        board = chess.Board(epd + " 0 1")
-        if not board.is_valid() or zobrist_int64(board) != parent:
-            raise ValueError(f"Invalid parent of transposition {child_hash}: {parent}")
+        board = checked_board(epd, parent)
         board.push_san(san)
-        if zobrist_int64(board) != child_hash:
+        if stored_key(board,isinstance(child_hash,dict)) != child_hash:
             raise ValueError(f"Transposition child mismatch at {parent} {san}")
         positions.add(board.epd(en_passant="xfen"))
     if len(positions) != 1:
@@ -40,9 +38,12 @@ def child_epd(group, child_hash):
 
 
 def resolve(frame, cache, spread_cp=30, nodes=30_000_000):
+    wide = frame.schema["child_hash"] == PAIR
+    cache = Path(cache) / "key128" if wide else Path(cache)
     cache.mkdir(parents=True, exist_ok=True)
     contract = {"engine_sha256": sha(SF), "script_sha256": sha(__file__), "nodes": nodes,
                 "threads": 1, "hash_mb": 128, "mate_cp": 2000}
+    if wide: contract["key_bits"] = 128
     config = cache / "config.json"
     if config.exists() and json.loads(config.read_text()) != contract:
         raise ValueError("Transposition search cache settings changed")
@@ -54,7 +55,8 @@ def resolve(frame, cache, spread_cp=30, nodes=30_000_000):
     try:
         for (child,), group in edges.group_by("child_hash", maintain_order=True):
             epd = child_epd(group, child)
-            file = cache / f"{child}.json"
+            name = f"{child['lo']}_{child['hi']}" if wide else str(child)
+            file = cache / f"{name}.json"
             if file.exists():
                 saved = json.loads(file.read_text())
                 if saved["epd"] != epd or saved["child_hash"] != child:
@@ -82,7 +84,13 @@ def resolve(frame, cache, spread_cp=30, nodes=30_000_000):
         if engine is not None:
             engine.quit()
     direct = pl.DataFrame([(r["child_hash"], r["cp_white"]) for r in records],
-                          schema={"child_hash": pl.Int64, "transposition_cp_white": pl.Int32}, orient="row")
+                          schema={"child_hash": PAIR if wide else pl.Int64, "transposition_cp_white": pl.Int32}, orient="row")
+    # A resolved child remains evidence even when later incoming scores happen to agree.
+    if "transposition_cp_white" in frame.columns:
+        old=frame.select("child_hash","transposition_cp_white").drop_nulls().unique()
+        if old["child_hash"].n_unique()!=old.height:
+            raise ValueError("conflicting previous direct transposition scores")
+        direct=pl.concat([old.join(direct.select("child_hash"),on="child_hash",how="anti"),direct])
     result = frame.drop("transposition_cp_white", strict=False).join(direct, on="child_hash", how="left")
     return result.sort("position_hash", "child_hash"), {"spread_cp": spread_cp, "contract": contract,
                                                         "positions": records}

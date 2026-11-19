@@ -397,3 +397,10 @@ The [practical repertoire workflow](docs/practical-repertoire.md) covers Stockfi
 ## License
 
 No license has been chosen yet, so default copyright applies.
+
+
+Experimental parameter-sweep execution is documented in
+[the preparation guide](docs/sweep-preparation-usage.md) and
+[the tracked progress log](docs/sweep-preparation-progress.md). These isolated,
+receipt-checked preparation commands do not change the deployed migration jobs or
+the canonical repertoires; the Black production pilot remains a release prerequisite.

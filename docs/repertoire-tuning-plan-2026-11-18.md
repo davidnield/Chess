@@ -363,3 +363,16 @@ Report each pool separately with the same proper-score/accuracy margins, paired 
 The frozen panels are reusable for the later Allie-versus-Maia comparison and calibration. This queued job specifically validates native versus reference Allie; it does not automatically switch the deployed model/backend.
 
 Implementation: scratch/allie-online-validation-20261118. Output: D:/chess/allie/online-backend-validation-20261118. Run after the OTB backend validation completes successfully, using two low-priority CPU threads. Preserve the current history pilot and OTB queue receipts. Rating-boundary/overlap tests, real-panel report checks, completion-gate checks and replay of all 6,934 histories passed before scheduling. The independent queue must propagate a failed/blocked dependency instead of launching on an incomplete report.
+
+
+## Implementation finding, November 19: extension metric comparison pending
+
+The continuation tests show that the maximum-covered-severity objective can give zero
+additional credit to an equally difficult later move once an earlier move covers that
+trajectory's maximum. The full implementation reproduces this, so it is a metric issue,
+not a four-move-cap bug. The proposed comparison measures the reduction in maximum
+remaining unbooked severity along each trajectory, allowing a package to cover the
+whole difficult sequence. Both versions retain continuous connectors, distinct-position
+cost and no recall discount. Both are implemented; the approved default is unchanged
+pending David's answer. See sweep-preparation-progress.md for the test, the conservative
+remaining-mass bound, and the next pilot steps.
