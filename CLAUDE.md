@@ -446,3 +446,14 @@ Selective count reads prune Parquet row groups conservatively and always compare
 The completed Allie Rust-backend tests passed quality margins. Modal-history equivalence
 is still unproven because its atlas almost always fell back to actual histories; retain
 actual histories and the calibrated Maia construction ensemble. See the third-pass notes.
+
+
+November 19 continuation: all 55 explorer recovery checks passed at 10:36 PST; the
+original pinned eval workflow resumed its capacity pilot. Do not restart verification.
+Pool finalization now uses an external DuckDB sort and fixed-schema Arrow batches;
+never restore the whole-export eager Polars read for uncut production pools.
+`sweep.audit_otb_split` is a read-only diagnostic, NOT a training-input publisher.
+The refreshed corpus merges 4,690 families across the old test/non-test boundary.
+Its candidate/quarantine files have `production_usable: false`; full ancestry and
+frozen legal replay remain necessary. Preserve old assignments and exclude mixed
+families before OTB training publication. See the fourth-pass progress entry.

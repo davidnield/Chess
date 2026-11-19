@@ -102,3 +102,14 @@ From the Python directory, run `python -m sweep.benchmark_counts --source POOL.p
 The selective count adapter now prunes row groups using existing low-half statistics, performs the final join on both halves, and retains groups whose statistics are missing. Frozen overlay sidecars include count_lookup metrics. The real Maia adapter/checkpoint smoke and microbenchmarks are in `docs/sweep-runtime-checks-2026-11-19.json`.
 
 Allie backend/history results and frozen evidence paths are in `docs/sweep-model-evidence-2026-11-19.json`; interpretation and limitations are in the third-pass progress entry. Rust passed the backend quality screen, but modal-history substitution has not passed equivalence. This does not change the calibrated Maia construction prior.
+
+
+## OTB split preflight after a corpus refresh
+
+Run from the pinned code's python directory:
+
+    python -m sweep.audit_otb_split --database D:/data/chess/tournament-games-deduplicated/tournament-games-deduplicated.duckdb --source-manifest D:/data/chess/tournament-games-deduplicated/manifest.json --historical-games C:/Users/David/Documents/Chess/outputs/otb-u2000-2026-11-13/games.parquet --out D:/chess/sweep-inputs-20261119/otb-audit
+
+This is a read-only corpus audit. Outputs are provisional identity candidates, a quarantine list and a hashed diagnostic report; they are **not training counts or an accepted split receipt**. Reuse checks both source generation and output hashes. A changed source/code requires another output directory. The November 19 run found 4,690 current families crossing the old test/non-test boundary. Complete ancestry reconciliation before freezing and replaying training inputs. Preserve old assignments; do not rehash changed numeric game IDs and silently reshuffle the holdout.
+
+Shared-pool finalization now externally sorts with the configured DuckDB budget/spill directory and streams Arrow batches. It no longer requires enough RAM for the entire pool plus sort. Ensure adequate temporary disk space before a production export; the bounded smoke is not a full-size capacity forecast.

@@ -175,3 +175,45 @@ Overall status: training extraction and merge complete (163 months, 512 buckets,
 Disk free space measured during this audit (decimal GB): C: 263, D: 1,655, E: 2,785, F: 3,125, H: 2,293. There is no current disk-pressure failure. The eval capacity pilot must still measure whether its projected temporary/output layout fits the reserves before the full rebuild starts.
 
 ChessDB download/readability repair and the offline WSL probe succeeded earlier (931 scored hits in its 1,000-position probe). ChessDB is **not** imported by the current Cloud/Fishnet eval launcher; its integration remains separately tracked. Successful readability must not be reported as completed eval-source integration.
+
+
+## November 19 fourth pass: explorer accepted, bounded exports, OTB split audit
+
+The explorer completed all **55 independent verification stages at 10:36:52 PST**. The final receipt is `D:/chess/ply51-migration-20261115/verification-recovery-sliced-20261119/verified.json` (SHA-256 `959264dc725d708e43959a0b91362af32d90a0d5524b67c0c0e2daa851f8c31a`). The book metadata remains `729801c10254906fc31c9f89b504d4c981a1f70cbbf2c6546495e477c4dde632`. The original pinned eval workflow started automatically. At 10:53 PST it was progressing through Fishnet source partitions in its eight-bucket capacity pilot, with no parse failures reported. This is not completion of the full eval DB or lookup. The running release and its disk reserve/fallback logic were left unchanged.
+
+### Fixed before large shared exports
+
+`pool_from_book.phase_finalize` previously loaded every bucket's edges into one eager Polars frame, sorted it, then repeated that for the aux table. Min-games-1 exports could therefore exhaust RAM even after all resumable bucket work succeeded.
+
+It now uses DuckDB's external sort under the configured memory/spill settings and writes 65,536-row Arrow batches into an atomic temporary Parquet output. Fixed Arrow types preserve large strings, signed full-key structs, optional fields and recipe metadata. Aux uniqueness compares both key halves, including the boundary between batches; null keys fail. Failures remove only the unfinished temporary file, preserve an existing output and never mark the pool complete. Existing per-bucket resumability and final row-count/meta checks remain.
+
+The focused export tests check exact 64/128-bit parity with the old sorted frame, empty shards/output, schema/metadata, same-low-half twins, duplicate keys across batches and interrupted publication. The existing full-key integration test passes conservation, terminal, independent reimplementation and evaluation gates, deliberate corruption detection, resume and both-color uncut reads. A one-million-row external-sort smoke with a **32 MB DuckDB budget** completed in **2.406 seconds**, actually spilled **94,109,696 bytes**, and passed an independent check of every key and payload. This is a bounded synthetic check, not a full-export ETA or a hard process-RAM cap. Record: `sweep-stream-export-check-2026-11-19.json`.
+
+### OTB split issue discovered; production input deliberately not published
+
+The historical November 13 file contains 4,037,682 selected games and 807,625 test assignments. Its source snapshot differs from the current deduplicated database. Matching historical representative record IDs to current membership yields:
+
+| Diagnostic | Count |
+|---|---:|
+| Missing representative records / source-name mismatches | 0 / 0 |
+| Historical games with a changed current game ID | 16,452 |
+| Distinct current games represented by the old selection | 4,022,859 |
+| Current families merging multiple old selected games | 14,357 |
+| Old selected games in those merged families | 29,180 |
+| Current families crossing old test/non-test partitions | **4,690** |
+| Old selected games in those crossing families | **9,623** |
+
+Blindly reusing the old labels would let the same newly recognized game contribute on both sides of the train/test boundary. Re-running the old numeric-record-offset replay against refreshed shard files is also not a valid migration procedure. This does not establish that earlier online-pool rankings reverse; it means close comparisons involving an OTB-trained component need rechecking on a clean frozen split.
+
+New `python -m sweep.audit_otb_split` reads the corpus without modifying it, hashes the historical assignment and source manifest, checks source stability, records the old/current identity candidates, and lists mixed test/training families separately as **quarantine**. Two tests verify quarantine rather than training assignment, missing/source-mismatch diagnostics and invalid historical identities. The real audit is `D:/chess/sweep-inputs-20261119/otb-audit/audit.json`; its candidate and quarantine Parquet outputs are hashed there. Current source manifest SHA is `1015009c0f8125e81127b21edff6c8bb354f7e8ccc4655110558caaf455a7ca3`; historical games SHA is `f2d4fb37900611c782e2eb98e9fde34c54ef65fcb69969b229be80983ac1643a`.
+
+**These files are diagnostics, not a published training split.** Matching one representative record does not prove every descendant of a historically split game was found. The audit explicitly records `production_usable: false`. Complete the identity-history reconciliation, retain untouched holdout families, quarantine mixed families, freeze the actual game text/ratings and assignments, then replay to full-key training counts. Keep the frozen calibration/holdout distinctions and never include heldout counts in the opponent prior. Do not infer production readiness from the candidate file's existence or its hashes.
+
+### Next actions
+
+1. Let the pinned capacity pilot, full Cloud/Fishnet rebuild and independently verified lookup finish. ChessDB import remains separate.
+2. Complete the OTB identity-history reconciliation and frozen full-key replay; rerun the relevant close OTB prediction comparisons on clean partitions.
+3. Once lookup receipts pass, run a bounded shared-export capacity/throughput pilot before the full min-games-1 exports. The finalizer is now ready for that measurement; this turn did not launch a multi-terabyte export queue.
+4. Bind accepted shared inputs and run the Black stricter 2,000-position quality-closure pilot before the matrix. Extension cost/convergence, the queued 24-variant metric comparison and final evaluator/publication work remain as listed above.
+
+Final validation for this pass: five focused unittest cases passed (two export cases, one full-key integration case, two split-audit cases). The existing brute-force legacy/compact game-flow suite passed **29/29 checks**; log: `scratch/pool-flow-regression-20261119.log`. The large spill smoke passed separately. At 10:55 PST the eval source scan remained active with no reported parse failures; free space was C: 262.8 GB, D: 1,654.7 GB, E: 2,783.7 GB, F: 3,124.6 GB, H: 2,290.8 GB (decimal).
