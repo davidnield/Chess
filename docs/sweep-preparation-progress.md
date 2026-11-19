@@ -131,6 +131,8 @@ The separate 256-game rollout/history pilot does **not** establish modal-history
 
 Actual-history Allie cold rollouts took about 87 minutes for White and 94 minutes for Black (128 games each); Maia took 9.2 and 4.4 minutes, much of that count lookup. Allie used CPU while Maia used GPU, and this pilot used the slower Allie backend. Actual-history storage was only 24,628 packed bytes across 256 games (about 96 bytes/game), whereas inference and the 18.4 GB model dominate costs. The atlas took approximately 89 minutes to prepare and occupied under 1 MB. A modal shortcut has not shown a meaningful storage benefit here.
 
+A direct read-only audit of the completed actual-history cache found 8,711 history/rating contexts but 8,692 position/rating contexts: even a perfect position collapse would remove only 19 predictions (0.218%) in this pilot. Eleven positions had multiple histories. Some pairwise prediction differences were substantial (maximum total-variation distance about 0.587), so history substitution is not automatically harmless. This is a retrospective pilot count, not a larger-sweep cost forecast; it strengthens the case for retaining actual histories while taking the separately validated Rust-backend speedup.
+
 Keep actual sampled histories for further Allie rollout validation. Before a modal shortcut can be accepted, test positions with independently supported alternative histories, report actual substitutions and fallback rates, and compare at least two different frozen books. Fix the backend, query ordering and cache conditions while timing. The displayed Maia/Allie rollout-score differences are model-dependent predictions, not observed human improvement or a move-prediction-accuracy result.
 
 ### Still pending before the matrix

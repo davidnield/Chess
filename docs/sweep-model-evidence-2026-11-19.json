@@ -422,5 +422,48 @@
       "Worker peak RSS is lifetime peak, not isolated per-arm peak; GPU/CPU devices differ.",
       "Small paired pilot cannot establish equivalence merely because a difference is nonsignificant."
     ]
+  },
+  "history_cache_collapse": {
+    "source": "D:\\chess\\allie\\history-20261118\\pilot01\\allie_sampled.sqlite",
+    "source_sha256": "f2a0f2b7586c9c8d87c4bddc86698c5ed2cd82b48fa7659f74babf97d70a09e9",
+    "history_contexts": 8711,
+    "unique_position_rating_contexts": 8692,
+    "positions_with_multiple_histories": 11,
+    "redundant_predictions": 19,
+    "maximum_prediction_count_saving": 0.0021811502697738493,
+    "measured_history_pair_tvs": [
+      0.28308802919470294,
+      0.022809494402236626,
+      0.2159522779019252,
+      0.09822466886180942,
+      0.48581110563475904,
+      0.5871494686861763,
+      0.4268626207375055,
+      0.5284756470979585,
+      0.10165937717529508,
+      0.03423299701771258,
+      0.04573316632181307,
+      0.04803053981317506,
+      0.011511973229411736,
+      0.01382430425705897,
+      0.002361652285763828,
+      0.013469629957057153,
+      0.25643715256575,
+      0.20721569875622545,
+      0.0017139316786052095,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "caveat": "Retrospective exact collapse of this pilot cache; no quality guarantee or forecast for larger comparisons. CPU cost need not scale exactly with count; native backend uses prefix reuse."
   }
 }
