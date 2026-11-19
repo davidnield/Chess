@@ -64,9 +64,9 @@ The second preparation pass is isolated on the same branch/worktree. No running 
 
 ### Extension metric issue discovered by the new tests
 
-The approved metric is the expected maximum severity **among covered added positions**. With two equally difficult moves on the same route, covering the first saturates that maximum: covering the second earns no additional credit. Removing the four-move cap does not fix this. A repeated-position fixture exposes the problem while separately verifying that a raw transposition is not treated as a draw.
+The initially approved metric was the expected maximum severity **among covered added positions**. With two equally difficult moves on the same route, covering the first saturates that maximum: covering the second earns no additional credit. Removing the four-move cap does not fix this. A repeated-position fixture exposes the problem while separately verifying that a raw transposition is not treated as a draw.
 
-I recommend comparing a metric that measures the reduction in maximum **remaining unbooked** severity. It only credits continuously connected prescriptions, counts the same advantage once, and can justify a package covering both equally difficult moves. Both metrics are implemented and tested. The second is selectable with `--metric remaining-maximum`; the approved default remains `covered-maximum` pending David's answer to the question sent November 19. No production metric switch has occurred. Reports now include known unbooked exposure so the masking is visible even under the approved metric.
+I recommend comparing a metric that measures the reduction in maximum **remaining unbooked** severity. It only credits continuously connected prescriptions, counts the same advantage once, and can justify a package covering both equally difficult moves. Both metrics are implemented and tested. David subsequently approved `remaining-maximum` as the default on November 19; `--metric covered-maximum` preserves the earlier metric for the queued comparison. See the decision entry below. Reports now include known unbooked exposure so the masking is visible even under the approved metric.
 
 The remaining-risk variant uses the entire unresolved route mass as a conservative uncertainty bound. The covered-risk variant retains its original bound. Neither bound certifies global optimality of the greedy package search.
 
@@ -85,7 +85,7 @@ The remaining-risk variant uses the entire unresolved route mass as a conservati
 
 1. Bind verified production explorer/eval publications and the frozen OTB training split; measure one pool export and selective frontier query costs.
 2. Run the Black stricter 2,000-position base pilot through the new coordinator. Check complete candidate menus, policy/nonmove conservation, engine quality closure, monotone evidence, gate/lookahead audits, pruning coverage and clean-rebuild agreement.
-3. Resolve the extension-metric choice and benchmark a bounded continuation sample. Add hybrid screening/shared tactical evidence before the four-anchor extension calibration.
+3. Use the approved remaining-maximum default, run the queued metric comparison, and benchmark a bounded continuation sample. Add hybrid screening/shared tactical evidence before the four-anchor extension calibration.
 4. Finish evaluator/backend and population-panel bindings when the Allie investigations publish; connect final reports and ladder/PGN publication.
 5. Release the full matrix only after the documented pilot checks pass.
 
@@ -140,8 +140,19 @@ Keep actual sampled histories for further Allie rollout validation. Before a mod
 1. Finish the production verification recovery and the queued eval DB/lookup rebuild, then bind their verified receipts.
 2. Publish the full-key OTB training split and measured shared-pool exports; benchmark count lookup on the actual frontier sizes.
 3. Run the Black stricter 2,000-position pilot and its full quality-closure, candidate-menu, pruning and clean-rebuild checks.
-4. Extension metric comparison, efficient hybrid tactical screening and production convergence/cost calibration remain unfinished. No 20M-per-visited-position prototype is being queued as a full extension run. The sum-of-unresolved-route bound is conservative and may be prohibitively expensive with full legal reply support; it needs measured convergence, not an assumed production guarantee. The existing metric default is unchanged pending that comparison.
+4. Extension metric comparison, efficient hybrid tactical screening and production convergence/cost calibration remain unfinished. No 20M-per-visited-position prototype is being queued as a full extension run. The sum-of-unresolved-route bound is conservative and may be prohibitively expensive with full legal reply support; it needs measured convergence, not an assumed production guarantee. The metric default is now remaining-maximum by David's subsequent approval; the comparison remains queued.
 5. Finish evaluator population bindings, final extension/ladder/PGN publication and ECO stability exports. The model-independent rollout and report contracts remain available, but are not labeled an end-to-end released evaluator.
 
 
 Recovery observation at 06:57 PST: the first production duplicate/mapping stage remains active with no error. Bucket 000 contains 253,427,969 physical rows across 27 files (8.80 GB compressed). CPU time continues increasing. The 32 GB setting is DuckDB's tracked-memory budget, not a hard process working-set limit; the process working set was about 41 GiB. Do not describe this first production stage as passed until its receipt appears. All preparation/native/headstart tests above have completed successfully. The eval worker is queued behind all ten successful recovery stages and has not yet restarted its rebuild.
+
+
+## November 19 decision: change extension default and queue comparison
+
+David explicitly requested: "Change the default to the one that doesn't overlook a later one but queue the comparison."
+
+- **Implemented default:** `remaining-maximum` in package selection, `Search`, CLI and manifest, all from one shared setting. Readiness output states the selected metric and threshold. Threshold 0.00003, engine-only severity, score gates, distinct connector cost and unlimited depth are unchanged.
+- **Queued comparison:** the new `docs/sweep-manifest-2026-11-19.json` contains an `extension_comparison` stage with 24 extension variants: four existing 2,000-position anchors x three thresholds x both metrics. Twelve are the planned default calibration; twelve are old-metric controls. No additional base books. The queue waits for verified inputs, the Black pilot, verified anchors and the extension cost pilot. No worker is launched before these prerequisites.
+- **Fair comparison:** share frozen base books, engine evidence and policy caches; use separate metric/threshold checkpoints; compare on a common frozen union of explored continuations, with paired evaluation seeds and a common horizon. Record residual risk, later difficult-move coverage, prescription/cost differences, performance and runtime. OPEN search bounds cannot become a completion claim.
+- **Compatibility:** preserve the November 18 manifest and explicit old-metric option. Metric is already part of checkpoint identity, so a switch cannot reuse an old checkpoint silently. Base-arm IDs remain unchanged.
+- **Validation:** 15 focused tests pass, including the repeated-position sequence where the new default covers both equally difficult prescriptions and the old metric covers one, rejection of a checkpoint resumed with another metric, all 24 queue combinations and queue-tampering rejection.

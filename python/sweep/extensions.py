@@ -85,7 +85,7 @@ def checked_terminal(board):
 def residual_exposure(routes,risks,added,base=()):
     """Expected maximum risk left at or after the first uncovered prescription.
 
-    Experimental alternative: covering an earlier equal-risk position cannot
+    Approved default: covering an earlier equal-risk position cannot
     hide a later uncovered risk. Only a continuous prescribed prefix counts.
     """
     validate(routes,risks)

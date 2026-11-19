@@ -36,6 +36,8 @@ class Continuations(unittest.TestCase):
             self.assertEqual(Search(**kw).run(0)["additional"],report["additional"])
             with self.assertRaisesRegex(ValueError,"recipe changed"):
                 Search(**(kw|dict(threshold=.002)))
+            with self.assertRaisesRegex(ValueError,"recipe changed"):
+                Search(**(kw|dict(metric="covered-maximum")))
 
     def test_repetition_is_history_based_and_prescriptions_are_deduplicated(self):
         def choose(b):
@@ -52,13 +54,14 @@ class Continuations(unittest.TestCase):
         report=s.run(40)
         self.assertTrue(report["closed"])
         self.assertEqual(report["deepest_ply"],16) # fivefold; first transposition at ply 4 was not terminal
-        self.assertEqual(report["additional_distinct"],1)
-        self.assertGreater(report["known_unbooked_exposure"],.1)
-        alternate=Search(base={},white=True,analyse=analyse,reply=reply,metric="remaining-maximum",
+        self.assertEqual(report["metric"],"remaining-maximum")
+        self.assertEqual(report["additional_distinct"],2)
+        self.assertEqual(report["known_unbooked_exposure"],0.)
+        alternate=Search(base={},white=True,analyse=analyse,reply=reply,metric="covered-maximum",
                          contract=dict(absolute_floor=.4,relative_limit=.06),threshold=.001).run(40)
         self.assertTrue(alternate["closed"])
-        self.assertEqual(alternate["additional_distinct"],2)
-        self.assertEqual(alternate["known_unbooked_exposure"],0.)
+        self.assertEqual(alternate["additional_distinct"],1)
+        self.assertGreater(alternate["known_unbooked_exposure"],.1)
 
     def test_master_hole_and_unknown_engine_evidence_cannot_close(self):
         def reply(b): raise AssertionError("should not reach opponent")

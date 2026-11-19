@@ -13,14 +13,14 @@ import chess
 from consumer_keys import stored_key
 from .extensions import Route,severity,package_value,unresolved_bound,residual_exposure,residual_package_value
 from .quality import score
-from .spec import digest
+from .spec import digest, DEFAULT_EXTENSION_METRIC
 from .stages import atomic_json
 
 def token(board):
     k=stored_key(board,True)
     return f"{k['lo']}:{k['hi']}"
 
-def choose(routes,risks,base,threshold,metric="covered-maximum"):
+def choose(routes,risks,base,threshold,metric=DEFAULT_EXTENSION_METRIC):
     value=package_value if metric=="covered-maximum" else residual_package_value
     """Consider each prefix, plus unions reaching the same transposed endpoint."""
     packages=set(); ends={}
@@ -46,7 +46,7 @@ def choose(routes,risks,base,threshold,metric="covered-maximum"):
 
 class Search:
     def __init__(self, *, base, white, analyse, reply, contract, threshold=.00003,
-                 checkpoint=None, allowed=None, root_fen=chess.STARTING_FEN,metric="covered-maximum"):
+                 checkpoint=None, allowed=None, root_fen=chess.STARTING_FEN,metric=DEFAULT_EXTENSION_METRIC):
         if not math.isfinite(threshold) or not 0<threshold<1: raise ValueError("invalid extension threshold")
         if metric not in ("covered-maximum","remaining-maximum"): raise ValueError("unknown extension metric")
         self.metric=metric

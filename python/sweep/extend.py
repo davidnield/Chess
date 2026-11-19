@@ -18,7 +18,7 @@ from consumer_keys import ConsumerKeys,checked_board,stored_key
 import engine_candidates as ec
 from .continuations import Search,token
 from .frontier import from_config
-from .spec import digest
+from .spec import digest, DEFAULT_EXTENSION_METRIC
 from .stages import file_sha,atomic_json,artifacts
 
 def load_book(path,colour):
@@ -81,8 +81,8 @@ def main():
     p.add_argument("--engine-cache",type=Path,required=True)
     p.add_argument("--allowed-book",type=Path)
     p.add_argument("--threshold",type=float,default=.00003)
-    p.add_argument("--metric",choices=["covered-maximum","remaining-maximum"],default="covered-maximum",
-                   help="remaining-maximum is the proposed comparison; see the progress log")
+    p.add_argument("--metric",choices=["covered-maximum","remaining-maximum"],default=DEFAULT_EXTENSION_METRIC,
+                   help="default: remaining-maximum; covered-maximum is the queued legacy control")
     p.add_argument("--steps",type=int,default=1000)
     p.add_argument("--execute",action="store_true")
     a=p.parse_args()
@@ -101,7 +101,7 @@ def main():
                 sources=cfg["artifacts"],code={str(p):file_sha(p) for p in Path(__file__).parent.glob("*.py")})
     contract=dict(inputs=inputs,absolute_floor=meta["absolute_score_floor"],relative_limit=meta["max_score_loss"])
     if not a.execute:
-        print(json.dumps(dict(state="ready",starts_jobs=False,contract=contract),indent=2));return
+        print(json.dumps(dict(state="ready",starts_jobs=False,metric=a.metric,threshold=a.threshold,contract=contract),indent=2));return
     a.out.mkdir(parents=True,exist_ok=True)
     keys=ConsumerKeys(meta["eval_lookup128"],expected_sha=meta["eval_lookup_sha256"])
     prior=from_config(a.policy_config,colour=meta["perspective"],keys=keys,pool=meta["stats"],aux=meta["aux_stats"])

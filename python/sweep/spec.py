@@ -25,8 +25,12 @@ FIXED = {"key_bits": 128, "max_ply": 30, "source_plies": 51, "min_games": 1,
 REQUIRED_BINDINGS = ["explorer_receipt", "eval_lookup_receipt", "code_receipt",
                      "maia_checkpoint_receipt", "engine_receipt", "otb_split_receipt",
                      "weak_policy_receipt", "candidate_source_receipt"]
-EXTENSIONS = {"threshold": .00003, "calibration": [.00001, .00003, .00010],
-              "severity": "max(gap2,0.60*gap3)", "exposure": "expected-trajectory-maximum",
+DEFAULT_EXTENSION_METRIC = "remaining-maximum"
+EXTENSION_EXPOSURE = {
+    "remaining-maximum": "reduction-in-expected-maximum-remaining-unbooked-risk",
+    "covered-maximum": "expected-trajectory-maximum"}
+EXTENSIONS = {"metric": DEFAULT_EXTENSION_METRIC, "threshold": .00003, "calibration": [.00001, .00003, .00010],
+              "severity": "max(gap2,0.60*gap3)", "exposure": EXTENSION_EXPOSURE[DEFAULT_EXTENSION_METRIC],
               "cost": "new-distinct-prescriptions-including-connectors",
               "depth_cap": None, "reply_cutoff": None, "recall_discount": False,
               "unresolved_frontier": "must-bound-or-expand"}
@@ -72,6 +76,32 @@ def pool_recipes():
                  training_months=["2013-01","2026-07"])
             for cap in (30,50) for name,speeds,bands in definitions]
 
+def extension_comparison(main):
+    """Deferred calibration queue: four existing masters, shared evidence, both metrics."""
+    anchors=[a for a in main if a["recipe"]["mode"]=="independent" and a["recipe"]["budget"]==2000]
+    runs=[]
+    for anchor in anchors:
+        for threshold in EXTENSIONS["calibration"]:
+            for metric in (DEFAULT_EXTENSION_METRIC,"covered-maximum"):
+                settings={k:deepcopy(v) for k,v in EXTENSIONS.items() if k!="calibration"}
+                settings.update(metric=metric,threshold=threshold,exposure=EXTENSION_EXPOSURE[metric])
+                recipe=dict(base_arm=anchor["id"],extensions=settings)
+                runs.append(dict(id=digest(recipe)[:20],recipe=recipe,depends_on=[anchor["id"]],
+                                 role="default-calibration" if metric==DEFAULT_EXTENSION_METRIC else "legacy-control",
+                                 state="queued-waiting-for-prerequisites",
+                                 cli_args=["--metric",metric,"--threshold",str(threshold)]))
+    return dict(schema=1,default_metric=DEFAULT_EXTENSION_METRIC,
+                prerequisites=["inputs-verified","black-pilot-closed","four-anchors-quality-closed",
+                               "extension-cost-pilot-passed"],
+                shared_inputs=["base-book","engine-cache","opponent-policy-cache"],
+                comparison_evidence="common-frozen-union-of-explored-continuations",
+                separate_checkpoints=True,
+                evaluation="paired-seeds-and-common-horizon",
+                report=["additional-distinct-prescriptions","selected-move-disagreement",
+                        "later-unbooked-risk","reach-weighted-coverage","paired-score",
+                        "runtime-and-cache-reuse","unresolved-exposure-bounds"],runs=runs)
+
+
 def manifest():
     main = []
     for colour in ("white","black"):
@@ -103,7 +133,8 @@ def manifest():
             sensitivity.append(arm(recipe(colour,gate,1000,max_ply=50,
                                           candidate_pool="brc1800-p50"),"horizon",[anchor["id"]]))
     result = dict(schema=1, primary=main, sensitivities=sensitivity, inputs=pool_recipes(),
-                  required_bindings=REQUIRED_BINDINGS, extensions=EXTENSIONS,
+                  required_bindings=REQUIRED_BINDINGS, extensions=deepcopy(EXTENSIONS),
+                  extension_comparison=extension_comparison(main),
                   evaluation=EVALUATION, pilot=next(a["id"] for a in main if
                   a["recipe"]["colour"]=="black" and a["recipe"]["gate"]=="stricter"
                   and a["recipe"]["budget"]==2000 and a["recipe"]["mode"]=="independent"),
@@ -131,6 +162,10 @@ def validate(m):
             raise ValueError("gate settings drifted")
         if r["mode"]=="reduced" and r["budget"]==2000:
             raise ValueError("do not count the common master twice")
+    # Historical manifests without this stage remain readable for reproducibility.
+    if "extension_comparison" in m:
+        if m["extensions"]!=EXTENSIONS or m["extension_comparison"]!=extension_comparison(m["primary"]):
+            raise ValueError("extension default or comparison queue drifted")
     # Fail closed on cyclic dependencies.
     pending={a["id"]:set(a["depends_on"]) for a in all_arms}
     while pending:
@@ -152,6 +187,6 @@ def main():
     if a.out.exists() and json.loads(a.out.read_text(encoding="utf8"))!=m:
         raise ValueError("manifest exists with a different recipe; use a new path")
     a.out.write_text(json.dumps(m,indent=2)+"\n",encoding="utf8")
-    print(f"20 primary arms, {len(m['sensitivities'])} follow-up arms; no jobs launched")
+    print(f"20 primary arms, {len(m['sensitivities'])} follow-up arms, {len(m['extension_comparison']['runs'])} queued extension variants; no jobs launched")
 
 if __name__=="__main__": main()

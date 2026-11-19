@@ -29,6 +29,21 @@ class Specification(unittest.TestCase):
         m["primary"][0]["recipe"]["slice_prior"]+=.01
         with self.assertRaises(ValueError): spec.validate(m)
 
+    def test_extension_default_and_paired_queue(self):
+        m=spec.manifest();q=m["extension_comparison"]
+        self.assertEqual(m["extensions"]["metric"],"remaining-maximum")
+        self.assertEqual(len(q["runs"]),24)
+        self.assertEqual(len({r["id"] for r in q["runs"]}),24)
+        anchors={a["id"] for a in m["primary"] if a["recipe"]["mode"]=="independent" and a["recipe"]["budget"]==2000}
+        self.assertEqual(len(anchors),4)
+        for anchor in anchors:
+            for threshold in (1e-5,3e-5,1e-4):
+                pair=[r for r in q["runs"] if r["recipe"]["base_arm"]==anchor and r["recipe"]["extensions"]["threshold"]==threshold]
+                self.assertEqual({r["recipe"]["extensions"]["metric"] for r in pair},{"remaining-maximum","covered-maximum"})
+                self.assertTrue(all(r["depends_on"]==[anchor] for r in pair))
+        q["runs"][0]["cli_args"][1]="covered-maximum"
+        with self.assertRaisesRegex(ValueError,"comparison queue drifted"):spec.validate(m)
+
     def test_stage_resume_failure_and_tampering(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)

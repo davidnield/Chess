@@ -24,11 +24,11 @@ The manifest preserves the builder's current lookahead default (off). The integr
 
 From this worktree's python directory:
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-18.json
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-19.json
 
 This refuses to overwrite a different manifest. Repeating the same recipe is harmless.
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-18.json --workspace D:/chess/sweep-inputs
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-19.json --workspace D:/chess/sweep-inputs
 
 With no source bindings this prints a waiting-for-publication report and starts nothing.
 
@@ -48,7 +48,7 @@ Construction bands are archive game-mean bands. The lowest archived band is 0, n
 2. Freeze the deduplicated OTB training/evaluation split and materialize the on-demand reached-position ensemble inputs. The formula, cache and overlay consumer are implemented; the selective count/model adapter is connected; its production paths and performance still need a pilot. Never fall back silently to the old reply pool.
 3. Pilot the implemented reached-candidate discovery and joint verification/rebuild coordinator. Retained-graph correction is not implemented; full rebuilding remains available and its cost must be measured.
 4. Run the Black stricter 2,000-position pilot. Require full-key identity, complete menus, conserved mass, gate/lookahead audit as applicable, quality closure, no evidence downgrade, and clean-rebuild agreement before the remaining primary base books.
-5. Calibrate the implemented continuation driver and resolve the metric issue described in the progress log. Add hybrid screening and measure engine/policy costs before large runs; finish extended-book/ladder publication.
+5. Calibrate the implemented continuation driver with the approved remaining-maximum default and run the queued old-metric comparison. Add hybrid screening and measure engine/policy costs before large runs; finish extended-book/ladder publication.
 6. Bind the evaluator to the validated model/backend and population panels; connect training profiles and common leaf scoring. Build route-aware ECO annotation/report exports from a frozen opening-name source. Allie adoption remains a separate evidence decision.
 
 No claim of incremental speedup, extension completeness, or production book quality is made from the fixture results.
@@ -90,7 +90,7 @@ The coordinator records immutable code snapshots, build/verify/audit receipts, r
 
 Default is read-only readiness. --execute --steps 1000 performs bounded work, saves checkpoint.json, and reports whether the unexplored exposure is bounded below the threshold. Run the same command again to continue. No book-depth limit or nonzero opponent-move cutoff is introduced by --steps. --allowed-book constrains the prescribed moves to the extended master; an uncovered required position is reported as a master hole.
 
-The default metric remains the approved covered maximum. --metric remaining-maximum enables the proposed alternative described in the progress log; use a separate output directory for a different metric. The complete engine/policy history is retained in checkpoint.json and its hash appears in the report. The adapter is deliberately not a production speed claim: its independent 20M MultiPV top-three searches still need hybrid screening and cost calibration. A bounded result creates extensions.json, preserving base and additional prescriptions separately; automatic PGN/ladder publication is not wired in.
+The default metric is remaining-maximum, approved November 19. --metric covered-maximum runs the earlier metric as a comparison control; use a separate output directory for each metric and threshold. The November 19 manifest queues both metrics on all four 2,000-position anchors at all three calibration thresholds (24 extension variants, reusing the same four base books). This deferred stage waits for verified inputs, an accepted Black pilot, closed anchors and the extension cost pilot. Use shared evidence/caches and a common continuation union for comparison. The November 18 manifest remains the historical record. The complete engine/policy history is retained in checkpoint.json and its hash appears in the report. The adapter is deliberately not a production speed claim: its independent 20M MultiPV top-three searches still need hybrid screening and cost calibration. A bounded result creates extensions.json, preserving base and additional prescriptions separately; automatic PGN/ladder publication is not wired in.
 
 Both entrypoints are ready for controlled pilots, not an instruction to launch the production matrix now.
 
