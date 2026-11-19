@@ -768,7 +768,7 @@ def write_sorted_export(con, query, output, columns, recipe=None, *, unique=None
                         previous = _unique_batch(batch.column(schema.get_field_index(unique)), previous)
                     writer.write_batch(batch, row_group_size=batch_rows)
                     count += len(batch)
-        check_export(tmp, columns, recipe)
+        check_export(tmp, [(field.name, str(field.type)) for field in schema], recipe)
         if pq.ParquetFile(tmp).metadata.num_rows != count:
             raise RuntimeError("finalize: row count changed during export")
         tmp.replace(output)

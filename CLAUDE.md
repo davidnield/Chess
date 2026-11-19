@@ -466,3 +466,17 @@ The current manifest is docs/sweep-manifest-2026-11-19-maia.json. Freeze product
 runtime/population bindings before releasing evaluation; the model choice alone
 is not completed integration. The full Cloud/Fishnet eval build started at 14:02
 with child shards on E: after the capacity pilot passed. F: fallback was not needed.
+
+
+November 19 OTB repair supersedes the diagnostic-only status above:
+`sweep.freeze_otb` follows complete archived membership (zero-based rid + 1),
+preserves historical roles, and quarantines connected train/validation/test
+conflicts. Frozen input: D:/chess/sweep-inputs-20261119/otb-v2-20261119.
+Use split.json and the independent verified.json; provenance is archived under
+frozen-inputs. Never return to refreshed raw-shard offsets or rehash historical
+IDs. Replay current frozen movetext with a comment-aware PGN reader; source
+annotations followed by blank lines can otherwise look like an empty game.
+The 2,519,686 eligible games include 1,509,521 training and 4,828 quarantined.
+Only training-role, under-2000 MOVER decisions belong in construction counts.
+Full 128-bit count replay/publication is still pending; training_counts_ready
+is deliberately false. See the newest progress entry and usage commands.

@@ -226,3 +226,42 @@ David chose to keep Maia for rollout evaluation because the measured Allie cost 
 The capacity pilot completed at 14:02:29 and the full Cloud/Fishnet rebuild began automatically. Pilot output: 177,463,155 rows, 7.40 GB, all eight sampled buckets. No full eval DB or lookup completion is claimed. Capacity/layout receipts are in `D:/chess/ply51-migration-20261115/evals/`; they choose **E:** for child shards. With a 20% scaling margin and existing 150 GB reserves, forecast allocations are H: 866.6 GB source shards, E: 2,239.0 GB child shards, D: 917.3 GB for output/lookup/spill. At 14:05, free space was H: 2,252.0 GB, E: 2,783.7 GB, D: 1,647.3 GB, F: 3,124.6 GB (decimal). F: remains unused fallback.
 
 The only active heavy chess worker is the full eval builder. OTB ancestry reconciliation/frozen replay, measured shared exports, Black stricter 2,000-position pilot, extension cost/calibration and final evaluator bindings are preparation work remaining; they are not running in the background. The completed split audit is diagnostic only. ChessDB is readable but has not been imported by the active Cloud/Fishnet pipeline.
+
+
+## November 19: OTB identity/split repair implemented and frozen
+
+David requested fixing the main outstanding issue. Added `sweep.freeze_otb` and `sweep.verify_otb_split` on the isolated sweep-preparation branch. The source corpus and running Cloud/Fishnet release remain unchanged. This supersedes the earlier status that only a representative-record diagnostic was available.
+
+### Complete ancestry, rather than representative matching
+
+The preserved November 13 membership has zero-based source offsets. Its first 35,456,972 records reproduce the historical study's exact source fingerprint `31ed3eb35a272fd83bfdc0722d8326628d871ebff176eea89552bb2fd177d5a2`. The archived identity-code/shard stamp matches, and all 4,037,682 historical representative anchors match after the explicit `rid + 1` conversion. Following every member yields **8,484,681 ancestral source records**, all present in the current corpus with unchanged source/source-file/source-record locators. There are 4,022,859 current descendant families and no actual historical one-to-many split in this corpus. Synthetic tests cover one-to-many splits and transitive mixed-role quarantine nevertheless.
+
+The repaired policy preserves historical test fold 0, validation fold 1, and training folds 2/3/4. It quarantines any connected family spanning different roles; merging two training folds does not remove a training family. This excludes both the previously discovered 4,690 test/non-test conflicts and 3,401 additional training/validation conflicts: 8,091 historical descendant families in total. Quarantine is an assignment, not deletion from the source corpus. Only a currently eligible family with no historical selected ancestor gets a new deterministic fold.
+
+### Published replay input
+
+Directory: `D:/chess/sweep-inputs-20261119/otb-v2-20261119/`.
+
+| Eligible role, 2013-01-01 through 2026-11-19 | Games |
+|---|---:|
+| Training | 1,509,521 |
+| Validation | 503,064 |
+| Test | 502,273 |
+| Quarantine | 4,828 |
+| Total | 2,519,686 |
+
+Of these, 33,427 games have no historical selected-family ancestor. Date, standard-start/variant, positive-rating and under-2000-on-at-least-one-side eligibility account for the smaller total than the all-years historical selection. The existing opening-analysis clock screen is retained. Each row freezes actual current movetext, both ratings and their systems, date, source, starting FEN and assignment. Replay must apply the under-2000 condition to the **mover**; a qualifying opponent does not make both players' moves eligible.
+
+The four frozen Parquets total 905,014,062 bytes; game text/assignments occupy 786,257,428 bytes. The successful freeze took about four minutes with two DuckDB threads and a 4 GB tracked-memory budget, using temporary disk spill. `split.json` identity is `56a6e8dca4b85973964d846fcd3d3483456fc68358f09a1c9196d2a6b3d6dc2f`; receipt SHA-256 is `e5e446803b94581c84c44ecef1d11653648a19fe4ef99b00985165cd77f05536`. Exported ancestry, lineage and assignments are separately hashed. A completed directory cannot be reused with changed source/code.
+
+### Validation and the remaining boundary
+
+The independent verifier reopens the exported files, rederives the complete ancestral-record census and role checks, and compares counts. No historical role crosses into another training/validation/test partition. Small provenance inputs are copied and hashed under `frozen-inputs/`, so verification survives later source refreshes. Source DB/index size/mtime and input hashes were stable during freezing; frozen output hashes provide the durable replay boundary. `verified.json` is the independent acceptance receipt.
+
+Ten focused tests cover source-prefix checks, zero/one-based anchors, lost nonrepresentative records, changed locators, split/merge family quarantine, unchanged historical folds, new assignments and date/rating eligibility, exact date-schema export, null/incorrect labels, source-refresh-independent verification, deliberate output corruption, and existing full-key export parity. The date-schema test fixed an export check that compared Arrow's `date32[day]` spelling against its `date32` input alias; no receipt had been published by the failed first attempt.
+
+The first deterministic replay sample exposed a PGN reader edge case in quarantined game 6575347: leading comments followed by a blank line produced an empty parsed game before its actual legal score. The comment-aware reader now skips only empty, error-free preambles; empty scores and illegal moves still fail. The initial report is retained as `verified-before-pgn-comment-fix.json`, and the current verifier records its own content-addressed code snapshot. This behavior must also be preserved in full replay.
+
+This fixes split identity and freezes the correct replay inputs. It does **not** publish OTB position counts: both receipts explicitly have `training_counts_ready: false`. Next replay the frozen texts into full 128-bit position/move tables, separate roles, exclude quarantine, report legal-prefix failures, retain mover-rating/ply eligibility and verify count conservation. Recheck close OTB-trained-component comparisons on the corrected partitions. These previously inspected partitions are not an untouched new confirmation set.
+
+Final independent replay: **256/256 sampled games passed**, covering 11,808 positions through at most 50 plies, with zero malformed prefixes after the comment-reader fix. This is a sample, not a claim of complete legal replay. Current `verified.json` SHA-256: `dae6c7d365632b343c4418d4ef278023a9bf8a515f41a181030f594016ce4b73`. The full ancestral census and role checks passed again.

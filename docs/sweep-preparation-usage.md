@@ -113,3 +113,35 @@ Run from the pinned code's python directory:
 This is a read-only corpus audit. Outputs are provisional identity candidates, a quarantine list and a hashed diagnostic report; they are **not training counts or an accepted split receipt**. Reuse checks both source generation and output hashes. A changed source/code requires another output directory. The November 19 run found 4,690 current families crossing the old test/non-test boundary. Complete ancestry reconciliation before freezing and replaying training inputs. Preserve old assignments; do not rehash changed numeric game IDs and silently reshuffle the holdout.
 
 Shared-pool finalization now externally sorts with the configured DuckDB budget/spill directory and streams Arrow batches. It no longer requires enough RAM for the entire pool plus sort. Ensure adequate temporary disk space before a production export; the bounded smoke is not a full-size capacity forecast.
+
+
+## Freeze and verify the corrected OTB split (November 19)
+
+The representative audit above is diagnostic. `sweep.freeze_otb` follows **every archived source record** in each historical game to its current deduplicated identity. The archived membership uses zero-based `rid`; published record IDs use `rid + 1`. Before accepting ancestry, the freezer verifies the historical source-prefix fingerprint, archived identity-code/shard stamp, every old representative anchor, complete source-record membership and unchanged source locators. The source corpus is opened read-only.
+
+From this worktree's Python directory:
+
+```powershell
+python -m sweep.freeze_otb `
+  --database D:/data/chess/tournament-games-deduplicated/tournament-games-deduplicated.duckdb `
+  --source-manifest D:/data/chess/tournament-games-deduplicated/manifest.json `
+  --historical-games C:/Users/David/Documents/Chess/outputs/otb-u2000-2026-11-13/games.parquet `
+  --membership D:/data/chess/tournament-games-deduplicated/_work/membership.parquet `
+  --index D:/data/chess/tournament-games-deduplicated/_work/index.duckdb `
+  --shards D:/data/chess/tournament-games-deduplicated/_work/shards.json `
+  --identity-code D:/data/chess/tournament-games-deduplicated/rebuild/tournament_identity.py `
+  --identity-stamp D:/data/chess/tournament-games-deduplicated/_work/identity-version.txt `
+  --as-of 2026-11-19 `
+  --out D:/chess/sweep-inputs-20261119/otb-v2-20261119
+
+python -m sweep.verify_otb_split `
+  --split D:/chess/sweep-inputs-20261119/otb-v2-20261119/split.json
+```
+
+Historical folds 2/3/4 remain training, 1 validation, and 0 test. A current game combining different historical roles is quarantined. All descendants connected through a historical game's split/merge ancestry inherit the same role, including quarantine. A merge of two training folds stays training. Only a genuinely new eligible family gets a new deterministic fold; its assignment must be preserved during future migrations.
+
+`games.parquet` freezes the **current resolved movetext**, ratings and rating-system labels, standard starting position, dates, source and assignments. It selects eligible standard-start games dated 2013-01-01 through the explicit as-of date, with positive ratings for both players and at least one player below 2000, under the corpus's existing `opening_analysis` clock screen. This keeps both ratings for replay: the OTB under-2000 construction counts must select **the moving player's rating below 2000**, not count both players merely because one qualifies. Unknown clocks and mixed published rating systems remain disclosed limitations.
+
+`ancestry.parquet`, `lineage.parquet` and `historical-assignments.parquet` retain the reconciliation evidence, including old games outside the current date eligibility. `split.json` pins the source generation, code and outputs. A changed input/code cannot reuse a completed freeze directory. The verifier archives the small provenance inputs under `frozen-inputs/`, rechecks the complete ancestral-record census and partition rules from exported files, checks output hashes, and smoke-replays a deterministic sample through 50 plies. `verified.json` pins those results. Neither receipt asserts that all game scores were legally replayed: both say `training_counts_ready: false`.
+
+The next producer must replay the frozen texts into full 128-bit position/move counts, separate training from validation/test, exclude quarantine, handle leading comment-only PGN preambles without losing the actual game, report malformed games/prefixes explicitly, retain mover-rating and ply eligibility, and check conservation before publishing counts. Production policy bindings must reference those verified training-count outputs, never this game's table or the old diagnostic candidates. Recheck close OTB prediction comparisons on the reconciled partitions; these previously inspected partitions are development/test partitions, not a new untouched confirmation set.
