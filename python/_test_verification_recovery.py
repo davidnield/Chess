@@ -6,7 +6,7 @@ import subprocess
 import duckdb
 import polars as pl
 import verify_book as vb
-from resume_explorer_verification import stage
+from resume_explorer_verification import stage,recovery_checks,run_checked
 
 class Recovery(unittest.TestCase):
     def test_extrema_match_distinct_for_both_position_invariants(self):
@@ -21,6 +21,44 @@ class Recovery(unittest.TestCase):
                 self.assertEqual(actual,expected)
             self.assertEqual(vb.mapping_conflicts(db,"rows","parent_hash,parent_hash_hi","parent_epd"),1)
             self.assertEqual(vb.mapping_conflicts(db,"rows","parent_hash,parent_epd","parent_hash_hi"),1)
+
+    def test_signed_ranges_preserve_duplicates_and_both_mapping_invariants(self):
+        lows=[-(1<<63),-(1<<60)-1,-(1<<60),-1,0,(1<<60)-1,1<<60,(1<<63)-1,None]
+        rows=[]
+        for low in lows:
+            for hi,epd in ((11,"a"),(11,"a"),(11,"b"),(12,"b")):
+                rows.append(dict(parent_hash=low,parent_hash_hi=hi,parent_epd=epd,
+                                 move_san="e4",event="Blitz",elo_band=1800,ply=1))
+        with duckdb.connect() as db:
+            db.register("rows",pl.DataFrame(rows).to_arrow())
+            expected=vb.duplicate_counts(db,"rows",True)
+            directions=(("parent_hash,parent_hash_hi","parent_epd"),("parent_hash,parent_epd","parent_hash_hi"))
+            expected_mappings=[vb.mapping_conflicts(db,"rows",k,v) for k,v in directions]
+            for count in (1,2,16):
+                observed=[0,0];mapping=[0,0]
+                for i in range(count):
+                    source=vb.shard_source("rows",(i,count))
+                    values=vb.duplicate_counts(db,source,True)
+                    observed=[a+b for a,b in zip(observed,values)]
+                    mapping=[a+vb.mapping_conflicts(db,source,k,v) for a,(k,v) in zip(mapping,directions)]
+                self.assertEqual(tuple(observed),expected)
+                self.assertEqual(mapping,expected_mappings)
+        checks=recovery_checks(16)
+        self.assertEqual(len(checks),55)
+        for bucket in (0,251,511):
+            self.assertEqual({flags[-1] for _,flags in checks if flags[:2]==["--dup-buckets",str(bucket)]},
+                             {f"{i}/16" for i in range(16)})
+
+    def test_child_heartbeat_failure_propagates(self):
+        import sys
+        with tempfile.TemporaryDirectory() as td:
+            calls=[]
+            with (Path(td)/"log").open("w",encoding="utf8") as output:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    run_checked([sys.executable,"-c","import time;time.sleep(.05);raise SystemExit(2)"],
+                                output=output,pulse=lambda pid,t:calls.append((pid,t)),
+                                resource_guard=lambda:None,interval=.02)
+            self.assertTrue(calls)
 
     def test_failure_resume_and_corrupt_receipt(self):
         with tempfile.TemporaryDirectory() as td:

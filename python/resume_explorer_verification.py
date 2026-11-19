@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,7 +17,40 @@ import sys
 import time
 from month_archive import root_lock,read_json,write_json,sha
 
-def stage(name,flags,*,root,identity,command,guard,execute=subprocess.run):
+def run_checked(command, *, output, pulse, resource_guard, interval=30):
+    """Visible heartbeat while a child runs; stop its process tree on guard failure."""
+    started=time.monotonic()
+    with subprocess.Popen(command,stdout=output,stderr=subprocess.STDOUT) as child:
+        try:
+            while child.poll() is None:
+                resource_guard()
+                pulse(child.pid,time.monotonic()-started)
+                try: child.wait(timeout=interval)
+                except subprocess.TimeoutExpired: pass
+            if child.returncode: raise subprocess.CalledProcessError(child.returncode,command)
+        except BaseException:
+            if child.poll() is None:
+                if os.name=="nt":
+                    subprocess.run(["taskkill","/PID",str(child.pid),"/T","/F"],
+                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,check=False)
+                else: child.terminate()
+                child.wait()
+            raise
+
+
+def recovery_checks(shards):
+    from verify_book import parse_dup_shard
+    parse_dup_shard(f"0/{shards}")
+    checks=[(f"duplicates-{b:03d}-{i:02d}-of-{shards}",
+             ["--dup-buckets",str(b),"--dup-shard",f"{i}/{shards}"])
+            for b in (0,251,511) for i in range(shards)]
+    checks += [(f"digest-{b:03d}",["--digest-buckets",str(b)]) for b in (0,251,511)]
+    checks += [("sums",["--sums"]),("terminal-digest",["--term-digest"]),
+               ("collisions",["--collisions"]),("sample",["--sample","3000"])]
+    return checks
+
+
+def stage(name,flags,*,root,identity,command,guard,execute=None,resource_guard=lambda:None):
     folder=root/name;folder.mkdir(parents=True,exist_ok=True)
     receipt=folder/"receipt.json";log=folder/"run.log"
     spec=dict(identity=identity,flags=flags,command=command)
@@ -29,7 +63,13 @@ def stage(name,flags,*,root,identity,command,guard,execute=subprocess.run):
     start=time.monotonic()
     write_json(root/"status.json",dict(stage=name,state="running",time=dt.datetime.now().isoformat()))
     with log.open("w",encoding="utf8") as output:
-        execute([*command,*flags],stdout=output,stderr=subprocess.STDOUT,check=True)
+        if execute is not None:
+            execute([*command,*flags],stdout=output,stderr=subprocess.STDOUT,check=True)
+        else:
+            def pulse(pid,elapsed):
+                write_json(root/"status.json",dict(stage=name,state="running",pid=pid,
+                           elapsed_seconds=elapsed,time=dt.datetime.now().isoformat()))
+            run_checked([*command,*flags],output=output,pulse=pulse,resource_guard=resource_guard)
     guard()
     saved=dict(spec=spec,log_sha256=sha(log),seconds=time.monotonic()-start)
     write_json(receipt,saved)
@@ -39,14 +79,18 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     for n in ("book","months-root","ops"):
         p.add_argument("--"+n,type=Path,required=True)
-    p.add_argument("--mem",default="32GB")
+    p.add_argument("--mem",default="8GB")
+    p.add_argument("--duplicate-shards",type=int,default=16)
+    p.add_argument("--run-name",default="verification-recovery-sliced-20261119")
     p.add_argument("--threads",type=int,default=2)
     p.add_argument("--resume-evals",type=Path)
     p.add_argument("--reserve-gb",type=float,default=150.)
     a=p.parse_args()
     pin=Path(__file__).resolve().parent
     release=read_json(pin/"pin.json")
-    root=a.ops/"verification-recovery-20261119"
+    if not a.run_name.replace("-","").replace("_","").isalnum(): p.error("invalid recovery run name")
+    checks=recovery_checks(a.duplicate_shards)
+    root=a.ops/a.run_name
     root.mkdir(parents=True,exist_ok=True)
     with root_lock(a.ops):
         try:
@@ -70,13 +114,15 @@ def main():
             inputs+=[Path(sys.executable)]
             hashes={str(f.resolve()):sha(f) for f in inputs}
             identity=dict(inputs=hashes,release=release)
+            def resource_guard():
+                if shutil.disk_usage(a.ops.anchor).free<a.reserve_gb*10**9:
+                    raise ValueError("verification free-space reserve exhausted")
             def guard():
                 for name,digest in release["files"].items():
                     if sha(pin/name)!=digest: raise ValueError(f"verification release changed: {name}")
                 for name,digest in hashes.items():
                     if sha(Path(name))!=digest: raise ValueError(f"verification input changed: {name}")
-                if shutil.disk_usage(a.ops.anchor).free<a.reserve_gb*10**9:
-                    raise ValueError("verification free-space reserve exhausted")
+                resource_guard()
             guard()
             command=[sys.executable,"-X","utf8","-u",str(pin/"verify_book.py"),str(a.book),str(a.months_root),
                      "--threads",str(a.threads),"--workers","2","--mem",a.mem,
@@ -85,15 +131,11 @@ def main():
             if not previous.exists() and (a.ops/"status.json").exists():
                 write_json(previous,read_json(a.ops/"status.json"))
             write_json(a.ops/"status.json",dict(stage="recovering explorer verification",time=dt.datetime.now().isoformat(),
-                       recovery=str(root),book=str(a.book),mem=a.mem))
+                       recovery=str(root),book=str(a.book),mem=a.mem,duplicate_shards=a.duplicate_shards))
             results=[]
             # First prove the failed operation, then rerun the full originally requested suite.
-            checks=[(f"duplicates-{b:03d}",["--dup-buckets",str(b)]) for b in (0,251,511)]
-            checks += [(f"digest-{b:03d}",["--digest-buckets",str(b)]) for b in (0,251,511)]
-            checks += [("sums",["--sums"]),("terminal-digest",["--term-digest"]),
-                       ("collisions",["--collisions"]),("sample",["--sample","3000"])]
             for name,flags in checks:
-                record=stage(name,flags,root=root,identity=identity,command=command,guard=guard)
+                record=stage(name,flags,root=root,identity=identity,command=command,guard=guard,resource_guard=resource_guard)
                 results.append(record);write_json(root/"progress.json",results);print(json.dumps(record),flush=True)
             guard()
             receipt=dict(identity=identity,checks=results,book_meta_sha256=sha(a.book/"_book.meta.json"),

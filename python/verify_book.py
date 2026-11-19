@@ -228,6 +228,38 @@ def check_term_digest(con, bk: Book) -> None:
     check(source == merged, f"terminal counts and sliced key digests agree over {len(inputs)} months ({source[0]:,} outcomes)")
 
 
+def parse_dup_shard(value: str) -> tuple[int, int]:
+    try:
+        index, count = map(int, value.split("/"))
+        if count < 1 or count > 256 or count & (count - 1) or not 0 <= index < count:
+            raise ValueError()
+    except ValueError:
+        raise argparse.ArgumentTypeError("duplicate shard must be INDEX/COUNT; COUNT is a power of two <=256")
+    return index, count
+
+
+def shard_source(source: str, shard: tuple[int, int] | None) -> str:
+    if shard is None: return source
+    index, count = shard
+    parse_dup_shard(f"{index}/{count}")
+    width = (1 << 64) // count
+    low = -(1 << 63) + index * width
+    high = low + width - 1
+    # Every checked grouping contains parent_hash, so a group cannot straddle a
+    # boundary. Include NULL in the first slice to preserve the unsliced query.
+    predicate = f"parent_hash BETWEEN {low} AND {high}"
+    if index == 0: predicate += " OR parent_hash IS NULL"
+    return f"(SELECT * FROM {source} WHERE {predicate})"
+
+
+def duplicate_counts(con, source: str, wide: bool):
+    pos = "parent_hash, parent_hash_hi" if wide else "parent_hash, parent_epd"
+    r = con.execute(f"SELECT COUNT(*) FILTER (WHERE n > 1), SUM(n) FROM ("
+                    f"SELECT COUNT(*) AS n FROM {source} "
+                    f"GROUP BY {pos}, move_san, event, elo_band, ply)").fetchone()
+    return int(r[0] or 0), int(r[1] or 0)
+
+
 def mapping_conflicts(con, source: str, key: str, value: str) -> int:
     # COUNT(DISTINCT text) keeps a second high-cardinality aggregate state. We only
     # need to know whether any two nonnull values differ: MIN != MAX is exact,
@@ -236,19 +268,19 @@ def mapping_conflicts(con, source: str, key: str, value: str) -> int:
                            f"GROUP BY {key} HAVING MIN({value}) != MAX({value}))").fetchone()[0])
 
 
-def check_dups(con, bk: Book, buckets: list[int]) -> None:
-    print(f"\nduplicate keys, {len(buckets)} bucket(s)", flush=True)
+def check_dups(con, bk: Book, buckets: list[int], shard=None) -> None:
+    print(f"\nduplicate keys, {len(buckets)} bucket(s), signed-low-key shard {shard or 'all'}", flush=True)
     dup, rows, two = 0, 0, 0
-    pos = "parent_hash, parent_hash_hi" if bk.wide else "parent_hash, parent_epd"
     for b in buckets:
         outs = bk.ps.get(b, [])
         if not outs:
             continue
         bcon = connect(*_CONNECT_ARGS)   # per bucket: DuckDB decays in a long-lived connection
-        r = bcon.execute(f"""
-            SELECT COUNT(*) FILTER (WHERE n > 1), SUM(n) FROM (
-              SELECT COUNT(*) AS n FROM {relation(outs)}
-              GROUP BY {pos}, move_san, event, elo_band, ply)""").fetchone()
+        source = shard_source(relation(outs), shard)
+        started = time.monotonic()
+        print(f"    bkt {b:03d}: counting duplicate move keys", flush=True)
+        r = duplicate_counts(bcon, source, bk.wide)
+        print(f"    bkt {b:03d}: move keys checked, {r[1]:,} rows ({time.monotonic()-started:.1f}s)", flush=True)
         t = 0
         if bk.wide:
             # A 128-bit key is a position: one EPD per key, and within a 64-bit hash one key
@@ -258,7 +290,10 @@ def check_dups(con, bk: Book, buckets: list[int]) -> None:
                                ("parent_hash, parent_epd", "parent_hash_hi")):
                 bcon.close()
                 bcon = connect(*_CONNECT_ARGS)
-                t += mapping_conflicts(bcon, relation(outs), key, value)
+                started = time.monotonic()
+                print(f"    bkt {b:03d}: mapping {key} -> {value}", flush=True)
+                t += mapping_conflicts(bcon, source, key, value)
+                print(f"    bkt {b:03d}: mapping checked ({time.monotonic()-started:.1f}s)", flush=True)
         bcon.close()
         dup += int(r[0] or 0)
         rows += int(r[1] or 0)
@@ -513,6 +548,8 @@ def main() -> int:
     ap.add_argument("months_root", type=Path)
     ap.add_argument("--digest-buckets", default=None, metavar="SPEC")
     ap.add_argument("--dup-buckets", default=None, metavar="SPEC")
+    ap.add_argument("--dup-shard", type=parse_dup_shard, metavar="INDEX/COUNT",
+                    help="check one disjoint signed-low-key range; all shards are required for full coverage")
     ap.add_argument("--term-digest", action="store_true", help="compare book-v3 terminal rows to the months, including speed, band and both key halves")
     ap.add_argument("--sums", action="store_true")
     ap.add_argument("--scan", action="store_true")
@@ -524,6 +561,7 @@ def main() -> int:
     ap.add_argument("--mem", default="4GB")
     ap.add_argument("--tmp-dir", type=Path, default=DEFAULT_TMP)
     a = ap.parse_args()
+    if a.dup_shard and not a.dup_buckets: ap.error("--dup-shard requires --dup-buckets")
     t0 = time.time()
     bk = Book(a.book, a.months_root)
     con = connect(a.threads, a.mem, a.tmp_dir)
@@ -538,7 +576,7 @@ def main() -> int:
         if a.digest_buckets:
             check_digests(con, bk, parse_buckets(a.digest_buckets))
         if a.dup_buckets:
-            check_dups(con, bk, parse_buckets(a.dup_buckets))
+            check_dups(con, bk, parse_buckets(a.dup_buckets), a.dup_shard)
         if a.sums or (not named and bk.complete):
             check_sums(con, bk)
         if a.term_digest or (not named and bk.complete and bk.schema in ("book-v3", "book-v4")):
