@@ -30,8 +30,8 @@ Each step records implemented scope, tests, limitations, and remaining productio
 
 - Native build and cargo tests passed in D:/rust-target/sweep-preparation.
 - Native/Python differential suite: 252,000 candidate-menu cases, 800 reach graphs, 1,000 assembled graphs, optimizer/collector/stop-table comparisons, zero differences.
-- 14 integration tests passed (one opt-in real-engine smoke skipped): horizon, lookahead receipts, full-key builds/scoring, cache reuse, monotone verification and closure.
-- Final combined targeted run: 25 tests passed, with the optional real-Stockfish smoke skipped. Separate expected-score, rare-verification, opponent-prior and lookahead-reference suites passed.
+- 14 integration tests run (13 passed; one opt-in real-engine smoke skipped): horizon, lookahead receipts, full-key builds/scoring, cache reuse, monotone verification and closure.
+- Final combined targeted run: 25 tests run: 24 passed and the optional real-Stockfish smoke was skipped. Separate expected-score, rare-verification, opponent-prior and lookahead-reference suites passed.
 - Latest preparation-only run: 11 tests passed, including actual-history rollouts, exact mate scoring, generalized recall and nonempty full-key veto receipts.
 - Generated docs/sweep-manifest-2026-11-18.json. Readiness CLI correctly reports waiting-for-publication without starting work.
 - Independent empty source headers and the hard fixed-parent reduction both passed through the production full-key builder.
