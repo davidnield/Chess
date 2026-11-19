@@ -217,3 +217,12 @@ New `python -m sweep.audit_otb_split` reads the corpus without modifying it, has
 4. Bind accepted shared inputs and run the Black stricter 2,000-position quality-closure pilot before the matrix. Extension cost/convergence, the queued 24-variant metric comparison and final evaluator/publication work remain as listed above.
 
 Final validation for this pass: five focused unittest cases passed (two export cases, one full-key integration case, two split-audit cases). The existing brute-force legacy/compact game-flow suite passed **29/29 checks**; log: `scratch/pool-flow-regression-20261119.log`. The large spill smoke passed separately. At 10:55 PST the eval source scan remained active with no reported parse failures; free space was C: 262.8 GB, D: 1,654.7 GB, E: 2,783.7 GB, F: 3,124.6 GB, H: 2,290.8 GB (decimal).
+
+
+## November 19 14:05 PST update: Maia selected; full eval rebuild running
+
+David chose to keep Maia for rollout evaluation because the measured Allie cost is unacceptable for the sweep. The approved position-only Maia construction ensemble stays unchanged. `sweep.spec.EVALUATION.backend` is now `maia3-79m-position`, published in the new `sweep-manifest-2026-11-19-maia.json`. Earlier manifests/evidence remain available. Allie follow-ups are deferred and removed from the critical path; no Allie worker is currently running. Actual simulation histories remain necessary for chess rules. Model/runtime/population bindings and production evaluator integration are still required.
+
+The capacity pilot completed at 14:02:29 and the full Cloud/Fishnet rebuild began automatically. Pilot output: 177,463,155 rows, 7.40 GB, all eight sampled buckets. No full eval DB or lookup completion is claimed. Capacity/layout receipts are in `D:/chess/ply51-migration-20261115/evals/`; they choose **E:** for child shards. With a 20% scaling margin and existing 150 GB reserves, forecast allocations are H: 866.6 GB source shards, E: 2,239.0 GB child shards, D: 917.3 GB for output/lookup/spill. At 14:05, free space was H: 2,252.0 GB, E: 2,783.7 GB, D: 1,647.3 GB, F: 3,124.6 GB (decimal). F: remains unused fallback.
+
+The only active heavy chess worker is the full eval builder. OTB ancestry reconciliation/frozen replay, measured shared exports, Black stricter 2,000-position pilot, extension cost/calibration and final evaluator bindings are preparation work remaining; they are not running in the background. The completed split audit is diagnostic only. ChessDB is readable but has not been imported by the active Cloud/Fishnet pipeline.

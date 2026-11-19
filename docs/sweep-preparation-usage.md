@@ -24,11 +24,11 @@ The manifest preserves the builder's current lookahead default (off). The integr
 
 From this worktree's python directory:
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-19.json
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-19-maia.json
 
 This refuses to overwrite a different manifest. Repeating the same recipe is harmless.
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-19.json --workspace D:/chess/sweep-inputs
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-19-maia.json --workspace D:/chess/sweep-inputs
 
 With no source bindings this prints a waiting-for-publication report and starts nothing.
 

@@ -425,7 +425,7 @@ Extensions have no four-move/depth or nonzero reply-frequency cap. Actual histor
 repetition; full keys deduplicate memory cost. David approved remaining-maximum as the
 default on November 19: reduce maximum remaining unbooked risk, so an earlier covered move
 cannot hide an equally difficult later move. Keep covered-maximum as the explicit control.
-The current manifest is docs/sweep-manifest-2026-11-19.json; its extension_comparison queue
+The current manifest is docs/sweep-manifest-2026-11-19-maia.json; its extension_comparison queue
 crosses both metrics, all three thresholds and four 2,000-position anchors (24 variants).
 Separate checkpoints by metric/threshold; share frozen engine/policy evidence. Wait for the
 listed pilot/input prerequisites. See the progress log for production cost limitations.
@@ -457,3 +457,12 @@ The refreshed corpus merges 4,690 families across the old test/non-test boundary
 Its candidate/quarantine files have `production_usable: false`; full ancestry and
 frozen legal replay remain necessary. Preserve old assignments and exclude mixed
 families before OTB training publication. See the fourth-pass progress entry.
+
+
+November 19 14:05 decision supersedes pending Allie evaluator selection: David chose
+Maia-3 79M position-only for rollouts and kept the existing Maia construction
+ensemble. Further Allie investigations are deferred, not sweep prerequisites.
+The current manifest is docs/sweep-manifest-2026-11-19-maia.json. Freeze production
+runtime/population bindings before releasing evaluation; the model choice alone
+is not completed integration. The full Cloud/Fishnet eval build started at 14:02
+with child shards on E: after the capacity pilot passed. F: fallback was not needed.

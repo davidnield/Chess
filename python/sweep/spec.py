@@ -34,7 +34,7 @@ EXTENSIONS = {"metric": DEFAULT_EXTENSION_METRIC, "threshold": .00003, "calibrat
               "cost": "new-distinct-prescriptions-including-connectors",
               "depth_cap": None, "reply_cutoff": None, "recall_discount": False,
               "unresolved_frontier": "must-bound-or-expand"}
-EVALUATION = {"backend": "pending-Allie-validation", "primary_trajectories": 4096,
+EVALUATION = {"backend": "maia3-79m-position", "primary_trajectories": 4096,
               "primary_seeds": [1,2,3,4], "finalist_trajectories": 32768,
               "finalist_seeds": list(range(101,109)), "minimum_horizon": 50,
               "extension_tail": 10, "finalist_extra_horizon": 20,
