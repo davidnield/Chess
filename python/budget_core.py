@@ -104,6 +104,29 @@ EVAL_WEIGHT_K = 0.0
 ROBUSTNESS_FLOOR = 0.1
 GATE_REL_FLOOR = 0.1
 GATE_REL_OWN_MARGIN = 0.02
+SCORE_ABSOLUTE_TOLERANCE = {"white": 0.110, "black": 0.075}
+MAX_SCORE_LOSS = 0.095
+SCORE_EPS = 1e-12
+
+
+def engine_loss(best_cp, move_cp, score_units):
+    """Both inputs are centipawns from the repertoire side's perspective."""
+    if score_units:
+        return cp_to_expected_score(best_cp) - cp_to_expected_score(move_cp)
+    return best_cp - move_cp
+
+
+def fails_engine_gate(best_cp, move_cp, limit, score_units, score_floor=None):
+    return ((limit is not None and engine_loss(best_cp, move_cp, score_units) >
+             limit + (SCORE_EPS if score_units else 0.0))
+            or (score_floor is not None and cp_to_expected_score(move_cp) + SCORE_EPS < score_floor))
+
+
+def score_floor_from_meta(meta, our_white):
+    if meta.get("max_score_loss") is None:
+        return None
+    prior = meta["slice_prior"] if our_white else 1.0 - meta["slice_prior"]
+    return prior - meta["robustness_floor"]
 
 
 # ── curves ──────────────────────────────────────────────────────────────────
@@ -463,6 +486,36 @@ def eval_loss_keep(cand_es: list[tuple[dict, float | None]], own_eval_ws: float 
     return keep or [max(scored, key=lambda t: t[1])[0]]
 
 
+def score_candidates(h, edges, eval_ws, our_white, slice_prior, absolute, limit,
+                     rare_floor, verified, disputes):
+    """Reference implementation of the Rust builder's hard expected-score gates."""
+    def side(ws):
+        return ws if our_white else 1.0 - ws
+    floor = side(slice_prior) - absolute
+    candidates = [(e, eval_ws[e["child_hash"]]) for e in edges
+                  if e.get("child_hash") in eval_ws and side(eval_ws[e["child_hash"]]) + SCORE_EPS >= floor]
+    checked = (verified or {}).get(h, ())
+    def trusted(e):
+        return (rare_floor is None or e.get("engine") or e.get("total", 0) >= rare_floor
+                or e["move_san"].rstrip("+#") in checked)
+    refs = [side(v) for e, v in candidates if trusted(e)]
+    if h in eval_ws:
+        refs.append(side(eval_ws[h]))
+    best = max(refs, default=None)
+    kept = [(e, v) for e, v in candidates if best is None or best - side(v) <= limit + SCORE_EPS]
+    if disputes is not None and rare_floor is not None:
+        threats = sorted(((e["move_san"], side(v)) for e, v in kept if not trusted(e)
+                          and (best is None or side(v) > best + SCORE_EPS)), key=lambda x: (-x[1], x[0]))
+        if threats:
+            risk = [e["move_san"] for e, v in kept if threats[0][1] - side(v) > limit + SCORE_EPS]
+            if risk:
+                disputes[h] = dict(reference_cp=None if best is None else ws_to_cp(best, True),
+                                   threats=[(m, ws_to_cp(v, True)) for m, v in threats], at_risk=risk)
+                if best is None:
+                    disputes[h]["unresolved"] = True
+    return kept
+
+
 def gate_candidates(h: int, es: list[dict], src: str | None,
                     eval_ws: dict[int, float], our_white: bool,
                     slice_prior: float,
@@ -472,7 +525,7 @@ def gate_candidates(h: int, es: list[dict], src: str | None,
                     require_eval: bool = True, gates: bool = True,
                     max_eval_loss: float | None = None,
                     rare_floor: int | None = None,
-                    verified: dict | None = None, disputes: dict | None = None
+                    verified: dict | None = None, disputes: dict | None = None, max_score_loss=None
                     ) -> list[tuple[dict, float | None]]:
     """The recorded moves at our node `h` that may be booked: the source book's
     move always, then those passing require-eval and both refutation gates. One
@@ -492,6 +545,9 @@ def gate_candidates(h: int, es: list[dict], src: str | None,
     With no trusted reference at all (no eval for the position itself and no trusted or verified
     scored move) both relative filters are deferred: every candidate that passed the other gates
     stays, and disputes[h] is marked 'unresolved' with the moves the old rule would have cut."""
+    if max_score_loss is not None:
+        return score_candidates(h, es, eval_ws, our_white, slice_prior, robustness_floor,
+                                max_score_loss, rare_floor, verified, disputes)
     binds = None
     if rare_floor is not None:
         ok = verified.get(h, ()) if verified else ()
@@ -625,8 +681,8 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                      admitted: dict[int, set] | None = None
                      ) -> tuple[dict[int, float], dict[int, int]]:
     """Policy-free reach upper bound: max over paths of the product of opponent
-    reply shares; our moves carry probability 1. Max-product Dijkstra (all
-    factors <= 1, so first finalization is maximal); lazy-deletion heap.
+    reply shares; our moves carry probability 1. Pop route labels by descending
+    reach, expanding each shorter arrival that still fits under the ply cap.
 
     admitted (--gated-reach): our node -> the child hashes of the moves the gates
     admit. Reach then flows only through moves the book could actually play; a
@@ -635,16 +691,15 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
     import heapq
     reach: dict[int, float] = {}
     ply: dict[int, int] = {}
-    heap = [(-1.0, 0, root)]
-    ply[root] = 0
+    heap = [(-1.0, 0, root, 0)]
     tie = 1
     while heap:
-        nr, _, h = heapq.heappop(heap)
+        nr, _, h, p_ply = heapq.heappop(heap)
         r = -nr
-        if h in reach:
+        if h in ply and ply[h] <= p_ply:
             continue
-        reach[h] = r
-        p_ply = ply[h]
+        reach.setdefault(h, r)
+        ply[h] = p_ply
         if p_ply >= max_ply:
             continue
         es = edges_by_parent.get(h)
@@ -665,11 +720,9 @@ def optimistic_reach(edges_by_parent: dict[int, list[dict]], root: int,
                 if share < share_floor:
                     continue
                 cr = r * share
-            if cr < eps or ch in reach:
+            if cr < eps or (ch in ply and ply[ch] <= p_ply + 1):
                 continue
-            if ch not in ply or ply[ch] > p_ply + 1:
-                ply[ch] = p_ply + 1
-            heapq.heappush(heap, (-cr, tie, ch))
+            heapq.heappush(heap, (-cr, tie, ch, p_ply + 1))
             tie += 1
     return reach, ply
 
@@ -680,7 +733,7 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
                      gate_rel_floor: float = GATE_REL_FLOOR,
                      gate_rel_own_margin: float = GATE_REL_OWN_MARGIN,
                      require_eval: bool = True, gates: bool = True,
-                     max_eval_loss: float | None = None, max_cands: int = 0,
+                     max_eval_loss: float | None = None, max_cands: int = 0, max_score_loss=None,
                      strict_source: bool = False,
                      engine_moves: dict[int, list[tuple[str, int]]] | None = None,
                      edges_by_parent: dict | None = None, epd: str | None = None,
@@ -707,11 +760,17 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
         if extra:
             n_eng = len(extra)
             es_g = es + extra
+    missing_source = None
+    if (max_score_loss is not None and src and epd
+            and all(e["move_san"].rstrip("+#") != src.rstrip("+#") for e in es_g)):
+        from build_baseline_books import child_of
+        missing_source = {"move_san": src, "child_hash": child_of(epd, src), "total": 0, "engine": True}
+        es_g = [*es_g, missing_source]
     cand_es = gate_candidates(h, es_g, src, eval_ws, our_white,
                               slice_prior, robustness_floor,
                               gate_rel_floor, gate_rel_own_margin,
                               require_eval, gates, max_eval_loss,
-                              rare_floor, verified, disputes)
+                              rare_floor, verified, disputes, max_score_loss)
     # Candidate cap.
     #
     # WHAT IT IS NOT (corrected 2026-08-29): budget_sizing_probe.py
@@ -758,6 +817,10 @@ def final_candidates(h: int, es: list[dict], src: str | None, eval_ws: dict[int,
             kept = kept[:-1] + [max(rest, key=_forcing)] if kept \
                 else [max(rest, key=_forcing)]
         cand_es = srcs + kept
+    if max_score_loss is not None:
+        restored = next(((src, e["child_hash"]) for e, _ in cand_es if e is missing_source), None)
+        rejected = bool(src and all(e["move_san"].rstrip("+#") != src.rstrip("+#") for e, _ in cand_es))
+        return [(e, cv) for e, cv in cand_es if e is not missing_source], restored, int(rejected), n_eng
     seen_src = any(e["move_san"] == src for e, _cv in cand_es)
     recorded_src = src is not None and any(e["move_san"] == src for e in es)
     if src and not seen_src and strict_source and recorded_src:
@@ -880,15 +943,27 @@ def verified_moves(frame) -> dict:
     return out
 
 
-def verified_exclusions(proposals, limit):
+def verified_exclusions(proposals, limit, *, max_score_loss=None, our_white=True, score_floor=None):
     """Edge-local vetoes also apply to recorded moves, restored source moves and fallbacks."""
     import polars as pl
-    if proposals is None or limit is None:
+    if proposals is None or (limit is None and max_score_loss is None):
         return {}
     frame = pl.read_parquet(proposals)
     excluded = {}
     if "verified_loss_cp" in frame.columns:
-        for h, san in frame.filter(pl.col("verified_loss_cp") > limit).select("position_hash", "move_san").iter_rows():
+        if max_score_loss is None:
+            rejected = pl.col("verified_loss_cp") > limit
+        else:
+            from stage3_backwards_induction import _es_expr
+            # Use the actual verified edge even when a transposition overrides its board score.
+            sign = 1 if our_white else -1
+            parent = _es_expr("parent_cp_white")
+            child = _es_expr("child_cp_white")
+            fails = sign * (parent - child) > max_score_loss + SCORE_EPS
+            if score_floor is not None:
+                fails |= (child if our_white else 1.0 - child) + SCORE_EPS < score_floor
+            rejected = pl.col("verified_loss_cp").is_not_null() & fails.fill_null(True)
+        for h, san in frame.filter(rejected).select("position_hash", "move_san").iter_rows():
             excluded.setdefault(h, set()).add(san.rstrip("+#"))
     return excluded
 
@@ -897,12 +972,8 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
                 reach: dict[int, float], ply: dict[int, int], max_ply: int,
                 share_floor: float, admitted: dict[int, set] | None = None) -> dict[int, int]:
     """The ply of each position's highest-reach route AMONG THE ROUTES THAT ARRIVE IN TIME.
-    optimistic_reach's ply is a traversal-dependent mix: it takes the minimum over every parent
-    that happened to push the position before it was finalised, so a reach-1 parent's 10% reply
-    sets the ply even when the position's reach of 0.9 comes from a longer route. Changing it
-    would change the depth cut for every recipe, so this is separate. A stop value that stands for
-    one ply stands for this one: the objective averages over the games played, so the value should
-    be the one at the ply most of them arrive at (sampled_stop.py).
+    optimistic_reach records the earliest qualifying arrival. The stop model instead
+    uses the ply of the most likely qualifying route.
 
     Best reach per (position, ply), level by level up to the cap (2026-11-04, review finding 1).
     Keeping only each position's overall best route ran past the horizon: a high-reach long arrival
@@ -910,7 +981,7 @@ def route_plies(edges_by_parent: dict[int, list[dict]], root: int, root_our: boo
     label is at most max_ply; a stop just outside is then at most max_ply + 1, the horizon. Ties
     (within rounding, as products of the same shares can differ in the last bit) go to the shortest
     route, independently of edge order. Only edges the graph can hold are walked: a node whose
-    legacy ply is at the cap has no children in it."""
+    earliest qualifying arrival is at the cap has no children in it."""
     best: dict[int, tuple[float, int]] = {root: (1.0, 0)}
     level = {root: 1.0}
     t = 0
@@ -968,7 +1039,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 gates: bool = True,
                 other_cov_blend: bool = False,
                 gated_reach: bool = False,
-                max_eval_loss: float | None = None,
+                max_eval_loss: float | None = None, max_score_loss=None,
                 strict_source: bool = False,
                 crack_at_parents: bool = False,
                 engine_moves: dict[int, list[tuple[str, int]]] | None = None,
@@ -1027,6 +1098,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
     # the root (ply 0, White to move) is an OPPONENT node, so reach must decay
     # by White's reply shares there.
     admitted = None
+    restored_children = {}
     if gated_reach:
         # Our-turn parity is unknown until reach assigns plies, but the gate is a
         # property of the position: admit per parent, and optimistic_reach only
@@ -1037,20 +1109,32 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 continue  # the overlay contains only opponent-to-move positions
             if strict_source or engine_moves:
                 # reach flows only through what the node can finally book
-                cs = final_candidates(
+                cs, restored, _, _ = final_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor=robustness_floor, gate_rel_floor=gate_rel_floor,
                     gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
-                    gates=gates, max_eval_loss=max_eval_loss, strict_source=strict_source,
+                    gates=gates, max_eval_loss=max_eval_loss, max_score_loss=max_score_loss, strict_source=strict_source,
                     engine_moves=engine_moves, edges_by_parent=edges_by_parent,
                     epd=es[0].get("parent_epd"), excluded=excluded,
-                    rare_floor=rare_floor, verified=verified)[0]
+                    rare_floor=rare_floor, verified=verified)
+                if restored is not None and restored[1] is not None:
+                    restored_children[h] = restored[1]
             else:
                 cs = gate_candidates(
                     h, es, rep_moves.get(h), eval_ws, our_white, slice_prior,
                     robustness_floor, gate_rel_floor, gate_rel_own_margin,
-                    require_eval, gates, max_eval_loss, rare_floor, verified)
+                    require_eval, gates, max_eval_loss, rare_floor, verified, max_score_loss=max_score_loss)
             admitted[h] = {e["child_hash"] for e, _ in cs if e.get("child_hash") is not None}
+            if h in restored_children:
+                admitted[h].add(restored_children[h])
+    if strict_source and not gated_reach:
+        for h, src in rep_moves.items():
+            es = edges_by_parent.get(h)
+            if es and src and not any(e['move_san'] == src for e in es) and es[0].get('parent_epd'):
+                from build_baseline_books import child_of
+                child = child_of(es[0]['parent_epd'], src)
+                if child is not None and src.rstrip('+#') not in (excluded or {}).get(h, ()):
+                    restored_children[h] = child
     # Search below an unplayed nominated move when its child has pool replies.
     # Zero observations keep it out of empirical frequencies and stop estimates.
     reach_edges = edges_by_parent
@@ -1061,6 +1145,11 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 existing = {e.get("child_hash") for e in edges_by_parent[h]}
                 reach_edges[h] = edges_by_parent[h] + [
                     {"child_hash": ch, "total": 0} for _, ch in moves if ch not in existing]
+    if restored_children:
+        reach_edges = dict(reach_edges)
+        for h, ch in restored_children.items():
+            if not any(e.get('child_hash') == ch for e in reach_edges[h]):
+                reach_edges[h] = reach_edges[h] + [{"child_hash": ch, "total": 0}]
     reach, ply = optimistic_reach(reach_edges, root, our_white, eps,
                                   max_ply, share_floor, admitted)
 
@@ -1114,7 +1203,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
                 h, es, src, eval_ws, our_white, slice_prior,
                 robustness_floor=robustness_floor, gate_rel_floor=gate_rel_floor,
                 gate_rel_own_margin=gate_rel_own_margin, require_eval=require_eval,
-                gates=gates, max_eval_loss=max_eval_loss, max_cands=max_cands,
+                gates=gates, max_eval_loss=max_eval_loss, max_score_loss=max_score_loss, max_cands=max_cands,
                 strict_source=strict_source, engine_moves=engine_moves,
                 edges_by_parent=edges_by_parent, epd=es[0].get("parent_epd"), excluded=excluded,
                 rare_floor=rare_floor, verified=verified,
@@ -1136,7 +1225,7 @@ def build_graph(edges_by_parent: dict[int, list[dict]], root: int,
             if restored is not None:
                 src, ch = restored
                 in_sub = ch is not None and ch in reach and \
-                    edges_by_parent.get(ch) is not None
+                    edges_by_parent.get(ch) is not None and p_ply + 1 <= max_ply
                 lv = leaf_edge_value(slice_prior, 0,
                                      eval_ws.get(ch) if ch is not None else None,
                                      slice_prior, our_white,

@@ -7,6 +7,9 @@ AND which move to book at each — the budget is inside the selection, so a
 book (which can afford deep traps). Method: per-node value-vs-budget curves
 (budget_core.py, where the algorithm and its documented approximations live).
 
+The production engine gates use the repertoire side's expected score. The absolute tolerance
+is 0.110 for White and 0.075 for Black. The relative tolerance is 0.095 for both.
+
 Two optimisers (2026-11-12; the greedy, fixed-policy and price-variant paths were retired and
 live in tag archive-2026-11-11):
   --method price     price search, one repricing round at max(book, optimistic) reach from the
@@ -16,6 +19,9 @@ live in tag archive-2026-11-11):
 Out-of-book positions are always valued by the weak-player stop model (--weak-pool), optionally
 replaced by sampled tables (--sampled-stop / --sampled-other); strict source and crack at parents
 are always on.
+
+--lookahead-floor N uses the gated graph and prunes its admitted menus after following up to N
+opponent replies. It records the pre-veto menus, boundaries and floor ranks for independent audit.
 
 Outputs one book per --budget from a single curve build. Books are
 replay_holdout/score_repertoire-compatible; `value` on booked rows is the
@@ -188,7 +194,7 @@ def _set_frontier(con, hashes) -> None:
 def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                            eps: float, max_ply: int, share_floor: float,
                            min_games: int, admit=None, engine_moves=None, reply_overlay=None,
-                           uncut_own: bool = False) -> pl.DataFrame:
+                           uncut_own: bool = False, source_moves=None) -> pl.DataFrame:
     """Iterative frontier expansion (pattern: build_baseline_books.edges_for),
     keeping every edge of every node whose OPTIMISTIC reach >= eps. Reach decays
     only at opponent nodes, by reply share; our moves carry it unchanged.
@@ -232,7 +238,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
         floor += f" OR split_part(s.parent_epd, ' ', 2) = '{our_turn}'"
     frames: list[pl.DataFrame] = []
     reach: dict[int, float] = {root: 1.0}
-    ply: dict[int, int] = {root: 0}
     frontier = [root]
     fetched: set[int] = set()
     lvl = 0
@@ -266,11 +271,13 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
             # parents and children of this level, for the gates' eval lookups
             admit.prefetch(df["parent_hash"].to_list()
                            + df["child_hash"].drop_nulls().to_list())
+        source_children = (unrecorded_sources(df, source_moves, getattr(admit, "excluded", {}) or {})
+                           if source_moves is not None and lvl < max_ply and (lvl % 2 == 0) == our_white else {})
         if df.height:
             for ph, grp in df.group_by("parent_hash", maintain_order=True):
                 ph = ph[0] if isinstance(ph, tuple) else ph
                 r = reach.get(ph, 0.0)
-                p_ply = ply.get(ph, 0)
+                p_ply = lvl
                 if p_ply >= max_ply:
                     continue
                 tot = int(grp["total"].sum())
@@ -281,6 +288,13 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                     rows.extend({"move_san": san, "child_hash": ch, "total": 0, "engine": True}
                                 for san, ch in engine_moves[ph] if ch not in existing)
                 allowed = admit(ph, rows) if (our_turn and admit is not None) else None
+                if ph in source_children:
+                    # Fetch possible continuations. Final assembly decides whether to restore it.
+                    child = source_children[ph]
+                    if child not in {row["child_hash"] for row in rows}:
+                        rows.append({"child_hash": child, "total": 0})
+                        if allowed is not None:
+                            allowed = allowed | {child}
                 for row in rows:
                     ch = row["child_hash"]
                     if ch is None:
@@ -300,11 +314,6 @@ def collect_subgraph_edges(con, stats: str, root: int, our_white: bool,
                         if ch in fetched:
                             reopened += 1
                         reach[ch] = cr
-                        # A position's side to move is fixed, so every path to it
-                        # has the same parity and only the DEPTH can differ. Keep
-                        # the shallowest, which is what level-order discovery gave
-                        # before re-propagation existed.
-                        ply[ch] = min(ply.get(ch, p_ply + 1), p_ply + 1)
                         nxt[ch] = cr
         frontier = list(nxt)
         lvl += 1
@@ -343,10 +352,33 @@ class SanCoder:
         return self.bares(pl.Series(list(sans), dtype=pl.String)).tolist()
 
 
+def unrecorded_sources(frame, sources, excluded, keys=None):
+    """Replay only legal, unrecorded source moves on this frontier."""
+    from build_baseline_books import child_of
+    if not frame.height or not len(sources):
+        return {}
+    parents = frame.select("parent_hash", "parent_epd").unique("parent_hash")
+    parent_ids = parents["parent_hash"].to_numpy()
+    if hasattr(sources, "h"):
+        idx = np.minimum(np.searchsorted(sources.h, parent_ids), len(sources.h) - 1)
+        src = [sources.san[i] if hit else None for i, hit in zip(idx, sources.h[idx] == parent_ids)]
+    else:
+        src = [sources.get(h) for h in parent_ids]
+    missing = (parents.with_columns(pl.Series("move_san", src, dtype=pl.String)).drop_nulls()
+               .join(frame.select("parent_hash", "move_san"), on=["parent_hash","move_san"], how="anti"))
+    out = {}
+    for h, epd, san in missing.iter_rows():
+        if san.rstrip("+#") not in excluded.get(h, ()):
+            child = keys.child(epd, san) if keys else child_of(epd, san)
+            if child is not None:
+                out[h] = child
+    return out
+
+
 def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                               eps: float, max_ply: int, share_floor: float,
                               min_games: int, admit=None, engine_moves=None, reply_overlay=None,
-                              uncut_own: bool = False, keys=None) -> pl.DataFrame:
+                              uncut_own: bool = False, keys=None, source_moves=None) -> pl.DataFrame:
     """collect_subgraph_edges with the walk and the gates in Rust (book_builder_rs.RsCollector):
     the same DuckDB scans, the same sorted rows, the same frames returned. With an opponent
     prior (reply_overlay) each level's rows are replaced as in collect_subgraph_edges, and the
@@ -378,7 +410,7 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
                      gs.get("gate_rel_floor", bc.GATE_REL_FLOOR),
                      gs.get("gate_rel_own_margin", bc.GATE_REL_OWN_MARGIN), admit.gates,
                      math.nan if admit.max_eval_loss is None else float(admit.max_eval_loss),
-                     -1 if admit.rare_floor is None else int(admit.rare_floor))
+                     -1 if admit.rare_floor is None else int(admit.rare_floor), gs.get("max_score_loss"))
     if engine_moves:
         em = [(h, san, ch) for h, lst in engine_moves.items() for san, ch in lst]
         sans = pl.Series([x[1] for x in em], dtype=pl.String)
@@ -423,6 +455,9 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             if admit is not None:
                 new = col.unseen(par, ch, has)
                 col.store(new, np.asarray(admit.lookup(new), np.int16))
+            if source_moves is not None and (lvl % 2 == 0) == our_white and lvl < max_ply:
+                restored = unrecorded_sources(df, source_moves, admit.excluded if admit else {}, keys=keys)
+                col.set_source_children(np.fromiter(restored, np.int64), np.fromiter(restored.values(), np.int64))
             col.walk(par, ch, has, df["total"].cast(pl.Int64).to_numpy(),
                      coder.sans(df["move_san"]), coder.bares(df["move_san"]),
                      None if reply_overlay is None else
@@ -542,6 +577,8 @@ def main() -> int:
                          "node out of many more recorded moves, so this is the "
                          "subgraph-size lever for larger budgets. A position reachable "
                          "only through a refuted move gets no reach. Default off.")
+    ap.add_argument("--allowed-book", metavar="BOOK",
+                    help="Hard subset of this parent's prescriptions, for reduced learning ladders")
     ap.add_argument("--incumbent", default=None, metavar="BOOK",
                     help="Rebuild stickiness: a PREVIOUS book of this colour (e.g. the one being "
                          "learned). At each position its move is kept unless another candidate is "
@@ -550,13 +587,17 @@ def main() -> int:
     ap.add_argument("--stick-margin", type=float, default=None,
                     help="Expected-score advantage a new move needs to replace the incumbent's "
                          "(default 0.01 with --incumbent; 0 = no stickiness, churn report only).")
-    ap.add_argument("--robustness-floor", type=float, default=bc.ROBUSTNESS_FLOOR,
-                    help="Absolute gate tolerance in expected-score units")
-    ap.add_argument("--gate-rel-floor", type=float, default=bc.GATE_REL_FLOOR,
-                    help="Relative gate tolerance in expected-score units")
-    ap.add_argument("--gate-rel-own-margin", type=float, default=bc.GATE_REL_OWN_MARGIN,
-                    help="Discount on the position's own eval for the relative gate")
-    ap.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
+    ap.add_argument("--robustness-floor", type=float, metavar="FRACTION",
+                    help="Allowed deficit below the side's construction prior (White 0.110, Black 0.075)")
+    ap.add_argument("--gate-rel-floor", type=float,
+                    help="Legacy Stage-3 relative tolerance (default 0.10 in legacy mode)")
+    ap.add_argument("--gate-rel-own-margin", type=float,
+                    help="Legacy Stage-3 parent discount (default 0.02 in legacy mode)")
+    policy = ap.add_mutually_exclusive_group()
+    policy.add_argument("--max-score-loss", type=float, metavar="FRACTION",
+                        help="Maximum engine expected-score loss at our decision (default 0.095)")
+    policy.add_argument("--legacy-gates", action="store_true", help="Replay the old gates without a cp cap")
+    policy.add_argument("--max-eval-loss", type=float, default=None, metavar="CP",
                     help="Soundness gate: at our nodes book only moves whose engine eval "
                          "is within CP centipawns of the best play there (the best "
                          "evaluated candidate, or the position's own eval if higher), "
@@ -567,12 +608,23 @@ def main() -> int:
     ap.add_argument("--mem", default="24GB")
     ap.add_argument("--tmp-dir", default="D:/chess_duckdb_tmp")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--verification-policy", choices=["legacy-rare", "quality"], default="legacy-rare",
+                    help="quality separates inclusion from evidence review; stored scores select provisionally")
+    ap.add_argument("--verification-score-band", type=float, default=.01,
+                    help="Expected-score distance to a gate requiring deeper independent review")
+    ap.add_argument("--rare-trust-floor", type=int,
+                    help="Legacy evidence-count threshold, independent of --min-games")
     ap.add_argument("--rare-verification", action="store_true",
                     help="With --uncut-own-moves: an own move with fewer than --min-games "
                          "observations and no verified score (rare_verify.py rows in "
                          "--engine-candidates) cannot set a gate reference. It stays a "
                          "candidate. Writes <book>.rare.json: the decisions where such a move "
                          "would have excluded a rival. Default off = the old rule exactly.")
+    ap.add_argument("--lookahead-floor", type=int, default=0, metavar="N",
+                    help="Prune the final admitted move menu across followed opponent replies "
+                         "up to N of our decisions ahead. Keep a known passing alternative; report "
+                         "voids and unknown frontiers separately. Write the pre-veto evidence and "
+                         "per-book veto list. See lookahead_policy.py. Default 0 disables lookahead.")
     ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
@@ -586,16 +638,36 @@ def main() -> int:
     keys = ConsumerKeys.for_pool(a.stats)
     if Path(a.weak_pool).is_file() and is_wide(a.weak_pool, "parent_hash") != bool(keys):
         ap.error("--weak-pool and --stats must use matching position-key widths")
+    legacy = a.legacy_gates or a.max_eval_loss is not None
+    if not legacy and (a.gate_rel_floor is not None or a.gate_rel_own_margin is not None):
+        ap.error("--gate-rel-floor and --gate-rel-own-margin belong to --legacy-gates or --max-eval-loss")
+    if a.gate_rel_floor is None:
+        a.gate_rel_floor = bc.GATE_REL_FLOOR
+    if a.gate_rel_own_margin is None:
+        a.gate_rel_own_margin = bc.GATE_REL_OWN_MARGIN
+    if not legacy and a.max_score_loss is None:
+        a.max_score_loss = bc.MAX_SCORE_LOSS
+    if a.robustness_floor is None:
+        a.robustness_floor = bc.ROBUSTNESS_FLOOR if legacy else bc.SCORE_ABSOLUTE_TOLERANCE[a.perspective]
+    if a.verification_policy == "quality" and legacy:
+        ap.error("quality verification requires the expected-score policy")
+    allowed_sha = hashlib.sha256(Path(a.allowed_book).read_bytes()).hexdigest() if a.allowed_book else None
     gate_settings = {k: getattr(a, k) for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin")}
+    if not legacy:
+        gate_settings["max_score_loss"] = a.max_score_loss
     if any(not 0 <= v <= 1 for v in gate_settings.values()):
         ap.error("gate tolerances must be between 0 and 1 expected-score units")
+    if a.slice_prior is not None and not 0 <= a.slice_prior <= 1:
+        ap.error("--slice-prior must be a White expected score between 0 and 1")
     # sampled tables record this; gates and strict_source are fixed True since 2026-11-12
     gate_recipe = dict(**gate_settings, max_eval_loss=a.max_eval_loss, gates=True,
                        gated_reach=a.gated_reach, strict_source=True)
-    if a.dump_engine_targets and a.max_eval_loss is None:
-        ap.error("--dump-engine-targets requires --max-eval-loss")
+    if a.dump_engine_targets and legacy and a.max_eval_loss is None:
+        ap.error("--dump-engine-targets requires a relative loss cap")
     if a.stick_margin is not None and not a.incumbent:
         ap.error("--stick-margin needs --incumbent")
+    if a.lookahead_floor < 0:
+        ap.error("--lookahead-floor is a number of moves, 0 or more")
     if a.polish and a.method != "dp":
         ap.error("--polish is for --method dp (--method price always polishes)")
     if a.incumbent and a.stick_margin is None:
@@ -647,12 +719,29 @@ def main() -> int:
     for dest in outs.values():
         if dest.exists() and not a.force:
             mp = Path(str(dest) + ".meta.json")
-            old_meta = json.loads(mp.read_text()) if mp.exists() else {}
-            old = old_meta.get("uncut_own_recipe")
-            if old_meta.get("eval_lookup_sha256") != (keys.sha if keys else None):
+            previous = json.loads(mp.read_text()) if mp.exists() else {}
+            if previous.get("eval_lookup_sha256") != (keys.sha if keys else None):
                 ap.error("existing output uses a different key width or evaluation generation")
-            if old != uncut_recipe:
+            if (previous.get("reach_version") != 2
+                    or previous.get("lookahead_floor", {}).get("depth", 0) != a.lookahead_floor):
+                ap.error("Existing output uses a different reach or lookahead policy; choose a fresh prefix or --force")
+            if a.lookahead_floor:
+                from lookahead_audit import artifacts
+                artifacts(dest, previous)
+            if previous.get("uncut_own_recipe") != uncut_recipe:
                 ap.error("Existing output uses another move lookup; choose a fresh output prefix")
+            if previous.get("allowed_book_sha256") != allowed_sha:
+                ap.error("Existing output uses another fixed-prescription parent")
+            if (previous.get("verification_policy", "legacy-rare") != a.verification_policy
+                    or previous.get("verification_score_band", .01) != a.verification_score_band):
+                ap.error("Existing output uses another verification policy")
+            if (previous.get("max_score_loss") != a.max_score_loss
+                    or previous.get("max_eval_loss") != a.max_eval_loss
+                    or previous.get("robustness_floor", bc.ROBUSTNESS_FLOOR) != a.robustness_floor
+                    or (not legacy and (previous.get("slice_prior_override") != a.slice_prior
+                        or previous.get("perspective") != a.perspective
+                        or Path(previous.get("stats", "")).resolve() != Path(a.stats).resolve()))):
+                ap.error("Existing output uses different evaluation gates; choose a fresh prefix or --force")
     todo = {b: p for b, p in outs.items() if a.force or not p.exists()}
     if not todo and not a.dump_engine_targets:
         log("all outputs exist; --force to rebuild")
@@ -673,23 +762,27 @@ def main() -> int:
         slice_prior = con.execute(f"""
             SELECT SUM(white_score_avg * total) / SUM(total)
             FROM read_parquet('{stats}') WHERE parent_hash = {root_sql}
-        """).fetchone()[0] or 0.5
+        """).fetchone()[0]
+        if slice_prior is None:
+            slice_prior = 0.5
+    absolute_score_floor = (slice_prior if our_white else 1.0 - slice_prior) - a.robustness_floor
+    if not legacy:
+        gate_recipe["absolute_score_floor"] = absolute_score_floor
     log(f"slice prior {slice_prior:.4f}; eps {eps:g}; budgets {budgets}; "
         f"method {a.method}")
 
     admit = None
+    from stage3_backwards_induction import IncumbentMoves
+    # Final assembly keeps the last nonempty source SAN for a position.
+    src_filter = ((pl.col("side_to_move") == a.perspective)
+                  & pl.col("best_move").is_not_null() & (pl.col("best_move") != ""))
+    moves = (keys.book_rows(a.rep, ["position_hash", "best_move"], predicate=src_filter) if keys else
+             pl.scan_parquet(a.rep).filter(src_filter).select("position_hash", "best_move").collect())
+    moves = moves.unique("position_hash", keep="last")
+    src_all = IncumbentMoves(moves["position_hash"].to_numpy(), moves["best_move"].to_list())
+    del moves
+    log(f"{len(src_all):,} source decisions loaded for collection")
     if a.gated_reach:
-        from stage3_backwards_induction import IncumbentMoves, load_incumbent
-        _sl0 = (pl.scan_parquet(a.rep).select(["event", "elo_band"]).unique().collect())
-        if keys:
-            src = keys.book_rows(a.rep, ["position_hash", "best_move"], predicate=(
-                (pl.col("side_to_move") == a.perspective) & pl.col("best_move").is_not_null() &
-                (pl.col("event") == _sl0["event"][0]) & (pl.col("elo_band") == _sl0["elo_band"][0])))
-            src_all = IncumbentMoves(src["position_hash"].to_numpy(), src["best_move"].to_list())
-            del src
-        else:
-            src_all = load_incumbent(a.rep, a.perspective, _sl0["event"][0], _sl0["elo_band"][0])
-        log(f"gated reach: {len(src_all):,} source decisions loaded for the gates")
         admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss,
                           score_lookup=keys.scores if keys else None, **gate_settings)
     pool_floor = _pool_min_games(stats)
@@ -719,20 +812,27 @@ def main() -> int:
             proposal_frame.write_parquet(buffer)
             proposal_input = buffer.getvalue()
         fresh = {}
-        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss)
+        excluded = bc.verified_exclusions(proposal_input, a.max_eval_loss, max_score_loss=a.max_score_loss,
+                    our_white=our_white, score_floor=absolute_score_floor)
         verified_cp = bc.verified_cp_overrides(pl.read_parquet(proposal_input))
         verified_at = bc.verified_moves(pl.read_parquet(proposal_input))
         proposal_moves, _ = bc.load_engine_candidates(proposal_input, fresh)
-        gate = admit
-        if gate is not None:
-            gate.excluded = excluded
-            gate.eval_ws.update(fresh)
-            gate._seen.update(fresh)
-    rare_floor = a.min_games if a.rare_verification else None
+        if admit is not None:
+            admit.excluded = excluded
+            admit.eval_ws.update(fresh)
+            admit._seen.update(fresh)
+    if not 0 <= a.verification_score_band <= 1:
+        ap.error("--verification-score-band must be between 0 and 1")
+    if a.rare_trust_floor is not None and a.rare_trust_floor < 1:
+        ap.error("--rare-trust-floor must be positive")
+    # Zero means all finite stored scores are provisional references regardless
+    # of historical frequency. Final independent quality review is separate.
+    rare_floor = (0 if a.verification_policy == "quality" else
+                  ((a.rare_trust_floor if a.rare_trust_floor is not None else a.min_games)
+                   if a.rare_verification else None))
     if rare_floor is not None:
-        gate = admit
-        if gate is not None:
-            gate.rare_floor, gate.verified = rare_floor, verified_at
+        if admit is not None:
+            admit.rare_floor, admit.verified = rare_floor, verified_at
     reply_overlay = None
     if a.opponent_prior:
         from opponent_prior import ReplyOverlay
@@ -746,7 +846,8 @@ def main() -> int:
         log(f"uncut own moves: {a.perspective}, recipe {uncut['recipe_sha256']}")
     edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
                                  a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
-                                 reply_overlay, uncut_own=bool(uncut), keys=keys)
+                                 reply_overlay, uncut_own=bool(uncut), keys=keys, source_moves=src_all)
+    del src_all, admit
     if not edf.height:
         log("FATAL: empty subgraph")
         return 1
@@ -843,21 +944,65 @@ def main() -> int:
                                 excluded=excluded, verified=verified_at, strict_source=True,
                                 aux_frame=aux_frame, keys=keys)
     del edf, aux_frame
+    if fi["rows"]["src_has_child"].any():
+        # A source-only move can lead outside the collected edge table. Its child
+        # still needs a gate evaluation; verified overlays already in ek take priority.
+        rows_in = fi["rows"]
+        missing = np.setdiff1d(rows_in["src_child"][rows_in["src_has_child"]], ek)
+        if missing.size:
+            cp = keys.scores(missing) if keys else lookup_evals(missing, mm_hash, mm_cp)
+            hit = cp != MISSING
+            ek = np.concatenate([ek, missing[hit]])
+            ev = np.concatenate([ev, book_builder_rs.cp_to_expected_score(cp[hit].astype(np.float64))])
     terminal = None
     if a.dump_stop_positions or a.sampled_stop:
         import sampled_stop as ss
         terminal = ss.terminal_outcomes_rs(fi, our_white)
         log(f"  {len(terminal):,} recorded moves end the game")
     t2 = time.time()
-    rs_out = budget_rs.run_csr(
-        fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
+    graph_args = dict(
         slice_prior=slice_prior, prior_strength=a.prior_strength, eval_weight=a.eval_weight,
         eval_weight_min=bc.EVAL_WEIGHT_MIN, eval_weight_k=bc.EVAL_WEIGHT_K, eps=eps,
         max_ply=a.max_ply, share_floor=a.share_floor, **gate_settings, require_eval=True,
         gates=True, max_eval_loss=a.max_eval_loss, rare_floor=rare_floor,
-        strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach,
+        strict_source=True, other_cov_blend=other_cov_blend, gated_reach=a.gated_reach or bool(a.lookahead_floor) or bool(a.allowed_book),
         crack_at_parents=True, engine_moves_given=bool(engine_moves),
         track_route_ply=track_route, track_other=bool(a.dump_other_positions or a.sampled_other))
+
+    def assemble(**opts):
+        return budget_rs.run_csr(fi["edges"], fi["rows"], fi["aux"], ek, ev, root, our_white,
+                                 **(graph_args | opts))
+
+    allowed_moves = None
+    if a.allowed_book:
+        rows = (keys.book_rows(a.allowed_book, ["position_hash", "best_move"],
+                    predicate=pl.col("side_to_move")==a.perspective) if keys else
+                pl.read_parquet(a.allowed_book).filter(pl.col("side_to_move")==a.perspective)
+                    .select("position_hash", "best_move"))
+        rows = rows.filter(pl.col("best_move").is_not_null() & (pl.col("best_move")!=""))
+        if rows.group_by("position_hash").agg(pl.col("best_move").n_unique().alias("n")).filter(pl.col("n")>1).height:
+            ap.error("allowed book has conflicting prescriptions")
+        allowed_moves = {h: m.rstrip("+#") for h,m in rows.iter_rows()}
+        from sweep.ladders import menu_veto
+        fi["rows"]["lookahead_veto"] = menu_veto(assemble(), fi["san_list"], allowed_moves)
+    lookahead, lookahead_vetoes = None, {}
+    if a.lookahead_floor:
+        import lookahead_policy
+        base = assemble(track_route_ply=False, track_other=False)
+        evidence_book = next(iter(todo.values()), outs[budgets[0]])
+        evidence_path = Path(str(evidence_book) + ".lookahead-inputs.parquet")
+        if a.dump_engine_targets or a.dump_stop_positions or a.dump_other_positions:
+            evidence_path = Path(str(a.out_prefix) + ".dump.lookahead-inputs.parquet")
+        post, lookahead_vetoes, veto_reach, lookahead = lookahead_policy.prepare(
+            base, fi["san_list"], ek, ev, white=our_white, prior=slice_prior,
+            floor=a.robustness_floor, depth=a.lookahead_floor, score_gate=a.max_score_loss is not None,
+            max_ply=a.max_ply, path=evidence_path, keys=keys)
+        del base
+        from sweep.ladders import merge_veto
+        fi["rows"]["lookahead_veto"] = merge_veto(fi["rows"].get("lookahead_veto", {}), post)
+        log(f"lookahead: {lookahead['vetoed_moves']:,} moves removed from final candidate menus, "
+            f"{lookahead['void_nodes']:,} decisions with no passing alternative")
+    rs_out = assemble()
     t3 = time.time()
     rs_sans = fi["san_list"]
     g = budget_rs.GraphView(rs_out, rs_sans, root, fi["parents"], fi["epd"], eps=eps,
@@ -887,6 +1032,8 @@ def main() -> int:
         other_key = recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                aux_stats=aux_path, eval_weight=a.eval_weight,
                                other_cov_blend=other_cov_blend)
+        other_key["reach_version"] = 2
+        other_key["lookahead_depth"] = a.lookahead_floor
         other_key["engine_candidates_sha256"] = proposal_sha
         other_key["uncut_own_recipe"] = uncut_recipe
         other_key["gate_policy"] = gate_recipe
@@ -922,8 +1069,6 @@ def main() -> int:
         on_graph = sum(1 for h in incumbent if h in g.our)
         log(f"  incumbent: {len(incumbent):,} moves ({on_graph:,} at positions of this graph), "
             f"stick margin {a.stick_margin}")
-    # nothing below reads the edge lists, the eval cache or the gate's source moves
-    del admit
     import gc
     gc.collect()
     # the graph, owned by Rust from here: every stage below runs on it (g keeps the meta,
@@ -948,6 +1093,8 @@ def main() -> int:
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
                                      weak_pool=a.weak_pool, weak_min_games=a.weak_min_games,
                                      weak_min_share=WEAK_MIN_SHARE, stop_model="weak")
+            dump_key["reach_version"] = 2
+            dump_key["lookahead_depth"] = a.lookahead_floor
             dump_key["engine_candidates_sha256"] = proposal_sha
             dump_key["uncut_own_recipe"] = uncut_recipe
             dump_key["gate_policy"] = gate_recipe
@@ -1198,8 +1345,11 @@ def main() -> int:
             "stranded_cycle_nodes": diag["stranded_cycle_nodes"],
             "slice_prior": slice_prior, "eval_weight": a.eval_weight,
             "prior_strength": a.prior_strength, "gates": True,
-            "max_cands": 0, "gated_reach": a.gated_reach,
+            "max_cands": 0, "gated_reach": graph_args["gated_reach"], "collector_gated_reach": a.gated_reach,
+            "reach_version": 2,
             "max_eval_loss": a.max_eval_loss, **gate_settings,
+            **({"absolute_score_floor": absolute_score_floor, "slice_prior_override": a.slice_prior}
+               if a.max_score_loss is not None else {}),
             "min_games": a.min_games, "pool_min_games": pool_floor,
             **({"uncut_own_recipe": uncut["recipe_sha256"], "uncut_own_moves": str(a.uncut_own_moves)}
                if uncut else {}),
@@ -1227,6 +1377,7 @@ def main() -> int:
                                           if keys else engine_conflicts)}
                if a.engine_candidates else {}),
             "crack_edges": g.meta.get("crack_edges", 0),
+            **({"lookahead_floor": lookahead} if lookahead is not None else {}),
             **({"incumbent": str(a.incumbent), "stick_margin": a.stick_margin,
                 "incumbent_churn": incumbent_churn(res["booked"], incumbent, g.reach)}
                if incumbent is not None else {}),
@@ -1244,6 +1395,13 @@ def main() -> int:
                if a.method == "price" else {}),
             **({"price": price_info} if price_info is not None else {}),
             **({"polish": polish_info} if polish_info is not None else {}),
+            "allowed_book": a.allowed_book, "allowed_book_sha256": allowed_sha,
+            "verification_policy": a.verification_policy,
+            "verification_score_band": a.verification_score_band,
+            "objective_components": {
+                "eval_weight": a.eval_weight, "empirical_prior": a.prior_strength,
+                "weak_stop_overrides": bool(stop_counts), "sampled_stop_overrides": bool(a.sampled_stop),
+                "meaning": "weight applies only where empirical/engine fallback blend remains active"},
             "weak_pool": a.weak_pool, "weak_min_games": a.weak_min_games,
             "weak_min_share": WEAK_MIN_SHARE, "weak_counts": stop_counts,
             "source_rep": str(a.rep), "source_meta": src_meta,
@@ -1253,6 +1411,23 @@ def main() -> int:
             "peak_commit_gb": peak_commit_gb(),
             "built": time.strftime("%Y-%m-%d %H:%M:%S"),
         }
+        if allowed_moves is not None and any(allowed_moves.get(h) != m.rstrip("+#")
+                                                   for h,m in res["booked"].items()):
+            raise ValueError("optimizer escaped the fixed-prescription parent")
+        if lookahead is not None:
+            # Each book owns its proof, including when only one budget is rebuilt later.
+            proof = Path(str(out) + ".lookahead-inputs.parquet")
+            if evidence_path != proof:
+                from shutil import copyfile
+                temp = proof.with_suffix(".parquet.tmp")
+                temp.unlink(missing_ok=True)
+                try:
+                    temp.hardlink_to(evidence_path)
+                except OSError:
+                    copyfile(evidence_path, temp)
+                temp.replace(proof)
+            meta["lookahead_floor"] = dict(lookahead, evidence_file=proof.name,
+                veto_sha256=lookahead_policy.write_veto(out, lookahead_vetoes, veto_reach, keys=keys))
         Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
         if rare_floor is not None:
             # every decision where an unverified rare move would have excluded a rival had it

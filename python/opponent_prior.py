@@ -13,27 +13,55 @@ class ReplyOverlay:
         meta = json.loads(Path(str(path)+".json").read_text())
         with path.open("rb") as fp:
             sha = hashlib.file_digest(fp,"sha256").hexdigest()
-        if (sha != meta["sha256"] or meta["schema"] not in (1, 2) or meta["colour"] != colour
+        if (sha != meta["sha256"] or meta["schema"] not in (1, 2, 3) or meta["colour"] != colour
                 or Path(meta["source_pool"]).resolve() != Path(pool).resolve()
                 or not aux_path or Path(aux_path).resolve() != Path(meta["source_aux"]).resolve()
                 or floor != meta["min_games"] or not math.isfinite(weight) or weight < 0):
             raise ValueError("Opponent prior does not match these pool, perspective, or weight settings")
         self.recipe = {"file":str(path.resolve()), "sha256":sha, "K":weight, "scope":meta["scope"]}
         self.rows = pl.read_parquet(path)
+        if meta["schema"] == 3:
+            from sweep.policy import validate_overlay_rows
+            validate_overlay_rows(self.rows, colour)
         if keys:
             self.rows = keys.encode(self.rows, "parent_hash", "child_hash")
-        mass = pl.col("reply_observed") + weight*pl.col("maia_p")
-        if meta["schema"] == 2 and weight:
-            # The prior predicts which move is played conditional on a move.
-            # Keep the observed chance of termination or censoring identical in both arms.
-            observed = pl.col("reply_observed").sum().over("parent_hash")
-            mass = mass * (observed / (observed + weight))
+        if meta["schema"] == 3:
+            # A completed ensemble is conditional on a move. Never add Maia twice.
+            if weight != 0:
+                raise ValueError("An ensemble overlay must use --opponent-pseudogames 0")
+            from sweep.stages import artifacts
+            pinned = artifacts(meta["input_artifacts"])
+            if not {str(Path(pool).resolve()), str(Path(aux_path).resolve())} <= set(pinned):
+                raise ValueError("Ensemble has not pinned its outcome pool and aux")
+            if not meta.get("policy_recipe"):
+                raise ValueError("Ensemble overlay lacks its policy recipe")
+            for name in ("policy_p", "move_mass", "nonmove"):
+                if self.rows[name].null_count() or not self.rows[name].is_finite().all() or (self.rows[name] < 0).any():
+                    raise ValueError(f"Invalid ensemble {name}")
+            checks = self.rows.group_by("parent_hash").agg(
+                pl.col("policy_p").sum().alias("p"),
+                pl.col("move_mass").n_unique().alias("m"),
+                pl.col("nonmove").n_unique().alias("n"),
+                (pl.col("move_mass") + pl.col("nonmove")).min().alias("mass"),
+                pl.col("move_san").n_unique().alias("unique"), pl.len().alias("rows"))
+            if checks.filter((pl.col("p")-1).abs()>1e-10).height or checks.filter(
+                    (pl.col("m")!=1) | (pl.col("n")!=1) | (pl.col("mass")<=0) |
+                    (pl.col("unique")!=pl.col("rows"))).height:
+                raise ValueError("Invalid conditional ensemble normalization or duplicate moves")
+            mass = pl.col("policy_p") * pl.col("move_mass")
+            self.recipe.update(policy_recipe=meta["policy_recipe"], inputs=meta["input_artifacts"])
+        else:
+            mass = pl.col("reply_observed") + weight*pl.col("maia_p")
+            if meta["schema"] == 2 and weight:
+                # Preserve the observed chance of actual termination or censoring.
+                observed = pl.col("reply_observed").sum().over("parent_hash")
+                mass = mass * (observed / (observed + weight))
         self.rows = self.rows.with_columns(mass.alias("reply_mass")).with_columns((pl.col("reply_mass") /
                         (pl.col("reply_mass").sum().over("parent_hash")+pl.col("nonmove")))
                        .alias("reach_share"))
         self.keys = self.rows.select("parent_hash").unique()
         self.extra_aux = {}
-        if meta["schema"] == 2:
+        if meta["schema"] == 2 or (meta["schema"] == 3 and meta.get("extra_aux_sha256")):
             extra = Path(str(path) + ".aux.parquet")
             with extra.open("rb") as fp:
                 if hashlib.file_digest(fp, "sha256").hexdigest() != meta["extra_aux_sha256"]:

@@ -288,7 +288,8 @@ def run_python(nodes, our_white, params, want_disputes):
                 robustness_floor=params["robustness_floor"], gate_rel_floor=params["gate_rel_floor"],
                 gate_rel_own_margin=params["gate_rel_own_margin"],
                 require_eval=params["require_eval"], gates=params["gates"],
-                max_eval_loss=params["max_eval_loss"], strict_source=params["strict_source"],
+                max_eval_loss=params["max_eval_loss"], max_score_loss=params.get("max_score_loss"),
+                strict_source=params["strict_source"],
                 engine_moves=engine_moves or None, epd=f"epd{nd['h']}",
                 excluded={-1 - nd["h"]: nd["veto"]} if nd["veto"] else None,
                 rare_floor=params["rare_floor"],
@@ -335,7 +336,7 @@ def run_rust(nodes, our_white, params, want_disputes):
         params["gate_rel_own_margin"], params["require_eval"], params["gates"],
         nan if params["max_eval_loss"] is None else params["max_eval_loss"],
         -1 if params["rare_floor"] is None else params["rare_floor"],
-        params["strict_source"], want_disputes)
+        params["strict_source"], want_disputes, params.get("max_score_loss"))
     dmap = {d[0]: d for d in disputes}
     out = []
     for i in range(len(nodes)):
@@ -382,14 +383,14 @@ def check_gates() -> None:
     for our_white in (True, False):
         nodes = gate_nodes(rng, 3000, our_white)
         for gates_on, require_eval in ((True, True), (True, False), (False, True)):
-            for loss in (None, 30.0):
+            for loss, score_loss in [(None, None), (30.0, None)] + ([(None, 0.095)] if gates_on and require_eval else []):
                 for rare in (None, 5):
                     for strict in (True, False):
                         for want in ((True, False) if rare is not None else (False,)):
                             params = dict(slice_prior=0.52, robustness_floor=0.1,
                                           gate_rel_floor=0.1, gate_rel_own_margin=0.02,
                                           require_eval=require_eval, gates=gates_on,
-                                          max_eval_loss=loss, rare_floor=rare,
+                                          max_eval_loss=loss, max_score_loss=score_loss, rare_floor=rare,
                                           strict_source=strict)
                             py = run_python(nodes, our_white, params, want)
                             got = run_rust(nodes, our_white, params, want)

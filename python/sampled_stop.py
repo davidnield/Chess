@@ -414,7 +414,8 @@ def table_problems(meta: dict, key: dict) -> dict:
     if "gate_policy" in bad and "gate_policy" not in meta.get("dump", {}):
         from budget_core import ROBUSTNESS_FLOOR, GATE_REL_FLOOR, GATE_REL_OWN_MARGIN
         settings = key["gate_policy"]
-        if (settings["robustness_floor"], settings["gate_rel_floor"], settings["gate_rel_own_margin"]) == (
+        if settings.get("max_score_loss") is None and (
+                settings["robustness_floor"], settings["gate_rel_floor"], settings["gate_rel_own_margin"]) == (
                 ROBUSTNESS_FLOOR, GATE_REL_FLOOR, GATE_REL_OWN_MARGIN):
             bad.pop("gate_policy")
     if "sim" not in meta:

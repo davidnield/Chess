@@ -28,7 +28,8 @@ pub struct Collector {
     pub max_ply: i64,
     pub share_floor: f64,
     pub reach: HashMap<Key, f64>,
-    pub ply: HashMap<Key, i64>,
+    depth: i64,
+    pub source_children: HashMap<Key, Key>,
     pub fetched: HashSet<Key>,
     pub frontier: Vec<Key>,
     pub reopened: i64,
@@ -52,10 +53,8 @@ impl Collector {
     pub fn new(root: Key, our_white: bool, eps: f64, max_ply: i64, share_floor: f64) -> Collector {
         let mut reach = HashMap::new();
         reach.insert(root, 1.0);
-        let mut ply = HashMap::new();
-        ply.insert(root, 0);
-        Collector { our_white, eps, max_ply, share_floor, reach, ply, fetched: HashSet::new(),
-                    frontier: vec![root], reopened: 0, gate: None, engine: HashMap::new() }
+        Collector { our_white, eps, max_ply, share_floor, reach, depth: 0, fetched: HashSet::new(),
+                    source_children: HashMap::new(), frontier: vec![root], reopened: 0, gate: None, engine: HashMap::new() }
     }
 
     /// The frontier's parents not fetched before (their rows are kept); marks the whole
@@ -126,7 +125,7 @@ impl Collector {
             let (a, b) = (s, e);
             s = e;
             let r = self.reach.get(&ph).copied().unwrap_or(0.0);
-            let p_ply = self.ply.get(&ph).copied().unwrap_or(0);
+            let p_ply = self.depth;
             if p_ply >= self.max_ply {
                 continue;
             }
@@ -149,11 +148,19 @@ impl Collector {
                 (Some(gt), true) => Some(Self::admit(gt, ph, &rows)),
                 _ => None,
             };
+            // The collector is a superset. A replayed source can be restored after the
+            // ordinary gates, so fetch its descendants without changing the gate reference.
+            let ordinary = rows.len();
+            if our_turn {
+                if let Some(&child) = self.source_children.get(&ph) {
+                    rows.push((Some(child), -1, -1, 0, false));
+                }
+            }
             for (k, row) in rows.iter().enumerate() {
                 let Some(ch) = row.0 else { continue };
                 let cr = if our_turn {
                     if let Some(al) = &allowed {
-                        if !al.contains(&ch) {
+                        if k < ordinary && !al.contains(&ch) {
                             continue;
                         }
                     }
@@ -177,15 +184,13 @@ impl Collector {
                         self.reopened += 1;
                     }
                     self.reach.insert(ch, cr);
-                    let np = p_ply + 1;
-                    let cur = self.ply.get(&ch).copied().unwrap_or(np);
-                    self.ply.insert(ch, cur.min(np));
                     if in_nxt.insert(ch) {
                         nxt.push(ch);
                     }
                 }
             }
         }
+        self.depth += 1;
         self.frontier = nxt.clone();
         nxt
     }

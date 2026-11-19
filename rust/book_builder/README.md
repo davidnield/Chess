@@ -71,7 +71,13 @@ evidence. A separate two-prescription Black build tests rebuilding to closure an
 resuming from round receipts. The real-engine check uses 5,000 and 20,000 nodes
 to exercise the code paths; pilot search budgets are configured separately.
 
-### Numerical agreement
+### Production engine gates
+
+`python/build_budget_books.py` defaults to the expected-score policy recorded in the [lifetime plan](../../docs/lifetime-repertoire-plan.md#engine-gate-decision-november-14-2026). `--robustness-floor` sets the allowed deficit below the construction prior from our side. `--max-score-loss` sets a relative tolerance on the 0–1 scale. For example, `0.095` means 9.5 percentage points. The Rust collector and final menu use the parent and eligible trusted siblings as references. Rare unverified moves can enter provisionally and trigger verification. A missing evaluation or a failed gate excludes an inherited move as well. If every move fails, the book ends there. Opponent replies retain their empirical weights.
+
+`run_rare_book.py` takes the non-gate recipe from the 60 cp template by default (`--template-cap` selects another). Verified overlays can be reused because they store the parent and child cp, which are converted separately for each new policy. The book metadata records `max_score_loss`, `robustness_floor`, `slice_prior`, and `absolute_score_floor`. For historical builds, `--max-eval-loss CP` and the driver's `--cap CP` select the centipawn rule. The builder's `--legacy-gates` reproduces the historical uncapped rule.
+
+### Numerical parity
 
 Every exported function equals the Python it names, bit for bit. The test
 `python/_test_book_builder_rs.py` compares floats by their bits, so NaN, -0.0 and the last ulp

@@ -2,8 +2,10 @@
 book rests on (rare_verify.py), rebuild with the verified scores, repeat until a verification
 pass produces no new evidence.
 
-    python run_rare_book.py --colour black --cap 30 --baseline <cutoff screen dir>
+    python run_rare_book.py --colour black --baseline <cutoff screen dir>
                             --lookup <uncut cache> --out <work dir> --searches <search cache>
+
+New runs use the lifetime expected-score gates. An explicit --cap replays a historical cp arm.
 
 Round r lives in <out>/round-NN: the build (book_b<B>.parquet, its .meta.json and .rare.json) and
 the verifier's overlay. Round 0 is the expanded menu before any fresh score; keep it.
@@ -13,6 +15,13 @@ is followed by a rebuild that consumes its overlay: a corrected value off the bo
 line worth a place in it. The run ends when a pass asks for nothing, and only if the final book's
 meta names the last overlay that carried new evidence. The frontier is searched in round 0 only
 (reach threshold and batch limit are flags); what is left of it is reported in final.json.
+
+Starting from earlier evidence (--seed-overlay). A verified score is a fact about a position, not
+about a book, and the position searches are cached. Without a seed a new run still rebuilds once
+per round to rediscover which of those scores its book rests on. With the last overlay of another
+run of the same colour as the seed, round 0 is built with that evidence already applied
+(so it is no longer the bare expanded menu), and the run needs only the rounds its own new
+decisions call for. The seed is part of round 0's receipt; final.json names it.
 
 The code a stage runs. The build and the verifier are run from a SNAPSHOT of python/*.py (and the
 Rust extension, if built) taken at launch (<out>/code-<hash>/), never from the working tree, so an edit made while a run is live
@@ -54,7 +63,8 @@ def code_files(folder: Path = HERE) -> list[Path]:
     """The maintained code a stage can execute: python/*.py and the Rust extension, if built
     (build_budget_books --rs-core imports it, so it is part of the code's identity)."""
     return sorted([p for p in folder.glob("*.py") if not p.name.startswith("_test_")]
-                  + list(folder.glob("book_builder_rs.pyd")))
+                  + list(folder.glob("book_builder_rs.pyd"))
+                  + list((folder / "sweep").glob("*.py")))
 
 
 # build_budget_books options retired on 2026-11-12 (the simplify step): the value each one may
@@ -85,8 +95,10 @@ def code_sha(files=None) -> str:
     """One hash over the maintained code a build or a verification can execute."""
     h = hashlib.sha256()
     for p in (code_files() if files is None else files):
-        h.update(p.name.encode())
-        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
+        name = ("sweep/" if p.parent.name == "sweep" else "") + p.name
+        h.update(name.encode())
+        data = p.read_bytes()
+        h.update(data.replace(b"\r\n", b"\n") if p.suffix == ".py" else data)
     return h.hexdigest()
 
 
@@ -143,7 +155,9 @@ def snapshot(work: Path, code: str, source: Path = HERE) -> Path:
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
         for p in code_files(source):
-            shutil.copy2(p, tmp / p.name)
+            target = tmp / p.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(p, target)
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=source, capture_output=True,
                               text=True).stdout.strip()
         (tmp / "HEAD.txt").write_text(head + "\n")
@@ -151,15 +165,33 @@ def snapshot(work: Path, code: str, source: Path = HERE) -> Path:
     return dest
 
 
+def lookahead_depth(args):
+    # argparse accepts both spellings, and its last occurrence wins.
+    ap = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
+    ap.add_argument("--lookahead-floor", type=int, default=0)
+    return ap.parse_known_args(args)[0].lookahead_floor
+
+
 def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
     """The round loop. build(args, log) and verify(book, overlay_out, frontier_args, log) default
     to the snapshot's build_budget_books.py and rare_verify.py; tests pass their own."""
     import polars as pl
 
-    receipt = a.baseline / "stages" / f"{a.colour}-cp{a.template_cap or a.cap}.json"
+    template = a.template_cap if a.template_cap is not None else (60 if a.cap is None else a.cap)
+    receipt = a.baseline / "stages" / f"{a.colour}-cp{template}.json"
     cmd = json.loads(receipt.read_text())["command"]
-    base = modern(cmd[cmd.index("--rep"):]) + list(getattr(a, "build_arg", None) or [])
-    base[base.index("--max-eval-loss") + 1] = str(a.cap)
+    base = modern(cmd[cmd.index("--rep"):])
+    if a.cap is not None:
+        base[base.index("--max-eval-loss") + 1] = str(a.cap)
+    else:
+        from budget_core import MAX_SCORE_LOSS, SCORE_ABSOLUTE_TOLERANCE
+        for flag in ("--max-eval-loss", "--robustness-floor", "--gate-rel-floor", "--gate-rel-own-margin"):
+            if flag in base:
+                i = base.index(flag)
+                del base[i:i+2]
+        limit = a.max_score_loss if a.max_score_loss is not None else MAX_SCORE_LOSS
+        base.extend(["--max-score-loss", str(limit), "--robustness-floor", str(SCORE_ABSOLUTE_TOLERANCE[a.colour])])
+    base += list(getattr(a, "build_arg", None) or [])
     budget = base[base.index("--budget") + 1]
     while a.wait and not (a.lookup / "ready.json").exists():
         time.sleep(30)
@@ -179,7 +211,8 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
         [py, "-X", "utf8", "-u", kept / "rare_verify.py", "--book", book, "--colour", a.colour,
          "--cache", a.searches, "--out", out, "--nodes", a.nodes, "--deep-nodes", a.deep_nodes,
          "--band", a.band, "--threads", a.threads, *front], log, kept))
-    rounds, overlay = [], None
+    seed = getattr(a, "seed_overlay", None)
+    rounds, overlay = [], seed
     for r in range(a.max_rounds):
         rd = a.out / f"round-{r:02d}"
         rd.mkdir(exist_ok=True)
@@ -190,12 +223,24 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
         args += ["--uncut-own-moves", str(a.lookup), "--rare-verification"]
         if overlay:
             args += ["--engine-candidates", str(overlay)]
+        outputs = [book, Path(str(book)+".meta.json"), Path(str(book)+".rare.json")]
+        depth = lookahead_depth(args)
+        audit_path = Path(str(book)+".lookahead-audit.json")
+        if depth:
+            outputs.extend([Path(str(book)+".lookahead-inputs.parquet"), Path(str(book)+".lookahead.json"), audit_path])
+
+        def build_and_check():
+            build(args, rd / "build.log")
+            if depth:
+                # Use the captured implementation, even if the live worktree changes.
+                run([py, "-X", "utf8", kept / "lookahead_audit.py", book, audit_path,
+                     "--depth", str(depth)], rd / "lookahead-audit.log", kept)
+
         built, reused = stage(
             rd / "build.receipt.json",
             {"code": code, "command": args, "lookup": lookup, "baseline_receipt": sha(receipt),
              "overlay_in": sha(overlay) if overlay else None},
-            [book, Path(str(book) + ".meta.json"), Path(str(book) + ".rare.json")],
-            lambda: build(args, rd / "build.log"), guard)
+            outputs, build_and_check, guard)
         ours = pl.read_parquet(book).filter((pl.col("side_to_move") == a.colour)
                                             & pl.col("best_move").is_not_null())
         if ours.height != int(budget) or ours["position_hash"].n_unique() != int(budget):
@@ -240,6 +285,7 @@ def drive(a, build=None, verify=None, source: Path = HERE) -> dict:
                 "book": str(book), "round": r, "overlay": str(overlay) if overlay else None,
                 "applied_overlay_sha256": applied, "code_sha256": code,
                 "code_snapshot": str(kept), "lookup": lookup,
+                "seed_overlay": str(seed) if seed else None,
                 "receipts": [x for rec in rounds for x in rec["receipts"]],
                 "frontier": {"searched_in_round_0_only": True, "reach_threshold": a.frontier_reach,
                              "batch_limit": a.frontier, "unbooked_disputes_left": len(left),
@@ -257,10 +303,12 @@ def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--colour", required=True, choices=["black", "white"])
-    ap.add_argument("--cap", type=int, required=True)
+    gate = ap.add_mutually_exclusive_group()
+    gate.add_argument("--cap", type=int, help="Replay a historical centipawn cap")
+    gate.add_argument("--max-score-loss", type=float, help="Relative score fraction (default 0.095)")
     ap.add_argument("--baseline", type=Path, required=True,
                     help="cutoff screen dir holding stages/<colour>-cp<cap>.json")
-    ap.add_argument("--template-cap", type=int, help="take the recipe from this cap's receipt")
+    ap.add_argument("--template-cap", type=int, help="take other settings from this cp receipt (score mode default 60)")
     ap.add_argument("--lookup", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--searches", type=Path, required=True,
@@ -273,6 +321,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--frontier", type=int, default=300)
     ap.add_argument("--max-rounds", type=int, default=8)
     ap.add_argument("--wait", action="store_true", help="wait for the lookup's ready.json")
+    ap.add_argument("--seed-overlay", type=Path, metavar="PARQUET",
+                    help="the last overlay of another run of this colour: round 0 starts "
+                         "from its verified scores (see the header)")
     ap.add_argument("--build-arg", action="append", default=[], metavar="ARG",
                     help="an extra build_budget_books argument (repeatable), e.g. "
                          "--build-arg=--rs-core")

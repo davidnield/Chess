@@ -52,6 +52,7 @@ impl<'a> Edges<'a> {
 #[derive(PartialEq)]
 struct Item {
     neg_r: f64,
+    depth: i64,
     tie: u64,
     h: Key,
 }
@@ -101,16 +102,19 @@ pub fn optimistic_reach(g: &Edges, rows: &HashMap<Key, usize>, root: Key, root_o
     let mut reach = OrderedMap::<f64>::default();
     let mut ply = OrderedMap::<i64>::default();
     let mut heap = BinaryHeap::new();
-    heap.push(Item { neg_r: -1.0, tie: 0, h: root });
-    ply.set(root, 0);
+    heap.push(Item { neg_r: -1.0, depth: 0, tie: 0, h: root });
     let mut tie = 1u64;
-    while let Some(Item { neg_r, h, .. }) = heap.pop() {
+    while let Some(Item { neg_r, depth: p_ply, h, .. }) = heap.pop() {
         let r = -neg_r;
-        if reach.contains(&h) {
+        // Previously popped labels have at least this reach. Only a shorter
+        // arrival can still reach a new continuation inside the horizon.
+        if ply.get(&h).is_some_and(|depth| depth <= p_ply) {
             continue;
         }
-        reach.set(h, r);
-        let p_ply = ply.get(&h).unwrap();
+        if !reach.contains(&h) {
+            reach.set(h, r);
+        }
+        ply.set(h, p_ply);
         if p_ply >= max_ply {
             continue;
         }
@@ -135,14 +139,10 @@ pub fn optimistic_reach(g: &Edges, rows: &HashMap<Key, usize>, root: Key, root_o
                 }
                 r * s
             };
-            if cr < eps || reach.contains(&ch) {
+            if cr < eps || ply.get(&ch).is_some_and(|depth| depth <= p_ply + 1) {
                 continue;
             }
-            match ply.get(&ch) {
-                Some(p) if p <= p_ply + 1 => {}
-                _ => ply.set(ch, p_ply + 1),
-            }
-            heap.push(Item { neg_r: -cr, tie, h: ch });
+            heap.push(Item { neg_r: -cr, depth: p_ply + 1, tie, h: ch });
             tie += 1;
         }
     }

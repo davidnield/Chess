@@ -17,6 +17,11 @@ The experiment order is in `docs/lifetime-repertoire-plan.md`. Tag `archive-2026
 every driver and search prototype retired on that date (the uncut sweep coordinators, the
 multi-depth / root-search / shared-budget prototypes); check it out to rerun one.
 
+The Rust builder and verification driver default to hard expected-score gates. The
+per-color absolute tolerances and shared relative tolerance are in the lifetime plan.
+Both gates use the repertoire player's view. Historical cp
+recipes stay reproducible through the explicit centipawn flags in the builder README.
+
 Rare-move verification (`build_budget_books.py --rare-verification` with an uncut own-move lookup)
 lets a move with fewer than `--min-games` games be booked but never set a gate reference until it
 has a fresh search. `python/run_rare_book.py` drives it: build, `rare_verify.py` searches the

@@ -798,7 +798,28 @@ with tempfile.TemporaryDirectory() as td:
         closed = False
     check("driver: a final book that does not name the last overlay is refused", not closed)
 
-    # the default stages run the snapshot's files, not the working tree's
+    # --seed-overlay: round 0 is already built with another run's evidence, and names it
+    seeded = ns("f")
+    seeded.seed_overlay = Path(final["overlay"])
+    n0 = len(log)
+    fs = rrb.drive(seeded, build, verify, source=src)
+    r0 = json.loads((td / "f" / "round-00" / "build.receipt.json").read_text())["identity"]
+    check("driver: a seeded run builds round 0 with the seed and records it",
+          log[n0:] == ["build+overlay", "verify", "build+overlay", "verify"]
+          and r0["overlay_in"] == rrb.sha(final["overlay"])
+          and str(final["overlay"]) in r0["command"] and fs["seed_overlay"] == str(final["overlay"])
+          and final.get("seed_overlay") is None, f"{log[n0:]} {fs}")
+
+    # A cp template supplies the rest of the recipe for a score-policy run.
+    score_run = ns("score")
+    score_run.cap, score_run.template_cap, score_run.max_score_loss = None, 30, None
+    rrb.drive(score_run, build, verify, source=src)
+    args = json.loads((score_run.out / "round-00/build.receipt.json").read_text())["identity"]["command"]
+    check("driver: a historical template yields the new Black score recipe",
+          "--max-eval-loss" not in args and args[args.index("--max-score-loss")+1] == "0.095"
+          and args[args.index("--robustness-floor")+1] == "0.075")
+
+    # The default stages run the snapshot's files.
     final = rrb.drive(ns("c"), None, lambda b_, o_, f_, l_: (
         pl.DataFrame({"x": [1]}).write_parquet(o_),
         Path(str(o_) + ".meta.json").write_text(json.dumps({"requested_parents": 0, "by_reason": {}}))),

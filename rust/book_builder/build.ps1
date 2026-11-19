@@ -1,12 +1,13 @@
 # Build the extension and install it as python/book_builder_rs.pyd (gitignored).
 #   pwsh rust/book_builder/build.ps1            release build + install
 #   pwsh rust/book_builder/build.ps1 -Test      also cargo test and the Python differential test
-param([switch]$Test)
+param([switch]$Test, [string]$TargetDir = "D:\rust-target\book_builder", [int]$Jobs = 2)
 $ErrorActionPreference = "Stop"
 $crate = $PSScriptRoot
 $repo = (Resolve-Path "$crate\..\..").Path
 $env:RUSTUP_TOOLCHAIN = "stable"
-$env:CARGO_TARGET_DIR = "D:\rust-target\book_builder"     # C: is nearly full
+$env:CARGO_TARGET_DIR = $TargetDir
+$env:CARGO_BUILD_JOBS = "$Jobs"
 $env:PYO3_PYTHON = "$repo\.venv\Scripts\python.exe"
 if (-not (Test-Path $env:PYO3_PYTHON)) {                   # a worktree: the main checkout's venv
     $env:PYO3_PYTHON = "C:\Users\David\Documents\Chess\.venv\Scripts\python.exe"

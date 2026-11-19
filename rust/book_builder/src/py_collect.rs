@@ -38,15 +38,26 @@ impl RsCollector {
         RsCollector { c: Collector::new(key(root), our_white, eps, max_ply, share_floor) }
     }
 
+    fn set_source_children(&mut self, parents: PyReadonlyArray1<i64>, children: PyReadonlyArray1<i64>) -> PyResult<()> {
+        let (p, c) = (parents.as_slice()?, children.as_slice()?);
+        crate::same_len(p.len(), &[c.len()])?;
+        self.c.source_children = p.iter().zip(c).map(|(&h,&ch)| (key(h), key(ch))).collect();
+        Ok(())
+    }
+
     /// GateAdmit: the source moves (first per hash wins, as IncumbentMoves.get), vetoes and
     /// verified moves as (key, bare code) pairs, the seen cache (NaN = no eval) and the gates
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature=(src_keys,src_sans,ex_keys,ex_bare,ver_keys,ver_bare,seen_keys,seen_vals,
+        slice_prior,robustness_floor,gate_rel_floor,gate_rel_own_margin,gates,max_eval_loss,
+        rare_floor,max_score_loss=None))]
     fn set_gate(&mut self, src_keys: PyReadonlyArray1<i64>, src_sans: PyReadonlyArray1<i64>,
                 ex_keys: PyReadonlyArray1<i64>, ex_bare: PyReadonlyArray1<i64>,
                 ver_keys: PyReadonlyArray1<i64>, ver_bare: PyReadonlyArray1<i64>,
                 seen_keys: PyReadonlyArray1<i64>, seen_vals: PyReadonlyArray1<f64>,
                 slice_prior: f64, robustness_floor: f64, gate_rel_floor: f64,
-                gate_rel_own_margin: f64, gates: bool, max_eval_loss: f64, rare_floor: i64)
+                gate_rel_own_margin: f64, gates: bool, max_eval_loss: f64, rare_floor: i64,
+                max_score_loss: Option<f64>)
                 -> PyResult<()> {
         let (sk, ss) = (src_keys.as_slice()?, src_sans.as_slice()?);
         let (xk, xb) = (ex_keys.as_slice()?, ex_bare.as_slice()?);
@@ -65,6 +76,7 @@ impl RsCollector {
                 our_white: self.c.our_white, slice_prior, robustness_floor, gate_rel_floor,
                 gate_rel_own_margin, require_eval: gates, gates,
                 max_eval_loss: if max_eval_loss.is_nan() { None } else { Some(max_eval_loss) },
+                max_score_loss: crate::score_limit(max_score_loss, max_eval_loss)?,
                 rare_floor: if rare_floor < 0 { None } else { Some(rare_floor) },
                 strict_source: false,
             },

@@ -6,8 +6,8 @@ For every decision of OUR colour in the file (base rows and sequence-extension r
   candidate  base rows of a budget book: is the move in the final candidate set its recipe
              allows -- budget_core.gate_candidates over the pool's edges at the meta's floor,
              plus the source book's move under the --strict-source rule? Status:
-               in_set          one of the candidates, within --max-eval-loss
-               fallback        every candidate failed the limit; the least-losing one (the
+               in_set          passes the book's recorded gate policy
+               fallback        legacy cp policy: every candidate failed; the least-losing one (the
                                owner's rule, 2026-10-08)
                unknown         no candidate had an eval: the limit could not judge
                outside_set     NOT a permitted candidate (a defect)
@@ -15,8 +15,8 @@ For every decision of OUR colour in the file (base rows and sequence-extension r
   eval       parent and child evals from the eval arrays and the cached loss; rows whose loss
              exceeds the limit, or that lack an eval, are FLAGGED
   fresh      with --nodes N, every flagged row gets a free Stockfish search. If its best move IS
-             the book's move there is nothing to compare: same_move, whatever the scores say
-             (two searches disagreeing is uncertainty, not an error). Otherwise the best move and
+             the book's move, the relative loss is zero and the score policy still checks the
+             absolute floor. Otherwise the best move and
              the book's move are each searched under the same restriction, budget and cleared
              hash: confirmed (the book's move is worse by more than the limit) or cleared.
              unstable marks a row whose free and restricted scores of the best move disagree
@@ -81,7 +81,8 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
     limit = meta.get("max_eval_loss")
     cand, restored, _rej, _eng = bc.final_candidates(
         h, es, source_move, ev, our_white, meta["slice_prior"], require_eval=gates, gates=gates,
-        max_eval_loss=limit, max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
+        max_eval_loss=limit, max_score_loss=meta.get("max_score_loss"),
+        max_cands=meta.get("max_cands", 0) or 0, strict_source=True,
         **{k: meta[k] for k in ("robustness_floor", "gate_rel_floor", "gate_rel_own_margin") if k in meta},
         engine_moves=engine_moves, edges_by_parent={h: es}, epd=epd, excluded=excluded,
         rare_floor=rare_floor, verified=verified)
@@ -96,7 +97,8 @@ def classify(h: int, move: str, es: list[dict], source_move: str | None, ev: dic
                           0.0 if rare_floor is None else bc.CP_EPS) or "in_set"
 
 
-def fresh_verdict(eng, b: chess.Board, move: str, nodes: int, limit: float, our_white: bool) -> dict:
+def fresh_verdict(eng, b: chess.Board, move: str, nodes: int, limit: float, our_white: bool,
+                  score_units=False, score_floor=None) -> dict:
     """See `fresh` in the header. eng: a python-chess engine (analyse, configure)."""
     def search(root_moves=None):
         eng.configure({"Clear Hash": None})
@@ -110,12 +112,14 @@ def fresh_verdict(eng, b: chess.Board, move: str, nodes: int, limit: float, our_
     mv = b.parse_san(move)
     out = {"sf_best": b.san(best), "sf_best_cp": cp(free), "sf_nodes": nodes}
     if best == mv:
-        return {**out, "sf_move_cp": cp(free), "sf_loss": 0, "fresh": "same_move", "unstable": False}
+        failed = bc.fails_engine_gate(cp(free), cp(free), limit, score_units, score_floor)
+        return {**out, "sf_move_cp": cp(free), "sf_loss": 0,
+                "fresh": "confirmed" if failed else "same_move", "unstable": False}
     best_cp, mine_cp = cp(search([best])), cp(search([mv]))
     loss = best_cp - mine_cp
     return {**out, "sf_best_restricted_cp": best_cp, "sf_move_cp": mine_cp, "sf_loss": loss,
-            "fresh": "confirmed" if loss > limit else "cleared",
-            "unstable": abs(cp(free) - best_cp) > limit}
+            "fresh": "confirmed" if bc.fails_engine_gate(best_cp, mine_cp, limit, score_units, score_floor) else "cleared",
+            "unstable": abs(bc.engine_loss(cp(free), best_cp, score_units)) > limit}
 
 
 def main():
@@ -141,6 +145,10 @@ def main():
         if expected and hashlib.sha256(proposal_input).hexdigest() != expected:
             raise SystemExit("Engine proposals differ from this book's recorded input")
     limit = meta.get("max_eval_loss")
+    score_units = meta.get("max_score_loss") is not None
+    if score_units:
+        limit = meta["max_score_loss"]
+    score_floor = bc.score_floor_from_meta(meta, our_white)
     min_games = meta.get("min_games", 50)          # pre-2026-10-31 metas: the old default
     d = pl.read_parquet(a.book)
     ext = d["extension"] if "extension" in d.columns else pl.Series([False] * d.height)
@@ -199,7 +207,29 @@ def main():
         engine_moves, conflicts = bc.load_engine_candidates(proposal_input, ev)
     cloud_moves = set()
     checked_moves = {}
-    excluded = bc.verified_exclusions(proposal_input, limit)
+    excluded = bc.verified_exclusions(proposal_input, meta.get("max_eval_loss"),
+                max_score_loss=meta.get("max_score_loss"), our_white=our_white, score_floor=score_floor)
+    lookahead_report = None
+    base_book = Path(str(meta_p).removesuffix(".meta.json"))
+    receipt = base_book.parent / "build.receipt.json"
+    if receipt.exists():
+        bound = json.loads(receipt.read_text(encoding="utf-8"))["outputs"]
+        if base_book.name + ".lookahead.json" in bound and not meta.get("lookahead_floor"):
+            raise ValueError("receipted veto file missing from book metadata")
+    if meta.get("lookahead_floor"):
+        from lookahead_audit import audit
+        if meta["perspective"] != a.colour:
+            raise ValueError("book colour differs from the lookahead recipe")
+        # Audit uses the pre-veto admitted menu. Verified engine exclusions still enter
+        # classify before the gates. The lookahead veto only applies after admission.
+        lookahead_report = audit(base_book, meta)
+        if Path(a.book).resolve() != base_book.resolve():
+            fields = ["position_hash", "best_move"]
+            base_rows = (pl.read_parquet(base_book)
+                         .filter((pl.col("side_to_move") == a.colour) & pl.col("best_move").is_not_null())
+                         .select(fields).sort(fields))
+            if not ours.filter(~pl.col("_ext")).select(fields).sort(fields).equals(base_rows):
+                raise ValueError("derived book prescriptions differ from its audited base")
     from book_graph import rare_policy
     rare_floor, verified_at = rare_policy(
         meta, pl.read_parquet(proposal_input) if proposal_input is not None else None)
@@ -233,7 +263,8 @@ def main():
                                      our_white, meta, engine_moves, rec["epd"], excluded,
                                      rare_floor, verified_at)
         rec["flagged"] = rec["legal"] and limit is not None and (
-            rec["cached_loss"] is None or rec["cached_loss"] > limit)
+            rec["cached_loss"] is None or bc.fails_engine_gate(rec["parent_cp_us"], rec["child_cp_us"],
+                limit, score_units, score_floor) or (score_units and rec["status"] == "outside_set"))
     # fresh searches of the flagged rows
     if a.nodes and limit is not None:
         eng = None
@@ -243,28 +274,33 @@ def main():
                 if checked:
                     loss = checked["verified_loss_cp"]
                     same = checked["verification_best"] == rec["move"]
+                    failed = bc.fails_engine_gate(sign*checked["parent_cp_white"], sign*checked["child_cp_white"],
+                                                  limit, score_units, score_floor)
                     rec.update(sf_best=checked["verification_best"], sf_best_cp=sign*checked["parent_cp_white"],
                                sf_move_cp=sign*checked["child_cp_white"], sf_nodes=checked["verification_nodes"],
-                               sf_loss=loss, fresh="confirmed" if loss > limit else ("same_move" if same else "cleared"),
+                               sf_loss=loss, fresh="confirmed" if failed else ("same_move" if same else "cleared"),
                                unstable=checked["verification_unstable"], verification_source="selection search")
                     continue
                 if eng is None:
                     eng = chess.engine.SimpleEngine.popen_uci(SF)
                     eng.configure({"Threads": 8, "Hash": 1024})
                 rec.update(fresh_verdict(eng, board(rec["epd"]), rec["move"], a.nodes, limit,
-                                         our_white))
+                                         our_white, score_units, score_floor))
         finally:
             if eng:
                 eng.quit()
     out = pl.DataFrame(rows, infer_schema_length=None)
     summ = {"book": a.book, "colour": a.colour, "meta": str(meta_p) if meta else None,
             "book_sha256": hashlib.sha256(Path(a.book).read_bytes()).hexdigest(),
-            "max_eval_loss": limit, "min_games": min_games, "decisions": len(rows),
+            "max_eval_loss": meta.get("max_eval_loss"), "max_score_loss": meta.get("max_score_loss"),
+            "absolute_score_floor": score_floor, "min_games": min_games, "decisions": len(rows),
             "extension_rows": int(out["extension"].sum()),
             "status": dict(out.group_by("status").len().iter_rows()),
             "flagged": int(out["flagged"].sum()),
             "missing_child_eval": int(out["child_cp_us"].is_null().sum()),
             "engine_eval_conflicts": conflicts}
+    if lookahead_report is not None:
+        summ["lookahead_audit"] = lookahead_report
     if "fresh" in out.columns:
         summ["fresh"] = dict(out.filter(pl.col("fresh").is_not_null()).group_by("fresh").len().iter_rows())
     selected = [r for r in rows if r["selected_cloud"]]

@@ -9,11 +9,19 @@ Choose one book per color, each with 2,000 distinct positions at which we prescr
 | Setting | Decision |
 |---|---|
 | Opponent move model | Use 30 Maia pseudogames, applied once to a position's reply distribution. |
-| Absolute gate | Keep the expected-score margin at 0.10 from the construction pool's prior. In the current pools the effective floors are about −0.90 pawns for White and −1.32 for Black, from our side. Record the prior and implied floors when changing pools. |
-| Relative gates | Sweep the engine loss cap at 30, 60, and 100 centipawns for each color. Hold the separate relative expected-score margin at 0.10 and the parent allowance at 0.02. Select the cap per color. |
+| Absolute gate | Allow a deficit of **0.110 for White** and **0.075 for Black** from that side's construction-pool prior. Record the prior and resulting floor for every new pool. |
+| Relative gate | Allow a maximum loss of **0.095 engine expected score (9.5 percentage points)** at each repertoire decision, for both colors, measured against the best trusted evaluation available at that position. Both boundaries are inclusive. |
 | Current construction pools | Lichess Blitz, Rapid, and Classical, January 2013–July 2026, game mean rating 1800+ for White and 2000+ for Black. Opponent prediction studies that use mover ratings label them separately. |
 
-The 100 cp arm lets the Blackmar–Diemer and From’s Gambit compete alongside the King’s Gambit, Danish, Schliemann and Albin. Their inclusion in a final book depends on selection and validation. The two-color screening builder uses a weak-player stop model and historical pool counts. Its paired reference evaluator has a legacy Maia weight of 100. The separate population evaluator uses 30. Compare books within each evaluator.
+The historical 100 cp arm let the Blackmar–Diemer and From’s Gambit compete alongside the King’s Gambit, Danish, Schliemann and Albin. The two-color screening builder used a weak-player stop model and historical pool counts. Its paired reference evaluator has a legacy Maia weight of 100. The separate population evaluator uses 30. Compare books within each evaluator.
+
+### Engine gate decision, November 14, 2026
+
+At the frozen White and Black pool priors of 51.8314% and 48.0433% from our side, these tolerances put the floors at 40.8314% and 40.5433%, or roughly −1.01 and −1.04 pawns. The relative gate uses the difference between two Lichess sigmoid scores. A fixed pawn concession costs more near equality than in an already winning position. If every evaluated move fails, the book stops prescribing moves at that position.
+
+The King’s Gambit offer cost 8.53 relative points at 20M nodes and 9.26 at 10M. The Kieseritzky continuation through `1.e4 e5 2.f4 exf4 3.Nf3 g5 4.h4 g4 5.Ne5 Nf6 6.Bc4 d5 7.exd5` required 10.13 absolute points in the conservative check. From’s Gambit through `1.f4 e5 2.fxe5 d6 3.exd6 Bxd6 4.Nf3 g5` required 4.63 absolute points and 8.53 relative points in the fresh checks. These moves can compete for a place in the book. Future engine evidence and the budgeted practical-score comparison determine selection.
+
+The 30/60/100 cp screen below remains a historical control. New Rust builds and verification runs use the score policy by default. Use `--max-eval-loss CP` on the builder or `--cap CP` on the round driver to replay a centipawn arm.
 
 ## Experiments and decisions
 

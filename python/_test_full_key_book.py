@@ -89,7 +89,15 @@ class BookTest(unittest.TestCase):
             self.exercise(Path(td))
             gc.collect()
 
-    def exercise(self, path):
+    def test_score_gates_with_lookahead(self):
+        e4, d4 = (zobrist128(board(s)) for s in ("e4","d4"))
+        twins = {board("d4").epd(): (e4[0], d4[1])}
+        with tempfile.TemporaryDirectory() as td, patch.dict(TWINS, twins, clear=True), \
+                patch.object(consumer_keys, "zobrist128", key), patch("zobrist128.zobrist128", key):
+            self.exercise(Path(td), modern=True)
+            gc.collect()
+
+    def exercise(self, path, modern=False):
         book, lookup = make_inputs(path)
         cps = {"": 0, "e4": 0, "d4": 0, "e4 e5": -100, "d4 d5": -200,
                "e4 c5": 400, "d4 Nf6": 300, "e4 e5 Nf3": -100, "d4 d5 c4": -200, **LINES}
@@ -120,13 +128,21 @@ class BookTest(unittest.TestCase):
                            side_to_move="black", best_move=m, value=.5, value_robust=.5,
                            value_worst=.5, eval_score=.5, event="Rapid", elo_band=1800)
                       for s, m in [("e4", "e5"), ("d4", "d5")]]).write_parquet(source)
+        if modern:
+            # Independence means the new search does not inherit a legacy prescription menu.
+            source.unlink()
+            from sweep.builder import empty_source
+            empty_source(source, prior=.5195669627673518)
         weak = path / "weak.parquet"
         pl.DataFrame([dict(parent_hash=pair(key(board(s))), child_hash=pair(key(board(s+" "+m))),
                            total=100) for s,m in [("e4", "c5"), ("d4", "Nf6")]]).write_parquet(weak)
         run(builder.main, "--stats", stats, "--aux-stats", aux, "--weak-pool", weak,
             "--weak-min-games", 1, "--rep", source, "--out-prefix", path/"black",
             "--budget", 2, "--max-ply", 2, "--epsilon", .0001, "--eval-weight", 1,
-            "--gated-reach", "--max-eval-loss", 30, "--uncut-own-moves", path/"uncut",
+                        "--gated-reach", *(["--max-score-loss", .06, "--robustness-floor", .05,
+                                "--lookahead-floor", 2, "--slice-prior", .5195669627673518]
+                               if modern else ["--max-eval-loss", 30]),
+            "--uncut-own-moves", path/"uncut",
             "--perspective", "black", "--tmp-dir", path/"spill")
         built = path / "black_b2.parquet"
         frame = pl.read_parquet(built)
@@ -135,6 +151,25 @@ class BookTest(unittest.TestCase):
                          {key(board("e4")): "e5", key(board("d4")): "d5"})
         self.assertEqual(json.loads(Path(str(built)+".meta.json").read_text())["eval_lookup_sha256"],
                          sha(lookup/"lookup.json"))
+        if modern:
+            import lookahead_audit
+            meta = json.loads(Path(str(built)+".meta.json").read_text())
+            proof = pl.read_parquet(Path(str(built)+".lookahead-inputs.parquet"))
+            self.assertEqual(proof.schema["parent"], consumer_keys.PAIR)
+            self.assertEqual(proof.schema["child"], consumer_keys.PAIR)
+            report = lookahead_audit.audit(built, meta, check_receipt=False)
+            self.assertEqual(report["checked_decisions"], 2)
+            allowed = path/"allowed.parquet"
+            frame.filter(pl.col("best_move")=="e5").write_parquet(allowed)
+            run(builder.main, "--stats", stats, "--aux-stats", aux, "--weak-pool", weak,
+                "--weak-min-games", 1, "--rep", source, "--out-prefix", path/"reduced",
+                "--budget", 1, "--max-ply", 2, "--epsilon", .0001, "--eval-weight", 1,
+                "--gated-reach", "--max-score-loss", .06, "--robustness-floor", .05,
+                "--slice-prior", .5195669627673518, "--lookahead-floor", 2,
+                "--allowed-book", allowed, "--perspective", "black", "--tmp-dir", path/"spill")
+            reduced=pl.read_parquet(path/"reduced_b1.parquet")
+            self.assertEqual(reduced["best_move"].drop_nulls().to_list(), ["e5"])
+
         changed = path / "changed.parquet"
         frame.with_columns(pl.when(pl.col("best_move") == "d5")
                            .then(pl.lit(pair((key(board("d4"))[0], 0)), dtype=consumer_keys.PAIR))
