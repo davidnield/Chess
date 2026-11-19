@@ -431,13 +431,17 @@ Separate checkpoints by metric/threshold; share frozen engine/policy evidence. W
 listed pilot/input prerequisites. See the progress log for production cost limitations.
 
 
-Production verification recovery (2026-11-19): the finished merge failed the old 4 GB
-mapping check. `python/resume_explorer_verification.py` is pinned separately under
-D:/chess/bin/ply51-verification-recovery-20261119, runs independent checks with 32 GB,
-receipts each successful stage, and resumes the original eval launcher only on all-pass.
-Read its live status under D:/chess/ply51-migration-20261115/verification-recovery-20261119.
-Do not restart extraction or merge to repair this check. Sweep shared-pool preparation
-requires completed matching publication receipts; `_BOOK.DONE` alone is insufficient.
+Production verification recovery (2026-11-19): the completed merge failed the original
+4 GB check. Its first 32 GB recovery still grew to ~56 GB process RAM. The active release is
+D:/chess/bin/ply51-verification-sliced-20261119 (commit e518f3c): 16 disjoint signed-low-key
+ranges per sampled bucket, 8 GB DuckDB budget, one process/receipt per range, live heartbeat
+and disk reserve guard. All 55 original-equivalent check stages must pass before resuming
+the original pinned eval launcher. Live status/resume command are in
+D:/chess/ply51-migration-20261115/verification-recovery-sliced-20261119.
+The earlier unpartitioned recovery is superseded; do not relaunch it. Do not rerun extraction
+or merge to repair verification. Shared-pool preparation requires completed matching
+publication receipts; `_BOOK.DONE` alone is insufficient. ChessDB has a successful offline
+probe but is not integrated into the queued Cloud/Fishnet eval rebuild.
 Selective count reads prune Parquet row groups conservatively and always compare full keys.
 The completed Allie Rust-backend tests passed quality margins. Modal-history equivalence
 is still unproven because its atlas almost always fell back to actual histories; retain
