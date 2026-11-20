@@ -368,3 +368,13 @@ None of this was run on production data.
 Stopped the eval worker and all four known recovery/eval wrapper processes; no replacement was launched. Preserved 164 source receipts, 47 child-routing group receipts and 104/512 eval DB buckets (2,307,009,240 rows, 96.20 GB). All completed file sizes/footer row counts and three sampled SHA-256 hashes passed the post-stop audit. Eight partial bucket files remain for native resume; no source or completed output was deleted. The accepted explorer and OTB counts remain valid. Eval status explicitly says stopped; upstream explorer status remains verified.
 
 The deployed full coordinator has a resumption gap: it repeats independent eval verification before resuming lookup, and the verifier has no internal durable checkpoints. This is documented for a new immutable deployment before the next stage; it was not changed in tonight's stop. The morning handoff includes a guarded join-only recipe preserving the old native generation and reserve checks, then verification/lookup and the conditional pool/pilot/sweep queue. See [morning resume handoff](repertoire-morning-resume-handoff-2026-11-20.md) and [checkpoint evidence](repertoire-morning-resume-evidence-2026-11-20.json). A separate Claude dashboard-copy task was observed and left alone; this stop did not shut down the PC.
+
+## November 20 (Claude): morning resume, merge, verification receipt
+
+- **Pre-flight passed** (`D:/chess/ply51-migration-20261115/resume-20261120/preflight-20261120.json`). Eval J resumed join-only at 08:42 with the handoff's guarded wrapper: wrapper PID 10856, native 29952, same pinned binary and settings. Receipts are rising at the old rate.
+- **Merged** Claude's 19 November review fixes; manifest v3 is current.
+- **Verification resumption** (`441fe59`, release `D:/chess/bin/ply51-evals-resume-20261120`):
+  - A content-bound success receipt (`python/eval_verification.py`) means an interrupted lookup no longer repeats verification.
+  - Durable verifier units (`verify_evals.py --checkpoint`) mean an interrupted verification resumes, with checks identical to an uninterrupted run.
+  - The native binary stays the 2026-11-15 pin's, called by hash.
+  - `after_join.py` in the resume folder starts this release once the join-only wrapper leaves a complete DB.

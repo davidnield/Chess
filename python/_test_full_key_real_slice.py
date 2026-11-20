@@ -105,8 +105,12 @@ def check(raw, folder):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path)
+    parser.add_argument("source", type=Path, nargs="?",
+                        help="opt-in: without it (as under run_tests.py) the check is skipped")
     args = parser.parse_args()
+    if args.source is None:
+        print("SKIP: pass one Lichess source Parquet to run this real-slice parity check")
+        raise SystemExit(0)
     with tempfile.TemporaryDirectory() as tmp:
         check(args.source, Path(tmp))
         gc.collect()

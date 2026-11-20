@@ -442,6 +442,13 @@ Separate checkpoints by metric/threshold; share frozen engine/policy evidence. W
 listed pilot/input prerequisites. See the progress log for production cost limitations.
 
 
+Eval verification resumes (2026-11-20): `run_ply51_evals.py` publishes `evals/verification-receipt.json`
+(`python/eval_verification.py`) only after `verify_evals.py` passes, and a restart reuses it only when
+the DB, book, source, verifier, native and settings identity is unchanged. A corrupt receipt stops the
+coordinator; never edit or delete one to get past that. `verify_evals.py --checkpoint` keeps the drawn
+sample and each scan as durable units. Never reuse units across a changed DB: the key prevents it.
+Release: D:/chess/bin/ply51-evals-resume-20261120 (it calls the 2026-11-15 pin's native exe in place).
+
 Production verification recovery (2026-11-19): the completed merge failed the original
 4 GB check. Its first 32 GB recovery still grew to ~56 GB process RAM. The active release is
 D:/chess/bin/ply51-verification-sliced-20261119 (commit e518f3c): 16 disjoint signed-low-key
