@@ -960,7 +960,10 @@ def main() -> int:
     log("evals (mmap)...")
     from eval_arrays import MISSING, lookup_evals, open_eval_arrays
     import book_builder_rs
-    cps = keys.scores(want_np) if keys else lookup_evals(want_np, *open_eval_arrays())
+    # A 64-bit pool reads the shared arrays; later lookups (source-only children, quality
+    # requests) reuse this one mapping.
+    mm_hash, mm_cp = (None, None) if keys else open_eval_arrays()
+    cps = keys.scores(want_np) if keys else lookup_evals(want_np, mm_hash, mm_cp)
     hit = cps != MISSING
     ek = want_np[hit]
     ev = book_builder_rs.cp_to_expected_score(cps[hit].astype(np.float64))
