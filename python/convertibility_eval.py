@@ -95,8 +95,10 @@ class MaiaCache:
 
     DIR holds identity.json (the Maia server, its batching code, interpreter and model snapshots:
     a cache from another model is refused) and part-*.npz files, one per flush, written to a
-    temporary name and renamed. Every part is read at open; a position in two parts keeps the
-    first part's answer (parts sort by name, which starts with the time)."""
+    hidden temporary name outside the completed-file glob and atomically renamed after close.
+    Legacy *.tmp.npz files are ignored, including complete but unpublished ones. Corrupt completed
+    shards still fail loudly. Every completed part is read at open; a position in two parts keeps
+    the first part's answer (parts sort by name, which starts with the time)."""
 
     FLUSH_EVERY = 500_000
 
@@ -119,20 +121,24 @@ class MaiaCache:
             tmp.write_text(json.dumps(ident, indent=1), encoding="utf-8")
             tmp.replace(ip)
         hs, se, oe, starts, lens, codes, ps, sans = [], [], [], [], [], [], [], {}
-        names: list[str] = []
         for part in sorted(self.dir.glob("part-*.npz")):
-            z = np.load(part)
-            local = [str(x) for x in z["sans"]]
-            remap = np.array([sans.setdefault(m, len(sans)) for m in local] or [0], np.int64)
-            off = sum(len(x) for x in codes)
-            hs.append(positions.native.encode(z["h"], z["hi"]) if positions else z["h"])
-            se.append(z["se"])
-            oe.append(z["oe"])
-            ptr = z["ptr"]
-            starts.append(ptr[:-1] + off)
-            lens.append(np.diff(ptr))
-            codes.append(remap[z["code"]] if len(z["code"]) else z["code"].astype(np.int64))
-            ps.append(z["p"])
+            # Older writers used names that matched this glob before publication.
+            # Never delete them here: an old worker may still be writing the file.
+            if part.name.endswith(".tmp.npz"):
+                continue
+            # Own the file explicitly so a failed ZIP open also closes it on Windows.
+            with part.open("rb") as source, np.load(source, allow_pickle=False) as z:
+                local = [str(x) for x in z["sans"]]
+                remap = np.array([sans.setdefault(m, len(sans)) for m in local] or [0], np.int64)
+                off = sum(len(x) for x in codes)
+                hs.append(positions.native.encode(z["h"], z["hi"]) if positions else z["h"])
+                se.append(z["se"])
+                oe.append(z["oe"])
+                ptr = z["ptr"]
+                starts.append(ptr[:-1] + off)
+                lens.append(np.diff(ptr))
+                codes.append(remap[z["code"]] if len(z["code"]) else z["code"].astype(np.int64))
+                ps.append(z["p"])
         self.sans = list(sans)
         cat = (lambda xs, dt: np.concatenate(xs).astype(dt) if xs else np.zeros(0, dt))  # noqa: E731
         H, SE, OE = cat(hs, np.int64), cat(se, np.int64), cat(oe, np.int64)
@@ -181,16 +187,30 @@ class MaiaCache:
                 p.append(x)
             ptr.append(len(code))
         import os
-        name = f"part-{time.strftime('%Y%m%d%H%M%S')}-{os.getpid()}-{len(list(self.dir.glob('part-*.npz')))}"
-        tmp = self.dir / f"{name}.tmp.npz"
+        import tempfile
+        import uuid
+        # Unique completed names prevent concurrent writers from replacing a shard.
+        name = f"part-{time.strftime('%Y%m%d%H%M%S')}-{time.time_ns():020d}-{os.getpid()}-{uuid.uuid4().hex}"
         ids = np.array([x[0] for x in self.new], np.int64)
         halves = self.positions.halves(ids) if self.positions else None
-        np.savez(tmp, h=halves[0] if halves else ids, **({"hi": halves[1]} if halves else {}),
-                 se=np.array([x[1] for x in self.new], np.int16),
-                 oe=np.array([x[2] for x in self.new], np.int16),
-                 ptr=np.array(ptr, np.int64), code=np.array(code, np.int32),
-                 p=np.array(p, np.float64), sans=np.array(list(sans) or [""]))
-        tmp.replace(self.dir / f"{name}.npz")
+        tmp = None
+        try:
+            # Passing an open file avoids numpy appending .npz to our temporary name.
+            with tempfile.NamedTemporaryFile(mode="wb", dir=self.dir, prefix=f".{name}-",
+                                             suffix=".tmp", delete=False) as stream:
+                tmp = Path(stream.name)
+                np.savez(stream, h=halves[0] if halves else ids, **({"hi": halves[1]} if halves else {}),
+                         se=np.array([x[1] for x in self.new], np.int16),
+                         oe=np.array([x[2] for x in self.new], np.int16),
+                         ptr=np.array(ptr, np.int64), code=np.array(code, np.int32),
+                         p=np.array(p, np.float64), sans=np.array(list(sans) or [""]))
+                stream.flush()
+                os.fsync(stream.fileno())
+            tmp.replace(self.dir / f"{name}.npz")
+        finally:
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
+        # A failed write/rename retains these answers so the caller can retry.
         self.new = []
 
 

@@ -130,8 +130,11 @@ def manifest():
                               ratings=[2200,2200],temperature=1.,pseudogames=30.)
                 sensitivity.append(arm(recipe(colour,gate,1000,opponent_policy=policy),
                                        "policy",[anchor["id"]]))
-            sensitivity.append(arm(recipe(colour,gate,1000,max_ply=50,
-                                          candidate_pool="brc1800-p50"),"horizon",[anchor["id"]]))
+            horizon_anchor = next(a for a in main if a["recipe"]["colour"]==colour
+                                  and a["recipe"]["gate"]==gate and a["recipe"]["budget"]==2000
+                                  and a["recipe"]["mode"]=="independent")
+            sensitivity.append(arm(recipe(colour,gate,2000,max_ply=50,
+                                          candidate_pool="brc1800-p50"),"horizon",[horizon_anchor["id"]]))
     result = dict(schema=1, primary=main, sensitivities=sensitivity, inputs=pool_recipes(),
                   required_bindings=REQUIRED_BINDINGS, extensions=deepcopy(EXTENSIONS),
                   extension_comparison=extension_comparison(main),
@@ -162,6 +165,20 @@ def validate(m):
             raise ValueError("gate settings drifted")
         if r["mode"]=="reduced" and r["budget"]==2000:
             raise ValueError("do not count the common master twice")
+    # The horizon comparison changes depth only, on the four 2,000-position masters.
+    # Rehashed but incorrectly paired recipes must not pass readiness validation.
+    horizons = [a for a in m["sensitivities"] if a["family"]=="horizon"]
+    pairs = {(c,g) for c in ("white","black") for g in GATES}
+    if len(horizons)!=4 or {(a["recipe"]["colour"],a["recipe"]["gate"]) for a in horizons}!=pairs:
+        raise ValueError("horizon sensitivity requires one 2,000-position comparison per colour/gate")
+    primary = {a["id"]:a["recipe"] for a in m["primary"]}
+    for a in horizons:
+        deps = a["depends_on"]
+        control = primary.get(deps[0]) if len(deps)==1 else None
+        if (control is None or control["budget"]!=2000 or control["mode"]!="independent"
+                or control["max_ply"]!=30 or control["candidate_pool"]!="brc1800-p30"
+                or a["recipe"]!=dict(control,max_ply=50,candidate_pool="brc1800-p50")):
+            raise ValueError("horizon sensitivity must match its independent 2,000-position ply-30 control")
     # Historical manifests without this stage remain readable for reproducibility.
     if "extension_comparison" in m:
         if m["extensions"]!=EXTENSIONS or m["extension_comparison"]!=extension_comparison(m["primary"]):

@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "verified_at": "2026-11-19T19:01:39.954045-08:00",
+  "purpose": "Verify corrected horizon budget/control and legacy Maia NPZ publication; no production jobs or live caches modified.",
+  "baseline_commit": "fe82dd10c562ba35c5af26ca43fc563a72603fa0",
+  "runtime": {
+    "python": "3.11.15 (main, Apr 14 2026, 14:31:26) [MSC v.1944 64 bit (AMD64)]",
+    "executable": "C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "packages": {
+      "numpy": "2.4.4",
+      "polars": "1.40.1",
+      "duckdb": "1.5.2",
+      "python-chess": "1.999"
+    },
+    "native_extension": {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python\\book_builder_rs.pyd",
+      "bytes": 2313728,
+      "sha256": "8af8ab0207b8aaec94b5922c3e27f149664eda945cb73bad23959c1569d9b29c"
+    },
+    "POLARS_MAX_THREADS": "2"
+  },
+  "before": {
+    "command": "python -X utf8 -m unittest _test_sweep_preparation.Specification.test_horizon_sensitivity_uses_matching_2000_position_control _test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control _test_maia_cache.MaiaCachePublication.test_legacy_temporary_shards_are_ignored_without_deleting_them _test_maia_cache.MaiaCachePublication.test_reader_during_partial_write_sees_only_published_shards",
+    "tests_run": 4,
+    "result": "expected failure",
+    "subtest_failures": 10,
+    "errors": 2,
+    "notes": "Wrong budget and missing semantic validation reproduced; stale and in-progress partial NPZ files raised BadZipFile, with Windows open-handle cleanup errors on the old reader. An earlier wrong-working-directory import attempt was not counted as reproduction."
+  },
+  "after": {
+    "command": "python -X utf8 -m unittest -v _test_maia_cache _test_sweep_preparation _test_sweep_coordinator _test_full_key_book",
+    "cwd": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python",
+    "tests_run": 25,
+    "passed": 25,
+    "skipped": 0,
+    "seconds": 38.516,
+    "coverage": [
+      "four horizon colour/gate arms, correct 2000-position controls",
+      "rehashed wrong-budget/control/colour/gate/objective recipes and missing/duplicate arms rejected",
+      "legacy temporary shards ignored, not deleted",
+      "reader during partial write sees only complete published shards",
+      "write and rename failure keep pending answers and preserve old shards; retry succeeds",
+      "same-process same-timestamp concurrent writers publish distinct shards",
+      "published corruption fails and file handles close",
+      "probability order and values, both ratings, first stored answer, identity mismatch rejection",
+      "128-bit cache survives different run-local ID assignments and planted high-half collisions",
+      "existing sweep coordinator and native-builder/full-key referee fixture integration"
+    ]
+  },
+  "manifest": {
+    "schema": 1,
+    "current_manifest": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-manifest-2026-11-19-maia-v2.json",
+    "current_manifest_sha256": "d65c01d4c4170e18579bda184bd6c76ce28e240e6a3fa7a3ecc56ec06ead0444",
+    "old_manifest_sha256": "cd4a375653bc90a105729ef973d80d39162856c75ba853de7e3b5b10783a708e",
+    "old_manifest_unchanged": true,
+    "old_manifest_rejected_for_execution": "horizon sensitivity must match its independent 2,000-position ply-30 control",
+    "overwrite_old_manifest_refused": true,
+    "unchanged_primary_arms": 20,
+    "unchanged_nonhorizon_sensitivities": 16,
+    "unchanged_extension_variants": 24,
+    "changed_horizons": [
+      {
+        "colour": "white",
+        "gate": "stricter",
+        "old_id": "d8a1f342d4e4e411a348",
+        "new_id": "c4fa4980ad049d542267",
+        "old_control": [
+          "8165be91cd4e739c9569"
+        ],
+        "new_control": [
+          "a9d51cc7330d63ca6260"
+        ],
+        "budget": 2000
+      },
+      {
+        "colour": "white",
+        "gate": "permissive",
+        "old_id": "2985c6820e87874475e8",
+        "new_id": "a18d2ccbfd5c9c034bb8",
+        "old_control": [
+          "343f0a45d3db3c60a289"
+        ],
+        "new_control": [
+          "9a5712009fd2bc7f775c"
+        ],
+        "budget": 2000
+      },
+      {
+        "colour": "black",
+        "gate": "stricter",
+        "old_id": "4221d2f43a7d3416f4bb",
+        "new_id": "22fc7e19f7f9d5136fe4",
+        "old_control": [
+          "2df21c194beed72068c5"
+        ],
+        "new_control": [
+          "6afdd81d5bea5c913e9c"
+        ],
+        "budget": 2000
+      },
+      {
+        "colour": "black",
+        "gate": "permissive",
+        "old_id": "a77b5b91d22c43959847",
+        "new_id": "23aa0f8af61fc4cd115f",
+        "old_control": [
+          "2211bbbca1892e1b3a80"
+        ],
+        "new_control": [
+          "82653175f1ca564e94ba"
+        ],
+        "budget": 2000
+      }
+    ]
+  },
+  "logs": {
+    "before": {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\review-fixes-20261119\\before.log",
+      "bytes": 14989,
+      "sha256": "c8fcf8ace22df56a7f59af280159fe22a884b842e70305998052593ddb17ff6d"
+    },
+    "after": {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\review-fixes-20261119\\after.log",
+      "bytes": 29672,
+      "sha256": "e32f688bb3e86cf1c4febe6af3296e870950a68ae36b4e337e3e850565ddb246"
+    }
+  },
+  "files": [
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python\\sweep\\spec.py",
+      "bytes": 12753,
+      "sha256": "60bde4cef6966b10595b78fcd45fac7d5d89bcbb96fe77348e3471b3c90e9cdf"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python\\convertibility_eval.py",
+      "bytes": 69706,
+      "sha256": "0b5c0f959a71d87c72c531310064a450864240eba472e569a19d7f6aa08ff0ed"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python\\_test_sweep_preparation.py",
+      "bytes": 17121,
+      "sha256": "9ba91b26d58c6f99668ad3db2c11bc6bd7d2e285293139cdafb2d689f11d5f31"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python\\_test_maia_cache.py",
+      "bytes": 7684,
+      "sha256": "efbe1c7d4e9cada2b592441d4e05b3aa824389ebece901048d979e39309bad2d"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-manifest-2026-11-19-maia-v2.json",
+      "bytes": 93710,
+      "sha256": "d65c01d4c4170e18579bda184bd6c76ce28e240e6a3fa7a3ecc56ec06ead0444"
+    }
+  ],
+  "limits": [
+    "Tests use temporary fixture caches and model/engine doubles; no production book or neural prediction study was run.",
+    "No migration/explorer/eval pinned release or shared production Maia cache was altered.",
+    "Old manifest bytes are preserved for audit; current execution validation rejects the incorrect horizon design.",
+    "The existing cache identity comparison is preserved, not upgraded to a new comprehensive runtime/model fingerprint contract."
+  ]
+}

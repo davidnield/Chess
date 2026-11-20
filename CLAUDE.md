@@ -74,7 +74,7 @@ polish. It stops with an error when the extension is not built; `--rs-core` is a
 does nothing. The Python stages stay as the tests' reference. The referee and the samplers
 always play their sampled games in Rust (`convertibility_eval.rollouts`; `rollouts_py` is the
 reference) and keep Maia's answers in `D:/chess/maia/answer_cache` by default
-(`--no-maia-cache` to opt out).
+(`--no-maia-cache` to opt out). Cache shards become visible only after a complete write/close and atomic rename. The reader ignores legacy `part-*.tmp.npz` files; new temporary shards live outside the completed-file glob. Do not delete another writer's temporary files or silently skip corrupt completed shards. Publication/retry regressions are in `python/_test_maia_cache.py`.
 
 ## Data paths — critical
 

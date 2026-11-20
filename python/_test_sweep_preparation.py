@@ -29,6 +29,47 @@ class Specification(unittest.TestCase):
         m["primary"][0]["recipe"]["slice_prior"]+=.01
         with self.assertRaises(ValueError): spec.validate(m)
 
+    def test_horizon_sensitivity_uses_matching_2000_position_control(self):
+        m=spec.manifest()
+        primary={a["id"]:a for a in m["primary"]}
+        horizons=[a for a in m["sensitivities"] if a["family"]=="horizon"]
+        self.assertEqual(len(horizons),4)
+        self.assertEqual({(a["recipe"]["colour"],a["recipe"]["gate"]) for a in horizons},
+                         {(c,g) for c in ("white","black") for g in spec.GATES})
+        for a in horizons:
+            with self.subTest(colour=a["recipe"]["colour"],gate=a["recipe"]["gate"]):
+                self.assertEqual(a["recipe"]["budget"],2000)
+                self.assertEqual(a["recipe"]["mode"],"independent")
+                self.assertEqual(len(a["depends_on"]),1)
+                control=primary[a["depends_on"][0]]["recipe"]
+                expected=dict(control,max_ply=50,candidate_pool="brc1800-p50")
+                self.assertEqual(a["recipe"],expected)
+                self.assertEqual(control["max_ply"],30)
+        self.assertTrue(all(a["recipe"]["budget"]==1000 for a in m["sensitivities"]
+                            if a["family"] in ("weight","policy")))
+
+    def test_horizon_validator_rejects_wrong_budget_and_control(self):
+        # Recompute the ID so a generic recipe-hash check cannot mask the defect.
+        for defect in ("budget","control","colour","gate","weight","missing","duplicate"):
+            with self.subTest(defect=defect):
+                m=spec.manifest()
+                a=next(a for a in m["sensitivities"] if a["family"]=="horizon")
+                r=a["recipe"]
+                if defect=="budget": r["budget"]=1000
+                elif defect=="control":
+                    a["depends_on"]=[next(p["id"] for p in m["primary"] if
+                        p["recipe"]["colour"]==r["colour"] and p["recipe"]["gate"]==r["gate"]
+                        and p["recipe"]["budget"]==1000 and p["recipe"]["mode"]=="independent")]
+                elif defect in ("colour","gate"):
+                    a["depends_on"]=[next(p["id"] for p in m["primary"] if
+                        p["recipe"][defect]!=r[defect] and p["recipe"]["budget"]==2000
+                        and p["recipe"]["mode"]=="independent")]
+                elif defect=="weight": r["eval_weight"]=.5
+                elif defect=="missing": m["sensitivities"].remove(a)
+                else: m["sensitivities"].append(dict(a))
+                a["id"]=spec.digest(r)[:20]
+                with self.assertRaises(ValueError):spec.validate(m)
+
     def test_extension_default_and_paired_queue(self):
         m=spec.manifest();q=m["extension_comparison"]
         self.assertEqual(m["extensions"]["metric"],"remaining-maximum")

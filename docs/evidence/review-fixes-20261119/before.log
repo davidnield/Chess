@@ -1,0 +1,195 @@
+FFFFFFFFFFEC:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\unittest\case.py:622: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\Users\\David\\AppData\\Local\\Temp\\tmp1l209yz4\\part-19990101000000-1-0.tmp.npz'>
+  with outcome.testPartExecutor(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+EC:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\unittest\case.py:622: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\Users\\David\\AppData\\Local\\Temp\\tmpv24h7trt\\part-20261119185816-28116-1.tmp.npz'>
+  with outcome.testPartExecutor(self):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+
+======================================================================
+ERROR: test_legacy_temporary_shards_are_ignored_without_deleting_them (_test_maia_cache.MaiaCachePublication.test_legacy_temporary_shards_are_ignored_without_deleting_them)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_maia_cache.py", line 47, in test_legacy_temporary_shards_are_ignored_without_deleting_them
+    cache=cv.MaiaCache(root,IDENTITY)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\convertibility_eval.py", line 124, in __init__
+    z = np.load(part)
+        ^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 471, in load
+    ret = NpzFile(fid, own_fid=own_fid, allow_pickle=allow_pickle,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 197, in __init__
+    _zip = zipfile_factory(fid)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 112, in zipfile_factory
+    return zipfile.ZipFile(file, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\zipfile.py", line 1329, in __init__
+    self._RealGetContents()
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\zipfile.py", line 1396, in _RealGetContents
+    raise BadZipFile("File is not a zip file")
+zipfile.BadZipFile: File is not a zip file
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 632, in _rmtree_unsafe
+    os.unlink(fullname)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\David\\AppData\\Local\\Temp\\tmp1l209yz4\\part-19990101000000-1-0.tmp.npz'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_maia_cache.py", line 40, in test_legacy_temporary_shards_are_ignored_without_deleting_them
+    with tempfile.TemporaryDirectory() as td:
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 943, in __exit__
+    self.cleanup()
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 947, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 929, in _rmtree
+    _shutil.rmtree(name, onerror=onerror)
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 787, in rmtree
+    return _rmtree_unsafe(path, onerror)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 634, in _rmtree_unsafe
+    onerror(os.unlink, fullname, sys.exc_info())
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 893, in onerror
+    _os.unlink(path)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\David\\AppData\\Local\\Temp\\tmp1l209yz4\\part-19990101000000-1-0.tmp.npz'
+
+======================================================================
+ERROR: test_reader_during_partial_write_sees_only_published_shards (_test_maia_cache.MaiaCachePublication.test_reader_during_partial_write_sees_only_published_shards)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_maia_cache.py", line 69, in test_reader_during_partial_write_sees_only_published_shards
+    reader=cv.MaiaCache(root,IDENTITY)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\convertibility_eval.py", line 124, in __init__
+    z = np.load(part)
+        ^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 471, in load
+    ret = NpzFile(fid, own_fid=own_fid, allow_pickle=allow_pickle,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 197, in __init__
+    _zip = zipfile_factory(fid)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\Documents\Chess\.venv\Lib\site-packages\numpy\lib\_npyio_impl.py", line 112, in zipfile_factory
+    return zipfile.ZipFile(file, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\zipfile.py", line 1329, in __init__
+    self._RealGetContents()
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\zipfile.py", line 1396, in _RealGetContents
+    raise BadZipFile("File is not a zip file")
+zipfile.BadZipFile: File is not a zip file
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 632, in _rmtree_unsafe
+    os.unlink(fullname)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\David\\AppData\\Local\\Temp\\tmpv24h7trt\\part-20000101000000-1-0.npz'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_maia_cache.py", line 54, in test_reader_during_partial_write_sees_only_published_shards
+    with tempfile.TemporaryDirectory() as td:
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 943, in __exit__
+    self.cleanup()
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 947, in cleanup
+    self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 929, in _rmtree
+    _shutil.rmtree(name, onerror=onerror)
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 787, in rmtree
+    return _rmtree_unsafe(path, onerror)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\shutil.py", line 634, in _rmtree_unsafe
+    onerror(os.unlink, fullname, sys.exc_info())
+  File "C:\Users\David\AppData\Roaming\uv\python\cpython-3.11.15-windows-x86_64-none\Lib\tempfile.py", line 893, in onerror
+    _os.unlink(path)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\David\\AppData\\Local\\Temp\\tmpv24h7trt\\part-20000101000000-1-0.npz'
+
+======================================================================
+FAIL: test_horizon_sensitivity_uses_matching_2000_position_control (_test_sweep_preparation.Specification.test_horizon_sensitivity_uses_matching_2000_position_control) (colour='white', gate='stricter')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 41, in test_horizon_sensitivity_uses_matching_2000_position_control
+    self.assertEqual(a["recipe"]["budget"],2000)
+AssertionError: 1000 != 2000
+
+======================================================================
+FAIL: test_horizon_sensitivity_uses_matching_2000_position_control (_test_sweep_preparation.Specification.test_horizon_sensitivity_uses_matching_2000_position_control) (colour='white', gate='permissive')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 41, in test_horizon_sensitivity_uses_matching_2000_position_control
+    self.assertEqual(a["recipe"]["budget"],2000)
+AssertionError: 1000 != 2000
+
+======================================================================
+FAIL: test_horizon_sensitivity_uses_matching_2000_position_control (_test_sweep_preparation.Specification.test_horizon_sensitivity_uses_matching_2000_position_control) (colour='black', gate='stricter')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 41, in test_horizon_sensitivity_uses_matching_2000_position_control
+    self.assertEqual(a["recipe"]["budget"],2000)
+AssertionError: 1000 != 2000
+
+======================================================================
+FAIL: test_horizon_sensitivity_uses_matching_2000_position_control (_test_sweep_preparation.Specification.test_horizon_sensitivity_uses_matching_2000_position_control) (colour='black', gate='permissive')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 41, in test_horizon_sensitivity_uses_matching_2000_position_control
+    self.assertEqual(a["recipe"]["budget"],2000)
+AssertionError: 1000 != 2000
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='budget')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='control')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='colour')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='gate')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='weight')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+======================================================================
+FAIL: test_horizon_validator_rejects_wrong_budget_and_control (_test_sweep_preparation.Specification.test_horizon_validator_rejects_wrong_budget_and_control) (defect='missing')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\python\_test_sweep_preparation.py", line 71, in test_horizon_validator_rejects_wrong_budget_and_control
+    with self.assertRaises(ValueError):spec.validate(m)
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.171s
+
+FAILED (failures=10, errors=2)
