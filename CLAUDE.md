@@ -478,5 +478,26 @@ IDs. Replay current frozen movetext with a comment-aware PGN reader; source
 annotations followed by blank lines can otherwise look like an empty game.
 The 2,519,686 eligible games include 1,509,521 training and 4,828 quarantined.
 Only training-role, under-2000 MOVER decisions belong in construction counts.
-Full 128-bit count replay/publication is still pending; training_counts_ready
-is deliberately false. See the newest progress entry and usage commands.
+Split-only receipts deliberately keep training_counts_ready false; count
+publication requires its own acceptance receipt. See the newest progress entry
+and usage commands for completed artifacts and in-flight work.
+
+The count producer is `sweep.otb_counts`, backed by the separate
+`rust/otb_counts_replay` library. Replay frozen game text, never live source-file
+record offsets. Retain played plies through 51, both halves of every position
+key, exact mover rating and role in the audit ledger. Published under-2000 counts
+filter the moving player's rating, preserve frequency-one moves, and keep
+training/validation/test separate. Whole malformed requested prefixes are
+excluded explicitly; quarantine never contributes. The published tables are
+move counts, not WDL or terminal mass.
+
+`sweep.verify_otb_counts` must accept the complete census, game flow, all aggregate
+counts and sampled independent Python legal-key replay before counts are ready.
+`sweep.check_otb_consumer` then checks exact key/count schemas and the actual
+selective reader. Consume the count-level accepted receipt, not the immutable
+split-level receipt (which deliberately still says counts are not ready).
+Derive new depth caps from the by-ply master, not the pooled minimum-ply field.
+Derive cuts within a stored rating band from the exact-rating ledger. Player/event
+cluster uncertainty additionally needs an identity-aligned frozen mapping; those
+IDs are not present in this count ledger. Usage and artifact receipts are linked
+from `docs/sweep-preparation-usage.md`.

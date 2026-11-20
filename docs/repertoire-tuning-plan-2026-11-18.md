@@ -247,7 +247,7 @@ The following production inputs are required by this tuning plan and are not que
 | 2200+ policy control | Uncut all-three-speeds 2200+ counts | Production export pending |
 | Targeted online OTB component | Rapid 2200+ plus Classical 1800+, retaining components for overlap subtraction | Production export pending |
 | Weak and improved own-play counts | 1000–1799, 1800–1999, 2000–2199 bands under the appropriate training/evaluation rating semantics | Production export pending |
-| OTB policy training data | Frozen deduplicated 2013-onward eligible games, training partitions and 128-bit positions | Snapshot/split audit and compatible production tables pending |
+| OTB policy training data | Frozen deduplicated 2013-onward eligible games, training partitions and 128-bit positions | Full 30/50-ply counts and ply-51 master independently accepted November 19; policy binding/comparison refresh next |
 | Evaluation population panels | Speed-specific and mover-rating-specific online panels, plus OTB scenarios and disjoint evaluation data | Production preparation pending |
 | Versioned policy cache | Legal probability vectors for the approved ensemble and controls, keyed by position/model/recipe | Integration and population of reachable cache pending |
 
@@ -399,3 +399,10 @@ The source-identity issue is resolved by tracing every archived source record, p
 The current eligible standard-start, positive-rated, under-2000-on-at-least-one-side corpus from 2013 through November 19 contains 2,519,686 games: 1,509,521 training, 503,064 validation, 502,273 test, and 4,828 quarantined. Complete ancestry covers 8,484,681 source records from 4,037,682 historically selected games, with no missing record or changed source locator. All historical descendant families include 8,091 mixed-role quarantines, of which 4,828 meet current date/eligibility rules. This extends the earlier 4,690 test/non-test finding by also excluding train/validation overlap. Only 33,427 currently eligible games lack a historical selected-family ancestor and receive a new deterministic fold.
 
 Next materialize full 128-bit OTB counts from the **frozen text**, using only the training role for construction and only qualifying under-2000 movers. Preserve the separate validation/test roles and exclude quarantine from every model selection/evaluation panel. Both split receipts deliberately mark training counts unready until legal replay, count conservation and count publication pass. Preserve source rating-system labels; do not reinterpret them as a USCF conversion. Recheck close OTB component comparisons on these corrected partitions before treating prior margins as reliable. Previously inspected partitions remain development evidence, not fresh confirmation.
+
+
+## 2026-11-19 17:30 PST: full-key OTB count publication complete
+
+The corrected frozen split has now been replayed into nine accepted tables at `D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119`: separate training/validation/test ply-and-rating masters through played ply 51 and pooled 30/50-ply exports. Every aggregate count, game disposition and full-key game chain passed independent verification. The count-level `verified.json` has `training_counts_ready: true`; all six pooled files also passed the actual selective-reader check. The earlier split-only receipts are unchanged. Inventory, sample coverage, exclusions and hashes are in the latest `sweep-preparation-progress.md` entry.
+
+Construction uses training counts only. Keep the one malformed training game and 4,828 quarantined games excluded. Retain mover-level under-2000 filtering, frequency-one moves and both hash halves. Recheck close OTB prediction comparisons before relying on previous margins. This completes OTB count production; it does not waive remaining eval/lookup, shared online pool, production-policy/evaluator integration or Black pilot gates.

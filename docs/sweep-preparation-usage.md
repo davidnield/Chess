@@ -145,3 +145,41 @@ Historical folds 2/3/4 remain training, 1 validation, and 0 test. A current game
 `ancestry.parquet`, `lineage.parquet` and `historical-assignments.parquet` retain the reconciliation evidence, including old games outside the current date eligibility. `split.json` pins the source generation, code and outputs. A changed input/code cannot reuse a completed freeze directory. The verifier archives the small provenance inputs under `frozen-inputs/`, rechecks the complete ancestral-record census and partition rules from exported files, checks output hashes, and smoke-replays a deterministic sample through 50 plies. `verified.json` pins those results. Neither receipt asserts that all game scores were legally replayed: both say `training_counts_ready: false`.
 
 The next producer must replay the frozen texts into full 128-bit position/move counts, separate training from validation/test, exclude quarantine, handle leading comment-only PGN preambles without losing the actual game, report malformed games/prefixes explicitly, retain mover-rating and ply eligibility, and check conservation before publishing counts. Production policy bindings must reference those verified training-count outputs, never this game's table or the old diagnostic candidates. Recheck close OTB prediction comparisons on the reconciled partitions; these previously inspected partitions are development/test partitions, not a new untouched confirmation set.
+
+
+## Full 128-bit OTB counts (November 19)
+
+The corrected production run uses immutable code in `D:/chess/bin/otb-counts-20261119/` and outputs under `D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119/`. The earlier `otb-counts-v1-20261119` directory was stopped before publication because a stored-file test found native string padding; it is not an accepted source. The `otb-counts-pilot-20261119` directory is a 4,096-game engineering fixture, also not a production source.
+
+The hidden launcher `D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119/launch.cmd` runs replay/export followed by independent verification and propagates failure. Read `status.json` and `run.log`. Restart the same launcher to resume an unfinished run; do not use it to start a competing worker. A completion claim requires `verified.json` with `training_counts_ready: true` and matching artifact hashes, not merely the presence of Parquet files.
+
+For explicit stage execution, from the pinned release's `python` directory:
+
+```powershell
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.otb_counts `
+  --split-verified D:/chess/sweep-inputs-20261119/otb-v2-20261119/verified.json `
+  --dll D:/chess/bin/otb-counts-20261119/otb_counts_replay.dll `
+  --out D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119 --phase all
+
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.verify_otb_counts `
+  --root D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119
+```
+
+`--phase replay` and `--phase aggregate` are available separately. Replay commits each 4,096-game batch with hashes, allowing an unfinished batch to be redone without losing completed ones. Changed source/code/binary hashes require another output directory. Replay uses a separate Rust library pinned to shakmaty 0.30.1 and the repository's python-chess-compatible SAN parser. It does not modify or relaunch the explorer/eval executable. DuckDB export/verification uses two threads, an 8 GB tracked-memory budget, disk spill and a 150 GB free-space check before work; these are not a hard OS working-set limit.
+
+For each of `training`, `validation`, and `test`, `counts/` contains:
+
+- `ROLE-by-ply-band.parquet`: exact counts by full parent and child keys, canonical SAN/UCI, parent EPD, **played ply 1–51**, and mover rating band (positive below 1500, 1500–1799, 1800–1999).
+- `ROLE-p30.parquet`: summed over qualifying mover bands and played plies 1–30, one row per position/move.
+- `ROLE-p50.parquet`: the corresponding sum through played ply 50.
+
+The extra 51st-ply records remain in the master table. Build other depth cuts and unions of those rating bands from the master, not by filtering the minimum-ply field of an already pooled table. A new threshold inside a stored band (for example 1600) requires reaggregating the audit ledger by its exact mover_elo; it does not require replaying the PGNs again. `parent_hash` and `child_hash` are signed `struct<lo: int64, hi: int64>` values; **every join uses both halves**. Parent EPD preserves pseudo-legal en-passant state consistently with the Polyglot/shakmaty key convention. Count every observed move, including frequency one; there is no Other Moves bucket. Repeated visits within a game remain separate observed decisions, distinguished by ply in the audit ledger.
+
+Only `training-p30.parquet` (or the explicitly selected depth's training export) supplies the OTB component of the construction policy. The policy adapter consumes parent/child keys, canonical SAN and total counts. These files contain **move observations**, not invented win/draw/loss results, engine evaluations or terminal/horizon masses; the existing outcome pool still supplies those quantities. Validation and test exports remain separate for prediction checks. Retain the frozen game's rating-system labels and clock-screen limitations.
+
+`chunks/*.edges.parquet` keeps game IDs, both key halves, ply, actual mover rating and full move/position text for auditing. Both players' valid moves are retained there for complete game-flow checks; publication filters the moving player's rating to 1–1999. Consequently its incidental 2000+ opponent moves are not a representative stronger-OTB population. `chunks/*.games.parquet` gives every frozen row a disposition. Quarantined games are never replayed. A syntax, illegal-move, null-move or empty-score error within the requested prefix excludes that entire game's prefix and is counted explicitly; an error after ply 51 does not affect this prefix. Such exclusions are not game endings.
+
+The verifier checks every frozen game's identity/role/disposition, every retained ply and full-key chain, actual mover-rating selection, and **every aggregate count** against the game ledger. It also checks pooled move uniqueness and full-key/EPD consistency, compares sampled legal replays with independent Python chess, and records native/Python crosschecks performed throughout extraction. A complete aggregation check is not a claim that a second chess implementation replayed every source game. `verified.json` pins final outputs, input/code provenance, counts, exclusions and sample coverage. Keep the game ledger for game/source-clustered checks and additional verification. Player/event clustering additionally requires an identity-aligned, frozen player/event mapping; those fields are not present in this count ledger.
+
+
+After full acceptance, the current worktree also provides `python -m sweep.check_otb_consumer --root D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119` (run from its `python` directory). This additional check verifies exact signed 128-bit key and integer-count schemas on all nine files, then uses the real selective policy reader on all six pooled exports. It checks legal SAN/UCI and full child keys, includes sampled later positions, and rejects a deliberately wrong high half paired with the starting position's real low half. It writes `consumer-check.json` only after the count receipt is accepted. The runtime versions and release manifest are recorded separately in `environment.json`.

@@ -36,6 +36,25 @@ class CountsTests(unittest.TestCase):
         self.assertEqual(lens.tolist(),[-2,-3,-4,-1,-1])
         rows,lens=self.native.replay(['1.e4 {unfinished'],1)
         self.assertEqual(lens.tolist(),[1]);compare_reference(rows[0],1,'1.e4',1)
+    def test_ply51_retention_and_distinct_pool_caps(self):
+        text=' '.join(['Nf3 Nf6 Ng1 Ng8']*13)
+        table=pa.Table.from_pylist([dict(game_id=7,role='training',white_elo=1999,black_elo=2000,movetext=text)])
+        edges,states,_=replay_table(table,self.native,51)
+        self.assertEqual(len(edges),51)
+        self.assertEqual(states['replayed_plies'].to_pylist(),[51])
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/'chunks').mkdir()
+            atomic_parquet(edges,root/'chunks/0.edges.parquet');atomic_parquet(states,root/'chunks/0.games.parquet');atomic_parquet(table,root/'frozen.parquet')
+            with connection(root) as c:
+                ledger_views(c,root,root/'frozen.parquet')
+                out=root/'master.parquet';write_sorted_export(c,master_query('training')+' ORDER BY parent_hash,ply',out,MASTER_SCHEMA)
+                self.assertEqual(verify_master(c,out,'training')['moves'],26)
+                for cap,moves,root_moves in [(30,15,8),(50,25,13)]:
+                    path=root/f'p{cap}.parquet';write_sorted_export(c,pool_query(out,cap)+' ORDER BY parent_hash,move_san',path,POOL_SCHEMA)
+                    self.assertEqual(verify_pool(c,path,out,cap)['moves'],moves)
+                    row=next(r for r in pq.read_table(path).to_pylist() if r['move_san']=='Nf3')
+                    self.assertEqual(row['total'],root_moves)
+
     def test_mover_rating_roles_transpositions_and_exact_export(self):
         rows=[dict(game_id=i,role=role,white_elo=w,black_elo=b,movetext=text) for i,role,w,b,text in [
             (1,'training',1999,2200,'1.Nf3 Nf6 2.Nc3 Nc6'),

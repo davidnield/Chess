@@ -265,3 +265,45 @@ The first deterministic replay sample exposed a PGN reader edge case in quaranti
 This fixes split identity and freezes the correct replay inputs. It does **not** publish OTB position counts: both receipts explicitly have `training_counts_ready: false`. Next replay the frozen texts into full 128-bit position/move tables, separate roles, exclude quarantine, report legal-prefix failures, retain mover-rating/ply eligibility and verify count conservation. Recheck close OTB-trained-component comparisons on the corrected partitions. These previously inspected partitions are not an untouched new confirmation set.
 
 Final independent replay: **256/256 sampled games passed**, covering 11,808 positions through at most 50 plies, with zero malformed prefixes after the comment-reader fix. This is a sample, not a claim of complete legal replay. Current `verified.json` SHA-256: `dae6c7d365632b343c4418d4ef278023a9bf8a515f41a181030f594016ce4b73`. The full ancestral census and role checks passed again.
+
+
+## November 19 15:30 PST: full OTB count publication started
+
+User authorized generation and verification of the complete 128-bit OTB move-count tables. Commit `c810d7e` adds a separate Rust replay library, resumable Python export driver and independent count verifier. The active immutable release is `D:/chess/bin/otb-counts-20261119`; the active output is `D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119`. Its hidden launcher starts verification automatically after all exports. Runtime code is separate from the still-running Cloud/Fishnet eval release.
+
+The first stored-ledger test exposed Arrow retaining NUL padding from native fixed-width strings. The preliminary v1 worker was stopped, its output marked superseded/unpublished, and explicit string trimming added before a new recipe/run. No padded tables were accepted. The corrected **full-path 4,096-game pilot** replayed 199,995 moves, including 165,113 qualifying under-2000 mover decisions, wrote all nine exports and passed exact count checks and independent Python replay of 96 games/4,644 positions. Its measured replay/export/verification work took 4.812 seconds after selecting the sample; this is not a large-data scaling forecast. Nine pilot games were quarantined and the other 4,087 parsed successfully. Pilot artifacts are in `D:/chess/sweep-inputs-20261119/otb-counts-pilot-20261119/` and are explicitly not production-usable.
+
+Rust tests passed (four, including reused parser tests). Python coverage includes 100 random legal games, special moves, annotations, malformed-prefix exclusion, full-key transpositions, mover cutoffs, role separation, file round trips and deliberate aggregate-count corruption. An additional repeated-position test confirms keeping ply 51 and separately producing correct 30/50-ply counts without treating minimum ply as a row-level depth filter. Full production acceptance remains pending in this timestamped entry; use the later completion entry and verified receipt when available.
+
+
+## 2026-11-19 17:30 PST: full 128-bit OTB counts independently accepted
+
+Completed the authorized full replay, nine exports, independent verification and real consumer check. Accepted directory: `D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119`. `verified.json` is the count-level acceptance receipt: `training_counts_ready: true`, SHA-256 `2c19ff37e7bfb3bc69359000cd968fd0b71e3cad3267f135373c87bcfe6be5d9`. The earlier split-level receipts remain immutable and deliberately still say counts are not ready; they describe the boundary before this producer.
+
+The complete census contains 2,519,686 frozen eligible games. Valid games: 1,509,520 training, 503,064 validation and 502,273 test. All 4,828 quarantined games contribute zero. One training game (2816742, lumbra-otb) contains illegal SAN `22. xc6`; both native and independent Python replay reject it. Its entire requested prefix is excluded, rather than guessing a pawn origin or counting an early ending.
+
+The audit ledger contains 122,761,289 legally replayed moves through played ply 51. Of these, 101,000,635 qualify by **the moving player's rating below 2000**. Higher-rated opponent moves remain in the ledger only for game-flow audit; they are not added to these published counts. This game selection is not a representative 2000+ OTB corpus.
+
+| Role / export | Distinct aggregate rows | Qualifying move observations |
+|---|---:|---:|
+| training / by-ply-band 1-51 | 42,814,696 | 60,616,548 |
+| training / ply 30 | 17,763,076 | 36,945,738 |
+| training / ply 50 | 40,251,755 | 59,593,882 |
+| validation / by-ply-band 1-51 | 14,897,056 | 20,209,870 |
+| validation / ply 30 | 6,509,568 | 12,313,808 |
+| validation / ply 50 | 14,036,746 | 19,868,483 |
+| test / by-ply-band 1-51 | 14,870,273 | 20,174,217 |
+| test / ply 30 | 6,494,591 | 12,293,451 |
+| test / ply 50 | 14,009,227 | 19,834,000 |
+
+Rows mean distinct position/move aggregates within that role/export; observations include repetitions and multiple games. The depth exports overlap and must not be summed. All counts retain frequency-one moves. The master retains ply and the below-1500, 1500-1799, and 1800-1999 mover bands. Other depth caps and band unions can be aggregated from it; thresholds within a band require the exact-rating ledger. A pooled row's ply is its minimum occurrence ply, not a basis for reconstructing a shallower export.
+
+Full verification checked every frozen game disposition, every ledger count/ply chain and mover/role assignment, artifact hashes, every master count, and every pooled count, including missing/extra/duplicate rows. Separately, independent Python replay checked 768 accepted games / 37,588 stored positions with zero mismatches. During generation the native cross-check sample covered 1,848 games / 89,715 positions. These samples are separate and may overlap; this is not a claim of independent Python replay of every game.
+
+`consumer-check.json` passed exact signed `struct<lo:int64,hi:int64>` and int64 count schema checks on all nine files, then used the real selective policy reader on all six pooled files. It checked 811 legal SAN/UCI/full-child-key rows from early and sampled later positions, retained known stored positions, preserved count mass through the actual `frontier.vectors` policy adapter without fabricating outcomes/nonmove mass, and returned no false match for the deliberately wrong high-half key. The checker and its consumer-code dependencies are archived and hashed. `environment.json` pins runtime versions and executable/release identities.
+
+The nine exports occupy 10,769,852,631 bytes (10.77 GB decimal); the resumable ledger/disposition Parquets occupy 5,762,548,039 bytes (5.76 GB). Replay/export ran from 15:29:44 to 16:21:11 (about 51.5 minutes); independent count verification reports 4,071.0 seconds. The run used two DuckDB threads, an 8 GB tracked budget and disk spill alongside the continuing Cloud/Fishnet rebuild. No engine/model inference or source-corpus modification was needed.
+
+The implementation is committed in `c810d7e`; this completion entry also records the added ply-51/repetition regression and consumer checker. Rust replay tests passed 4/4; focused Python count tests passed 4/4, with the prior split/export checks unchanged and passing. The initial padded-string output remains explicitly unpublished, and the 4,096-game pilot remains an engineering fixture.
+
+Next use only the accepted **training** export for construction-policy binding. Recheck close OTB-component prediction comparisons on the repaired partitions; these already inspected validation/test roles are not a fresh confirmation set. Player/event-cluster uncertainty still needs an identity-aligned frozen mapping. Shared online pool exports, final eval/lookup acceptance, policy/evaluator integration and the Black stricter pilot remain separate sweep prerequisites; this completion does not launch the full book matrix.
