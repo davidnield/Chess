@@ -1,6 +1,8 @@
 # Repertoire review handoff: November 14–19, 2026
 
-Prepared by Codex for David and Claude. **Live-state snapshot: November 19, 2026, approximately 18:02 PST.** Implementation baseline for this review: `ffb11e2e28162a4224c2e06f1806724b67424dff`, branch `codex/sweep-preparation-20261118`. This document adds no production code and does not start, stop, or change a job.
+Prepared by Codex for David and Claude. **Live-state snapshot: November 19, 2026, approximately 18:02 PST.** Original implementation baseline: `ffb11e2e28162a4224c2e06f1806724b67424dff`. **Follow-up fixes verified at 2026-11-19T19:04:02-08:00, implementation commit `0a3ca669b77449244549c2515961da970621b8f5`**, branch `codex/sweep-preparation-20261118`. The original job-state snapshot below is retained; the follow-up changed neither running jobs nor pinned releases.
+
+**The horizon-budget mismatch and legacy Maia temporary-shard issue are now fixed.** All 25 targeted regression/integration tests passed with no skips. Sections 9 and 11 describe the corrected behavior and verification; the [fix verification receipt](C:/Users/David/Documents/Chess/docs/repertoire-review-fixes-verification-2026-11-19.json) includes exact commands, hashes, before/after logs, and the changed horizon IDs. These fixes do not waive the other pilot/release prerequisites.
 
 ## Request to Claude
 
@@ -8,7 +10,7 @@ Please review the code, evidence, decisions, and remaining plan below before rec
 
 For each actionable finding, provide severity, exact file/line, a reproduction or concrete counterexample, its effect on repertoire choices or evaluation, a proposed fix, and a verification test. Separate **must fix before the Black pilot**, **must fix before the main sweep**, and **can defer**. Review the existing changes first; do not repin or restart the active migration, launch the whole sweep, or promote a new canonical book as part of this review. The currently running work should continue.
 
-Start with sections 1, 2, 11, and 12 for state and remaining questions; use the rest to audit the reasoning and implementations. The companion [evidence inventory](C:/Users/David/Documents/Chess/docs/repertoire-review-handoff-evidence-2026-11-19.json) records full commit IDs, worktree states, deployed file hashes, receipt hashes, process commands, disk observations, and the manifest's actual horizon recipes. It is a snapshot, not a live dashboard.
+Start with sections 1, 2, 11, and 12 for state and remaining questions; use the rest to audit the reasoning and implementations. The companion [evidence inventory](C:/Users/David/Documents/Chess/docs/repertoire-review-handoff-evidence-2026-11-19.json) records full commit IDs, worktree states, deployed file hashes, receipt hashes, process commands, disk observations, and the original manifest's actual horizon recipes and a separately dated fix-verification amendment. It is a snapshot with explicit corrections, not a live dashboard.
 
 ## 1. What is complete, active, and still only planned
 
@@ -85,9 +87,9 @@ The old Black 0.30-centipawn pilot also has different data and gates from the ne
 
 The main checkout remains on `review-fixes` at `d75daa2` and has unrelated modified/untracked annotation, explorer, tournament ingestion, and puzzle work. Do not reset, switch, stage wholesale, or assume that checkout contains the new sweep implementation.
 
-| Worktree / branch | Implementation HEAD at this snapshot | Role |
+| Worktree / branch | Reviewed implementation HEAD (including follow-up for sweep) | Role |
 |---|---|---|
-| `C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation` / `codex/sweep-preparation-20261118` | `ffb11e2` | **Primary integration and review target** |
+| `C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation` / `codex/sweep-preparation-20261118` | `0a3ca66` | **Primary integration and review target, including the two follow-up fixes** |
 | `.../scratch/worktrees/full-key-consumers` / `codex/full-key-consumers` | `34ace88` | November 15 downstream integration baseline |
 | `.../scratch/worktrees/keys128` / `keys128` | `97da558` | Extraction, compact storage, migration orchestration |
 | `.../scratch/worktrees/lookahead-floor` / `lookahead-floor` | `4d7c945` | Expected-score gates and corrected horizon/lookahead work |
@@ -98,11 +100,11 @@ Use the following precedence:
 
 1. Explicit user decisions summarized here, including November 19's extension default and Maia choice.
 2. [Current tuning plan in the sweep worktree](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/repertoire-tuning-plan-2026-11-18.md), including its dated amendments.
-3. [Current Maia manifest](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/sweep-manifest-2026-11-19-maia.json) and actual code, checking for conflicts with the plan.
+3. [Current Maia manifest](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/sweep-manifest-2026-11-19-maia-v2.json) and actual code, checking for conflicts with the plan.
 4. [Progress/evidence log](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/sweep-preparation-progress.md) and [usage/contracts](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/sweep-preparation-usage.md). Later entries supersede earlier “pending” statuses.
 5. Older handoffs and result reports as historical evidence.
 
-The similarly named tuning-plan file in the **main checkout is an older, untracked copy**. The November 18 and earlier November 19 manifests remain historical records. The current manifest selects Maia and remaining-maximum extensions, but has the horizon-budget discrepancy described in section 11.
+The similarly named tuning-plan file in the **main checkout is an older, untracked copy**. The November 18 and earlier November 19 manifests remain historical records. The current v2 manifest selects Maia and remaining-maximum extensions and corrects the horizon budget/control pairing. The earlier Maia manifest is archived unchanged; section 11 records the defect and its fix.
 
 ### Commit map
 
@@ -124,8 +126,9 @@ Claude's November 14 handoff was based on `3d99336`. Its just-committed baseline
 | `76c6e42` | Bounded external sort and streamed shared-pool finalization |
 | `c80f80b`, `def2b7c` | Refreshed OTB identity audit, complete ancestry reconciliation, frozen texts/splits and independent verifier |
 | `c810d7e`, `ffb11e2` | Native OTB replay, resumable count exports, full independent checks, real policy-reader compatibility, accepted publication |
+| `0a3ca66` | Correct four horizon arms/control dependencies to B=2,000; reject incorrect rehashed comparisons; atomic legacy Maia shard publication and completed-only reads; 25 passing tests and versioned manifest/evidence |
 
-Some integration was applied across branches rather than preserving every side-branch SHA as an ancestor. Review code and provenance, not merely whether `git merge-base --is-ancestor` succeeds. Useful read-only comparisons are `3d99336..ffb11e2` for the integrated result and `34ace88..ffb11e2` for the sweep/OTB layer. The evidence inventory includes full commit IDs and changed file lists.
+Some integration was applied across branches rather than preserving every side-branch SHA as an ancestor. Review code and provenance, not merely whether `git merge-base --is-ancestor` succeeds. Useful read-only comparisons are `3d99336..0a3ca66` for the integrated result and `34ace88..0a3ca66` for the sweep/OTB layer including the follow-up fixes. The evidence inventory includes full commit IDs and changed file lists.
 
 **Deployed code is separately pinned.** The active eval native executable is built from `b72b0dc`; its Python release references `655dcc0` and the verifier corrections in `34ace88`. Its executable SHA-256 is `0f79bcbb95f1055fbedc075fe2c5db5ecee9a33ec3645786bdf23c62726453c0`. The active sliced-verification recovery is a newer, separate immutable release. Do not overwrite these binaries by rebuilding in place.
 
@@ -419,7 +422,7 @@ The current `sweep.extend` adapter performs independent **20M-node MultiPV top-t
 | Opponent policy | Primary ensemble vs legacy BRC1800 and BRC2200 with Maia-30, ratings 2200/2200, T=1; independent B=1,000 | Selected common weight, both gates/colors, horizon 30 | 8 |
 | Construction horizon | **Plan: 30 vs 50 at independent B=2,000**, both gates/colors | Selected weight, primary policy, extension rule | 4 |
 
-The manifest currently creates the four horizon variants at **B=1,000**, contradicting the table/approved plan. Correct this before execution and regenerate manifest IDs/dependencies; do not silently redefine the experiment. Total counts remain 20 primary + 20 sensitivity arms, but the affected identities and references differ.
+The earlier manifest incorrectly created the four horizon variants at B=1,000. **Fixed in `0a3ca66`:** the current `sweep-manifest-2026-11-19-maia-v2.json` uses B=2,000 with the matching independent B=2,000 ply-30 controls. Only these four arm IDs/dependencies change; the 20 primary arms, 16 other sensitivities, and 24 extension variants are identical. The old manifest remains archived unchanged and is rejected by current readiness validation. Do not reuse an old horizon output directory under a new arm identity.
 
 First instrument whether `eval_weight` changes reachable values. It currently blends empirical and engine values in some fallback/auxiliary paths; weak/sampled stop values can override it. Do not claim it directly weights “convertibility versus objective score” everywhere. If it is effectively inactive, avoid an uninformative 12-cell experiment and propose any genuine new objective explicitly. Keep 0.75 if inconclusive.
 
@@ -476,24 +479,47 @@ The following are separate, partly overlapping suites—not additive counts of i
 | OTB count tests | 4 Rust and 4 focused Python tests passed | Plus full production ledger/aggregate verification and sampled independent replay |
 | Full explorer acceptance | 55 stages passed | Receipt specifies exhaustive and sampled portions |
 | Full OTB count acceptance | All aggregate/census checks, sample replay, and actual consumer checks passed | Exact counts accepted; population/model uncertainty remains |
+| Follow-up horizon/cache corrections (`0a3ca66`) | **25/25 tests, no skips, 38.516 seconds**; manifest equality and overwrite-protection checks | New boundary regressions plus existing sweep coordinator and native full-key builder/referee fixtures; no production model/engine search |
 
-Read `docs/sweep-preparation-progress.md`, `sweep-runtime-checks-2026-11-19.json`, `sweep-stream-export-check-2026-11-19.json`, and the producer receipts for precise commands and environments. This handoff task inspected existing evidence and code; it did not rerun the entire suite under the active production job.
+Read `docs/sweep-preparation-progress.md`, `sweep-runtime-checks-2026-11-19.json`, `sweep-stream-export-check-2026-11-19.json`, and the producer receipts for precise commands and environments. The original handoff inspected existing evidence without rerunning the entire suite. The requested follow-up ran the 25-test suite above under `POLARS_MAX_THREADS=2`, using temporary caches and fixture engines/models alongside the active data job.
 
 ## 11. Findings and questions requiring Claude's review
 
-These are not an assertion that every remaining issue has been found. The first two are concrete discrepancies seen while preparing this handoff; the others separate known unfinished work from claims requiring scrutiny.
+These are not an assertion that every remaining issue has been found. The first two were concrete discrepancies found while preparing this handoff and are now fixed, with their original reproductions and verification retained. The other items remain review questions/unfinished work; fixing A and B does not resolve them.
 
-### A. Horizon sensitivity conflicts with the approved plan
+### A. FIXED: horizon sensitivity budget and control pairing
 
-[Plan line 159](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/repertoire-tuning-plan-2026-11-18.md:159) says independent **B=2,000** for the 30/50 comparison. [Manifest generator around line 133](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python/sweep/spec.py:133) uses `recipe(colour, gate, 1000, max_ply=50, ...)`, depending on the 1,000 anchor. The published Maia manifest contains four horizon recipes with budget 1,000; the evidence inventory reproduces them.
+The approved [plan](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/repertoire-tuning-plan-2026-11-18.md:159) requires independent **B=2,000** for the 30/50 comparison. The old generator used `recipe(..., 1000, max_ply=50, ...)` and depended on the 1,000 anchor. The original manifest and evidence snapshot preserve that incorrect state.
 
-Before scheduling those arms, use the approved 2,000 anchor/budget, regenerate the current manifest and dependent IDs, and add a test that compares the family recipe to the approved design. No affected production books have been built, so this is still cheap to correct. Do not silently mutate historical manifests or resume mismatched output directories.
+Commit `0a3ca66` changes [spec.py](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python/sweep/spec.py:133) to the correct B=2,000 master for each color/gate. Validation now requires exactly four horizon arms, one per color/gate, each paired with its independent 2,000-position ply-30 control and differing only in construction horizon and the corresponding candidate-pool depth. Recomputing a recipe hash cannot bypass this semantic check. Wrong budget, wrong control/color/gate, a changed objective weight, and missing/duplicate horizon arms are rejected.
 
-### B. Legacy Maia NPZ temporary-file reader issue remains
+The new [v2 manifest](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/docs/sweep-manifest-2026-11-19-maia-v2.json) is reproduced exactly by the generator. Its SHA-256 is `d65c01d4c4170e18579bda184bd6c76ce28e240e6a3fa7a3ecc56ec06ead0444`. The original `sweep-manifest-2026-11-19-maia.json` is byte-for-byte unchanged and is retained as an archival artifact; current execution validation rejects it. An explicit attempt to regenerate over it was refused. Comparison confirms all primary/nonhorizon/extension recipes are unchanged. No affected production book was built or restarted.
 
-[convertibility_eval.py line 123](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python/convertibility_eval.py:123) loads `glob("part-*.npz")`. The writer around [line 185](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python/convertibility_eval.py:185) creates `f"{name}.tmp.npz"`, which also matches that glob. A stale/in-progress partial temporary ZIP can be read as a completed shard and fail loading. The earlier November 14 review raised this; the full-key work fixed the in-memory rating key but did not repair this reader/writer boundary.
+### B. FIXED: legacy Maia cache temporary-file publication
 
-Confirm whether the production rollout binding would use this legacy path or the newer SQLite cache. Fix publication outside the completed-file glob, reject temporary/incomplete artifacts, and test interruption/concurrent-reader recovery without accepting an incomplete shard. Also confirm checkpoint/model/runtime/temperature/source identity prevents incompatible disk-cache reuse. Do not dismiss the legacy problem simply because a newer construction adapter has a safer cache.
+The old [MaiaCache](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python/convertibility_eval.py:89) reader globbed `part-*.npz`, while its writer created `part-*.tmp.npz`. Both an abandoned truncated file and a reader opening the cache while a writer was paused mid-write reproduced `BadZipFile`; the old path also exposed unclosed file-handle cleanup errors on Windows.
+
+Commit `0a3ca66` now:
+
+- Ignores legacy `.tmp.npz` files without deleting another worker's file, even if the temporary ZIP happens to be complete.
+- Writes to a unique dot-prefixed `.tmp` name outside the completed-file glob, using an open file handle so NumPy cannot append `.npz` automatically. It flushes/fsyncs and closes the stream before atomically renaming it to a unique completed shard.
+- Uses collision-resistant completed names so simultaneous same-process/same-timestamp writers cannot replace each other's shards.
+- Cleans up its own failed temporary write, retaining pending answers after write/rename failure so retry succeeds. A process crash can leave an orphan temporary file, which readers ignore.
+- Closes both the NPZ and its underlying file handle, including on ZIP-open failure. **Corrupt completed shards still raise**, rather than silently losing cached evidence.
+
+Regression tests cover stale malformed and complete unpublished files, a reader during a deliberately paused partial write, simultaneous writers with a frozen timestamp, injected write and rename failures/retry, corruption rejection, exact probability/key order, both rating dimensions, first stored answer, and existing model-identity mismatch rejection. Existing full-key integration tests additionally reload the cache with reversed run-local IDs and planted equal-low/different-high keys.
+
+Completed legacy shards remain readable; no production cache was rewritten or deleted. The existing model/setup identity comparison is preserved. This patch is **not** a new comprehensive model/runtime fingerprint scheme or proof against simultaneous initialization with incompatible identities; that broader production-binding audit remains appropriate. These source changes apply to future runs using this code, not automatically to older pinned snapshots.
+
+**Verification for both fixes:** before changing production code, four targeted tests reproduced the defects (10 failed subcases and two cache errors). After the fixes, the full chosen suite passed **25 tests, zero failures/errors/skips, in 38.516 seconds**:
+
+```powershell
+# Run from C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/python
+$env:POLARS_MAX_THREADS = '2'
+C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -X utf8 -m unittest -v _test_maia_cache _test_sweep_preparation _test_sweep_coordinator _test_full_key_book
+```
+
+The [verification receipt](C:/Users/David/Documents/Chess/docs/repertoire-review-fixes-verification-2026-11-19.json) pins implementation/test/manifest hashes, runtime and native extension, the old/new arm IDs, and both logs. The earlier import failure from an incorrect test working directory is excluded from the reproduction counts. Tests use fixtures; there was no neural inference job, new engine search, production sweep, or change to any running migration/eval release.
 
 ### C. Lookahead safety, historical pilot, and current defaults
 
@@ -540,7 +566,7 @@ Finally, challenge the cost of the proposed experiment. Prefer shared pool/evide
 ### Order of work
 
 1. **Let the current eval chain finish.** Recheck logs, reserves, and accepted receipts. Preserve completed source/child checkpoints and separate generations. Fix any actual failure before downstream publication; do not restart healthy work for this review.
-2. **Resolve review blockers and measure pool export capacity.** Correct the horizon manifest, resolve the actual legacy rollout-cache path, and settle safety-audit semantics. Benchmark uncut shared online exports/selective batches with a disk forecast. Recipes cover BRC-all, BRC1800, BRC2200, Rapid2200, Classical1800, and weak1000–1799, each at plies 30 and 50; share underlying data and avoid unnecessary duplicate full exports.
+2. **Resolve review blockers and measure pool export capacity.** Use the corrected v2 manifest and cache publication fix; confirm the intended production rollout binding and settle safety-audit semantics. Benchmark uncut shared online exports/selective batches with a disk forecast. Recipes cover BRC-all, BRC1800, BRC2200, Rapid2200, Classical1800, and weak1000–1799, each at plies 30 and 50; share underlying data and avoid unnecessary duplicate full exports.
 3. **Bind accepted inputs and reproduce the policy.** Use accepted explorer/eval/lookup plus the completed OTB training counts; pin all model/runtime/engine/source identities. Recheck OTB component results and real dynamic/frozen policy behavior. Do not silently fall back to the old pool if integration is incomplete.
 4. **Run one new Black stricter 2,000-position pilot.** This is the gatekeeper for the other arms, not the stale Black cp30 job. Use the intended full recipe and shared quality closure; inspect choices and safety manually with traceable PGNs.
 5. **Measure and improve extension cost.** On accepted anchors, validate hybrid checks, remaining-risk bounds and master handling before broad extension calibration. Complete rollout/population bindings, recall schedules, and publication/report paths.
@@ -608,8 +634,9 @@ Read-only Git commands from the primary implementation root:
 ```powershell
 git status --short
 git log --all --since='2026-11-14 00:00:00' --oneline
-git diff --stat 3d99336..ffb11e2
-git diff --stat 34ace88..ffb11e2
+git diff --stat 3d99336..0a3ca66
+git diff --stat 34ace88..0a3ca66
+git show 0a3ca66
 git show ffb11e2
 git show c810d7e
 git show def2b7c

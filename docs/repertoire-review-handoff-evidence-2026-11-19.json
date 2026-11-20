@@ -1138,7 +1138,9 @@
       "kind": "plan_code_discrepancy",
       "file": "python/sweep/spec.py",
       "line": 133,
-      "finding": "Horizon sensitivity uses budget 1000 and the 1000 anchor; approved plan line 159 requires 2000."
+      "finding": "Horizon sensitivity uses budget 1000 and the 1000 anchor; approved plan line 159 requires 2000.",
+      "status": "fixed-after-original-snapshot",
+      "fixed_in": "0a3ca669b77449244549c2515961da970621b8f5"
     },
     {
       "kind": "legacy_cache_publication_issue",
@@ -1147,12 +1149,108 @@
         123,
         185
       ],
-      "finding": "part-*.npz reader glob includes writer temporary part-*.tmp.npz files."
+      "finding": "part-*.npz reader glob includes writer temporary part-*.tmp.npz files.",
+      "status": "fixed-after-original-snapshot",
+      "fixed_in": "0a3ca669b77449244549c2515961da970621b8f5"
     },
     {
       "kind": "safety_contract_to_review",
       "file": "python/sweep/spec.py",
       "finding": "Primary fixed lookahead_floor is 0; corrected optional lookahead implementation is not enabled."
     }
-  ]
+  ],
+  "followup_fixes": {
+    "updated_at": "2026-11-19T19:04:02-08:00",
+    "implementation_commit": "0a3ca669b77449244549c2515961da970621b8f5",
+    "verification_receipt": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\repertoire-review-fixes-verification-2026-11-19.json",
+    "verification_sha256": "8f9c019294cf1a656111eee289d16dc8804633c2127d84ad91d4517a2b2ba574",
+    "tests": {
+      "command": "python -X utf8 -m unittest -v _test_maia_cache _test_sweep_preparation _test_sweep_coordinator _test_full_key_book",
+      "cwd": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\python",
+      "tests_run": 25,
+      "passed": 25,
+      "skipped": 0,
+      "seconds": 38.516,
+      "coverage": [
+        "four horizon colour/gate arms, correct 2000-position controls",
+        "rehashed wrong-budget/control/colour/gate/objective recipes and missing/duplicate arms rejected",
+        "legacy temporary shards ignored, not deleted",
+        "reader during partial write sees only complete published shards",
+        "write and rename failure keep pending answers and preserve old shards; retry succeeds",
+        "same-process same-timestamp concurrent writers publish distinct shards",
+        "published corruption fails and file handles close",
+        "probability order and values, both ratings, first stored answer, identity mismatch rejection",
+        "128-bit cache survives different run-local ID assignments and planted high-half collisions",
+        "existing sweep coordinator and native-builder/full-key referee fixture integration"
+      ]
+    },
+    "manifest": {
+      "schema": 1,
+      "current_manifest": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-manifest-2026-11-19-maia-v2.json",
+      "current_manifest_sha256": "d65c01d4c4170e18579bda184bd6c76ce28e240e6a3fa7a3ecc56ec06ead0444",
+      "old_manifest_sha256": "cd4a375653bc90a105729ef973d80d39162856c75ba853de7e3b5b10783a708e",
+      "old_manifest_unchanged": true,
+      "old_manifest_rejected_for_execution": "horizon sensitivity must match its independent 2,000-position ply-30 control",
+      "overwrite_old_manifest_refused": true,
+      "unchanged_primary_arms": 20,
+      "unchanged_nonhorizon_sensitivities": 16,
+      "unchanged_extension_variants": 24,
+      "changed_horizons": [
+        {
+          "colour": "white",
+          "gate": "stricter",
+          "old_id": "d8a1f342d4e4e411a348",
+          "new_id": "c4fa4980ad049d542267",
+          "old_control": [
+            "8165be91cd4e739c9569"
+          ],
+          "new_control": [
+            "a9d51cc7330d63ca6260"
+          ],
+          "budget": 2000
+        },
+        {
+          "colour": "white",
+          "gate": "permissive",
+          "old_id": "2985c6820e87874475e8",
+          "new_id": "a18d2ccbfd5c9c034bb8",
+          "old_control": [
+            "343f0a45d3db3c60a289"
+          ],
+          "new_control": [
+            "9a5712009fd2bc7f775c"
+          ],
+          "budget": 2000
+        },
+        {
+          "colour": "black",
+          "gate": "stricter",
+          "old_id": "4221d2f43a7d3416f4bb",
+          "new_id": "22fc7e19f7f9d5136fe4",
+          "old_control": [
+            "2df21c194beed72068c5"
+          ],
+          "new_control": [
+            "6afdd81d5bea5c913e9c"
+          ],
+          "budget": 2000
+        },
+        {
+          "colour": "black",
+          "gate": "permissive",
+          "old_id": "a77b5b91d22c43959847",
+          "new_id": "23aa0f8af61fc4cd115f",
+          "old_control": [
+            "2211bbbca1892e1b3a80"
+          ],
+          "new_control": [
+            "82653175f1ca564e94ba"
+          ],
+          "budget": 2000
+        }
+      ]
+    },
+    "original_snapshot_retained": true,
+    "running_jobs_and_pinned_releases_changed": false
+  }
 }
