@@ -18,6 +18,7 @@ from .builder import command
 from .spec import digest, manifest
 from .stages import artifacts, atomic_json, file_sha
 from .reports import pilot_acceptance
+from .bindings import check_arm
 
 def check_book(path, arm, overlay, *, final=False):
     rows=pl.read_parquet(path)
@@ -56,6 +57,9 @@ def preflight(config):
         if a.get("depends_on",[])!=known[a["id"]]["depends_on"]:
             raise ValueError("arm dependencies differ from the approved manifest")
     ids={e["arm"]["id"] for e in entries}
+    for e in entries:
+        # the bound files must be the populations the recipe names (pool, weak, opponent policy)
+        check_arm(e["arm"]["recipe"],e["inputs"])
     for e in entries:
         r=e["arm"]["recipe"]
         if r["mode"]=="reduced" and r.get("allowed_parent",r["master"]) not in ids:

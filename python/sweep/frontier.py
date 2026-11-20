@@ -56,6 +56,16 @@ class Counts:
         for r in self.readers.values():r.close()
 
 
+def continuation_mass(observed, nonmove, other_support):
+    """The outcome pool's continuing mass at a board: its observed moves. With none, a
+    model-only continuation gets mass 1 when nothing ended there either; when only endings
+    were recorded but another source (broad or OTB) saw moves, one pseudo-continuation keeps
+    the ensemble's replies (review 2026-11-19); a board where every source only ended keeps 0."""
+    if observed:
+        return float(observed)
+    return 1. if (not nonmove or other_support) else 0.
+
+
 def vectors(board, record):
     legal=sorted(m.uci() for m in board.legal_moves)
     counts={n:{u:0 for u in legal} for n in Counts.names}
@@ -98,7 +108,7 @@ class FrontierOverlay:
         self.policy_recipe=recipe
         self.inputs=input_artifacts
         self.pool,self.aux=pool,aux
-        self.identity=digest(dict(recipe=recipe,inputs=cache_components or input_artifacts,implementation=2))
+        self.identity=digest(dict(recipe=recipe,inputs=cache_components or input_artifacts,implementation=3))
         Path(cache).parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(cache,timeout=60)
         self.db.execute("CREATE TABLE IF NOT EXISTS replies(recipe TEXT, key TEXT, value TEXT, PRIMARY KEY(recipe,key))")
@@ -150,10 +160,23 @@ class FrontierOverlay:
             for (_,k,b),prior in zip(missing,priors):
                 legal,bc,ac,rc,oc,outcomes,nonmove=vectors(b,data[k])
                 if set(prior)!=set(legal): raise ValueError("Maia must cover every legal move")
-                prob=ensemble(legal,bc,ac,rc,oc,[prior[u] for u in legal])
+                pr=self.policy_recipe
+                prob=ensemble(legal,bc,ac,rc,oc,[prior[u] for u in legal],
+                              otb_strength=pr["otb_strength"],empirical_strength=pr["empirical_strength"],
+                              maia_strength=pr["maia_strength"],backup_discount=pr["backup_discount"],
+                              broad_discount=pr["broad_discount"])
                 observed=sum(ac)
                 # Zero empirical arrivals means a model-only continuation, not a made-up result.
-                mass=observed if observed or nonmove else 1.
+                # The outcome pool can record only endings at a board other sources saw continue
+                # (review 2026-11-19): keep one pseudo-continuation there, so the ensemble's
+                # replies are not all dropped as zero mass.
+                other_support=sum(bc)+sum(oc)
+                mass=continuation_mass(observed,nonmove,other_support)
+                if not observed and nonmove and other_support:
+                    self.stats["endings_only_pseudo"]=self.stats.get("endings_only_pseudo",0)+1
+                unseen=[p for p,bb,oo in zip(prob,bc,oc) if bb==0 and oo==0]
+                self.stats["model_only_replies"]=self.stats.get("model_only_replies",0)+len(unseen)
+                self.stats["model_only_probability"]=self.stats.get("model_only_probability",0.)+sum(unseen)
                 frame=overlay_rows(b,dict(zip(legal,prob)),empirical=outcomes,nonmove=nonmove,move_mass=mass)
                 frame=frame.with_columns(pl.lit(sum(bc)).alias("support_broad"),
                       pl.lit(sum(ac)).alias("support_adult"),pl.lit(sum(rc)).alias("support_target"),

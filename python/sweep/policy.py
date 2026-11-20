@@ -12,8 +12,10 @@ def _vector(name, values, size, probability=False):
         raise ValueError(f"{name} probabilities do not sum to one")
     return list(map(float,values))
 
-def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10.):
-    """Counts are mutually nested b >= a >= r PER MOVE, and OTB is disjoint."""
+def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
+             maia_strength=3., backup_discount=.10, broad_discount=.01):
+    """Counts are mutually nested b >= a >= r PER MOVE, and OTB is disjoint. The strengths and
+    discounts are the recipe's (spec.POLICY); the defaults are its approved values."""
     L=len(legal)
     if not L or len(set(legal))!=L: raise ValueError("need unique legal moves")
     b,a,r,o=[_vector(n,v,L) for n,v in
@@ -21,16 +23,21 @@ def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10.):
     q=_vector("Maia",maia,L,True)
     if any(not (bb>=aa>=rr) for bb,aa,rr in zip(b,a,r)):
         raise ValueError("overlapping/superset counts do not support subtraction")
-    if not math.isfinite(otb_strength) or otb_strength<=0: raise ValueError("invalid OTB strength")
+    for name,v in (("OTB strength",otb_strength),("empirical strength",empirical_strength),
+                   ("Maia strength",maia_strength)):
+        if not math.isfinite(v) or v<=0: raise ValueError(f"invalid {name}")
+    for name,v in (("backup discount",backup_discount),("broad discount",broad_discount)):
+        if not math.isfinite(v) or not 0<=v<=1: raise ValueError(f"invalid {name}")
     B,A,R,O=map(sum,(b,a,r,o))
     if B==0 and O==0: return q
-    support=R+.10*(A-R)+.01*(B-A)
+    k,m=empirical_strength,maia_strength
+    support=R+backup_discount*(A-R)+broad_discount*(B-A)
     result=[]
     for bb,aa,rr,oo,qq in zip(b,a,r,o,q):
         broad_p=(bb+1/L)/(B+1)
-        backup=(aa-rr+30*broad_p)/(A-R+30)
-        online=(rr+30*backup)/(R+30)
-        pre=(support*online+3*qq)/(support+3)
+        backup=(aa-rr+k*broad_p)/(A-R+k)
+        online=(rr+k*backup)/(R+k)
+        pre=(support*online+m*qq)/(support+m)
         result.append((oo+otb_strength*pre)/(O+otb_strength))
     return _vector("ensemble",result,L,True)
 

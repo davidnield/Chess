@@ -1,0 +1,3366 @@
+{
+  "schema": 1,
+  "primary": [
+    {
+      "id": "1c3ff1f8a6939a7e388e",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 500,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "b568f1798b3338de631c",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "85d1f2cbaf716f260257",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "d07907cfa228d1f88a83",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "reduced",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish",
+        "master": "85d1f2cbaf716f260257"
+      },
+      "depends_on": [
+        "85d1f2cbaf716f260257"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "192760a1d3e98ee90fe5",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 500,
+        "mode": "reduced",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish",
+        "master": "85d1f2cbaf716f260257",
+        "allowed_parent": "d07907cfa228d1f88a83"
+      },
+      "depends_on": [
+        "d07907cfa228d1f88a83"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "8c5272a5d527e462a91d",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 500,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "fd0d70a49f13bd3ffc88",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "7a5b963392abb6a14733",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "3a06856a793bdd3a2301",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "reduced",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish",
+        "master": "7a5b963392abb6a14733"
+      },
+      "depends_on": [
+        "7a5b963392abb6a14733"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "69e9209d42f27c26b418",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 500,
+        "mode": "reduced",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish",
+        "master": "7a5b963392abb6a14733",
+        "allowed_parent": "3a06856a793bdd3a2301"
+      },
+      "depends_on": [
+        "3a06856a793bdd3a2301"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "a0db154b184b25b30cfd",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 500,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "64838e84c2a11b8e5ca6",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "aee55e77b07f1213e148",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "bb0bfd79fecc595dfbd6",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "reduced",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish",
+        "master": "aee55e77b07f1213e148"
+      },
+      "depends_on": [
+        "aee55e77b07f1213e148"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "83d4068c40210d6100c1",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 500,
+        "mode": "reduced",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish",
+        "master": "aee55e77b07f1213e148",
+        "allowed_parent": "bb0bfd79fecc595dfbd6"
+      },
+      "depends_on": [
+        "bb0bfd79fecc595dfbd6"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "a209ccb8fcc215679778",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 500,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "e803c51a9e20dbb3ab79",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "5c372e61ab2912f60cf1",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [],
+      "state": "not-started"
+    },
+    {
+      "id": "ae84816c695ed2a9fca7",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "reduced",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish",
+        "master": "5c372e61ab2912f60cf1"
+      },
+      "depends_on": [
+        "5c372e61ab2912f60cf1"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "63e6a1f22a9a44fd4d4e",
+      "family": "primary",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 500,
+        "mode": "reduced",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish",
+        "master": "5c372e61ab2912f60cf1",
+        "allowed_parent": "ae84816c695ed2a9fca7"
+      },
+      "depends_on": [
+        "ae84816c695ed2a9fca7"
+      ],
+      "state": "not-started"
+    }
+  ],
+  "sensitivities": [
+    {
+      "id": "cc44d43813c3f5a710b9",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.5,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "b568f1798b3338de631c"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "be4092a44b69e7335caa",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 1.0,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "b568f1798b3338de631c"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "383ef1a67b26cd411847",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "brc1800-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "b568f1798b3338de631c"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "10290bc43fa4122c9acc",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "brc2200-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "b568f1798b3338de631c"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "39ee0a8950b69a931cbf",
+      "family": "horizon",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 50,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p50",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "stricter",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "85d1f2cbaf716f260257"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "5cbf23ef279880870621",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.5,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "fd0d70a49f13bd3ffc88"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "def199757542295600aa",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 1.0,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "fd0d70a49f13bd3ffc88"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "b03dd696e8552c71aeec",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "brc1800-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "fd0d70a49f13bd3ffc88"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "80d568349ec55085aa69",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "brc2200-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "fd0d70a49f13bd3ffc88"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "3cc5015dacd671c989f1",
+      "family": "horizon",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 50,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p50",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "white",
+        "gate": "permissive",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5183137990703003,
+        "robustness_floor": 0.11,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "price+polish"
+      },
+      "depends_on": [
+        "7a5b963392abb6a14733"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "2a2a2a182edb421f9b73",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.5,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "64838e84c2a11b8e5ca6"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "cb7ffd11a7acd1460a32",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 1.0,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "64838e84c2a11b8e5ca6"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "5c6afa0170712947d962",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "brc1800-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "64838e84c2a11b8e5ca6"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "2f772214d257c2fcb81f",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "brc2200-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "64838e84c2a11b8e5ca6"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "86f94e2c9dd184c500c0",
+      "family": "horizon",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 50,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p50",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "stricter",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.05,
+        "max_score_loss": 0.06,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "aee55e77b07f1213e148"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "8794418a60742e4f7147",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.5,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "e803c51a9e20dbb3ab79"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "4c1dae5ff458c67998fa",
+      "family": "weight",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 1.0,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "e803c51a9e20dbb3ab79"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "ef1d6ca7bd5cbd10739b",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "brc1800-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "e803c51a9e20dbb3ab79"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "910c0838fbadc8d90b10",
+      "family": "policy",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 30,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p30",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 1000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "brc2200-maia30",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2200,
+            2200
+          ],
+          "temperature": 1.0,
+          "pseudogames": 30.0
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "e803c51a9e20dbb3ab79"
+      ],
+      "state": "not-started"
+    },
+    {
+      "id": "a15aae04169d52572615",
+      "family": "horizon",
+      "recipe": {
+        "key_bits": 128,
+        "max_ply": 50,
+        "source_plies": 51,
+        "min_games": 1,
+        "eval_weight": 0.75,
+        "prior_strength": 500.0,
+        "own_policy": "historical-1000-1799",
+        "candidate_pool": "brc1800-p50",
+        "engine_nominations": "shared-verified",
+        "epsilon": 0.0005,
+        "share_floor": 0.002,
+        "incumbent_stickiness": 0.0,
+        "lookahead_floor": 0,
+        "weak_min_games": 20.0,
+        "grid_cap": 256,
+        "match_inflate": 1.5,
+        "verification": {
+          "mode": "quality",
+          "nodes": 5000000,
+          "deep_nodes": 20000000,
+          "score_band": 0.01,
+          "independent_final_cloud": true,
+          "no_quality_downgrade": true,
+          "min_reach": 0.0005,
+          "max_parents": 2000,
+          "rare_trust": 20
+        },
+        "colour": "black",
+        "gate": "permissive",
+        "budget": 2000,
+        "mode": "independent",
+        "slice_prior": 0.5195669627673518,
+        "robustness_floor": 0.075,
+        "max_score_loss": 0.095,
+        "opponent_policy": {
+          "name": "otb-ensemble-v1",
+          "model": "maia3-79m-position",
+          "ratings": [
+            2600,
+            2600
+          ],
+          "temperature": 1.35,
+          "empirical_strength": 30.0,
+          "maia_strength": 3.0,
+          "otb_strength": 10.0,
+          "backup_discount": 0.1,
+          "broad_discount": 0.01
+        },
+        "solver": "dp+match-distinct+polish"
+      },
+      "depends_on": [
+        "5c372e61ab2912f60cf1"
+      ],
+      "state": "not-started"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "brc-all-p30",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        0,
+        1000,
+        1200,
+        1400,
+        1600,
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "brc1800-p30",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "brc2200-p30",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        2200,
+        2500
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "rapid2200-p30",
+      "events": [
+        "Rapid"
+      ],
+      "elo_bands": [
+        2200,
+        2500
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "classical1800-p30",
+      "events": [
+        "Classical"
+      ],
+      "elo_bands": [
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "weak1000-1799-p30",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        1000,
+        1200,
+        1400,
+        1600
+      ],
+      "max_ply": 30,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "brc-all-p50",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        0,
+        1000,
+        1200,
+        1400,
+        1600,
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "brc1800-p50",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "brc2200-p50",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        2200,
+        2500
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "rapid2200-p50",
+      "events": [
+        "Rapid"
+      ],
+      "elo_bands": [
+        2200,
+        2500
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "classical1800-p50",
+      "events": [
+        "Classical"
+      ],
+      "elo_bands": [
+        1800,
+        2000,
+        2200,
+        2500
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    },
+    {
+      "id": "weak1000-1799-p50",
+      "events": [
+        "Blitz",
+        "Rapid",
+        "Classical"
+      ],
+      "elo_bands": [
+        1000,
+        1200,
+        1400,
+        1600
+      ],
+      "max_ply": 50,
+      "min_games": 1,
+      "key_bits": 128,
+      "rating_semantics": "game-mean",
+      "training_months": [
+        "2013-01",
+        "2026-07"
+      ]
+    }
+  ],
+  "required_bindings": [
+    "explorer_receipt",
+    "eval_lookup_receipt",
+    "code_receipt",
+    "maia_checkpoint_receipt",
+    "engine_receipt",
+    "otb_split_receipt",
+    "weak_policy_receipt",
+    "candidate_source_receipt"
+  ],
+  "extensions": {
+    "metric": "remaining-maximum",
+    "threshold": 3e-05,
+    "calibration": [
+      1e-05,
+      3e-05,
+      0.0001
+    ],
+    "severity": "max(gap2,0.60*gap3)",
+    "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+    "cost": "new-distinct-prescriptions-including-connectors",
+    "depth_cap": null,
+    "reply_cutoff": null,
+    "recall_discount": false,
+    "unresolved_frontier": "must-bound-or-expand"
+  },
+  "extension_comparison": {
+    "schema": 1,
+    "default_metric": "remaining-maximum",
+    "prerequisites": [
+      "inputs-verified",
+      "black-pilot-closed",
+      "four-anchors-quality-closed",
+      "extension-cost-pilot-passed"
+    ],
+    "shared_inputs": [
+      "base-book",
+      "engine-cache",
+      "opponent-policy-cache"
+    ],
+    "comparison_evidence": "common-frozen-union-of-explored-continuations",
+    "separate_checkpoints": true,
+    "evaluation": "paired-seeds-and-common-horizon",
+    "report": [
+      "additional-distinct-prescriptions",
+      "selected-move-disagreement",
+      "later-unbooked-risk",
+      "reach-weighted-coverage",
+      "paired-score",
+      "runtime-and-cache-reuse",
+      "unresolved-exposure-bounds"
+    ],
+    "runs": [
+      {
+        "id": "1d34e6d33df8666799f3",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "55fb6ee63e9f2fd89721",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "1685c29932777369c190",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "0dcb87d960c73cf3dc9a",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "4f82095dd336a95b05d5",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "931a960a4940622f8dbd",
+        "recipe": {
+          "base_arm": "85d1f2cbaf716f260257",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "85d1f2cbaf716f260257"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "ca87132a04357b039cd6",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "d6591e7d7611598753d2",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "2ae4acb99032b1ff964a",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "4b3348a068aaa757cd48",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "35b726e58c3fe64f74c1",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "7e3fbf70cb48dc2e9701",
+        "recipe": {
+          "base_arm": "7a5b963392abb6a14733",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "7a5b963392abb6a14733"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "51f350056aef9fc3c10d",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "5184d1c00ff63e9ee02b",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "e5c3d5698e6f6ae55e93",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "3830a3ea0fad6be1090c",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "49c03ef6d589cf194e52",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "da84561419368c837b2a",
+        "recipe": {
+          "base_arm": "aee55e77b07f1213e148",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "aee55e77b07f1213e148"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "e1618c3f8bed78004580",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "0021847d92ca295814a7",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 1e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "1e-05"
+        ]
+      },
+      {
+        "id": "dbf3ae85c13cab11e909",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "57f0bd763fa2c291ba07",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 3e-05,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "3e-05"
+        ]
+      },
+      {
+        "id": "9c1c803d5d53b3521511",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "remaining-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "reduction-in-expected-maximum-remaining-unbooked-risk",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "default-calibration",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "remaining-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      },
+      {
+        "id": "c21ef188fea15ff87c1f",
+        "recipe": {
+          "base_arm": "5c372e61ab2912f60cf1",
+          "extensions": {
+            "metric": "covered-maximum",
+            "threshold": 0.0001,
+            "severity": "max(gap2,0.60*gap3)",
+            "exposure": "expected-trajectory-maximum",
+            "cost": "new-distinct-prescriptions-including-connectors",
+            "depth_cap": null,
+            "reply_cutoff": null,
+            "recall_discount": false,
+            "unresolved_frontier": "must-bound-or-expand"
+          }
+        },
+        "depends_on": [
+          "5c372e61ab2912f60cf1"
+        ],
+        "role": "legacy-control",
+        "state": "queued-waiting-for-prerequisites",
+        "cli_args": [
+          "--metric",
+          "covered-maximum",
+          "--threshold",
+          "0.0001"
+        ]
+      }
+    ]
+  },
+  "evaluation": {
+    "backend": "maia3-79m-position",
+    "primary_trajectories": 4096,
+    "primary_seeds": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "finalist_trajectories": 32768,
+    "finalist_seeds": [
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108
+    ],
+    "minimum_horizon": 50,
+    "extension_tail": 10,
+    "finalist_extra_horizon": 20,
+    "recall": {
+      "half_life_days": [
+        2,
+        5,
+        10
+      ],
+      "multipliers": [
+        1.6,
+        2.0,
+        2.4
+      ],
+      "max_interval_days": 365,
+      "cards_per_color_day": 30,
+      "finalist_cards": [
+        15,
+        60
+      ],
+      "schedules": 8,
+      "days": [
+        30,
+        90,
+        240
+      ]
+    }
+  },
+  "pilot": "aee55e77b07f1213e148",
+  "release_gates": [
+    "inputs-verified",
+    "policy-reproduced",
+    "black-pilot-closed",
+    "extension-calibrated",
+    "evaluation-backend-frozen"
+  ]
+}

@@ -43,6 +43,9 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
           "--epsilon",str(r["epsilon"]),"--share-floor",str(r["share_floor"]),
           "--lookahead-floor",str(r["lookahead_floor"]),"--gated-reach",
           "--verification-policy","quality","--verification-score-band",str(r["verification"]["score_band"]),
+          "--quality-min-reach",str(r["verification"]["min_reach"]),
+          "--quality-max-parents",str(r["verification"]["max_parents"]),
+          "--quality-rare-trust",str(r["verification"]["rare_trust"]),
           "--method","price" if r["colour"]=="white" else "dp"]
     if inputs.get("engine_overlay"): args.extend(["--engine-candidates",str(inputs["engine_overlay"])])
     if inputs.get("opponent_overlay"): args.extend(["--opponent-prior",str(inputs["opponent_overlay"])])
@@ -50,6 +53,10 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
     if r["opponent_policy"]["name"]!="otb-ensemble-v1":
         # The control overlay uses the existing schema-2 conditional recipe.
         args[args.index("--opponent-pseudogames")+1]=str(r["opponent_policy"]["pseudogames"])
-    if r["colour"]=="black": args.append("--match-distinct")
+    if r["solver"]!=("price+polish" if r["colour"]=="white" else "dp+match-distinct+polish"):
+        raise ValueError("unknown solver for this colour")
+    # Black: DP with distinct-position matching, then polish (the validated recipe; polish is
+    # never below the DP book in-model and trims it to exactly the budget).
+    if r["colour"]=="black": args += ["--match-distinct","--polish"]
     if r["mode"]=="reduced": args.extend(["--allowed-book",str(inputs["allowed_book"])])
     return args
