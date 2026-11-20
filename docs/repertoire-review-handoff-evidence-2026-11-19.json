@@ -1,0 +1,1158 @@
+{
+  "schema": 1,
+  "purpose": "Read-only evidence snapshot for Claude handoff; live state ages after capture.",
+  "captured_at": "2026-11-19T18:02:01.272368-08:00",
+  "code_head_before_document_commit": "ffb11e2e28162a4224c2e06f1806724b67424dff",
+  "worktrees": {
+    "exit_code": 0,
+    "output": "worktree C:/Users/David/Documents/Chess\nHEAD d75daa27481c5106e1b055be3890769ef9a68445\nbranch refs/heads/review-fixes\n\nworktree C:/Users/David/.codex/worktrees/498e/Chess\nHEAD d75daa27481c5106e1b055be3890769ef9a68445\ndetached\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/annotation-evidence-pilot\nHEAD 74babdbc1c5ccf2d724b3c7aca6ef6ee2208f7ba\nbranch refs/heads/codex/annotation-evidence-pilot\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/full-key-consumers\nHEAD 34ace88e5417da46f4612b983c1a19c5ba501745\nbranch refs/heads/codex/full-key-consumers\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/integration\nHEAD d1d4ae8a2e39ef4b78ecbf1ffa33665678c87653\nbranch refs/heads/integration\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/keys128\nHEAD 97da558d485d9b7326fbb06a31b9bc1404c4bbae\nbranch refs/heads/keys128\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/keys128-suite\nHEAD 3d9933639a9c8e60aa2a8fbf62e140bcb4947eb6\ndetached\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/lookahead-floor\nHEAD 4d7c9458bab815d2afda1bb72a08a7a50724d48a\nbranch refs/heads/lookahead-floor\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/maia-cache\nHEAD 3d9933639a9c8e60aa2a8fbf62e140bcb4947eb6\nbranch refs/heads/maia-cache\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/practical-repertoire\nHEAD 86cdaa1e6e4d896ca69936161d723e96b0b34652\nbranch refs/heads/codex/practical-repertoire\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/rare-verify\nHEAD f6d054054ee2828f6f82b867085276dae5814bd9\nbranch refs/heads/rare-move-verification\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/simplify\nHEAD 4e4d896567c6bddd3054d70c542fc49336dbbd46\nbranch refs/heads/simplify\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation\nHEAD ffb11e2e28162a4224c2e06f1806724b67424dff\nbranch refs/heads/codex/sweep-preparation-20261118\n\nworktree C:/Users/David/Documents/Chess/scratch/worktrees/uncut-move-lookup\nHEAD d54d6f20e63d8ade4ae4cc6c52cc98e12322dc1f\nbranch refs/heads/codex/uncut-move-lookup",
+    "error": ""
+  },
+  "statuses": {
+    "main": {
+      "exit_code": 0,
+      "output": "M README.md\n M python/explorer_policy_value.py\n M python/repertoire_explorer.py\n?? .tmp/\n?? docs/black-030-verification-depth-handoff-2026-11-10.md\n?? docs/black-030-verification-followup-handoff-2026-11-10.md\n?? docs/black-030-verification-handoff-2026-11-10.md\n?? docs/builder-port-and-128bit-plan-2026-11-12.md\n?? docs/claude-repertoire-ownership-handoff-prompt-2026-11-14.md\n?? docs/evidence/\n?? docs/maia3-position-only-otb-2026-11-13.md\n?? docs/otb-move-prediction-under-2000-2026-11-13.md\n?? docs/otb-opponent-reply-handoff-2026-11-13.md\n?? docs/position-evaluation-ensemble-handoff-2026-11-13.docx\n?? docs/position-evaluation-ensemble-handoff-2026-11-13.md\n?? docs/rare-move-floor-test-2026-11-12.md\n?? docs/rare-move-verification-black-030-2026-11-11.md\n?? docs/repertoire-decisions-2026-11-08-to-10.docx\n?? docs/repertoire-decisions-2026-11-08-to-10.md\n?? docs/repertoire-handoff-for-chatgpt-2026-11-13.md\n?? docs/repertoire-migration-review-2026-11-14.md\n?? docs/repertoire-ownership-transfer-from-claude-2026-11-14.md\n?? docs/repertoire-practical-rebuild-handoff-2026-11-07.md\n?? docs/repertoire-progress-2026-11-04.md\n?? docs/repertoire-progress-review-2026-11-04.md\n?? docs/repertoire-puzzles.md\n?? docs/repertoire-repair-handoff-for-claude-2026-10-31.md\n?? docs/repertoire-review-2026-10-31.md\n?? docs/repertoire-review-2026-11-10.md\n?? docs/repertoire-review-followup-2026-10-31.md\n?? docs/repertoire-review-highest-reach-2026-10-31.md\n?? docs/repertoire-review-option-a-2026-10-31.md\n?? docs/repertoire-review-option-a-response-2026-10-31.md\n?? docs/repertoire-review-r1-r6-followup-2026-10-31.md\n?? docs/repertoire-review-r1-r6-response-2026-10-31.md\n?? docs/repertoire-review-response-2026-10-31.md\n?? docs/repertoire-review-response-r1-r6-2026-10-31.md\n?? docs/repertoire-status-2026-11-07.md\n?? docs/repertoire-tuning-plan-2026-11-18.md\n?? docs/sampled-stop-ab-2026-11-13.md\n?? docs/tournament_audit.md\n?? python/_test_repertoire_puzzles.py\n?? python/_test_tournament_game_audit.py\n?? python/ajedrez_event_clock_evidence.parquet\n?? python/chess_castle_reports.py\n?? python/club_archive_fetch.py\n?? python/compile_club_archives.py\n?? python/compile_mega_2021.py\n?? python/compile_rated_archives.py\n?? python/compile_regional_pgn_collections.py\n?? python/compile_tournament_games.py\n?? python/compile_twic.py\n?? python/deduplicate_tournament_games.py\n?? python/four_nations_seasons.py\n?? python/puzzle_practice.html\n?? python/regional_pgn_inventory.py\n?? python/regional_tournament_sources.py\n?? python/repertoire_puzzles.py\n?? python/tournament_game_audit.py\n?? python/tournament_game_sources.py\n?? python/tournament_identity.py\n?? python/tournament_opening_clocks.py\n?? python/tournament_replay_decisions.parquet\n?? python/tournament_time_controls.py\n?? python/twic_archive.py\n?? python/verify_mega_2021.py\n?? python/verify_tournament_games.py\n?? rust/caissa_decode/\n?? rust/mega_export/\n?? rust/tournament_mainline.rs\n?? rust/tournament_replay/",
+      "error": ""
+    },
+    "keys128": {
+      "exit_code": 0,
+      "output": "",
+      "error": ""
+    },
+    "lookahead-floor": {
+      "exit_code": 0,
+      "output": "M docs/lifetime-repertoire-plan.md",
+      "error": ""
+    },
+    "full-key-consumers": {
+      "exit_code": 0,
+      "output": "M docs/lifetime-repertoire-plan.md",
+      "error": ""
+    },
+    "sweep-preparation": {
+      "exit_code": 0,
+      "output": "",
+      "error": ""
+    }
+  },
+  "all_branch_commits_since_nov14": {
+    "exit_code": 0,
+    "output": "ffb11e2e28162a4224c2e06f1806724b67424dff\t2026-11-19T17:31:23-08:00\tAccept full OTB counts and verify policy consumer compatibility\nc810d7e954eba044e1bc2e6a83615cc9a4db5d73\t2026-11-19T15:29:38-08:00\tAdd resumable native OTB counts and independent full-key verification\ndef2b7c91581d4b7e5bfaa18250ce6c0079ce26c\t2026-11-19T15:02:43-08:00\tFreeze OTB splits using complete source ancestry and quarantine conflicts\n85226a126fab8f05163dae2bae5f1a3a9a850911\t2026-11-19T14:07:11-08:00\tSelect position-only Maia for the sweep evaluator and defer Allie\nc80f80b88c87d35f09c461412c31b4bd0f9c0e04\t2026-11-19T10:55:55-08:00\tAudit refreshed OTB split conflicts and record verified explorer handoff\n76c6e420c1f20ca816a962dbed9464c8befb4bf5\t2026-11-19T10:55:54-08:00\tStream shared pool finalization through bounded external sorts\nf84a58eca34c480fce52d4d5fb32e1e0a7aa1248\t2026-11-19T07:09:28-08:00\tDocument active sliced recovery and overall pipeline status\ne518f3c33b0bd3fbb3fc6f879b4602d6ce278472\t2026-11-19T07:06:38-08:00\tShard explorer invariants by signed key ranges and heartbeat recovery checks\n0749b1d47270c7ed13a8ed0b52cecc46bff2d1b8\t2026-11-19T07:01:24-08:00\tDefault extensions to remaining risk and queue paired metric calibration\nde6c19ff4590fffb7fdc460848051990e31facd3\t2026-11-19T06:57:53-08:00\tRecord completed native and compact verifier regressions\nc0f379340fccc7ec67de5e261ad2dc8e65334156\t2026-11-19T06:53:44-08:00\tRecord direct history-cache reuse audit for Allie rollout planning\n175336a248a694e6dc8233f5bd5e0e689601e1f9\t2026-11-19T06:51:26-08:00\tPrune selective pool reads and require verified publication bindings\n4a6a64ed38abbbc66de8f8fa2a9cd40448189f35\t2026-11-19T06:40:19-08:00\tBound explorer mapping checks and resume verified stages before eval rebuild\ne4c79fae37a6d52b7a0de3ea3adea61ec8a2e98f\t2026-11-19T06:10:11-08:00\tConnect selective sweep policies, joint verification, and resumable continuations\n7f751fdb5cf576813b47732925ba8f942920979d\t2026-11-18T22:17:07-08:00\tClarify preparation regression test counts\n5452e62ad494c904c46b9f5650e21c877dae9f90\t2026-11-18T22:16:28-08:00\tIntegrate full-key score gates and prepare reproducible repertoire sweep\n34ace88e5417da46f4612b983c1a19c5ba501745\t2026-11-15T20:39:19-08:00\tFix downstream publication failures found by the July end-to-end rehearsal\n655dcc0db7e92d3586245f88ab9428373a055839\t2026-11-15T20:04:55-08:00\tUse the archive drive last for eval child shards\nd9b7d5118b24e8283fd60d110badabf933842599\t2026-11-15T19:02:43-08:00\tVerify engine proposals and rare moves by full position key\n8a9e7bebf51978ad10c4a93c0f28fb0dc2ab9908\t2026-11-15T18:01:36-08:00\tCarry full position keys through budget selection and rollout scoring\n5292f913d62b5a9e4c7fe103950f594f3911c879\t2026-11-15T17:25:25-08:00\tPreserve full position keys in repertoire pools and uncut move lookups\n97da558d485d9b7326fbb06a31b9bc1404c4bbae\t2026-11-15T14:05:42-08:00\tRun a bounded Sunday extraction and resume training after Monday sign-in\n8ea942023caa4bed95238bc75d988def2f824b86\t2026-11-15T13:54:19-08:00\tExercise sliced terminal flows in the compact pool parity fixture\n9daf0d890557f06bc6070d39f01f11f999cd001f\t2026-11-15T13:45:33-08:00\tDocument compact worker recovery and isolate the compact pool fixture\nb08759355b84daaa45dcc92ce6ebe39f58829928\t2026-11-15T13:42:07-08:00\tKeep the monthly schedule independent and require the measured compact receipt at production merge\n527da1d023661094fd035884c7f373fa8ca05e6b\t2026-11-15T13:37:15-08:00\tRehearse and certify the compact explorer before promoting the production merger\nb72b0dc5dd06f8f33f5b10e3c3a28ebd001784a0\t2026-11-15T13:32:19-08:00\tDescribe compact move decoding in the published explorer and validate its physical schema\n35254b88606847203269007ca6319966d3da80ca\t2026-11-15T13:30:54-08:00\tWrite compact book-v4 move slices and project logical explorer columns for consumers\na1aaf849f3a50990cb1501157c77ae8edf777653\t2026-11-15T09:55:25-08:00\tRecord Sunday migration receipts, queue order and restart procedure\n3bfd358ca524dd925842b241571fe011ebda84bb\t2026-11-15T09:52:49-08:00\tQueue measured full-key eval generation and read-only offline ChessDB panel\n27c68f3b25410591d991401538ce798f69fbd0da\t2026-11-15T09:43:04-08:00\tBind eval checkpoints to verified source bytes and wide explorer generation\n63d1b316ed74748ed2fd8b7c90080b75e59cf9a9\t2026-11-15T09:39:05-08:00\tVerify holdout headers and publish full-key eval lookups with source attribution\n8d6c5e8bdf2ce2b0ea9aec08b9d09916bddbb573\t2026-11-15T09:21:17-08:00\tCoordinate measured three-month rehearsal and reserved training migration\nab64cbb5ee5f960daaf5be0c8e5b9e717ecff11e\t2026-11-15T09:17:25-08:00\tVerify sliced terminal digests and directly rehearse caps 30 and 50\ne4514e617cd29ffd94795950e66b6a37f7cb613f\t2026-11-15T09:10:43-08:00\tVerify pinned snapshot revisions and repair empty blobs locally\nb54e3a03021733374159ffce993899fc859c0716\t2026-11-15T09:05:53-08:00\tDetect conflicting 128-bit edges before within-chunk aggregation\n4d7c9458bab815d2afda1bb72a08a7a50724d48a\t2026-11-14T21:29:20-08:00\tRespect route horizons and audit lookahead against the admitted book menu\n94de25da632503d8dcb4709a972730d152872ad2\t2026-11-14T20:53:49-08:00\tRecord pilot verification and coordinator launch\ncf0ac1e3572e4846a77ec577a58bc07308b8f10e\t2026-11-14T20:49:30-08:00\tCheck staged Parquet headers and record pilot controls and measurements\n57412e5940391299f5c1e11ece1343d44351cc17\t2026-11-14T20:44:38-08:00\tVerify month publication and preserve speed- and rating-specific endings\nc9824ed565dd00581b0953e3702d76c38c49efeb\t2026-11-14T20:03:09-08:00\tGate repertoire moves on engine expected-score loss\n008db6c0b68284be1987e72e702f8c491b57c2fe\t2026-11-14T19:26:54-08:00\trun_rare_book.py --seed-overlay: start a run from another run's verified scores\n8ae48995d768437ca64e00c0d713686fb63f1be7\t2026-11-14T19:26:52-08:00\tBudget books: --lookahead-floor N, veto moves that walk under the absolute gate\n512be2be5de191df92bdde6980425d32e5a45e37\t2026-11-14T19:26:27-08:00\trun_month_extraction.py: draft launcher for the multi-month extraction (not yet safe to run)\n16c4284be4ce18ba6f37debc6bef883fe42f8fcf\t2026-11-14T19:25:53-08:00\tmerge: accept months that hold a subset of the six speeds, in the merge's order\n5645037ae7704ae0f41b6654b2668fb44308e6c8\t2026-11-14T19:25:38-08:00\tCLAUDE.md: storage after the 2026-11-14 deletions and moves\n74babdbc1c5ccf2d724b3c7aca6ef6ee2208f7ba\t2026-11-14T15:53:59-08:00\tTeach the queenless Italian as a connected, verified recall unit\na87017f9dcac487a58d78c11233d6a9f0e7fcedb\t2026-11-14T15:33:23-08:00\tGive annotation writers full game scores and frozen repertoire continuations\n80d7ccbd7185c52dfb12f39b8a4a76572f051fe8\t2026-11-14T09:09:31-08:00\tGive repertoire annotators all fifteen interactive board tools",
+    "error": ""
+  },
+  "sweep_changes_since_full_key_consumers": {
+    "exit_code": 0,
+    "output": "CLAUDE.md                                      |  101 +\n README.md                                      |    7 +\n docs/black-030-lookahead-pilot.md              |   64 +\n docs/lifetime-repertoire-plan.md               |   14 +-\n docs/repertoire-tuning-plan-2026-11-18.md      |  408 +++\n docs/sweep-manifest-2026-11-18.json            | 2544 +++++++++++++++++++\n docs/sweep-manifest-2026-11-19-maia.json       | 3246 ++++++++++++++++++++++++\n docs/sweep-manifest-2026-11-19.json            | 3246 ++++++++++++++++++++++++\n docs/sweep-model-evidence-2026-11-19.json      |  469 ++++\n docs/sweep-preparation-progress.md             |  309 +++\n docs/sweep-preparation-usage.md                |  185 ++\n docs/sweep-runtime-checks-2026-11-19.json      |  421 +++\n docs/sweep-stream-export-check-2026-11-19.json |   20 +\n python/_test_book_builder_rs.py                |    9 +-\n python/_test_expected_score_gates.py           |  132 +\n python/_test_full_key_book.py                  |   49 +-\n python/_test_horizon_lookahead.py              |  332 +++\n python/_test_lookahead_floor.py                |  225 ++\n python/_test_pool_stream_export.py             |   77 +\n python/_test_rare_verify.py                    |   23 +-\n python/_test_sweep_continuations.py            |   76 +\n python/_test_sweep_coordinator.py              |   92 +\n python/_test_sweep_execution.py                |  243 ++\n python/_test_sweep_keyed_parquet.py            |   34 +\n python/_test_sweep_otb_counts.py               |   88 +\n python/_test_sweep_otb_freeze.py               |  125 +\n python/_test_sweep_otb_split.py                |   38 +\n python/_test_sweep_preparation.py              |  246 ++\n python/_test_sweep_publications.py             |   36 +\n python/_test_sweep_transpositions.py           |   48 +\n python/_test_verification_recovery.py          |   81 +\n python/budget_core.py                          |  153 +-\n python/budget_rs.py                            |    8 +-\n python/build_budget_books.py                   |  342 ++-\n python/cloud_feedback.py                       |   29 +-\n python/lookahead_audit.py                      |  176 ++\n python/lookahead_floor.py                      |  228 ++\n python/lookahead_policy.py                     |  126 +\n python/maia_batch.py                           |    4 +-\n python/maia_server.py                          |   10 +-\n python/opponent_prior.py                       |   44 +-\n python/pool_from_book.py                       |  119 +-\n python/rare_verify.py                          |  160 +-\n python/resume_explorer_verification.py         |  159 ++\n python/run_rare_book.py                        |   77 +-\n python/sampled_stop.py                         |    3 +-\n python/sweep/__init__.py                       |    1 +\n python/sweep/audit_otb_split.py                |  106 +\n python/sweep/benchmark_counts.py               |   57 +\n python/sweep/builder.py                        |   55 +\n python/sweep/candidates.py                     |   47 +\n python/sweep/check_otb_consumer.py             |   68 +\n python/sweep/continuations.py                  |  172 ++\n python/sweep/coordinator.py                    |  227 ++\n python/sweep/extend.py                         |  134 +\n python/sweep/extensions.py                     |  106 +\n python/sweep/freeze_otb.py                     |  212 ++\n python/sweep/frontier.py                       |  245 ++\n python/sweep/keyed_parquet.py                  |   72 +\n python/sweep/ladders.py                        |   17 +\n python/sweep/maia_policy.py                    |   87 +\n python/sweep/otb_counts.py                     |  177 ++\n python/sweep/policy.py                         |  145 ++\n python/sweep/prepare.py                        |   61 +\n python/sweep/publications.py                   |   44 +\n python/sweep/quality.py                        |   59 +\n python/sweep/recall.py                         |   61 +\n python/sweep/reports.py                        |   87 +\n python/sweep/rollout.py                        |   97 +\n python/sweep/spec.py                           |  192 ++\n python/sweep/stages.py                         |   93 +\n python/sweep/validate_pool.py                  |   27 +\n python/sweep/verify.py                         |  192 ++\n python/sweep/verify_otb_counts.py              |  132 +\n python/sweep/verify_otb_split.py               |  153 ++\n python/transposition_search.py                 |   22 +-\n python/validate_book.py                        |   64 +-\n python/verify_book.py                          |   73 +-\n rust/book_builder/README.md                    |    8 +-\n rust/book_builder/build.ps1                    |    5 +-\n rust/book_builder/src/collect.rs               |   25 +-\n rust/book_builder/src/gates.rs                 |   60 +\n rust/book_builder/src/graph.rs                 |   37 +-\n rust/book_builder/src/lib.rs                   |   17 +-\n rust/book_builder/src/py_collect.rs            |   14 +-\n rust/book_builder/src/py_graph.rs              |   12 +-\n rust/book_builder/src/reach.rs                 |   24 +-\n rust/otb_counts_replay/Cargo.lock              |  129 +\n rust/otb_counts_replay/Cargo.toml              |   10 +\n rust/otb_counts_replay/src/lib.rs              |   78 +\n 90 files changed, 18077 insertions(+), 253 deletions(-)",
+    "error": ""
+  },
+  "integration_changes_since_shared_baseline": {
+    "exit_code": 0,
+    "output": "M\tCLAUDE.md\nM\tREADME.md\nA\tdocs/black-030-lookahead-pilot.md\nA\tdocs/explorer-ply51-pilot.md\nM\tdocs/lifetime-repertoire-plan.md\nA\tdocs/repertoire-tuning-plan-2026-11-18.md\nA\tdocs/sweep-manifest-2026-11-18.json\nA\tdocs/sweep-manifest-2026-11-19-maia.json\nA\tdocs/sweep-manifest-2026-11-19.json\nA\tdocs/sweep-model-evidence-2026-11-19.json\nA\tdocs/sweep-preparation-progress.md\nA\tdocs/sweep-preparation-usage.md\nA\tdocs/sweep-runtime-checks-2026-11-19.json\nA\tdocs/sweep-stream-export-check-2026-11-19.json\nA\tpython/Resume-Trip.cmd\nM\tpython/_test_book_builder_rs.py\nA\tpython/_test_eval_lookup128.py\nA\tpython/_test_expected_score_gates.py\nA\tpython/_test_full_key_book.py\nA\tpython/_test_full_key_real_slice.py\nA\tpython/_test_full_key_verification.py\nA\tpython/_test_horizon_lookahead.py\nA\tpython/_test_lookahead_floor.py\nA\tpython/_test_month_archive.py\nA\tpython/_test_ply51_eval_capacity.py\nA\tpython/_test_pool128.py\nM\tpython/_test_pool_from_book.py\nA\tpython/_test_pool_stream_export.py\nM\tpython/_test_rare_verify.py\nA\tpython/_test_sweep_continuations.py\nA\tpython/_test_sweep_coordinator.py\nA\tpython/_test_sweep_execution.py\nA\tpython/_test_sweep_keyed_parquet.py\nA\tpython/_test_sweep_otb_counts.py\nA\tpython/_test_sweep_otb_freeze.py\nA\tpython/_test_sweep_otb_split.py\nA\tpython/_test_sweep_preparation.py\nA\tpython/_test_sweep_publications.py\nA\tpython/_test_sweep_transpositions.py\nM\tpython/_test_uncut_own_moves.py\nA\tpython/_test_verification_recovery.py\nM\tpython/_test_verify_evals.py\nA\tpython/benchmark_compact_evals.py\nM\tpython/book_graph.py\nM\tpython/budget_core.py\nM\tpython/budget_rs.py\nM\tpython/build_budget_books.py\nM\tpython/build_weak_edges.py\nM\tpython/cloud_feedback.py\nM\tpython/compare_explorer_outputs.py\nA\tpython/consumer_keys.py\nM\tpython/convertibility_eval.py\nM\tpython/engine_candidates.py\nM\tpython/eval_arrays_build.py\nA\tpython/eval_lookup128.py\nA\tpython/explorer_storage.py\nA\tpython/hf_fetch.py\nA\tpython/lookahead_audit.py\nA\tpython/lookahead_floor.py\nA\tpython/lookahead_policy.py\nM\tpython/maia_batch.py\nM\tpython/maia_server.py\nA\tpython/month_archive.py\nM\tpython/opponent_prior.py\nM\tpython/pool_from_book.py\nM\tpython/pool_from_book_gates.py\nA\tpython/probe_chessdb_snapshot.py\nM\tpython/rare_verify.py\nA\tpython/resume_explorer_verification.py\nA\tpython/resume_ply51_trip.py\nA\tpython/run_month_extraction.py\nA\tpython/run_ply51_evals.py\nA\tpython/run_ply51_migration.py\nA\tpython/run_ply51_pilot.ps1\nA\tpython/run_ply51_sunday.py\nM\tpython/run_rare_book.py\nM\tpython/sampled_stop.py\nM\tpython/side_explorer.py\nA\tpython/sweep/__init__.py\nA\tpython/sweep/audit_otb_split.py\nA\tpython/sweep/benchmark_counts.py\nA\tpython/sweep/builder.py\nA\tpython/sweep/candidates.py\nA\tpython/sweep/check_otb_consumer.py\nA\tpython/sweep/continuations.py\nA\tpython/sweep/coordinator.py\nA\tpython/sweep/extend.py\nA\tpython/sweep/extensions.py\nA\tpython/sweep/freeze_otb.py\nA\tpython/sweep/frontier.py\nA\tpython/sweep/keyed_parquet.py\nA\tpython/sweep/ladders.py\nA\tpython/sweep/maia_policy.py\nA\tpython/sweep/otb_counts.py\nA\tpython/sweep/policy.py\nA\tpython/sweep/prepare.py\nA\tpython/sweep/publications.py\nA\tpython/sweep/quality.py\nA\tpython/sweep/recall.py\nA\tpython/sweep/reports.py\nA\tpython/sweep/rollout.py\nA\tpython/sweep/spec.py\nA\tpython/sweep/stages.py\nA\tpython/sweep/validate_pool.py\nA\tpython/sweep/verify.py\nA\tpython/sweep/verify_otb_counts.py\nA\tpython/sweep/verify_otb_split.py\nM\tpython/transposition_search.py\nM\tpython/uncut_own_moves.py\nM\tpython/validate_book.py\nM\tpython/verify_book.py\nA\tpython/verify_compact_book.py\nM\tpython/verify_evals.py\nA\tpython/verify_holdout_headers.py\nA\tpython/verify_ply51_caps.py\nM\tpython/weak_stop.py\nM\trust/book_builder/README.md\nM\trust/book_builder/build.ps1\nM\trust/book_builder/src/collect.rs\nM\trust/book_builder/src/core.rs\nM\trust/book_builder/src/dp.rs\nM\trust/book_builder/src/gates.rs\nM\trust/book_builder/src/graph.rs\nM\trust/book_builder/src/lib.rs\nM\trust/book_builder/src/polish.rs\nA\trust/book_builder/src/position_ids.rs\nM\trust/book_builder/src/py_collect.rs\nM\trust/book_builder/src/py_core.rs\nM\trust/book_builder/src/py_graph.rs\nM\trust/book_builder/src/py_rollout.rs\nM\trust/book_builder/src/reach.rs\nM\trust/book_builder/src/rollout.rs\nA\trust/book_builder/tests/full_keys.rs\nM\trust/explorer_extract/README.md\nA\trust/explorer_extract/src/compact_book.rs\nM\trust/explorer_extract/src/evals.rs\nM\trust/explorer_extract/src/keys.rs\nM\trust/explorer_extract/src/lib.rs\nM\trust/explorer_extract/src/main.rs\nM\trust/explorer_extract/src/merge.rs\nM\trust/explorer_extract/src/month.rs\nM\trust/explorer_extract/src/partials.rs\nM\trust/explorer_extract/tests/evals.rs\nM\trust/explorer_extract/tests/merge.rs\nA\trust/otb_counts_replay/Cargo.lock\nA\trust/otb_counts_replay/Cargo.toml\nA\trust/otb_counts_replay/src/lib.rs",
+    "error": ""
+  },
+  "artifacts": [
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\verification-recovery-sliced-20261119\\verified.json",
+      "exists": true,
+      "bytes": 118478,
+      "modified": "2026-11-19T10:36:52.070242-08:00",
+      "sha256": "959264dc725d708e43959a0b91362af32d90a0d5524b67c0c0e2daa851f8c31a"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\evals\\status.json",
+      "exists": true,
+      "bytes": 113,
+      "modified": "2026-11-19T14:02:29.774409-08:00",
+      "sha256": "96b8052e4ed4dfc680225392cc95112d44002005bf97c03974b3c98894c7b42c",
+      "value": {
+        "child_shards": "E:",
+        "stage": "building full Cloud/Fishnet eval DB",
+        "time": "2026-11-19T14:02:29"
+      }
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\compact-comparison.json",
+      "exists": true,
+      "bytes": 620,
+      "modified": "2026-11-15T14:20:53.578389-08:00",
+      "sha256": "95dafce6c8e3fbfbd67ac042eb811986af1d50b47e0c8965cdeb00bf9e6f9b49"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\compact-eval-benchmark.json",
+      "exists": true,
+      "bytes": 1610,
+      "modified": "2026-11-15T13:40:10.748834-08:00",
+      "sha256": "ab6f7746ef550cbc3a6c75cce252d2c7a0dc1c014735c98dbb3390e1fdd32f4f"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\headstart-e2e\\results.json",
+      "exists": true,
+      "bytes": 4886,
+      "modified": "2026-11-15T20:40:40.405125-08:00",
+      "sha256": "03a7d910c507a5b7c5cd34872287f0275ea277189568c5df6f6243af58e3d4ec"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\holdout-inputs\\month=2026_8.json",
+      "exists": true,
+      "bytes": 16128,
+      "modified": "2026-11-15T14:16:48.904062-08:00",
+      "sha256": "37cee3a7d52f9094e3154f22b78247f630d5f5c7c2d40dc1818a815c1fd32041"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\holdout-inputs\\month=2026_9.json",
+      "exists": true,
+      "bytes": 15839,
+      "modified": "2026-11-15T18:21:34.541497-08:00",
+      "sha256": "b1d8c086eca7cd5da82bde010cc14e986afc1ee89a7d50f776278826f34b2739"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-v2-20261119\\split.json",
+      "exists": true,
+      "bytes": 4648,
+      "modified": "2026-11-19T14:58:24.951352-08:00",
+      "sha256": "e5e446803b94581c84c44ecef1d11653648a19fe4ef99b00985165cd77f05536"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-v2-20261119\\verified.json",
+      "exists": true,
+      "bytes": 4674,
+      "modified": "2026-11-19T15:02:09.258551-08:00",
+      "sha256": "dae6c7d365632b343c4418d4ef278023a9bf8a515f41a181030f594016ce4b73"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-counts-v2-20261119\\recipe.json",
+      "exists": true,
+      "bytes": 3336,
+      "modified": "2026-11-19T15:29:49.854352-08:00",
+      "sha256": "18be73ea14443ab34b6b34d6d77fcf5e16afe926f30a999f6d2bce76ffd51d43"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-counts-v2-20261119\\verified.json",
+      "exists": true,
+      "bytes": 9759,
+      "modified": "2026-11-19T17:29:26.883363-08:00",
+      "sha256": "2c19ff37e7bfb3bc69359000cd968fd0b71e3cad3267f135373c87bcfe6be5d9"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-counts-v2-20261119\\consumer-check.json",
+      "exists": true,
+      "bytes": 8691,
+      "modified": "2026-11-19T17:30:25.470917-08:00",
+      "sha256": "95fa19e740a23b54b94c0e5c55955b19fb111fd71d446c07418e0fcfed911237"
+    },
+    {
+      "path": "D:\\chess\\sweep-inputs-20261119\\otb-counts-v2-20261119\\environment.json",
+      "exists": true,
+      "bytes": 915,
+      "modified": "2026-11-19T16:12:48.587047-08:00",
+      "sha256": "e5c290a4a4ec78305d6404143e4f7390b18eb28928469b725ad303fbf67610e1",
+      "value": {
+        "python": "3.11.15 (main, Apr 14 2026, 14:31:26) [MSC v.1944 64 bit (AMD64)]",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "versions": {
+          "duckdb": "1.5.2",
+          "pyarrow": "24.0.0",
+          "numpy": "2.4.4",
+          "python_chess": "1.11.2"
+        },
+        "executables": [
+          {
+            "path": "C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe",
+            "sha256": "fee5ed8687d7e24ac045d833ecd1963396357988bc1d741212b8f372d0cf327a"
+          },
+          {
+            "path": "C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe",
+            "sha256": "3279c45d110d123918d8c73675a28494c8f832102522d111a69314ea9ac52d12"
+          }
+        ],
+        "release_manifest": {
+          "path": "D:\\chess\\bin\\otb-counts-20261119\\files.json",
+          "sha256": "58e5c88c516af4e1bac122768d00df73f36f241158a9b30cbc35efb04aedbea6"
+        },
+        "generation_commit": "c810d7e",
+        "source_prefix_plies": 51
+      }
+    },
+    {
+      "path": "D:\\chess\\allie\\backend-validation-20261118\\comparison.json",
+      "exists": true,
+      "bytes": 52444,
+      "modified": "2026-11-19T03:06:13.277671-08:00",
+      "sha256": "b81958e98701c709e5f0ff4a681f8823036511cc20878531e60c5851a85959d7"
+    },
+    {
+      "path": "D:\\chess\\allie\\online-backend-validation-20261118\\comparison.json",
+      "exists": true,
+      "bytes": 183995,
+      "modified": "2026-11-19T04:21:40.609960-08:00",
+      "sha256": "848d6d0b9bfe42bbbd5f212cbf84d2d42be9eed7b2aad9a5e4b5c00209b59be5"
+    },
+    {
+      "path": "D:\\chess\\allie\\history-20261118\\pilot01\\comparison.json",
+      "exists": true,
+      "bytes": 33212,
+      "modified": "2026-11-19T02:31:38.763834-08:00",
+      "sha256": "f1e9bf309610e3c20ab8bf60afff915eea2ac39ab24780f88f27c000d728230d"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\allie-pilot-20261118\\scores.json",
+      "exists": true,
+      "bytes": 3724,
+      "modified": "2026-11-18T12:10:22.623087-08:00",
+      "sha256": "da10bb62da825ddd8c23b18fa579ad94899f3f290a5c65eb7333f1385faabe8c"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-model-evidence-2026-11-19.json",
+      "exists": true,
+      "bytes": 14965,
+      "modified": "2026-11-19T06:53:25.775907-08:00",
+      "sha256": "68f0d1e3824bfe4f84c616379255eab75417cca0020734268e6d1c06732bb765"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-runtime-checks-2026-11-19.json",
+      "exists": true,
+      "bytes": 15598,
+      "modified": "2026-11-19T06:50:29.948647-08:00",
+      "sha256": "f1d3f5798ffdc2de538d3c761468f935982256abc3c1de96d33f0ffebb086e69"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-stream-export-check-2026-11-19.json",
+      "exists": true,
+      "bytes": 603,
+      "modified": "2026-11-19T10:54:47.862448-08:00",
+      "sha256": "e32b66997c4e8f6d33e5e624d55edcdc26074b6b264cde3e89a5b4c36224c13e"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-manifest-2026-11-19-maia.json",
+      "exists": true,
+      "bytes": 93710,
+      "modified": "2026-11-19T14:07:10.707901-08:00",
+      "sha256": "cd4a375653bc90a105729ef973d80d39162856c75ba853de7e3b5b10783a708e"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\repertoire-tuning-plan-2026-11-18.md",
+      "exists": true,
+      "bytes": 59220,
+      "modified": "2026-11-19T17:30:53.764119-08:00",
+      "sha256": "304a20280a8e00bbb25cc4b85a79ab294333c04cdc8158bc92cf0ad9f64ea643"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-preparation-progress.md",
+      "exists": true,
+      "bytes": 51137,
+      "modified": "2026-11-19T17:30:53.761118-08:00",
+      "sha256": "92a45f096fdeea0c8dc15501d41a88153db3d89339a7887377a960c8acceaa26"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\sweep-preparation-usage.md",
+      "exists": true,
+      "bytes": 26807,
+      "modified": "2026-11-19T16:19:02.223063-08:00",
+      "sha256": "505c62f4ab1466b56596f146df56aba17b9b115e3245a46292ac83f6a183605d"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\docs\\repertoire-ownership-transfer-from-claude-2026-11-14.md",
+      "exists": true,
+      "bytes": 32721,
+      "modified": "2026-11-14T19:33:30.340974-08:00",
+      "sha256": "3a895c34338a41d277a6a0a8727c8b3b032b01913a783547fa818356fc176fde"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\docs\\repertoire-migration-review-2026-11-14.md",
+      "exists": true,
+      "bytes": 32993,
+      "modified": "2026-11-14T17:53:07.219308-08:00",
+      "sha256": "0c325dbd312ebe7c15d025d4e097cf1dd235d389c712d05a00586b6a608f23db"
+    },
+    {
+      "path": "C:\\Users\\David\\Documents\\Chess\\docs\\otb-opponent-reply-handoff-2026-11-13.md",
+      "exists": true,
+      "bytes": 17445,
+      "modified": "2026-11-13T17:45:38.348933-08:00",
+      "sha256": "173cb95a656d7c26b30e683f1a4fbe838f019f666e1046ba35485fd0a0904553"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\black-030-horizon-v2\\status.json",
+      "exists": true,
+      "bytes": 756,
+      "modified": "2026-11-14T23:54:43.669422-08:00",
+      "sha256": "3079d19d4fb0a08b0b290cdc11ef479e7e9b9d52d02aca7b6599a07c6e1dccc3",
+      "value": {
+        "stage": "queued",
+        "updated": "2026-11-14 23:54:43 -0800",
+        "pid": 23752,
+        "waiting_for": [
+          "build_budget_books.py",
+          "convertibility_eval.py",
+          "lf_chain2.bat",
+          "run_ply51_pilot.ps1",
+          "run_rare_book.py",
+          "score_lf.py",
+          "score_lf_w1.bat"
+        ],
+        "processes": {
+          "14708": "convertibility_eval.py",
+          "20536": "lf_chain2.bat",
+          "24748": "score_lf.py",
+          "26508": "score_lf.py",
+          "30696": "build_budget_books.py",
+          "34520": "run_ply51_pilot.ps1",
+          "36132": "convertibility_eval.py",
+          "36432": "score_lf_w1.bat",
+          "38380": "score_lf.py",
+          "40560": "run_rare_book.py",
+          "42684": "run_rare_book.py",
+          "43888": "score_lf.py",
+          "44484": "build_budget_books.py"
+        }
+      }
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\evals\\capacity.json",
+      "exists": true,
+      "bytes": 521,
+      "sha256": "ea9b8cc6693543a7594ef85fb195347590992ef7e1acb36573c2f6cad8181737",
+      "modified": "2026-11-19T14:02:29.413814-08:00"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\evals\\layout.json",
+      "exists": true,
+      "bytes": 547,
+      "sha256": "2764fe30f6619ab359910b483fa6038f7023a05c88653c11db73d0cc5f45d4ce",
+      "modified": "2026-11-19T14:02:29.416227-08:00"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\compact-forecast.json",
+      "exists": true,
+      "bytes": 984,
+      "sha256": "f1f04a34472c5408b9e136ddab796266de84c2895d6a2e85bfb825e8caed420b",
+      "modified": "2026-11-15T14:20:55.843909-08:00"
+    },
+    {
+      "path": "D:\\chess\\ply51-migration-20261115\\chessdb-inventory.json",
+      "exists": true,
+      "bytes": 299,
+      "sha256": "a3f22a861997d326850921c9c5c4df5020d0c90d9899fd0ee6fa8be8ae8dce7b",
+      "modified": "2026-11-15T09:33:24.583352-08:00"
+    }
+  ],
+  "runtime_releases": [
+    {
+      "directory": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115",
+      "pin": {
+        "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\pin.json",
+        "exists": true,
+        "bytes": 1444,
+        "modified": "2026-11-15T20:39:46.246377-08:00",
+        "sha256": "819f043b59a9046e038e9724853dab08825ccb1563aa5c31ac0eb73815633eb0",
+        "value": {
+          "base_compact_pin": "3f57d74470ee7056474c05edfedd95e4a017b3737bc21922372561a9a8819704",
+          "files": {
+            "duck_compat.py": "456f910cbbfeb867e368b41c06d4f95e572e156f4d2668f295d01a2c0e70c765",
+            "eval_arrays.py": "3eb0414add9f6e262bb18674dd5a985cb755a61c8f4638c59e552847d0687893",
+            "eval_arrays_build.py": "e61291df4bb07c32d0960cfb9483f94677aed4e401122c582f1bf4e547d7a41a",
+            "eval_lookup128.py": "b65f8076a205267e50db5a291525b92387af5d123aa55c9e885500740570127a",
+            "explorer-extract.exe": "0f79bcbb95f1055fbedc075fe2c5db5ecee9a33ec3645786bdf23c62726453c0",
+            "explorer_storage.py": "6aa1f4e7b5e87bc1c7f0af9f1ef95e681f28e0fd7a5615732051721f753b5f91",
+            "month_archive.py": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14",
+            "run_ply51_evals.py": "25e55322a3190101eb0627459e51738498767c4df14783a76b68361c1c68b47e",
+            "verify_book.py": "4f4370b4bfdc7c6d7333791f1c58c9861870055f82877ba2f2bf310691e68070",
+            "verify_evals.py": "3ad8b5ab6cb48671852595956ac6a4acd4122ba9b14e57bacf2550899d3fd4db",
+            "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+            "zobrist128.py": "e1ddd56f673ec578aa7f7f103f81f8857ae2049cb22330aa726f594584933f41"
+          },
+          "native_version": "explorer-extract 0.1.0 (commit b72b0dc5dd06, built 2026-11-15, target features )",
+          "python_commit": "655dcc0db7e92d3586245f88ab9428373a055839",
+          "verifier_commit": "34ace88e5417da46f4612b983c1a19c5ba501745"
+        }
+      },
+      "files": [
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\duck_compat.py",
+          "exists": true,
+          "bytes": 1513,
+          "modified": "2026-11-15T20:39:46.057113-08:00",
+          "sha256": "456f910cbbfeb867e368b41c06d4f95e572e156f4d2668f295d01a2c0e70c765"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\eval_arrays.py",
+          "exists": true,
+          "bytes": 18583,
+          "modified": "2026-11-15T20:39:46.065689-08:00",
+          "sha256": "3eb0414add9f6e262bb18674dd5a985cb755a61c8f4638c59e552847d0687893"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\eval_arrays_build.py",
+          "exists": true,
+          "bytes": 28374,
+          "modified": "2026-11-15T20:39:46.072690-08:00",
+          "sha256": "e61291df4bb07c32d0960cfb9483f94677aed4e401122c582f1bf4e547d7a41a"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\eval_lookup128.py",
+          "exists": true,
+          "bytes": 10354,
+          "modified": "2026-11-15T20:39:46.082724-08:00",
+          "sha256": "b65f8076a205267e50db5a291525b92387af5d123aa55c9e885500740570127a"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\explorer-extract.exe",
+          "exists": true,
+          "bytes": 18077184,
+          "modified": "2026-11-15T20:39:46.098697-08:00",
+          "sha256": "0f79bcbb95f1055fbedc075fe2c5db5ecee9a33ec3645786bdf23c62726453c0"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\explorer_storage.py",
+          "exists": true,
+          "bytes": 2654,
+          "modified": "2026-11-15T20:39:46.165725-08:00",
+          "sha256": "6aa1f4e7b5e87bc1c7f0af9f1ef95e681f28e0fd7a5615732051721f753b5f91"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\month_archive.py",
+          "exists": true,
+          "bytes": 8251,
+          "modified": "2026-11-15T20:39:46.167723-08:00",
+          "sha256": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\pin.json",
+          "exists": true,
+          "bytes": 1444,
+          "modified": "2026-11-15T20:39:46.246377-08:00",
+          "sha256": "819f043b59a9046e038e9724853dab08825ccb1563aa5c31ac0eb73815633eb0"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\run_ply51_evals.py",
+          "exists": true,
+          "bytes": 10135,
+          "modified": "2026-11-15T20:39:46.177965-08:00",
+          "sha256": "25e55322a3190101eb0627459e51738498767c4df14783a76b68361c1c68b47e"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\verify_book.py",
+          "exists": true,
+          "bytes": 27001,
+          "modified": "2026-11-15T20:39:46.187474-08:00",
+          "sha256": "4f4370b4bfdc7c6d7333791f1c58c9861870055f82877ba2f2bf310691e68070"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\verify_evals.py",
+          "exists": true,
+          "bytes": 38685,
+          "modified": "2026-11-15T20:39:46.228490-08:00",
+          "sha256": "3ad8b5ab6cb48671852595956ac6a4acd4122ba9b14e57bacf2550899d3fd4db"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\zobrist.py",
+          "exists": true,
+          "bytes": 7129,
+          "modified": "2026-11-15T20:39:46.238259-08:00",
+          "sha256": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\zobrist128.py",
+          "exists": true,
+          "bytes": 18521,
+          "modified": "2026-11-15T20:39:46.239765-08:00",
+          "sha256": "e1ddd56f673ec578aa7f7f103f81f8857ae2049cb22330aa726f594584933f41"
+        }
+      ]
+    },
+    {
+      "directory": "D:\\chess\\bin\\ply51-verification-sliced-20261119",
+      "pin": {
+        "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\pin.json",
+        "exists": true,
+        "bytes": 798,
+        "modified": "2026-11-19T07:06:38.207341-08:00",
+        "sha256": "6551d20f28d44d85ea1569bf4f01f475245010ef08963039c92a77a62d684af9",
+        "value": {
+          "commit": "e518f3c33b0bd3fbb3fc6f879b4602d6ce278472",
+          "created": "2026-11-19T07:06:38.207341",
+          "files": {
+            "explorer_storage.py": "954fc6a74b0cc9f9723c39825c5d76cbec1141fc981e19d314906b6717215cf7",
+            "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+            "resume_explorer_verification.py": "8e614ba5db19c46be07133ad4b64033ffaea18821c533bfc5f9a49d447b5933f",
+            "verify_book.py": "ee9cfd09f0dab6d1bf39d70748f56a355b11adc2f6241c927d4fedd0d146065c",
+            "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+            "zobrist128.py": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+          },
+          "purpose": "Exact signed-low-key partitioned verification; stage receipts, heartbeat and live disk guard"
+        }
+      },
+      "files": [
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\explorer_storage.py",
+          "exists": true,
+          "bytes": 3431,
+          "modified": "2026-11-18T21:41:19.425561-08:00",
+          "sha256": "954fc6a74b0cc9f9723c39825c5d76cbec1141fc981e19d314906b6717215cf7"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\month_archive.py",
+          "exists": true,
+          "bytes": 8918,
+          "modified": "2026-11-18T21:41:19.439215-08:00",
+          "sha256": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\pin.json",
+          "exists": true,
+          "bytes": 798,
+          "modified": "2026-11-19T07:06:38.207341-08:00",
+          "sha256": "6551d20f28d44d85ea1569bf4f01f475245010ef08963039c92a77a62d684af9"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\resume_explorer_verification.py",
+          "exists": true,
+          "bytes": 9106,
+          "modified": "2026-11-19T07:05:02.945153-08:00",
+          "sha256": "8e614ba5db19c46be07133ad4b64033ffaea18821c533bfc5f9a49d447b5933f"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\verify_book.py",
+          "exists": true,
+          "bytes": 29914,
+          "modified": "2026-11-19T07:05:02.945153-08:00",
+          "sha256": "ee9cfd09f0dab6d1bf39d70748f56a355b11adc2f6241c927d4fedd0d146065c"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\zobrist.py",
+          "exists": true,
+          "bytes": 7129,
+          "modified": "2026-11-18T21:41:19.577326-08:00",
+          "sha256": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-verification-sliced-20261119\\zobrist128.py",
+          "exists": true,
+          "bytes": 18763,
+          "modified": "2026-11-18T21:41:19.579331-08:00",
+          "sha256": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+        }
+      ]
+    },
+    {
+      "directory": "D:\\chess\\bin\\ply51-queue-adaptive-20261116",
+      "pin": {
+        "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\pin.json",
+        "exists": true,
+        "bytes": 648,
+        "modified": "2026-11-16T17:45:06.928820-08:00",
+        "sha256": "1802add3a155140f6f63375aeac8db2a14aca8b7cbbb5b93b233e3e69a57340c",
+        "value": {
+          "compact_pin": "3f57d74470ee7056474c05edfedd95e4a017b3737bc21922372561a9a8819704",
+          "files": {
+            "month_archive.py": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14",
+            "run_month_extraction.py": "9585c5ba4982a5a217c454a27b78e35336f9c307bda4bb2c033f44385a7b7231",
+            "run_ply51_migration.py": "33a98554760a5bffb486fc5970fedf252a842454c0e8f28ae1f5c637fa14b020",
+            "resume_adaptive.py": "21f03e0fafda431b224e07773b94176b500cc0cca09b2e5458a1a0c213388b74"
+          },
+          "python_commit": "b08759355b84daaa45dcc92ce6ebe39f58829928",
+          "base_queue_pin": "7f3f0dfa900550ddc4f0ed800def4dc1c5d12b30ce019196349d4dc6c7697f82"
+        }
+      },
+      "files": [
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\month_archive.py",
+          "exists": true,
+          "bytes": 8251,
+          "modified": "2026-11-16T17:45:06.927850-08:00",
+          "sha256": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\pin.json",
+          "exists": true,
+          "bytes": 648,
+          "modified": "2026-11-16T17:45:06.928820-08:00",
+          "sha256": "1802add3a155140f6f63375aeac8db2a14aca8b7cbbb5b93b233e3e69a57340c"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\resume_adaptive.py",
+          "exists": true,
+          "bytes": 207,
+          "modified": "2026-11-16T17:45:06.927850-08:00",
+          "sha256": "21f03e0fafda431b224e07773b94176b500cc0cca09b2e5458a1a0c213388b74"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\run_month_extraction.py",
+          "exists": true,
+          "bytes": 17986,
+          "modified": "2026-11-16T17:45:06.927850-08:00",
+          "sha256": "9585c5ba4982a5a217c454a27b78e35336f9c307bda4bb2c033f44385a7b7231"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-adaptive-20261116\\run_ply51_migration.py",
+          "exists": true,
+          "bytes": 17609,
+          "modified": "2026-11-16T17:45:06.927850-08:00",
+          "sha256": "33a98554760a5bffb486fc5970fedf252a842454c0e8f28ae1f5c637fa14b020"
+        }
+      ]
+    },
+    {
+      "directory": "D:\\chess\\bin\\ply51-queue-80gb-20261116",
+      "pin": {
+        "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\pin.json",
+        "exists": true,
+        "bytes": 743,
+        "modified": "2026-11-16T18:10:32.081906-08:00",
+        "sha256": "c32d494ba745e079878ab85080aa58a2cbab3ce03a80415f0d85c4dd03bda9cc",
+        "value": {
+          "compact_pin": "3f57d74470ee7056474c05edfedd95e4a017b3737bc21922372561a9a8819704",
+          "files": {
+            "month_archive.py": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14",
+            "run_month_extraction.py": "9585c5ba4982a5a217c454a27b78e35336f9c307bda4bb2c033f44385a7b7231",
+            "run_ply51_migration.py": "44c09ac798056db509498e60dd647f9fdbb9403915abf05d571b8d52a0994a5a",
+            "resume_adaptive.py": "21f03e0fafda431b224e07773b94176b500cc0cca09b2e5458a1a0c213388b74"
+          },
+          "python_commit": "b08759355b84daaa45dcc92ce6ebe39f58829928",
+          "base_queue_pin": "7f3f0dfa900550ddc4f0ed800def4dc1c5d12b30ce019196349d4dc6c7697f82",
+          "previous_release_pin": "1802add3a155140f6f63375aeac8db2a14aca8b7cbbb5b93b233e3e69a57340c"
+        }
+      },
+      "files": [
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\month_archive.py",
+          "exists": true,
+          "bytes": 8251,
+          "modified": "2026-11-16T18:10:32.080903-08:00",
+          "sha256": "699b7063a843c3cfe0167911828ff680e3e6fbc012ad23f40369d60f24f5ac14"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\pin.json",
+          "exists": true,
+          "bytes": 743,
+          "modified": "2026-11-16T18:10:32.081906-08:00",
+          "sha256": "c32d494ba745e079878ab85080aa58a2cbab3ce03a80415f0d85c4dd03bda9cc"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\resume_adaptive.py",
+          "exists": true,
+          "bytes": 207,
+          "modified": "2026-11-16T18:10:32.080903-08:00",
+          "sha256": "21f03e0fafda431b224e07773b94176b500cc0cca09b2e5458a1a0c213388b74"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\run_month_extraction.py",
+          "exists": true,
+          "bytes": 17986,
+          "modified": "2026-11-16T18:10:32.080903-08:00",
+          "sha256": "9585c5ba4982a5a217c454a27b78e35336f9c307bda4bb2c033f44385a7b7231"
+        },
+        {
+          "path": "D:\\chess\\bin\\ply51-queue-80gb-20261116\\run_ply51_migration.py",
+          "exists": true,
+          "bytes": 17609,
+          "modified": "2026-11-16T18:10:32.080903-08:00",
+          "sha256": "44c09ac798056db509498e60dd647f9fdbb9403915abf05d571b8d52a0994a5a"
+        }
+      ]
+    },
+    {
+      "directory": "D:\\chess\\bin\\otb-counts-20261119",
+      "pin": {
+        "path": "D:\\chess\\bin\\otb-counts-20261119\\pin.json",
+        "exists": false
+      },
+      "files": [
+        {
+          "path": "D:\\chess\\bin\\otb-counts-20261119\\files.json",
+          "exists": true,
+          "bytes": 43202,
+          "modified": "2026-11-19T15:29:43.994117-08:00",
+          "sha256": "58e5c88c516af4e1bac122768d00df73f36f241158a9b30cbc35efb04aedbea6"
+        },
+        {
+          "path": "D:\\chess\\bin\\otb-counts-20261119\\otb_counts_replay.dll",
+          "exists": true,
+          "bytes": 916480,
+          "modified": "2026-11-19T15:29:43.945117-08:00",
+          "sha256": "2d517fd8e8a17329fe95f2cc41c13108ed85a22daa0cede1361b03b08c4db14d"
+        }
+      ]
+    }
+  ],
+  "processes": [
+    {
+      "ProcessId": 6720,
+      "ParentProcessId": 1424,
+      "Name": "wslservice.exe",
+      "CreationDate": "/Date(1794849750024)/",
+      "CommandLine": null
+    },
+    {
+      "ProcessId": 37504,
+      "ParentProcessId": 34656,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795100817482)/",
+      "CommandLine": "\"C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe\" -X utf8 -u D:/chess/bin/ply51-verification-sliced-20261119/resume_explorer_verification.py --book E:/chess/position-stats/brc-p51-train-201301-202607-20261115 --months-root F:/chess/explorer_brc_p51_pilot --ops D:/chess/ply51-migration-20261115 --resume-evals D:/chess/bin/ply51-evals-rehearsed-20261115/run_ply51_evals.py"
+    },
+    {
+      "ProcessId": 19752,
+      "ParentProcessId": 37504,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795100817514)/",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -X utf8 -u D:/chess/bin/ply51-verification-sliced-20261119/resume_explorer_verification.py --book E:/chess/position-stats/brc-p51-train-201301-202607-20261115 --months-root F:/chess/explorer_brc_p51_pilot --ops D:/chess/ply51-migration-20261115 --resume-evals D:/chess/bin/ply51-evals-rehearsed-20261115/run_ply51_evals.py"
+    },
+    {
+      "ProcessId": 33952,
+      "ParentProcessId": 19752,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795113412083)/",
+      "CommandLine": "C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe -X utf8 -u D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\run_ply51_evals.py"
+    },
+    {
+      "ProcessId": 25340,
+      "ParentProcessId": 33952,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795113412094)/",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -X utf8 -u D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\run_ply51_evals.py"
+    },
+    {
+      "ProcessId": 16820,
+      "ParentProcessId": 25340,
+      "Name": "explorer-extract.exe",
+      "CreationDate": "/Date(1795125749778)/",
+      "CommandLine": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\explorer-extract.exe evals --book E:\\chess\\position-stats\\brc-p51-train-201301-202607-20261115 --cloud H:\\chess\\evals\\cloud_2026-10-07 --fishnet H:\\chess\\evals\\fishnet --work H:\\chess\\eval-work-p51-20261115 --out D:\\chess\\eval-db-p51-20261115 --threads 12 --mem-gb 55 --below-normal"
+    },
+    {
+      "ProcessId": 17064,
+      "ParentProcessId": 14308,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795140115920)/",
+      "CommandLine": "\"C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe\" -"
+    },
+    {
+      "ProcessId": 29900,
+      "ParentProcessId": 17064,
+      "Name": "python.exe",
+      "CreationDate": "/Date(1795140115944)/",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -"
+    }
+  ],
+  "disks_bytes": [
+    {
+      "Name": "C",
+      "Used": 1766372843520,
+      "Free": 232887582720
+    },
+    {
+      "Name": "D",
+      "Used": 2373494149120,
+      "Free": 1627274174464
+    },
+    {
+      "Name": "E",
+      "Used": 5571006513152,
+      "Free": 2430513623040
+    },
+    {
+      "Name": "F",
+      "Used": 12875792908288,
+      "Free": 3124627505152
+    },
+    {
+      "Name": "G",
+      "Used": 1778017222656,
+      "Free": 221243203584
+    },
+    {
+      "Name": "H",
+      "Used": 2487005413376,
+      "Free": 1513762910208
+    }
+  ],
+  "eval_progress_tail": [
+    "[2026-11-20T00:58:17Z +10214s commit 35.2/145.9 GB] E fishnet_standard_rated_2024_07: 532,392,349 rows, 470,983,420 parsed, 167,503 variants, 0 failed, 437,407,721 shard rows in 1024 files (10.84 GB), 190s (2.81 M rows/s)",
+    "[2026-11-20T01:01:41Z +10417s commit 38.7/145.9 GB] E fishnet_standard_rated_2024_08: 551,548,323 rows, 488,163,827 parsed, 171,740 variants, 0 failed, 453,006,908 shard rows in 1024 files (11.23 GB), 203s (2.71 M rows/s)",
+    "[2026-11-20T01:04:59Z +10616s commit 40.0/145.9 GB] E fishnet_standard_rated_2024_09: 517,711,650 rows, 458,185,324 parsed, 162,520 variants, 0 failed, 425,043,237 shard rows in 1024 files (10.57 GB), 199s (2.60 M rows/s)",
+    "[2026-11-20T01:08:01Z +10797s commit 38.3/145.9 GB] E fishnet_standard_rated_2024_10: 564,794,726 rows, 499,975,835 parsed, 176,312 variants, 0 failed, 463,065,468 shard rows in 1024 files (11.49 GB), 182s (3.11 M rows/s)",
+    "[2026-11-20T01:10:39Z +10956s commit 39.4/145.9 GB] E fishnet_standard_rated_2024_11: 542,110,954 rows, 479,970,511 parsed, 170,135 variants, 0 failed, 444,472,156 shard rows in 1024 files (11.06 GB), 158s (3.42 M rows/s)",
+    "[2026-11-20T01:13:45Z +11142s commit 41.7/145.9 GB] E fishnet_standard_rated_2024_12: 600,600,677 rows, 531,733,872 parsed, 189,900 variants, 0 failed, 491,560,501 shard rows in 1024 files (12.19 GB), 186s (3.23 M rows/s)",
+    "[2026-11-20T01:16:52Z +11329s commit 37.1/145.9 GB] E fishnet_standard_rated_2025_01: 627,353,822 rows, 555,460,910 parsed, 196,112 variants, 0 failed, 512,738,120 shard rows in 1024 files (12.70 GB), 187s (3.36 M rows/s)",
+    "[2026-11-20T01:20:32Z +11548s commit 38.9/145.9 GB] E fishnet_standard_rated_2025_02: 544,907,368 rows, 482,442,970 parsed, 170,635 variants, 0 failed, 445,684,148 shard rows in 1024 files (11.10 GB), 220s (2.48 M rows/s)",
+    "[2026-11-20T01:24:10Z +11766s commit 36.9/145.9 GB] E fishnet_standard_rated_2025_03: 591,224,487 rows, 523,367,167 parsed, 183,949 variants, 0 failed, 482,924,446 shard rows in 1024 files (12.00 GB), 218s (2.72 M rows/s)",
+    "[2026-11-20T01:24:10Z +11766s commit 36.9/145.9 GB] phase C: 512 book buckets in 47 groups of <= 11, 47 groups to do",
+    "[2026-11-20T01:28:24Z +12021s commit 36.4/145.9 GB] C g000 (book buckets [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]): 297 files, 2,787,654,485 child rows, 2,568,683,937 distinct per source, 2,567,482,378 routed in 512 files (40.08 GB), 254s",
+    "[2026-11-20T01:32:14Z +12250s commit 33.2/145.9 GB] C g001 (book buckets [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]): 297 files, 2,787,903,538 child rows, 2,568,795,545 distinct per source, 2,567,639,753 routed in 512 files (40.09 GB), 229s",
+    "[2026-11-20T01:35:49Z +12465s commit 33.4/145.9 GB] C g002 (book buckets [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]): 297 files, 2,787,638,640 child rows, 2,568,737,292 distinct per source, 2,567,525,876 routed in 512 files (40.09 GB), 215s",
+    "[2026-11-20T01:39:46Z +12703s commit 40.4/145.9 GB] C g003 (book buckets [33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43]): 297 files, 2,787,690,341 child rows, 2,568,725,436 distinct per source, 2,567,503,867 routed in 512 files (40.09 GB), 238s",
+    "[2026-11-20T01:43:43Z +12939s commit 34.4/145.9 GB] C g004 (book buckets [44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54]): 297 files, 2,787,864,758 child rows, 2,568,811,381 distinct per source, 2,567,644,520 routed in 512 files (40.08 GB), 236s",
+    "[2026-11-20T01:48:44Z +13241s commit 34.8/145.9 GB] C g005 (book buckets [55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65]): 297 files, 2,787,894,920 child rows, 2,568,803,474 distinct per source, 2,567,487,270 routed in 512 files (40.08 GB), 302s",
+    "[2026-11-20T01:53:11Z +13507s commit 34.7/145.9 GB] C g006 (book buckets [66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76]): 297 files, 2,787,700,613 child rows, 2,568,684,318 distinct per source, 2,567,468,817 routed in 512 files (40.08 GB), 266s",
+    "[2026-11-20T01:57:50Z +13786s commit 34.8/145.9 GB] C g007 (book buckets [77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87]): 297 files, 2,787,684,175 child rows, 2,568,704,091 distinct per source, 2,567,543,209 routed in 512 files (40.08 GB), 279s"
+  ],
+  "manifest_summary": {
+    "primary": 20,
+    "sensitivities": 20,
+    "horizon_sensitivity_recipes": [
+      {
+        "id": "d8a1f342d4e4e411a348",
+        "family": "horizon",
+        "recipe": {
+          "key_bits": 128,
+          "max_ply": 50,
+          "source_plies": 51,
+          "min_games": 1,
+          "eval_weight": 0.75,
+          "prior_strength": 500.0,
+          "own_policy": "historical-1000-1799",
+          "candidate_pool": "brc1800-p50",
+          "engine_nominations": "shared-verified",
+          "epsilon": 0.0005,
+          "share_floor": 0.002,
+          "incumbent_stickiness": 0.0,
+          "lookahead_floor": 0,
+          "weak_min_games": 20.0,
+          "grid_cap": 256,
+          "match_inflate": 1.6,
+          "verification": {
+            "mode": "quality",
+            "nodes": 5000000,
+            "deep_nodes": 20000000,
+            "score_band": 0.01,
+            "independent_final_cloud": true,
+            "no_quality_downgrade": true
+          },
+          "colour": "white",
+          "gate": "stricter",
+          "budget": 1000,
+          "mode": "independent",
+          "slice_prior": 0.5183137990703003,
+          "robustness_floor": 0.05,
+          "max_score_loss": 0.06,
+          "opponent_policy": {
+            "name": "otb-ensemble-v1",
+            "model": "maia3-79m-position",
+            "ratings": [
+              2600,
+              2600
+            ],
+            "temperature": 1.35,
+            "empirical_strength": 30.0,
+            "maia_strength": 3.0,
+            "otb_strength": 10.0,
+            "backup_discount": 0.1,
+            "broad_discount": 0.01
+          },
+          "solver": "price+polish"
+        },
+        "depends_on": [
+          "8165be91cd4e739c9569"
+        ],
+        "state": "not-started"
+      },
+      {
+        "id": "2985c6820e87874475e8",
+        "family": "horizon",
+        "recipe": {
+          "key_bits": 128,
+          "max_ply": 50,
+          "source_plies": 51,
+          "min_games": 1,
+          "eval_weight": 0.75,
+          "prior_strength": 500.0,
+          "own_policy": "historical-1000-1799",
+          "candidate_pool": "brc1800-p50",
+          "engine_nominations": "shared-verified",
+          "epsilon": 0.0005,
+          "share_floor": 0.002,
+          "incumbent_stickiness": 0.0,
+          "lookahead_floor": 0,
+          "weak_min_games": 20.0,
+          "grid_cap": 256,
+          "match_inflate": 1.6,
+          "verification": {
+            "mode": "quality",
+            "nodes": 5000000,
+            "deep_nodes": 20000000,
+            "score_band": 0.01,
+            "independent_final_cloud": true,
+            "no_quality_downgrade": true
+          },
+          "colour": "white",
+          "gate": "permissive",
+          "budget": 1000,
+          "mode": "independent",
+          "slice_prior": 0.5183137990703003,
+          "robustness_floor": 0.11,
+          "max_score_loss": 0.095,
+          "opponent_policy": {
+            "name": "otb-ensemble-v1",
+            "model": "maia3-79m-position",
+            "ratings": [
+              2600,
+              2600
+            ],
+            "temperature": 1.35,
+            "empirical_strength": 30.0,
+            "maia_strength": 3.0,
+            "otb_strength": 10.0,
+            "backup_discount": 0.1,
+            "broad_discount": 0.01
+          },
+          "solver": "price+polish"
+        },
+        "depends_on": [
+          "343f0a45d3db3c60a289"
+        ],
+        "state": "not-started"
+      },
+      {
+        "id": "4221d2f43a7d3416f4bb",
+        "family": "horizon",
+        "recipe": {
+          "key_bits": 128,
+          "max_ply": 50,
+          "source_plies": 51,
+          "min_games": 1,
+          "eval_weight": 0.75,
+          "prior_strength": 500.0,
+          "own_policy": "historical-1000-1799",
+          "candidate_pool": "brc1800-p50",
+          "engine_nominations": "shared-verified",
+          "epsilon": 0.0005,
+          "share_floor": 0.002,
+          "incumbent_stickiness": 0.0,
+          "lookahead_floor": 0,
+          "weak_min_games": 20.0,
+          "grid_cap": 256,
+          "match_inflate": 1.6,
+          "verification": {
+            "mode": "quality",
+            "nodes": 5000000,
+            "deep_nodes": 20000000,
+            "score_band": 0.01,
+            "independent_final_cloud": true,
+            "no_quality_downgrade": true
+          },
+          "colour": "black",
+          "gate": "stricter",
+          "budget": 1000,
+          "mode": "independent",
+          "slice_prior": 0.5195669627673518,
+          "robustness_floor": 0.05,
+          "max_score_loss": 0.06,
+          "opponent_policy": {
+            "name": "otb-ensemble-v1",
+            "model": "maia3-79m-position",
+            "ratings": [
+              2600,
+              2600
+            ],
+            "temperature": 1.35,
+            "empirical_strength": 30.0,
+            "maia_strength": 3.0,
+            "otb_strength": 10.0,
+            "backup_discount": 0.1,
+            "broad_discount": 0.01
+          },
+          "solver": "dp+match-distinct"
+        },
+        "depends_on": [
+          "2df21c194beed72068c5"
+        ],
+        "state": "not-started"
+      },
+      {
+        "id": "a77b5b91d22c43959847",
+        "family": "horizon",
+        "recipe": {
+          "key_bits": 128,
+          "max_ply": 50,
+          "source_plies": 51,
+          "min_games": 1,
+          "eval_weight": 0.75,
+          "prior_strength": 500.0,
+          "own_policy": "historical-1000-1799",
+          "candidate_pool": "brc1800-p50",
+          "engine_nominations": "shared-verified",
+          "epsilon": 0.0005,
+          "share_floor": 0.002,
+          "incumbent_stickiness": 0.0,
+          "lookahead_floor": 0,
+          "weak_min_games": 20.0,
+          "grid_cap": 256,
+          "match_inflate": 1.6,
+          "verification": {
+            "mode": "quality",
+            "nodes": 5000000,
+            "deep_nodes": 20000000,
+            "score_band": 0.01,
+            "independent_final_cloud": true,
+            "no_quality_downgrade": true
+          },
+          "colour": "black",
+          "gate": "permissive",
+          "budget": 1000,
+          "mode": "independent",
+          "slice_prior": 0.5195669627673518,
+          "robustness_floor": 0.075,
+          "max_score_loss": 0.095,
+          "opponent_policy": {
+            "name": "otb-ensemble-v1",
+            "model": "maia3-79m-position",
+            "ratings": [
+              2600,
+              2600
+            ],
+            "temperature": 1.35,
+            "empirical_strength": 30.0,
+            "maia_strength": 3.0,
+            "otb_strength": 10.0,
+            "backup_discount": 0.1,
+            "broad_discount": 0.01
+          },
+          "solver": "dp+match-distinct"
+        },
+        "depends_on": [
+          "2211bbbca1892e1b3a80"
+        ],
+        "state": "not-started"
+      }
+    ],
+    "extension_variants": 24,
+    "evaluation": {
+      "backend": "maia3-79m-position",
+      "primary_trajectories": 4096,
+      "primary_seeds": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "finalist_trajectories": 32768,
+      "finalist_seeds": [
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108
+      ],
+      "minimum_horizon": 50,
+      "extension_tail": 10,
+      "finalist_extra_horizon": 20,
+      "recall": {
+        "half_life_days": [
+          2,
+          5,
+          10
+        ],
+        "multipliers": [
+          1.6,
+          2.0,
+          2.4
+        ],
+        "max_interval_days": 365,
+        "cards_per_color_day": 30,
+        "finalist_cards": [
+          15,
+          60
+        ],
+        "schedules": 8,
+        "days": [
+          30,
+          90,
+          240
+        ]
+      }
+    }
+  },
+  "historical_book_receipts": [
+    {
+      "path": "D:\\chess\\rare-verify-v1\\rs\\white-cp60\\final.json",
+      "exists": true,
+      "bytes": 2039,
+      "modified": "2026-11-13T16:35:49.037966-08:00",
+      "sha256": "cafeeea33fe62272f6f3fd41cceb10891071d0b4b8d830d3a0447ce2f2472d92"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\rs\\white-cp100\\final.json",
+      "exists": true,
+      "bytes": 1740,
+      "modified": "2026-11-14T03:35:35.267364-08:00",
+      "sha256": "9f34da2fa0fd492e97966f4adb1c291226efb10db7a7e3b24bc5cd8b82a0dc67"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\rs\\black-cp60\\final.json",
+      "exists": true,
+      "bytes": 1569,
+      "modified": "2026-11-13T09:45:41.787146-08:00",
+      "sha256": "238acc70c0eb1882b9f021b5fe64cd88f4349ed260d1fa943a5f92aeaefa6d04"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\rs\\black-cp100\\final.json",
+      "exists": true,
+      "bytes": 2216,
+      "modified": "2026-11-14T09:17:32.034866-08:00",
+      "sha256": "10512623650dc7a4ca94ca00c6da14c51871e799d76da70898f76e6711b1b3f2"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\lf\\white-cp60\\final.json",
+      "exists": true,
+      "bytes": 2039,
+      "modified": "2026-11-14T18:19:11.568085-08:00",
+      "sha256": "620f77e42e7e43638b95e7db88ae464a2336fd8e96088c0fc52ed57e51077ef9"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\lf\\white-cp100\\final.json",
+      "exists": true,
+      "bytes": 1354,
+      "modified": "2026-11-14T21:33:10.014969-08:00",
+      "sha256": "5902cc6bc5310c00f3596052867d34b8397f31d4915fe24fa0185bf8082cf011"
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\lf\\black-cp60\\final.json",
+      "exists": false
+    },
+    {
+      "path": "D:\\chess\\rare-verify-v1\\lf\\black-cp100\\final.json",
+      "exists": true,
+      "bytes": 1194,
+      "modified": "2026-11-14T23:54:30.887903-08:00",
+      "sha256": "298ad7e0646be849776dff4b6eb4558a0ac2b38235f185d4004ca23755e1a7cc"
+    }
+  ],
+  "paused_historical_automation": {
+    "path": "C:\\Users\\David\\.codex\\automations\\finish-the-black-0-30-pilot\\automation.toml",
+    "exists": true,
+    "bytes": 787,
+    "modified": "2026-11-15T09:01:48.739467-08:00",
+    "sha256": "4881533008e50824a2d3f5aff5bff44e2b4258aa302ae4b58cde906a457d02fb",
+    "text": "version = 1\nid = \"finish-the-black-0-30-pilot\"\nkind = \"heartbeat\"\nname = \"Finish the Black 0.30 pilot\"\nprompt = \"Follow the authorized Black 0.30 pilot through its final comparison after the migration has released the heavy-work slot. Inspect D:/chess/rare-verify-v1/black-030-horizon-v2/status.json and stage logs, diagnose interruptions and resume the pinned worker when appropriate. Respect subsequent priority and stop instructions. Report closed books, exposure, Stockfish findings and paired scores, then remove this follow-up.\"\nmodel_prompt_sha256 = \"489e1c1145a511c5b7b43d8e9d64d8678aec0739db0e0072ceee5a692fc91511\"\nstatus = \"PAUSED\"\nrrule = \"FREQ=HOURLY;INTERVAL=4\"\ntarget_thread_id = \"01a1dc80-dc4b-7fc1-846d-84142d0655ba\"\ncreated_at = 1794721083300\nupdated_at = 1794762108738\n"
+  },
+  "snapshot_limits": [
+    "No bulk multi-terabyte source rehash was performed for this handoff. Use pinned acceptance receipts.",
+    "All-branch commit history includes other sessions; see prose for authored scope.",
+    "Process IDs and free space are observations, not resume authority.",
+    "Do not mistake old launcher status or a bare _DONE marker for accepted publication."
+  ],
+  "review_findings": [
+    {
+      "kind": "plan_code_discrepancy",
+      "file": "python/sweep/spec.py",
+      "line": 133,
+      "finding": "Horizon sensitivity uses budget 1000 and the 1000 anchor; approved plan line 159 requires 2000."
+    },
+    {
+      "kind": "legacy_cache_publication_issue",
+      "file": "python/convertibility_eval.py",
+      "lines": [
+        123,
+        185
+      ],
+      "finding": "part-*.npz reader glob includes writer temporary part-*.tmp.npz files."
+    },
+    {
+      "kind": "safety_contract_to_review",
+      "file": "python/sweep/spec.py",
+      "finding": "Primary fixed lookahead_floor is 0; corrected optional lookahead implementation is not enabled."
+    }
+  ]
+}
