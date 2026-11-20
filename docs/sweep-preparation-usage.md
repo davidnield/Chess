@@ -24,11 +24,11 @@ The manifest preserves the builder's current lookahead default (off). The integr
 
 From this worktree's python directory:
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-19-maia-v2.json
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-19-maia-v3.json
 
 This refuses to overwrite a different manifest. Repeating the same recipe is harmless. The v2 manifest corrects the four horizon comparisons to independent 2,000-position books paired with their matching ply-30 masters. Weight/policy sensitivities remain at 1,000. The older Maia manifest is archived unchanged; its incorrect horizon design now fails readiness validation. No old output directory should be relabelled or resumed as a corrected horizon arm.
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-19-maia-v2.json --workspace D:/chess/sweep-inputs
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-19-maia-v3.json --workspace D:/chess/sweep-inputs
 
 With no source bindings this prints a waiting-for-publication report and starts nothing.
 

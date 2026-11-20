@@ -409,6 +409,17 @@ no-ops if unconfigured — pipelines run identically without it.
 
 ## Isolated sweep execution preparation (2026-11-19)
 
+Review fixes (2026-11-19 evening, `docs/claude-review-fixes-plan-2026-11-19.md`):
+- **Black is DP + match-distinct + polish at match-inflate 1.5**, the validated recipe.
+- **Quality evidence requests come from the chosen book's policy reach, never the whole
+  graph's optimistic reach** (that scan would request millions of parents). They are
+  thresholded, ranked and capped per round (`verification.min_reach` / `max_parents`), and the
+  meta accounts for what was left.
+- **The relative gate measures from the parent's own stored score.** A parent above every
+  child therefore empties the menu, and `parent-above-children` must request it.
+- **`sweep.bindings.check_arm` holds bound pools and policies to the recipe's labels and
+  depth.** Do not bind inputs by convention.
+
 The maintained experimental entrypoints are `python -m sweep.prepare`, `sweep.coordinator`,
 `sweep.verify`, and `sweep.extend` from the python directory. Read
 `docs/sweep-preparation-progress.md` and `docs/sweep-preparation-usage.md` before executing.
@@ -425,7 +436,7 @@ Extensions have no four-move/depth or nonzero reply-frequency cap. Actual histor
 repetition; full keys deduplicate memory cost. David approved remaining-maximum as the
 default on November 19: reduce maximum remaining unbooked risk, so an earlier covered move
 cannot hide an equally difficult later move. Keep covered-maximum as the explicit control.
-The current manifest is docs/sweep-manifest-2026-11-19-maia.json; its extension_comparison queue
+The current manifest is docs/sweep-manifest-2026-11-19-maia-v3.json; its extension_comparison queue
 crosses both metrics, all three thresholds and four 2,000-position anchors (24 variants).
 Separate checkpoints by metric/threshold; share frozen engine/policy evidence. Wait for the
 listed pilot/input prerequisites. See the progress log for production cost limitations.
@@ -462,7 +473,7 @@ families before OTB training publication. See the fourth-pass progress entry.
 November 19 14:05 decision supersedes pending Allie evaluator selection: David chose
 Maia-3 79M position-only for rollouts and kept the existing Maia construction
 ensemble. Further Allie investigations are deferred, not sweep prerequisites.
-The current manifest is docs/sweep-manifest-2026-11-19-maia.json. Freeze production
+The current manifest is docs/sweep-manifest-2026-11-19-maia-v3.json. Freeze production
 runtime/population bindings before releasing evaluation; the model choice alone
 is not completed integration. The full Cloud/Fishnet eval build started at 14:02
 with child shards on E: after the capacity pilot passed. F: fallback was not needed.
