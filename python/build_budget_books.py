@@ -617,6 +617,15 @@ def main() -> int:
                     help="quality separates inclusion from evidence review; stored scores select provisionally")
     ap.add_argument("--verification-score-band", type=float, default=.01,
                     help="Expected-score distance to a gate requiring deeper independent review")
+    ap.add_argument("--quality-min-reach", type=float, default=.0005,
+                    help="quality: request evidence only at positions the chosen book reaches with at "
+                         "least this policy reach (booked positions and where it stops)")
+    ap.add_argument("--quality-max-parents", type=int, default=2000,
+                    help="quality: at most this many parents per round, the most reached first; the rest "
+                         "are reported as deferred and requested again next round")
+    ap.add_argument("--quality-rare-trust", type=int, default=20,
+                    help="quality: a reference child with fewer games and no 5M+ verification that cuts "
+                         "a rival is requested (unverified-rare-reference)")
     ap.add_argument("--rare-trust-floor", type=int,
                     help="Legacy evidence-count threshold, independent of --min-games")
     ap.add_argument("--rare-verification", action="store_true",
@@ -656,6 +665,12 @@ def main() -> int:
         a.robustness_floor = bc.ROBUSTNESS_FLOOR if legacy else bc.SCORE_ABSOLUTE_TOLERANCE[a.perspective]
     if a.verification_policy == "quality" and legacy:
         ap.error("quality verification requires the expected-score policy")
+    if not 0 <= a.quality_min_reach <= 1 or a.quality_max_parents < 1 or a.quality_rare_trust < 1:
+        ap.error("--quality-min-reach must be a probability; --quality-max-parents and "
+                 "--quality-rare-trust must be positive")
+    quality_selection = (dict(scope="book-policy-reach", min_reach=a.quality_min_reach,
+                              max_parents=a.quality_max_parents, rare_trust=a.quality_rare_trust)
+                         if a.verification_policy == "quality" else None)
     if a.opponent_policy_config and (a.opponent_prior or a.opponent_pseudogames or a.uncut_own_moves):
         ap.error("selective policy uses uncut min-games-1 pools, with no second opponent overlay")
     policy_config_sha = (hashlib.sha256(Path(a.opponent_policy_config).read_bytes()).hexdigest()
@@ -748,7 +763,9 @@ def main() -> int:
             if previous.get("allowed_book_sha256") != allowed_sha:
                 ap.error("Existing output uses another fixed-prescription parent")
             if (previous.get("verification_policy", "legacy-rare") != a.verification_policy
-                    or previous.get("verification_score_band", .01) != a.verification_score_band):
+                    or previous.get("verification_score_band", .01) != a.verification_score_band
+                    or (a.verification_policy == "quality"
+                        and previous.get("quality_selection") != quality_selection)):
                 ap.error("Existing output uses another verification policy")
             if (previous.get("max_score_loss") != a.max_score_loss
                     or previous.get("max_eval_loss") != a.max_eval_loss
@@ -801,6 +818,17 @@ def main() -> int:
         admit = GateAdmit(src_all, our_white, slice_prior, max_eval_loss=a.max_eval_loss,
                           score_lookup=keys.scores if keys else None, **gate_settings)
     pool_floor = _pool_min_games(stats)
+    _pm = Path(str(stats) + ".meta.json")
+    pool_cap = json.loads(_pm.read_text()).get("max_ply") if _pm.exists() else None
+    if pool_cap is not None and a.max_ply > int(pool_cap):
+        # a pool capped at C holds moves through ply C: decisions deeper than C have no
+        # candidates, so a deeper --max-ply builds a ply-C book under another label. Refused for
+        # full-key pools; the historical 64-bit recipes (--max-ply 40 over ply-30 pools) still run.
+        if keys:
+            log(f"FATAL: --max-ply {a.max_ply} is above the pool's recorded cap {pool_cap}")
+            return 1
+        log(f"WARNING: --max-ply {a.max_ply} is above the pool's recorded cap {pool_cap}; "
+            f"decisions deeper than {pool_cap} have no candidates")
     if a.min_games is None:
         a.min_games = pool_floor if pool_floor is not None else 50
         log(f"min-games {a.min_games} ({'the pool' + chr(39) + 's floor' if pool_floor is not None else 'default, pool meta has none'})")
@@ -980,6 +1008,24 @@ def main() -> int:
                        == ("w" if our_white else "b"))
                        .select("parent_hash","parent_epd","move_san","child_hash")
                      if a.verification_policy == "quality" else None)
+    if quality_edges is not None:
+        quality_edges = (quality_edges.join(edf.select("parent_hash", "move_san", "total"),
+                                            on=["parent_hash", "move_san"], how="left"))
+    model_only = None
+    if "additional_reply" in edf.columns:
+        # Opponent replies the policy adds with no observation in the outcome pool. Without a
+        # child eval their value is a fallback, not evidence: report how much policy mass that is.
+        mo = edf.filter(pl.col("additional_reply").fill_null(False))
+        if mo.height:
+            ch = mo["child_hash"].cast(pl.Int64).fill_null(0).to_numpy()
+            has = np.isin(ch, ek) & mo["child_hash"].is_not_null().to_numpy()
+            share = mo["reach_share"].cast(pl.Float64).fill_null(0.0).to_numpy()
+            model_only = dict(edges=int(mo.height), edges_without_eval=int((~has).sum()),
+                              share_sum=float(share.sum()), share_sum_without_eval=float(share[~has].sum()))
+        else:
+            model_only = dict(edges=0, edges_without_eval=0, share_sum=0.0, share_sum_without_eval=0.0)
+        log(f"  model-only opponent replies: {model_only['edges']:,} edges, "
+            f"{model_only['edges_without_eval']:,} without a child eval")
     fi = budget_rs.frame_inputs(edf, rep_moves=rep_moves, engine_moves=engine_moves,
                                 excluded=excluded, verified=verified_at, strict_source=True,
                                 aux_frame=aux_frame, keys=keys)
@@ -1050,19 +1096,35 @@ def main() -> int:
                             slice_prior=slice_prior, our_white=our_white,
                             strict_source=True, crack_at_parents=True)
     quality_frontier = None
-    if quality_edges is not None:
-        from sweep.candidates import requests as candidate_requests
+    quality_parents = (set(quality_edges["parent_hash"].unique().to_list())
+                       if quality_edges is not None else set())
+    quality_verified = (pl.read_parquet(proposal_input) if proposal_input and quality_edges is not None
+                        else None)
+
+    def quality_for(booked, out):
+        """The chosen book's evidence requests (sweep.candidates): from its policy reach, not the
+        whole graph's optimistic reach, ranked and capped per round (review 2026-11-19)."""
+        from sweep.candidates import requests as candidate_requests, select as select_requests
         from sweep.stages import atomic_json, file_sha
-        qrows = candidate_requests(quality_edges,g.reach,keys.scores if keys else
-                                  lambda h: lookup_evals(h,mm_hash,mm_cp),
-                                  white=our_white,floor=absolute_score_floor,limit=a.max_score_loss,
-                                  verified_frame=pl.read_parquet(proposal_input) if proposal_input else None,
-                                  overrides=verified_cp,band=a.verification_score_band)
-        if keys: qrows=keys.records(qrows,["position_hash"])
-        qpath=Path(str(a.out_prefix)+".quality-frontier.json")
-        atomic_json(qpath,qrows)
-        quality_frontier=dict(file=str(qpath.resolve()),sha256=file_sha(qpath),parents=len(qrows))
-        del quality_edges
+        preach = {h: r for h, r in budget_rs.policy_reach_rs(rsg, rs_sans, booked).items()
+                  if h in quality_parents}
+        qrows = candidate_requests(quality_edges, preach, keys.scores if keys else
+                                   lambda h: lookup_evals(h, mm_hash, mm_cp),
+                                   white=our_white, floor=absolute_score_floor, limit=a.max_score_loss,
+                                   verified_frame=quality_verified, overrides=verified_cp,
+                                   band=a.verification_score_band, rare_trust=a.quality_rare_trust,
+                                   min_reach=a.quality_min_reach)
+        qrows, summary = select_requests(qrows, preach, min_reach=a.quality_min_reach,
+                                         max_parents=a.quality_max_parents,
+                                         graph_parents=len(quality_parents))
+        if keys: qrows = keys.records(qrows, ["position_hash"])
+        qpath = (Path(str(a.out_prefix) + ".quality-frontier.json") if len(budgets) == 1
+                 else Path(str(out) + ".quality-frontier.json"))
+        atomic_json(qpath, qrows)
+        log(f"  quality requests: {summary['requested']:,} parents (reach {summary['requested_reach']:.3f}), "
+            f"{summary['deferred']:,} deferred, {summary['below_threshold_positions']:,} positions below "
+            f"reach {a.quality_min_reach:g} not examined; reasons {summary['reasons']}")
+        return dict(file=str(qpath.resolve()), sha256=file_sha(qpath), parents=len(qrows), **summary)
     del fi, ek, ev
     budget_rs.LAST_TIMING.update(convert_in=t2 - t1, rust=t3 - t2, convert_out=time.time() - t3)
     log(f"  {len(g.our):,} our nodes, {len(g.opp):,} opponent nodes "
@@ -1334,6 +1396,8 @@ def main() -> int:
             res = {**res, "root_value_realized": (1.0 - ra) + ra * rv,
                    "realized": {**res["realized"], g.root: (1.0 - ra) + ra * res["realized"][g.root]}
                    if g.root in res["realized"] else res["realized"]}
+        if quality_edges is not None:
+            quality_frontier = quality_for(res["booked"], out)
         rows = []
         lexc = g.meta.get("loss_exceptions")
         flip = (lambda v: v) if our_white else (lambda v: None if v is None
@@ -1453,6 +1517,8 @@ def main() -> int:
             "opponent_policy_config_sha256": policy_config_sha,
             "allowed_book": a.allowed_book, "allowed_book_sha256": allowed_sha,
             "quality_frontier": quality_frontier,
+            "quality_selection": quality_selection,
+            "model_only_replies": model_only,
             "verification_policy": a.verification_policy,
             "verification_score_band": a.verification_score_band,
             "objective_components": {

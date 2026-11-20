@@ -30,14 +30,14 @@ The main checkout `C:/Users/David/Documents/Chess` is on `review-fixes` and cont
 
 The November 19 fixes are already implemented: commit `0a3ca669b77449244549c2515961da970621b8f5` corrects the horizon comparison to independent B=2,000 and makes legacy Maia cache shard publication atomic/retry-safe. The follow-up report/evidence are committed in `2ad11c8`. Focused verification passed **25/25 tests, no skips**, including native full-key reuse. See `docs/repertoire-review-fixes-verification-2026-11-19.json`; do not repeat those changes from an older checkout. Broader model/runtime cache identity and production safety semantics remain review topics, not claims resolved by those two fixes.
 
-Current manifest:
+Current manifest (updated 20 November by Claude, after merging `claude/review-fixes-20261119`):
 
 ```text
-docs/sweep-manifest-2026-11-19-maia-v2.json
-SHA-256 d65c01d4c4170e18579bda184bd6c76ce28e240e6a3fa7a3ecc56ec06ead0444
+docs/sweep-manifest-2026-11-19-maia-v3.json
+SHA-256 1c80733ee1d78dd8423b763656bb3b2b9a557a7ee159dd850f79cb67733c50f0
 ```
 
-The previous `...-maia.json` remains unchanged as history; current semantic validation rejects its incorrect horizon recipes. Do not relabel old output directories as v2 arms.
+v3 adds the Black polish and the quality-request scope settings, so every arm ID changed. v2 (`...-maia-v2.json`, SHA-256 `d65c01d4…`) and the earlier `...-maia.json` remain unchanged as history, and current validation rejects both. Do not relabel old output directories as v3 arms.
 
 Pinned running-code generation, to reuse unchanged:
 

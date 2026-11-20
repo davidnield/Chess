@@ -6,7 +6,7 @@ parent or a child of its edges). A full pool_from_book build of the weak bands i
 the wrong tool: the 1000-1799 Blitz/Rapid/Classical population is ~64M edges per
 bucket and projected at ~200 h, almost all of it at positions 1800+ games never
 reach. This instead keeps only the weak slices' rows whose parent is a main-pool
-position, summed over event, elo band and ply:
+position, summed over event, elo band and ply up to --max-ply:
 
     out: parent_hash, move_san, child_hash, total     (no min-games floor; the
                                                        consumer applies its own)
@@ -15,9 +15,14 @@ One pass per bucket (the book and the key set are both bucketed by parent hash),
 resumable: bucket outputs are written atomically and skipped if present, and the
 final concatenation is written last.
 
+--max-ply C is required (review of 2026-11-19): a ply-keyed book holds every ply it was
+extracted to, so without a cap a "ply-30" weak table summed observations from plies 31-51 too.
+This tool keys rows by the 64-bit hash alone, so it refuses a full-key (128-bit) book or main
+pool: build the weak population with pool_from_book.py (recipe weak1000-1799-p<C>) instead.
+
     .venv/Scripts/python.exe python/build_weak_edges.py \\
         --pool E:/chess/position-stats/position_stats_pooled_ge1800_2013_2026_brc.parquet \\
-        --bands 1000 1200 1400 1600 --out E:/chess/position-stats/weak_edges_b1000_1800_on_ge1800.parquet \\
+        --book <64-bit explorer book> --max-ply 30 --bands 1000 1200 1400 1600 --out E:/chess/position-stats/weak_edges_b1000_1800_on_ge1800.parquet \\
         --work D:/chess/pool_work/weak_edges_b1000_1800
 """
 from __future__ import annotations
@@ -32,7 +37,6 @@ from pathlib import Path
 import duckdb
 import polars as pl
 
-BOOK = Path("E:/chess/position-stats/explorer_banded_2013_2026")
 EVENTS = ("Blitz", "Rapid", "Classical")
 
 
@@ -44,7 +48,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--pool", required=True, help="Main pool: its positions are the keys.")
-    ap.add_argument("--book", default=str(BOOK))
+    ap.add_argument("--book", required=True, help="a 64-bit ply-keyed explorer book (book-v1)")
+    ap.add_argument("--max-ply", type=int, required=True,
+                    help="keep move rows with ply <= this (the consuming builder's pool cap)")
     ap.add_argument("--events", nargs="+", default=list(EVENTS))
     ap.add_argument("--bands", nargs="+", type=int, required=True)
     ap.add_argument("--out", required=True)
@@ -57,7 +63,15 @@ def main() -> int:
 
     work = Path(a.work)
     (work / "b").mkdir(parents=True, exist_ok=True)
-    params = {"pool": a.pool, "book": a.book, "events": a.events, "bands": a.bands}
+    if a.max_ply < 1:
+        ap.error("--max-ply must be positive")
+    lock = Path(a.book) / "_merge_params.json"
+    book_wide = lock.exists() and json.loads(lock.read_text()).get("input_params", {}).get("key_bits") == 128
+    pool_meta = Path(a.pool + ".meta.json")
+    pool_wide = pool_meta.exists() and json.loads(pool_meta.read_text()).get("key_bits") == 128
+    if book_wide or pool_wide:
+        ap.error("this tool joins on the 64-bit hash only; use pool_from_book.py for full-key inputs")
+    params = {"pool": a.pool, "book": a.book, "events": a.events, "bands": a.bands, "max_ply": a.max_ply}
     pf = work / "_params.json"
     if pf.exists() and json.loads(pf.read_text()) != params:
         log(f"FATAL: {work} was started with other settings: {pf.read_text()}")
@@ -100,6 +114,7 @@ def main() -> int:
               FROM {relation(files)} s
               SEMI JOIN (SELECT h FROM read_parquet('{keys.as_posix()}') WHERE bkt = {i}) k
                 ON k.h = s.parent_hash
+              WHERE s.ply <= {a.max_ply}
               GROUP BY 1, 2, 3
             ) TO '{out.as_posix()}.tmp' (FORMAT parquet, COMPRESSION zstd)""")
         Path(f"{out}.tmp").replace(out)

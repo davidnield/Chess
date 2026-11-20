@@ -20,18 +20,54 @@ class Epochs(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);m=manifest()
             pilot=next(a for a in m["primary"] if a["id"]==m["pilot"])
+            from sweep.spec import POLICY, pool_recipes
+            pools={r["id"]:r for r in pool_recipes()}
             inputs={k:str(root/k) for k in ("source","stats","aux","weak","opponent_overlay")}
             for v in inputs.values(): Path(v).write_text("fixture",encoding="utf8")
             lookup=root/"lookup";lookup.mkdir();atomic_json(lookup/"lookup.json",{})
-            atomic_json(inputs["stats"]+".meta.json",dict(eval_lookup128=str(lookup)))
-            atomic_json(inputs["opponent_overlay"]+".json",{})
+            def pool_meta(path,pool_id,**extra):
+                r=pools[pool_id]
+                atomic_json(path+".meta.json",dict(population=dict(events=r["events"],elo_bands=r["elo_bands"]),
+                            max_ply=r["max_ply"],min_games=r["min_games"],key_bits=r["key_bits"],**extra))
+            pool_meta(inputs["stats"],"brc1800-p30",eval_lookup128=str(lookup))
+            pool_meta(inputs["weak"],"weak1000-1799-p30")
+            atomic_json(inputs["opponent_overlay"]+".json",dict(schema=3,policy_recipe=POLICY,source_pool=inputs["stats"]))
             engine=root/"engine";engine.write_bytes(b"fixture")
-            paths=[*map(Path,inputs.values()),Path(inputs["stats"]+".meta.json"),
+            paths=[*map(Path,inputs.values()),Path(inputs["stats"]+".meta.json"),Path(inputs["weak"]+".meta.json"),
                    Path(inputs["opponent_overlay"]+".json"),lookup/"lookup.json",engine,Path(sys.executable)]
             pins=[dict(path=str(p),sha256=file_sha(p)) for p in paths]
             cfg=dict(schema=1,arms=[dict(arm=pilot,inputs=inputs)],artifacts=pins)
             with patch.object(ec,"SF",engine):
                 self.assertEqual(preflight(cfg)[0]["arm"]["id"],m["pilot"])
+                # the bound data must be what the recipe names (review 2026-11-19, finding 4)
+                wrong=dict(inputs,stats=str(root/"stats50"));Path(wrong["stats"]).write_text("x")
+                pool_meta(wrong["stats"],"brc1800-p50",eval_lookup128=str(lookup))
+                with self.assertRaisesRegex(ValueError,"is not brc1800-p30.*max_ply 50"):
+                    preflight(dict(cfg,arms=[dict(arm=pilot,inputs=wrong)]))
+                weak=dict(inputs,weak=str(root/"weakbrc"));Path(weak["weak"]).write_text("x")
+                pool_meta(weak["weak"],"brc1800-p30")
+                with self.assertRaisesRegex(ValueError,"own post-book policy"):
+                    preflight(dict(cfg,arms=[dict(arm=pilot,inputs=weak)]))
+                other_policy=dict(POLICY,temperature=1.)
+                bad=dict(inputs,opponent_overlay=str(root/"ov2"));Path(bad["opponent_overlay"]).write_text("x")
+                atomic_json(bad["opponent_overlay"]+".json",dict(schema=3,policy_recipe=other_policy,source_pool=inputs["stats"]))
+                with self.assertRaisesRegex(ValueError,"not a frozen ensemble of this recipe"):
+                    preflight(dict(cfg,arms=[dict(arm=pilot,inputs=bad)]))
+                horizon=next(a for a in m["sensitivities"] if a["family"]=="horizon"
+                             and a["recipe"]["colour"]=="black" and a["recipe"]["gate"]=="stricter")
+                with self.assertRaisesRegex(ValueError,"is not brc1800-p50"):
+                    from sweep.bindings import check_arm
+                    check_arm(horizon["recipe"],inputs)  # the ply-30 pool under a horizon-50 label
+                controls=[a for a in m["sensitivities"] if a["family"]=="policy"
+                          and a["recipe"]["colour"]=="black" and a["recipe"]["gate"]=="stricter"]
+                ctl=dict(inputs,opponent_overlay=str(root/"ctl"));Path(ctl["opponent_overlay"]).write_text("x")
+                atomic_json(ctl["opponent_overlay"]+".json",dict(schema=2,source_pool=inputs["stats"],reply_pool=inputs["stats"]))
+                check_arm(next(a for a in controls if a["recipe"]["opponent_policy"]["name"].startswith("brc1800"))["recipe"],ctl)
+                with self.assertRaisesRegex(ValueError,"brc2200-maia30 reply pool is not brc2200-p30"):
+                    check_arm(next(a for a in controls if a["recipe"]["opponent_policy"]["name"].startswith("brc2200"))["recipe"],ctl)
+                atomic_json(ctl["opponent_overlay"]+".json",dict(schema=2,source_pool=inputs["stats"]))
+                with self.assertRaisesRegex(ValueError,"does not declare its reply_pool"):
+                    check_arm(controls[0]["recipe"],ctl)
                 with self.assertRaisesRegex(ValueError,"not all bound inputs"):
                     preflight(dict(cfg,artifacts=pins[:-1]))
                 other=next(a for a in m["primary"] if a["recipe"]["colour"]=="white" and a["recipe"]["budget"]==2000)

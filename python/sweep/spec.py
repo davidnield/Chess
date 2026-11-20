@@ -18,10 +18,14 @@ FIXED = {"key_bits": 128, "max_ply": 30, "source_plies": 51, "min_games": 1,
          "eval_weight": .75, "prior_strength": 500., "own_policy": "historical-1000-1799",
          "candidate_pool": "brc1800-p30", "engine_nominations": "shared-verified",
          "epsilon": .0005, "share_floor": .002, "incumbent_stickiness": 0.,
-         "lookahead_floor": 0, "weak_min_games": 20., "grid_cap": 256, "match_inflate": 1.6,
+         # match_inflate 1.5 and DP polish are the validated Black solver (B30o5, the
+         # 0.30/0.60/1.00 screens and full-menu books, the 12 November optimiser check).
+         "lookahead_floor": 0, "weak_min_games": 20., "grid_cap": 256, "match_inflate": 1.5,
          "verification": {"mode": "quality", "nodes": 5_000_000,
                           "deep_nodes": 20_000_000, "score_band": .01,
-                          "independent_final_cloud": True, "no_quality_downgrade": True}}
+                          "independent_final_cloud": True, "no_quality_downgrade": True,
+                          # requests come from the chosen book's policy reach, capped per round
+                          "min_reach": .0005, "max_parents": 2000, "rare_trust": 20}}
 REQUIRED_BINDINGS = ["explorer_receipt", "eval_lookup_receipt", "code_receipt",
                      "maia_checkpoint_receipt", "engine_receipt", "otb_split_receipt",
                      "weak_policy_receipt", "candidate_source_receipt"]
@@ -53,7 +57,7 @@ def recipe(colour, gate, budget, mode="independent", **overrides):
     result.update(colour=colour, gate=gate, budget=budget, mode=mode,
                   slice_prior=BASELINES[colour], robustness_floor=GATES[gate][colour],
                   max_score_loss=GATES[gate]["relative"], opponent_policy=deepcopy(POLICY),
-                  solver="price+polish" if colour=="white" else "dp+match-distinct")
+                  solver="price+polish" if colour=="white" else "dp+match-distinct+polish")
     result.update(overrides)
     return result
 

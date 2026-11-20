@@ -318,6 +318,51 @@ The legacy `convertibility_eval.MaiaCache` reader now ignores old `part-*.tmp.np
 Validation: four focused pre-fix regressions reproduced the two defects; the post-fix suite passed **25/25 tests, no skips, in 38.516 seconds**. Coverage includes interrupted/failed writes, concurrent readers/writers, old temporary files, corruption rejection, wrong/rehashed horizon recipes, and native full-key builder/referee cache reuse across different run-local IDs. The current manifest is reproduced exactly; attempts to overwrite the historical manifest are refused. Evidence and exact commands: `docs/repertoire-review-fixes-verification-2026-11-19.json` and `docs/evidence/review-fixes-20261119/`. No production worker, pinned release, or canonical book changed.
 
 
+## November 19 (evening): fixes from Claude's review
+
+Source: `docs/claude-review-of-codex-2026-11-19.md`; plan and progress in
+`docs/claude-review-fixes-plan-2026-11-19.md`. Branch `claude/review-fixes-20261119` from `2ad11c8`.
+The current manifest is **`sweep-manifest-2026-11-19-maia-v3.json`**. Every arm ID changes,
+because the recipe gained the Black polish and the request-scope settings. v2 and earlier stay as
+archived records, and current validation rejects them.
+
+- **Black solver.** DP + match-distinct + **polish** at match-inflate **1.5**: the validated recipe
+  of B30o5, the 0.30/0.60/1.00 screens and the full-menu books. `builder.command` refuses an
+  unknown solver label.
+- **Quality requests are scoped to the chosen book.**
+  - `sweep.candidates.requests` now runs after selection, on the book's **policy reach** (booked
+    positions and where it stops). It examines parents at or above `verification.min_reach`
+    (0.0005), ranks them by reach, and keeps at most `verification.max_parents` (2,000) per round.
+  - The build meta's `quality_frontier` records requested, deferred, below-threshold and
+    off-policy counts, plus reach mass and reasons. Deferred parents are requested again next
+    round, so closure still means none above the threshold remain.
+  - The old whole-graph scan would have requested roughly 75–83% of about 3 million own positions.
+- **New request reasons:**
+  - `parent-above-children`: the parent's stored score exceeds every child's by more than the
+    band. The relative gate measures from the parent, so this can empty the menu; the search
+    nominates the engine's best move.
+  - `unverified-rare-reference`: a thin best child, or a parent agreeing with it, cuts a move
+    that passes against the trusted children.
+- **Recipe-to-data binding.**
+  - `sweep.bindings.check_arm`, called from `coordinator.preflight`, holds the bound candidate
+    pool, the weak pool, and the ensemble sources or frozen overlay to the recipe's labels and
+    depth.
+  - A control overlay must declare its `reply_pool`. Its `source_pool` is the outcome pool.
+  - The builder refuses `--max-ply` above a full-key pool's recorded cap.
+  - `build_weak_edges.py` requires `--book` and `--max-ply`, and refuses full-key inputs.
+- **Ensemble details.**
+  - The strengths and discounts are read from the recipe. The defaults are the approved values,
+    so output is identical.
+  - An endings-only board keeps one pseudo-continuation when broad or OTB players moved on.
+  - The selective cache identity moved to implementation 3.
+  - The build meta reports model-only opponent replies and those without a child eval.
+
+Tests: `_test_review_fixes_1119.py` (9), plus updated `_test_sweep_coordinator.py` and
+`_test_full_key_book.py`. With the existing sweep/full-key/gate/horizon suites that is 51 passed and
+1 opt-in skip. `_test_rare_verify`, `_test_book_builder_rs`, `_test_budget_eval_loss`,
+`_test_opponent_prior`, `_test_lookahead_floor`, `_test_pool128` and `_test_docs_paths` all pass.
+None of this was run on production data.
+
 ## November 19, 22:16 PST: user-requested overnight stop
 
 Stopped the eval worker and all four known recovery/eval wrapper processes; no replacement was launched. Preserved 164 source receipts, 47 child-routing group receipts and 104/512 eval DB buckets (2,307,009,240 rows, 96.20 GB). All completed file sizes/footer row counts and three sampled SHA-256 hashes passed the post-stop audit. Eight partial bucket files remain for native resume; no source or completed output was deleted. The accepted explorer and OTB counts remain valid. Eval status explicitly says stopped; upstream explorer status remains verified.

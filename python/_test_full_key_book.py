@@ -179,6 +179,16 @@ class BookTest(unittest.TestCase):
                 "--allowed-book", allowed, "--perspective", "black", "--tmp-dir", path/"spill")
             reduced=pl.read_parquet(path/"reduced_b1.parquet")
             self.assertEqual(reduced["best_move"].drop_nulls().to_list(), ["e5"])
+            # A full-key pool records its cap: a deeper --max-ply would build a ply-5 book under
+            # another label (review 2026-11-19, finding 4).
+            with patch.object(sys, "argv", ["build_budget_books", *map(str, (
+                    "--stats", stats, "--aux-stats", aux, "--weak-pool", weak, "--weak-min-games", 1,
+                    "--rep", source, "--out-prefix", path/"toodeep", "--budget", 1, "--max-ply", 6,
+                    "--epsilon", .0001, "--eval-weight", 1, "--gated-reach", "--max-score-loss", .06,
+                    "--robustness-floor", .05, "--slice-prior", .5195669627673518,
+                    "--perspective", "black", "--tmp-dir", path/"spill"))]):
+                self.assertEqual(builder.main(), 1)
+            self.assertFalse((path/"toodeep_b1.parquet").exists())
 
         changed = path / "changed.parquet"
         frame.with_columns(pl.when(pl.col("best_move") == "d5")
