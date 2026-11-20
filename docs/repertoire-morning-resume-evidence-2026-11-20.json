@@ -1,0 +1,960 @@
+{
+  "checked_at": "2026-11-19T22:20:50.221172-08:00",
+  "stop_record": {
+    "stopped_at": "2026-11-19T22:16:57.5516077-08:00",
+    "stopped_pids": [
+      37504,
+      19752,
+      33952,
+      25340,
+      16820
+    ],
+    "remaining_matching_processes": 0,
+    "completed_outputs_preserved": true,
+    "partial_files_preserved": true,
+    "pc_shutdown_requested": false
+  },
+  "eval_status": {
+    "checkpoint_root": "D:/chess/eval-db-p51-20261115/_bucket_done",
+    "child_shards": "E:",
+    "interrupted_stage": "full Cloud/Fishnet eval DB phase J",
+    "native_release": "D:/chess/bin/ply51-evals-rehearsed-20261115",
+    "reason": "User-requested overnight stop on 2026-11-19; do not restart until the morning handoff is invoked.",
+    "stage": "stopped",
+    "stop_record": "D:/chess/ply51-migration-20261115/overnight-stop-20261119/stopped.json",
+    "time": "2026-11-19T22:16:58.195275-08:00",
+    "upstream_explorer_acceptance_preserved": true
+  },
+  "explorer_publication": {
+    "book": "E:\\chess\\position-stats\\brc-p51-train-201301-202607-20261115",
+    "meta_sha256": "729801c10254906fc31c9f89b504d4c981a1f70cbbf2c6546495e477c4dde632",
+    "stage": "training explorer verified",
+    "time": "2026-11-19T10:36:52.080242",
+    "verification_receipt": "D:\\chess\\ply51-migration-20261115\\verification-recovery-sliced-20261119\\verified.json",
+    "verification_receipt_sha256": "959264dc725d708e43959a0b91362af32d90a0d5524b67c0c0e2daa851f8c31a"
+  },
+  "eval_release_pin": "D:\\chess\\bin\\ply51-evals-rehearsed-20261115\\pin.json",
+  "all_12_release_file_hashes_match": true,
+  "stage_e_completed_units": 164,
+  "stage_c_completed_groups": 47,
+  "stage_j_completed_buckets": 104,
+  "total_buckets": 512,
+  "completed_bytes": 96197439112,
+  "completed_rows": 2307009240,
+  "latest_bucket": {
+    "bucket": 355,
+    "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt355.json",
+    "bytes": 925040439,
+    "rows": 22183203,
+    "finished": "2026-11-20T06:12:09Z",
+    "expected_sha256": "d209cec7270ec9286c6ee6742f6c4ae0f09c92d5701b565cf6484fa6e4163626",
+    "sampled_actual_sha256": "d209cec7270ec9286c6ee6742f6c4ae0f09c92d5701b565cf6484fa6e4163626"
+  },
+  "checks_performed": {
+    "all_completed_bucket_file_sizes_and_parquet_footer_row_counts": true,
+    "sha256_sampled_bucket_ids": [
+      0,
+      130,
+      355
+    ],
+    "all_bucket_contents_rehashed": false,
+    "explorer_receipt_and_metadata_hashes": true,
+    "otb_count_acceptance_receipt_hash": true
+  },
+  "completed_buckets": [
+    {
+      "bucket": 0,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt000.json",
+      "bytes": 924738397,
+      "rows": 22178117,
+      "finished": "2026-11-20T04:49:34Z",
+      "expected_sha256": "17e01aa07000a9819b514da1ce38d0fb2d259f605eaec69effdb898f3b24c217",
+      "sampled_actual_sha256": "17e01aa07000a9819b514da1ce38d0fb2d259f605eaec69effdb898f3b24c217"
+    },
+    {
+      "bucket": 1,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt001.json",
+      "bytes": 924773459,
+      "rows": 22178736,
+      "finished": "2026-11-20T05:03:21Z",
+      "expected_sha256": "de59c65b93b6b775cc2937f7f4414f136e3d4ed2be50f138065fb5645d8cd05b"
+    },
+    {
+      "bucket": 2,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt002.json",
+      "bytes": 924866233,
+      "rows": 22180009,
+      "finished": "2026-11-20T05:09:12Z",
+      "expected_sha256": "c8fe065b794d2cb7db424a3b9845f578bff076ea4b7cf09940e5802f36ff5293"
+    },
+    {
+      "bucket": 3,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt003.json",
+      "bytes": 924900186,
+      "rows": 22179691,
+      "finished": "2026-11-20T05:15:04Z",
+      "expected_sha256": "a271fb47b2142c8f9e64cd58d371bdbecedbb52f4422459c422c388e0885082a"
+    },
+    {
+      "bucket": 4,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt004.json",
+      "bytes": 924652995,
+      "rows": 22176209,
+      "finished": "2026-11-20T05:29:22Z",
+      "expected_sha256": "be7996cf48ca63af5939ccb18bdd8208630bf880780c62824224ebe5bd30e21c"
+    },
+    {
+      "bucket": 5,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt005.json",
+      "bytes": 924713075,
+      "rows": 22174735,
+      "finished": "2026-11-20T05:37:04Z",
+      "expected_sha256": "a2f8b911996c6c55585dcca88f32ba79d90ea66ffcda96a7012091552507c7f1"
+    },
+    {
+      "bucket": 6,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt006.json",
+      "bytes": 924726191,
+      "rows": 22176427,
+      "finished": "2026-11-20T05:44:39Z",
+      "expected_sha256": "b860fc7b7aa2a6c324accf7600493cbfd391cd6e6c2b21047caedaca95b74937"
+    },
+    {
+      "bucket": 7,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt007.json",
+      "bytes": 924986508,
+      "rows": 22183462,
+      "finished": "2026-11-20T05:55:21Z",
+      "expected_sha256": "bf6db6af553a9b5210e6fb22170eea9642404bb0710ef4726a6204a8af99da0b"
+    },
+    {
+      "bucket": 8,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt008.json",
+      "bytes": 924642425,
+      "rows": 22175725,
+      "finished": "2026-11-20T04:49:47Z",
+      "expected_sha256": "2c4ee08d0fb64d1b63621064e87f62eccce44ff8285e5fc3bc6ee7436dcce2df"
+    },
+    {
+      "bucket": 9,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt009.json",
+      "bytes": 925132977,
+      "rows": 22186037,
+      "finished": "2026-11-20T05:03:21Z",
+      "expected_sha256": "cbfeff559ffcd4c6bc95c3927a7917c6f08e9af6f5c954ba673e05c1ac310980"
+    },
+    {
+      "bucket": 10,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt010.json",
+      "bytes": 925036369,
+      "rows": 22184931,
+      "finished": "2026-11-20T05:14:59Z",
+      "expected_sha256": "1c5ec1f535e186229a8e443f6c87c6ed2c53a3d9429c29d535c0385b3de1c227"
+    },
+    {
+      "bucket": 11,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt011.json",
+      "bytes": 925068778,
+      "rows": 22184080,
+      "finished": "2026-11-20T05:22:40Z",
+      "expected_sha256": "9df1b4439ba6021c7d0796a15797b48934b32fa656766f6ff2dfcc1e07db0c96"
+    },
+    {
+      "bucket": 12,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt012.json",
+      "bytes": 925115411,
+      "rows": 22186014,
+      "finished": "2026-11-20T04:57:14Z",
+      "expected_sha256": "ec15978fd8f127d5519d69094da0040e2096b3e32ecda572562b071f8563c4a2"
+    },
+    {
+      "bucket": 13,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt013.json",
+      "bytes": 925013312,
+      "rows": 22184837,
+      "finished": "2026-11-20T05:09:08Z",
+      "expected_sha256": "83d2fb54dab50ab2f07a6476a72586ac634a183d3aa4cddc64f8040dee34d944"
+    },
+    {
+      "bucket": 14,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt014.json",
+      "bytes": 925335438,
+      "rows": 22192656,
+      "finished": "2026-11-20T04:56:43Z",
+      "expected_sha256": "45e8c7c0bd93862e4ee8c1a66e42e11663153345e94193658c05688bd0b5111e"
+    },
+    {
+      "bucket": 15,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt015.json",
+      "bytes": 924785976,
+      "rows": 22178159,
+      "finished": "2026-11-20T05:03:21Z",
+      "expected_sha256": "4be6d24f278604bcd1ff1eb925226f41a729a70a27aa8ee77888eb20010324bc"
+    },
+    {
+      "bucket": 16,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt016.json",
+      "bytes": 925121949,
+      "rows": 22185795,
+      "finished": "2026-11-20T04:49:30Z",
+      "expected_sha256": "9d8f9dd55452828e03bce02d23387037cea5fbbb9f32e47112fa4001e6f89254"
+    },
+    {
+      "bucket": 17,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt017.json",
+      "bytes": 924923611,
+      "rows": 22180267,
+      "finished": "2026-11-20T05:03:14Z",
+      "expected_sha256": "6cdb5a90068969c25aeab5b46abf49053477c1d3153a6489db9985626ff28538"
+    },
+    {
+      "bucket": 18,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt018.json",
+      "bytes": 925038242,
+      "rows": 22182749,
+      "finished": "2026-11-20T05:09:06Z",
+      "expected_sha256": "926d9a24e4677b23dc36440b03e95fc2d901144e815f3e99b76ef387c037c17e"
+    },
+    {
+      "bucket": 19,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt019.json",
+      "bytes": 924561264,
+      "rows": 22173872,
+      "finished": "2026-11-20T05:15:02Z",
+      "expected_sha256": "eb697ce9273e5ff9602b8116349da0ae6ca0bfdea7800c94b8692a1fe4999482"
+    },
+    {
+      "bucket": 20,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt020.json",
+      "bytes": 925088318,
+      "rows": 22186183,
+      "finished": "2026-11-20T05:29:22Z",
+      "expected_sha256": "ca6a890865fb3cb718036a3270de3349e268a10b8b8747f5de6b868ccdb8e505"
+    },
+    {
+      "bucket": 21,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt021.json",
+      "bytes": 925156693,
+      "rows": 22186941,
+      "finished": "2026-11-20T05:43:58Z",
+      "expected_sha256": "5ac151f28c426faddf519f108849fc08c3fb73d2b6623255b3af833b2855d2e8"
+    },
+    {
+      "bucket": 22,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt022.json",
+      "bytes": 925418684,
+      "rows": 22192781,
+      "finished": "2026-11-20T05:49:50Z",
+      "expected_sha256": "7b87bd1e15a5ed99090beb983009bac818a3d0f6eb806353b12315a2db02f01a"
+    },
+    {
+      "bucket": 23,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt023.json",
+      "bytes": 924747679,
+      "rows": 22178344,
+      "finished": "2026-11-20T05:55:48Z",
+      "expected_sha256": "d33a5f919e5af7b9ae535c2a8b5a88848868136c58819bbcdc421934ce09aaee"
+    },
+    {
+      "bucket": 24,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt024.json",
+      "bytes": 924889322,
+      "rows": 22179956,
+      "finished": "2026-11-20T06:04:07Z",
+      "expected_sha256": "1dcb9da42454521028393e8ad9d6060e8983c7bf2d3672113a74d338531b0cb5"
+    },
+    {
+      "bucket": 25,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt025.json",
+      "bytes": 924884472,
+      "rows": 22181450,
+      "finished": "2026-11-20T06:11:13Z",
+      "expected_sha256": "69f6c2c12883a3a7f00b4ad208f6a57358425d1b2fc9ed4d695a317018dfbb7d"
+    },
+    {
+      "bucket": 32,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt032.json",
+      "bytes": 924627818,
+      "rows": 22175861,
+      "finished": "2026-11-20T04:56:44Z",
+      "expected_sha256": "efbeed308e73ecc7678cffcc0fdae0e0bacd0212e2f3d2fb5afe6e0eb045146c"
+    },
+    {
+      "bucket": 33,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt033.json",
+      "bytes": 924803930,
+      "rows": 22178662,
+      "finished": "2026-11-20T05:03:19Z",
+      "expected_sha256": "59596055d91b3e5bfa99c443b2b32495cfe68c0564355d345e52786848adddc5"
+    },
+    {
+      "bucket": 34,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt034.json",
+      "bytes": 925059626,
+      "rows": 22187030,
+      "finished": "2026-11-20T05:14:58Z",
+      "expected_sha256": "94d7b1e1064eb060777bff60a3893188cbef76801a3101b9c6e169182abf8002"
+    },
+    {
+      "bucket": 35,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt035.json",
+      "bytes": 925089900,
+      "rows": 22183765,
+      "finished": "2026-11-20T05:21:43Z",
+      "expected_sha256": "d2218ac6518c72a76b2da4408152ef43165111235a88bc61357aa98979669daf"
+    },
+    {
+      "bucket": 36,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt036.json",
+      "bytes": 925106446,
+      "rows": 22185665,
+      "finished": "2026-11-20T05:29:42Z",
+      "expected_sha256": "cd49f9c83544e4a8e46d5fb83ae4cdb009237f3f20898d3c36632fadb368f9ed"
+    },
+    {
+      "bucket": 37,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt037.json",
+      "bytes": 925261512,
+      "rows": 22188192,
+      "finished": "2026-11-20T05:43:44Z",
+      "expected_sha256": "355f19396de549fd99613e13c356d840755fdb2ac2b76e07476be9ca471a3326"
+    },
+    {
+      "bucket": 38,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt038.json",
+      "bytes": 925107054,
+      "rows": 22188542,
+      "finished": "2026-11-20T05:49:43Z",
+      "expected_sha256": "28436bf6e623016c83aaea579a2136b904bd056d3cc44682430d1fb10bfb6bdc"
+    },
+    {
+      "bucket": 39,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt039.json",
+      "bytes": 924986886,
+      "rows": 22182672,
+      "finished": "2026-11-20T05:55:34Z",
+      "expected_sha256": "9f3f2c658bdb794459d394c0acfc558f2edf3799548c0bce58e54ce9fe75db9d"
+    },
+    {
+      "bucket": 40,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt040.json",
+      "bytes": 924828763,
+      "rows": 22179456,
+      "finished": "2026-11-20T06:03:39Z",
+      "expected_sha256": "9df6b46d7787979039fea98199db628da08bb77168d27c0c3426e1a84bdea771"
+    },
+    {
+      "bucket": 41,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt041.json",
+      "bytes": 924997840,
+      "rows": 22181621,
+      "finished": "2026-11-20T06:10:57Z",
+      "expected_sha256": "83e0b00714fec554b1ecc83fb80dcc24487aeb4ea3a44137e3110e7834732728"
+    },
+    {
+      "bucket": 64,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt064.json",
+      "bytes": 925132530,
+      "rows": 22186237,
+      "finished": "2026-11-20T04:49:32Z",
+      "expected_sha256": "c05b66425cb57e11443b7bb9da2f9062a48ef311f3f6f7ea67e161828677cb2d"
+    },
+    {
+      "bucket": 65,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt065.json",
+      "bytes": 925221713,
+      "rows": 22187596,
+      "finished": "2026-11-20T04:56:48Z",
+      "expected_sha256": "f41878156861d672531f27ec2b4a570fc3ed0179d09f88fdf7ca2a4b7023dcac"
+    },
+    {
+      "bucket": 66,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt066.json",
+      "bytes": 924908706,
+      "rows": 22184076,
+      "finished": "2026-11-20T05:09:09Z",
+      "expected_sha256": "22fee0ea17e2b71617f7c5228fcfe1ba60f4403d52b9143497663eadfe223d90"
+    },
+    {
+      "bucket": 67,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt067.json",
+      "bytes": 924911682,
+      "rows": 22181073,
+      "finished": "2026-11-20T05:21:24Z",
+      "expected_sha256": "2d37d3113fd006f9e92fa7870cf34768726d10db2ddf6daf1225b2215a25d2d2"
+    },
+    {
+      "bucket": 68,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt068.json",
+      "bytes": 924595985,
+      "rows": 22176165,
+      "finished": "2026-11-20T05:29:23Z",
+      "expected_sha256": "ee5244b091b9f928149649103ed0527e5aa22561478cd36c42b4569e921dba7b"
+    },
+    {
+      "bucket": 69,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt069.json",
+      "bytes": 924810459,
+      "rows": 22177741,
+      "finished": "2026-11-20T05:37:41Z",
+      "expected_sha256": "a8cb90eff216b442ebfc0483fc2467894c9f32c3e0c34ea68507a956619856e2"
+    },
+    {
+      "bucket": 70,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt070.json",
+      "bytes": 924609407,
+      "rows": 22173544,
+      "finished": "2026-11-20T06:11:42Z",
+      "expected_sha256": "eeed14ea541a76f9938651baaeccc1024ca41cead9453ffd5b0107cb59848d51"
+    },
+    {
+      "bucket": 96,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt096.json",
+      "bytes": 924714663,
+      "rows": 22177152,
+      "finished": "2026-11-20T05:09:15Z",
+      "expected_sha256": "2d042f79d242af2137c9af7e5f20b7b2583383593f192dae207a08227e11cdac"
+    },
+    {
+      "bucket": 97,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt097.json",
+      "bytes": 925097621,
+      "rows": 22186684,
+      "finished": "2026-11-20T05:21:29Z",
+      "expected_sha256": "423dad3f0412edda67a3459e81df7e7082799e92cb8809f435945ad3abf4a623"
+    },
+    {
+      "bucket": 98,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt098.json",
+      "bytes": 925032864,
+      "rows": 22183768,
+      "finished": "2026-11-20T05:36:51Z",
+      "expected_sha256": "dc8e68050d02e04d4664cac6b4f27e03163689dd1a1fec1232d0d55f56acfa54"
+    },
+    {
+      "bucket": 99,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt099.json",
+      "bytes": 924871809,
+      "rows": 22178467,
+      "finished": "2026-11-20T05:44:16Z",
+      "expected_sha256": "97f44e58ed065a14c3b44b273509b4d91286f85414cbf55fb8085d24e7a7232c"
+    },
+    {
+      "bucket": 100,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt100.json",
+      "bytes": 925023097,
+      "rows": 22184740,
+      "finished": "2026-11-20T05:50:18Z",
+      "expected_sha256": "8239ee4ac0a768daffcf90a3a2adec839d7c4c93b9e2b12bfe9bb9d77a4733f7"
+    },
+    {
+      "bucket": 101,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt101.json",
+      "bytes": 924661078,
+      "rows": 22174675,
+      "finished": "2026-11-20T05:56:06Z",
+      "expected_sha256": "549f8d2908618133e58f1cb3c6e797043c518c9c987ddca04b2bc8bc575c55b7"
+    },
+    {
+      "bucket": 102,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt102.json",
+      "bytes": 924918092,
+      "rows": 22182457,
+      "finished": "2026-11-20T06:11:19Z",
+      "expected_sha256": "110214b04ef762131c31bd535f8400c1c531212632ad0f4f2d1fd79ae5921ce1"
+    },
+    {
+      "bucket": 128,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt128.json",
+      "bytes": 924861042,
+      "rows": 22179898,
+      "finished": "2026-11-20T04:57:17Z",
+      "expected_sha256": "7d4d4886afc89993f2d475f891b1bf7158183ea9ae34684f4433eb3cef52ef5a"
+    },
+    {
+      "bucket": 129,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt129.json",
+      "bytes": 925065541,
+      "rows": 22185918,
+      "finished": "2026-11-20T05:09:01Z",
+      "expected_sha256": "df53a321425fa37633f875137e110a61a60235fcf8bafa86b367321bf1fad64b"
+    },
+    {
+      "bucket": 130,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt130.json",
+      "bytes": 924476075,
+      "rows": 22173210,
+      "finished": "2026-11-20T05:14:55Z",
+      "expected_sha256": "0b46d3974c01417ab10846edb004a9e1933ab9f694d884eff64d525a17f3d4f2",
+      "sampled_actual_sha256": "0b46d3974c01417ab10846edb004a9e1933ab9f694d884eff64d525a17f3d4f2"
+    },
+    {
+      "bucket": 131,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt131.json",
+      "bytes": 924718494,
+      "rows": 22175119,
+      "finished": "2026-11-20T05:37:27Z",
+      "expected_sha256": "43979aa5cd7e0ec9e5e409bd0a7e02aee258959cd71ee9c9769d856da570c3d6"
+    },
+    {
+      "bucket": 132,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt132.json",
+      "bytes": 924963038,
+      "rows": 22185693,
+      "finished": "2026-11-20T05:55:45Z",
+      "expected_sha256": "bdda7ff998c8fe8b3fcdf733e62c691f2c00d87b5b8dc681518dd59801bc9159"
+    },
+    {
+      "bucket": 133,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt133.json",
+      "bytes": 925221819,
+      "rows": 22189005,
+      "finished": "2026-11-20T06:04:56Z",
+      "expected_sha256": "f7e8d9cda473283cf3800e1ad4a3680e9c913e86ce39602842a1ab9f2f09ee4f"
+    },
+    {
+      "bucket": 192,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt192.json",
+      "bytes": 924859266,
+      "rows": 22181551,
+      "finished": "2026-11-20T04:49:33Z",
+      "expected_sha256": "9fc5d2d0536aeef5fc578220d1002423e90c634df7c8e27ac1e1f6d470ad9c1e"
+    },
+    {
+      "bucket": 193,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt193.json",
+      "bytes": 925161581,
+      "rows": 22185100,
+      "finished": "2026-11-20T04:56:47Z",
+      "expected_sha256": "336c646f7475048e5337ac351c0fec7449e8e8f2bc8f94da79d4c92d9666ba9a"
+    },
+    {
+      "bucket": 194,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt194.json",
+      "bytes": 925118335,
+      "rows": 22187080,
+      "finished": "2026-11-20T05:03:32Z",
+      "expected_sha256": "0ff4a6e8074f45a0ea9bed00314a9aa65e0fcf62b0afcae6c9b57af2daa8514e"
+    },
+    {
+      "bucket": 195,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt195.json",
+      "bytes": 924991717,
+      "rows": 22182374,
+      "finished": "2026-11-20T05:14:57Z",
+      "expected_sha256": "c67768cec81e836ab6a9f9bbc3bab52ebc7987d69ffeff2ab7b4116469591b02"
+    },
+    {
+      "bucket": 196,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt196.json",
+      "bytes": 925073825,
+      "rows": 22184653,
+      "finished": "2026-11-20T05:21:30Z",
+      "expected_sha256": "b1f836a70752d20cd49582f8d48df37889cd7335ac401f834f1cf0ceaab2da8f"
+    },
+    {
+      "bucket": 197,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt197.json",
+      "bytes": 924906938,
+      "rows": 22180213,
+      "finished": "2026-11-20T05:29:33Z",
+      "expected_sha256": "eaf9757c7d4bb056a304e29dac7048e9ad9e648a8881f95b1c4a62d9554cd4ec"
+    },
+    {
+      "bucket": 198,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt198.json",
+      "bytes": 925106741,
+      "rows": 22186577,
+      "finished": "2026-11-20T05:37:07Z",
+      "expected_sha256": "022b57cb03c3cf9da3e00ebd2749a3079e42979496d1ca09ec16ad476d57582b"
+    },
+    {
+      "bucket": 199,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt199.json",
+      "bytes": 925200716,
+      "rows": 22187906,
+      "finished": "2026-11-20T05:44:10Z",
+      "expected_sha256": "afe3a0ee0caae733247115bf07d1f91779ef19f03b535efd2ae68e6caa4bec44"
+    },
+    {
+      "bucket": 200,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt200.json",
+      "bytes": 924688015,
+      "rows": 22176645,
+      "finished": "2026-11-20T05:50:02Z",
+      "expected_sha256": "b12740aea0d096dc59ae4dc5e1f04b4ace77575ab01ff1e2c87af2a61e43d606"
+    },
+    {
+      "bucket": 201,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt201.json",
+      "bytes": 925237424,
+      "rows": 22188026,
+      "finished": "2026-11-20T05:56:01Z",
+      "expected_sha256": "586d2dce1522c898b32b719c623bf9c7ae2c215293e587999f9a33e5300fdec4"
+    },
+    {
+      "bucket": 202,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt202.json",
+      "bytes": 925095454,
+      "rows": 22185652,
+      "finished": "2026-11-20T06:04:12Z",
+      "expected_sha256": "3438ab5b830928919da6f1ba156b157b1c57ad65153eefb4f0c50b0aed3d5b27"
+    },
+    {
+      "bucket": 256,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt256.json",
+      "bytes": 924677961,
+      "rows": 22175123,
+      "finished": "2026-11-20T04:49:47Z",
+      "expected_sha256": "2b566f74bd3d9e7410d3f5475e519cee26eddc2051177180df84a8ffb12ca641"
+    },
+    {
+      "bucket": 257,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt257.json",
+      "bytes": 925183999,
+      "rows": 22189947,
+      "finished": "2026-11-20T05:03:25Z",
+      "expected_sha256": "423618ef2c8faa104225969130486c17c1e9cd7e0919d43d5be6bd51016ef2c9"
+    },
+    {
+      "bucket": 258,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt258.json",
+      "bytes": 924999997,
+      "rows": 22183059,
+      "finished": "2026-11-20T05:09:15Z",
+      "expected_sha256": "63e24e9da829d7d5ddea42816743c1b88a381a40741c3d1c27dd7b5a19983709"
+    },
+    {
+      "bucket": 259,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt259.json",
+      "bytes": 924949017,
+      "rows": 22183185,
+      "finished": "2026-11-20T05:22:30Z",
+      "expected_sha256": "6fe8f17bf8a53e359c08d2c39a91feaeb6c4fe44fb2e105d2d89f70ef21f8cdf"
+    },
+    {
+      "bucket": 260,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt260.json",
+      "bytes": 924957747,
+      "rows": 22182576,
+      "finished": "2026-11-20T05:37:28Z",
+      "expected_sha256": "127d1f84ffe63091cda614eb53b9bba7f095e0c74fab091993a1b37fa3a9699d"
+    },
+    {
+      "bucket": 261,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt261.json",
+      "bytes": 924830828,
+      "rows": 22180299,
+      "finished": "2026-11-20T05:44:33Z",
+      "expected_sha256": "d79ae04a827cb225cbfa92d13cdb14c71e7b559cda8d9df893ce11bc9f1d8afb"
+    },
+    {
+      "bucket": 262,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt262.json",
+      "bytes": 925078389,
+      "rows": 22183424,
+      "finished": "2026-11-20T05:50:24Z",
+      "expected_sha256": "09f031ea927d4a6dd06544133ace8df304d7b2ebf68c735f74776b59937d1c22"
+    },
+    {
+      "bucket": 263,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt263.json",
+      "bytes": 925032605,
+      "rows": 22184295,
+      "finished": "2026-11-20T06:11:07Z",
+      "expected_sha256": "5fe9f54f03086e4e409ad0b8a95a18899df709bbfc484a923e6d6aa93f78c5d3"
+    },
+    {
+      "bucket": 320,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt320.json",
+      "bytes": 924833493,
+      "rows": 22177193,
+      "finished": "2026-11-20T05:21:58Z",
+      "expected_sha256": "412a222ac56e0e994c82b82f6aacdf1c32f7d89521d0247b2f197d9e00bafe75"
+    },
+    {
+      "bucket": 321,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt321.json",
+      "bytes": 925142947,
+      "rows": 22188339,
+      "finished": "2026-11-20T05:30:38Z",
+      "expected_sha256": "758597b1de9f5b4af2dd1e9b3c71a1ff6f5cad817c413c7888c11e64b85f5113"
+    },
+    {
+      "bucket": 322,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt322.json",
+      "bytes": 924618810,
+      "rows": 22173037,
+      "finished": "2026-11-20T06:04:17Z",
+      "expected_sha256": "9ee701a256284eca8538acc082f1f4522b90083b5b3f92255cea0dd386f22025"
+    },
+    {
+      "bucket": 352,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt352.json",
+      "bytes": 925230392,
+      "rows": 22189010,
+      "finished": "2026-11-20T05:44:03Z",
+      "expected_sha256": "e9fcc582ea79ac3e4a938ba1a6760d5c00d8ab1cd44be17de76620cc2f356200"
+    },
+    {
+      "bucket": 353,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt353.json",
+      "bytes": 925182826,
+      "rows": 22187339,
+      "finished": "2026-11-20T05:50:00Z",
+      "expected_sha256": "5742294a20cfb596b19a94adfd0b5d37ff1fdab0377106f25cd13d4c8815bf03"
+    },
+    {
+      "bucket": 354,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt354.json",
+      "bytes": 925635394,
+      "rows": 22197917,
+      "finished": "2026-11-20T06:04:37Z",
+      "expected_sha256": "669afd30982a1026bd71ece34a271ea792de13f50ed2000fd78ae70f211320c1"
+    },
+    {
+      "bucket": 355,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt355.json",
+      "bytes": 925040439,
+      "rows": 22183203,
+      "finished": "2026-11-20T06:12:09Z",
+      "expected_sha256": "d209cec7270ec9286c6ee6742f6c4ae0f09c92d5701b565cf6484fa6e4163626",
+      "sampled_actual_sha256": "d209cec7270ec9286c6ee6742f6c4ae0f09c92d5701b565cf6484fa6e4163626"
+    },
+    {
+      "bucket": 384,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt384.json",
+      "bytes": 924906846,
+      "rows": 22179024,
+      "finished": "2026-11-20T04:49:30Z",
+      "expected_sha256": "900d3f9928cc253ff3271882f6cb9a994530f592e9391875809a1c38c73b16e3"
+    },
+    {
+      "bucket": 385,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt385.json",
+      "bytes": 924889611,
+      "rows": 22183389,
+      "finished": "2026-11-20T04:56:47Z",
+      "expected_sha256": "f97717c84c455cdb3bc78d73ace37c759531705aecc90190b18a5a548db1b434"
+    },
+    {
+      "bucket": 386,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt386.json",
+      "bytes": 925494647,
+      "rows": 22194728,
+      "finished": "2026-11-20T05:09:10Z",
+      "expected_sha256": "9180574ccb0af50343e32cbfba394e1902d468e73d3ee659185a0564eb036249"
+    },
+    {
+      "bucket": 387,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt387.json",
+      "bytes": 924938796,
+      "rows": 22180836,
+      "finished": "2026-11-20T05:15:00Z",
+      "expected_sha256": "d08a43c2bdef42d5e27b31b56a7ee6e7e2a4a3e6ff84bb192419b8780360bac4"
+    },
+    {
+      "bucket": 388,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt388.json",
+      "bytes": 924877997,
+      "rows": 22181578,
+      "finished": "2026-11-20T05:29:18Z",
+      "expected_sha256": "e9af4654a2fbbd96e18f9c329e7017ee942b178c08f735b0cccfb74012a26f1e"
+    },
+    {
+      "bucket": 389,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt389.json",
+      "bytes": 925135380,
+      "rows": 22188889,
+      "finished": "2026-11-20T05:36:55Z",
+      "expected_sha256": "905782f9912066cdf3b12b36a4ffe6d35ed3d85b8cf7c327784d291788d4bc22"
+    },
+    {
+      "bucket": 390,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt390.json",
+      "bytes": 925150883,
+      "rows": 22185566,
+      "finished": "2026-11-20T05:43:54Z",
+      "expected_sha256": "e1e109a74b1023206d97710c3dc20aa5a02159f63b2120897042508f6251e007"
+    },
+    {
+      "bucket": 391,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt391.json",
+      "bytes": 924862532,
+      "rows": 22182499,
+      "finished": "2026-11-20T05:49:46Z",
+      "expected_sha256": "9fe9ed335164e29feac07c65184dd15ed7353bf04a0032b9799f27bb6563a107"
+    },
+    {
+      "bucket": 392,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt392.json",
+      "bytes": 925464548,
+      "rows": 22194285,
+      "finished": "2026-11-20T05:55:38Z",
+      "expected_sha256": "92138dd6ee195ff2be3b69020f861a24f82198b9591dedac8baa4f66baafa896"
+    },
+    {
+      "bucket": 393,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt393.json",
+      "bytes": 925063345,
+      "rows": 22185341,
+      "finished": "2026-11-20T06:03:42Z",
+      "expected_sha256": "6e5e3fff0a1c94f19779ea8b371d3325fe7559f57cec79623c6d6dc1641c394d"
+    },
+    {
+      "bucket": 394,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt394.json",
+      "bytes": 925119259,
+      "rows": 22185404,
+      "finished": "2026-11-20T06:11:26Z",
+      "expected_sha256": "645fbf66f6ecbd688a8096f5badf5d181136499e1928303263d00e617547f31d"
+    },
+    {
+      "bucket": 416,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt416.json",
+      "bytes": 924992568,
+      "rows": 22180681,
+      "finished": "2026-11-20T06:10:49Z",
+      "expected_sha256": "92eba77b5621f9d1568e5b8f2031122192f0742ba5c36a20849905816b5223ce"
+    },
+    {
+      "bucket": 448,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt448.json",
+      "bytes": 924908011,
+      "rows": 22180635,
+      "finished": "2026-11-20T04:49:31Z",
+      "expected_sha256": "59bb2ba1d2fa88866d75b662ac6013cf225cb766f283c89193d18f008918c848"
+    },
+    {
+      "bucket": 449,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt449.json",
+      "bytes": 924941579,
+      "rows": 22182048,
+      "finished": "2026-11-20T04:56:47Z",
+      "expected_sha256": "173f48bb001d629e5300ea9a5fe9c236f77f3790d9fcc7111b91bc3dae304eea"
+    },
+    {
+      "bucket": 450,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt450.json",
+      "bytes": 925211360,
+      "rows": 22187774,
+      "finished": "2026-11-20T05:03:34Z",
+      "expected_sha256": "16f426cb33f6f41d596bcb67fd5ddef1cc4f80a63938f09d8315d637da310a49"
+    },
+    {
+      "bucket": 451,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt451.json",
+      "bytes": 924919334,
+      "rows": 22181599,
+      "finished": "2026-11-20T05:14:50Z",
+      "expected_sha256": "de806b229a092a7b5c124bb42d8d8ec10946ebdd845493bf680ce88021ff9340"
+    },
+    {
+      "bucket": 452,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt452.json",
+      "bytes": 925363947,
+      "rows": 22189989,
+      "finished": "2026-11-20T05:21:22Z",
+      "expected_sha256": "8afc0fe0757b573f4d3e4f8fea4e58a72ed65569fac081bef0c0efb4e08349d3"
+    },
+    {
+      "bucket": 453,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt453.json",
+      "bytes": 924974623,
+      "rows": 22182593,
+      "finished": "2026-11-20T05:30:15Z",
+      "expected_sha256": "dc7227d56e644590b9f5e5964d1f0904f06a7d0b0157661a6bae7524dc31e94d"
+    },
+    {
+      "bucket": 454,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt454.json",
+      "bytes": 925020645,
+      "rows": 22181851,
+      "finished": "2026-11-20T05:38:02Z",
+      "expected_sha256": "7bbdb8a063cc31248d517d426fd5b561b060552258e6b12fe56b9e17666cbafe"
+    },
+    {
+      "bucket": 455,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt455.json",
+      "bytes": 924644597,
+      "rows": 22175875,
+      "finished": "2026-11-20T05:49:32Z",
+      "expected_sha256": "333bbf7561600f62d488b1722e5d3dce81005bc3ec0e67e5b1a03972e90955fa"
+    },
+    {
+      "bucket": 456,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt456.json",
+      "bytes": 924838755,
+      "rows": 22178340,
+      "finished": "2026-11-20T05:55:32Z",
+      "expected_sha256": "ef7650923fc1411fdad522bae0259fd9feb2dbf7830d26b4d8db5878377f8917"
+    },
+    {
+      "bucket": 457,
+      "receipt": "D:\\chess\\eval-db-p51-20261115\\_bucket_done\\bkt457.json",
+      "bytes": 924881539,
+      "rows": 22179746,
+      "finished": "2026-11-20T06:03:43Z",
+      "expected_sha256": "481b9897272548ccb1eec782a0e5bde5b6b2ae03ceeec350c6dcf44d88d30bc7"
+    }
+  ],
+  "incomplete_files_preserved": [
+    {
+      "name": "bkt026.parquet.tmp",
+      "bytes": 698351601
+    },
+    {
+      "name": "bkt103.parquet.tmp",
+      "bytes": 698342182
+    },
+    {
+      "name": "bkt134.parquet.tmp",
+      "bytes": 611063680
+    },
+    {
+      "name": "bkt203.parquet.tmp",
+      "bytes": 785762121
+    },
+    {
+      "name": "bkt264.parquet.tmp",
+      "bytes": 654740088
+    },
+    {
+      "name": "bkt323.parquet.tmp",
+      "bytes": 698392229
+    },
+    {
+      "name": "bkt417.parquet.tmp",
+      "bytes": 742007730
+    },
+    {
+      "name": "bkt458.parquet.tmp",
+      "bytes": 611066089
+    }
+  ],
+  "free_space_bytes": {
+    "C": 264505696256,
+    "D": 1524369813504,
+    "E": 917683961856,
+    "F": 3124627505152,
+    "H": 1513762910208
+  },
+  "eval_db_done_exists": false,
+  "lookup_exists": false,
+  "otb_count_receipt": "D:\\chess\\sweep-inputs-20261119\\otb-counts-v2-20261119\\verified.json",
+  "otb_count_receipt_sha256": "2c19ff37e7bfb3bc69359000cd968fd0b71e3cad3267f135373c87bcfe6be5d9",
+  "scope_note": "Stopped the eval worker and all four known recovery/eval coordinator processes. A separate Claude dashboard-copy task was observed and deliberately not stopped. No PC shutdown was requested or performed.",
+  "implementation_branch": "codex/sweep-preparation-20261118",
+  "implementation_head_before_handoff": "2ad11c81f9bfef038235996c7be30fa8f982f4a5",
+  "original_process_stop_request": "D:\\chess\\ply51-migration-20261115\\overnight-stop-20261119\\request.json",
+  "handoff_validation": {
+    "time": "2026-11-19T22:25:57.402187-08:00",
+    "python_resume_example_syntax": true,
+    "pinned_helper_attributes_exist": true,
+    "powershell_launch_example_syntax": true,
+    "manifest_sha256_matches": true,
+    "referenced_docs_and_otb_training_export_exist": true,
+    "live_job_launched": false,
+    "subsequent_process_check": "No matching chess Python/native/Stockfish workers or dashboard copy process in the targeted final process inspection."
+  }
+}
