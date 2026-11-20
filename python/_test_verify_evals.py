@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -130,6 +131,65 @@ def run_v2(tmp: Path, gs: list, cmd: list[str]) -> bool:
     return True
 
 
+def _checks(stdout: str) -> list[str]:
+    """The PASS/FAIL lines, with timings masked."""
+    return [re.sub(r"\d[\d,]*s\b", "Ns", ln) for ln in stdout.splitlines() if ln.startswith(("  PASS", "  FAIL"))]
+
+
+def run_checkpoint(tmp: Path, ver: list[str], plain: str) -> None:
+    """--checkpoint: a full run, a run resumed after losing its later units, and a fully reused run report
+    exactly the checks of the uninterrupted run without it; damaged units stop the run; a changed DB file
+    starts a fresh unit set (2026-11-20)."""
+    print("\ncheckpointed verification", flush=True)
+    ck, res = tmp / "ck", tmp / "result.json"
+    want = _checks(plain)
+
+    def go(extra=()):
+        r = subprocess.run(ver + ["--checkpoint", str(ck), "--result-json", str(res), *extra],
+                           capture_output=True, text=True)
+        return r, (json.loads(res.read_text(encoding="utf-8")) if res.is_file() else None)
+
+    r, out = go()
+    if r.returncode or out is None:
+        print(r.stdout[-3000:], r.stderr[-3000:])
+    check(r.returncode == 0 and _checks(r.stdout) == want and out["all_pass"] and out["units_reused"] == 0
+          and out["units_written"] > 0, f"a checkpointed run reports the plain run's {len(want)} checks "
+          f"({out and out['units_written']} units written)")
+    (unit_dir,) = [d for d in ck.iterdir() if d.is_dir()]
+    later = sorted((unit_dir / "child").glob("*.json")) + sorted((unit_dir / "scan").rglob("*.json"))[1:]
+    for f in later:
+        f.unlink()
+    r, out = go()
+    check(r.returncode == 0 and _checks(r.stdout) == want and out["units_written"] == len(later)
+          and out["units_reused"] > 0 and "sample reused from the checkpoint" in r.stdout,
+          f"after losing {len(later)} later units the resumed run recomputes only those and matches")
+    r, out = go()
+    check(r.returncode == 0 and _checks(r.stdout) == want and out["units_written"] == 0,
+          f"a complete unit set is reused whole ({out['units_reused']} units) and matches")
+    victim = sorted((unit_dir / "scan").rglob("*.json"))[0]
+    good = victim.read_bytes()
+    victim.write_text("{", encoding="utf-8")
+    r, _ = go()
+    check(r.returncode != 0 and "unreadable checkpoint unit" in (r.stdout + r.stderr), "a corrupt unit stops the run")
+    unit = json.loads(good)
+    unit["depends"]["targets"] = "0" * 64
+    victim.write_text(json.dumps(unit), encoding="utf-8")
+    r, _ = go()
+    check(r.returncode != 0 and "does not match its dependencies" in (r.stdout + r.stderr),
+          "a unit recorded against other dependencies stops the run")
+    victim.write_bytes(good)
+    bucket_file = sorted((tmp / "out").glob("bkt*.parquet"))[0]
+    st = bucket_file.stat()
+    os.utime(bucket_file, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+    r, out = go()
+    check(r.returncode == 0 and _checks(r.stdout) == want and out["units_reused"] == 0
+          and len([d for d in ck.iterdir() if d.is_dir()]) == 2,
+          "a touched DB file gets a fresh unit set, never the stored sample")
+    os.utime(bucket_file, ns=(st.st_atime_ns, st.st_mtime_ns))
+    shutil.rmtree(ck)
+    res.unlink(missing_ok=True)
+
+
 def run(tmp: Path) -> int:
     gs = games()
     # Book: every parent of every game in Blitz/1600 (ply = index + 1), and the first 4 again in Rapid/1800.
@@ -213,6 +273,7 @@ def run(tmp: Path) -> int:
     check(r.returncode == 0 and "ALL PASS" in r.stdout, "verify_evals.py passes the real build")
     if r.returncode:
         print(r.stdout[-3000:], r.stderr[-2000:])
+    run_checkpoint(tmp, ver, r.stdout)
     # The book-v2 variant, while the book and the 64-bit output are still intact.
     v2 = run_v2(tmp, gs, cmd)
     print()

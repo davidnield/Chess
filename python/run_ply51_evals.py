@@ -1,4 +1,14 @@
-"""Run the separate Cloud/Fishnet generation after the verified training explorer is published."""
+"""Run the separate Cloud/Fishnet generation after the verified training explorer is published.
+
+Stages: native DB build (E/C/J, resumable by its own receipts), independent verification
+(verify_evals.py), the 128-bit lookup (eval_lookup128.py, resumable), then the final
+"eval DB and lookup verified" status. Since 2026-11-20 a verification pass leaves a content-bound
+receipt (eval_verification.py) and a restart reuses it after re-validating its identity, so an
+interrupted lookup no longer repeats hours of verification; the verifier keeps its own durable
+units in STATE/verify-checkpoint, so an interrupted verification resumes from them. The native
+binary is the 2026-11-15 pin's, checked by hash: a Python-only release must not change the
+generation the existing E/C/J receipts belong to.
+"""
 from __future__ import annotations
 
 import datetime as dt
@@ -14,9 +24,14 @@ import numpy as np
 import pyarrow.parquet as pq
 
 from eval_lookup128 import CLOUD, FISHNET, TERMINAL, ROW, WideEvalLookup
+import eval_verification as ev
 from month_archive import read_json, root_lock, sha, write_json
 
 PIN = Path(__file__).resolve().parent
+# The native generation is fixed by the 2026-11-15 pin; later Python releases call its bytes in place.
+NATIVE_PIN = Path("D:/chess/bin/ply51-evals-rehearsed-20261115")
+NATIVE = NATIVE_PIN / "explorer-extract.exe"
+NATIVE_SHA256 = "0f79bcbb95f1055fbedc075fe2c5db5ecee9a33ec3645786bdf23c62726453c0"
 OPS = Path("D:/chess/ply51-migration-20261115")
 STATE = OPS / "evals"
 BOOK = Path("E:/chess/position-stats/brc-p51-train-201301-202607-20261115")
@@ -30,6 +45,10 @@ PILOT_DB = DB.with_name(DB.name + "-sample")
 BUCKETS = list(range(7, 512, 64))
 GB = 10**9
 CHILD_DRIVES = ("H:", "D:", "E:", "F:")
+RECEIPT = STATE / "verification-receipt.json"
+# Explicit, though they equal verify_evals.py's defaults: the receipt binds what was run.
+VERIFY_SETTINGS = {"buckets": 16, "positive": 100_000, "negative": 100_000, "seed": 20260930,
+                   "threads": 8, "mem": "24GB"}
 
 
 def status(stage, **details):
@@ -42,9 +61,19 @@ def space(path):
     return shutil.disk_usage(path.anchor).free
 
 
-def guarded(args, drives):
+def guarded(args, drives, log=None):
     command = [str(arg) for arg in args]
-    with subprocess.Popen(command, cwd=STATE) as child:
+    out = open(log, "a", encoding="utf-8") if log is not None else None
+    try:
+        _guarded(command, drives, out)
+    finally:
+        if out is not None:
+            out.close()
+
+
+def _guarded(command, drives, out):
+    with subprocess.Popen(command, cwd=STATE, stdout=out,
+                          stderr=subprocess.STDOUT if out is not None else None) as child:
         while child.poll() is None:
             for path in drives:
                 if space(path) < 80 * GB:
@@ -77,7 +106,7 @@ def wait_book():
 
 
 def native(work, out, sample=False, drives=()):
-    args = [PIN/"explorer-extract.exe", "evals", "--book", BOOK, "--cloud", CLOUD_DIR,
+    args = [NATIVE, "evals", "--book", BOOK, "--cloud", CLOUD_DIR,
             "--fishnet", FISH_DIR, "--work", work, "--out", out,
             "--threads", 12, "--mem-gb", 55, "--below-normal"]
     if sample:
@@ -131,6 +160,45 @@ def forecast():
     report["phase_c_drive"] = choice
     write_json(STATE/"layout.json", report)
     return report
+
+
+def check_native():
+    if sha(NATIVE) != NATIVE_SHA256 or read_json(NATIVE_PIN/"pin.json")["files"]["explorer-extract.exe"] != NATIVE_SHA256:
+        raise ValueError(f"native binary {NATIVE} is not the pinned generation")
+
+
+def verify_independently():
+    """verify_evals.py on DB once per identity: reuse a valid receipt, else run it and publish one."""
+    ident = ev.identity(DB, BOOK, PIN, NATIVE, VERIFY_SETTINGS)
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    if RECEIPT.exists():
+        receipt = ev.load_receipt(RECEIPT)  # ReceiptError: stop, a person looks
+        stale = ev.differences(receipt["identity"], ident)
+        if not stale:
+            status("independent verification reused from its receipt", receipt=str(RECEIPT),
+                   receipt_sha256=sha(RECEIPT))
+            return
+        aside = RECEIPT.with_name(f"verification-receipt.stale-{stamp}.json")
+        RECEIPT.replace(aside)
+        print(f"verification receipt is stale ({', '.join(stale)}): set aside as {aside}", flush=True)
+    log = STATE / f"verify-{stamp}.log"
+    result = STATE / "verify-result.json"
+    result.unlink(missing_ok=True)
+    temp = STATE/"verify-tmp"
+    temp.mkdir(exist_ok=True)
+    s = VERIFY_SETTINGS
+    status("independently verifying full-key DB and source selection", log=str(log))
+    guarded([sys.executable, "-u", PIN/"verify_evals.py", DB, "--book", BOOK, "--cloud", CLOUD_DIR,
+             "--fishnet", FISH_DIR, "--buckets", s["buckets"], "--positive", s["positive"],
+             "--negative", s["negative"], "--seed", s["seed"], "--threads", s["threads"], "--mem", s["mem"],
+             "--tmp-dir", temp, "--checkpoint", STATE/"verify-checkpoint", "--result-json", result],
+            [DB], log=log)
+    outcome = read_json(result)
+    if ev.differences(ident, ev.identity(DB, BOOK, PIN, NATIVE, VERIFY_SETTINGS)):
+        raise ValueError("verification inputs changed while the verifier ran; no receipt published")
+    ev.write_receipt(RECEIPT, ident, outcome, log)
+    status("independent verification passed; receipt published", receipt=str(RECEIPT),
+           receipt_sha256=sha(RECEIPT))
 
 
 def attach_child_folder(drive):
@@ -192,6 +260,7 @@ def main():
             for name, digest in read_json(PIN/"pin.json")["files"].items():
                 if sha(PIN/name) != digest:
                     raise ValueError(f"pin mismatch: {name}")
+            check_native()
             wait_book()
             layout = STATE/"layout.json"
             if not layout.exists():
@@ -206,15 +275,12 @@ def main():
             attach_child_folder(drive)
             status("building full Cloud/Fishnet eval DB", child_shards=drive)
             native(WORK, DB, drives=[Path(drive+"/")])
-            status("independently verifying full-key DB and source selection")
-            temp = STATE/"verify-tmp"
-            temp.mkdir(exist_ok=True)
-            guarded([sys.executable,"-u",PIN/"verify_evals.py",DB,"--book",BOOK,"--cloud",CLOUD_DIR,
-                     "--fishnet",FISH_DIR,"--threads",8,"--mem","24GB","--tmp-dir",temp], [DB])
+            verify_independently()
             status("publishing 128-bit lookup with terminal corrections")
             guarded([sys.executable,"-u",PIN/"eval_lookup128.py","--eval-db",DB,"--book",BOOK,"--out",LOOKUP], [DB])
             status("eval DB and lookup verified", db=str(DB), lookup=str(LOOKUP),
                    db_meta_sha256=sha(DB/"_build.meta.json"), lookup_sha256=sha(LOOKUP/"lookup.json"),
+                   verification_receipt=str(RECEIPT), verification_receipt_sha256=sha(RECEIPT),
                    **sample_lookup())
         except Exception as exc:
             status("stopped", error=str(exc))

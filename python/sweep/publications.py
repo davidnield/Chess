@@ -40,5 +40,15 @@ def validate(bindings):
         if (file_sha(ex["verification_receipt"])!=ex["verification_receipt_sha256"]
             or proof["book_meta_sha256"]!=book_sha):
             raise ValueError("explorer check bundle changed")
+    # Since 2026-11-20 the eval coordinator also names its verification receipt
+    # (eval_verification.py); when present it must be pinned and name this DB generation.
+    if "verification_receipt" in ev:
+        proof=checked(ev["verification_receipt"])
+        if (file_sha(ev["verification_receipt"])!=ev["verification_receipt_sha256"]
+            or proof.get("schema")!="eval-verification-receipt-v1"
+            or proof["result"].get("all_pass") is not True
+            or proof["identity"]["db_hashes"]["_build.meta.json"]!=ev["db_meta_sha256"]
+            or Path(proof["identity"]["db"]).resolve()!=db):
+            raise ValueError("eval verification receipt does not match the published DB")
     return dict(book_meta_sha256=book_sha,lookup_sha256=ev["lookup_sha256"],
                 db_meta_sha256=ev["db_meta_sha256"])

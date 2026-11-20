@@ -29,6 +29,21 @@ class Publication(unittest.TestCase):
             atomic_json(ex,dict(saved,stage="recovering explorer verification"))
             with self.assertRaisesRegex(ValueError,"not verification-complete"):validate(bind())
             atomic_json(ex,saved)
+            # A named eval verification receipt must be pinned, unchanged, a pass, and of this DB.
+            rc=r/"verification-receipt.json"
+            def receipt(db_sha,all_pass=True,where=db):
+                atomic_json(rc,dict(schema="eval-verification-receipt-v1",result=dict(all_pass=all_pass),
+                                    identity=dict(db=str(where),db_hashes={"_build.meta.json":db_sha})))
+                e=json.loads(ev.read_text(encoding="utf8"))
+                atomic_json(ev,dict(e,verification_receipt=str(rc),verification_receipt_sha256=file_sha(rc)))
+            def bind_rc():
+                b=bind();b["artifacts"].append(dict(path=str(rc),sha256=file_sha(rc)));return b
+            receipt(file_sha(dm))
+            self.assertEqual(validate(bind_rc())["db_meta_sha256"],file_sha(dm))
+            with self.assertRaisesRegex(ValueError,"not pinned"):validate(bind())
+            for args in ((("0"*64),),(file_sha(dm),False),(file_sha(dm),True,r/"otherdb")):
+                receipt(*args)
+                with self.assertRaisesRegex(ValueError,"verification receipt"):validate(bind_rc())
             m=json.loads(lm.read_text(encoding="utf8"));m["book_meta_sha256"]="different";atomic_json(lm,m)
             e=json.loads(ev.read_text(encoding="utf8"));e["lookup_sha256"]=file_sha(lm);atomic_json(ev,e)
             with self.assertRaisesRegex(ValueError,"generations disagree"):validate(bind())

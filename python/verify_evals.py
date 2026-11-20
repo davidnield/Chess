@@ -3,6 +3,7 @@ with the Rust tool). The contract is the blog repo's docs/eval-db-spec.md, secti
 
     python/verify_evals.py <out> [--book B] [--cloud C] [--fishnet F] [--buckets N] [--positive N]
                                  [--negative N] [--threads T] [--mem 24GB] [--tmp-dir D] [--seed S] [--no-sha]
+                                 [--checkpoint DIR] [--result-json PATH]
 
 The inputs default to the paths `<out>/_build.meta.json` records; the source files, output buckets and
 child-source buckets always come from there, so a pilot is checked against exactly what it read.
@@ -31,6 +32,17 @@ its low half and position_hash_hi, the last column, its high half. Then identity
 (both halves, ep variants included); a parent row's key must be the book parent's; a child row's key must
 be a book (child_hash, child_hash_hi) and no book (parent_hash, parent_hash_hi), whatever else shares its
 low half; and no row may be hash_ambiguous.
+
+Resumption (--checkpoint DIR, added 2026-11-20). The long stages are kept as durable units under
+DIR/<identity key>, each written atomically only after it completes: every bucket's sha256 (reused only
+while the file's size and mtime are unchanged), the drawn positive/negative sample, every raw-source scan,
+and every child-check group. The key binds the build meta and manifest hashes, the book meta hash, every
+source file's size and mtime, this checker's code and the settings that choose the sample (--buckets,
+--positive, --negative, --seed, --no-sha). A rerun with the same key checks the SAME sample against the
+same scans: every check is recomputed from those units, so a resumed run reports exactly what an
+uninterrupted one would. (DuckDB's REPEATABLE reservoir is not promised identical across multithreaded
+runs, which is why the sample itself is stored.) A unit that does not parse, or whose recorded dependencies
+differ, stops the run. --result-json writes the outcome (all_pass, checks, failures) atomically at the end.
 """
 from __future__ import annotations
 
@@ -304,7 +316,8 @@ def _member_scan(job: tuple) -> tuple[list, list]:
     return sorted(as_child), sorted(as_parent)
 
 
-def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list, a, wide: bool = False) -> None:
+def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list, a, wide: bool = False,
+                   ck: "Checkpoint | None" = None) -> None:
     """The sampled child-only hashes must be book child_hash values (any child-source bucket) and no book
     parent_hash; with `wide` (an eval-db-v2) `chi` holds (low, high) keys and both halves must match.
     In-process, one query over all 27,648 book files crawled at ~1 core after the sampling
@@ -323,8 +336,18 @@ def check_children(idx: dict[int, list[Path]], child_src: list[int], chi: list, 
         jobs.append((g, targets, a.threads, CHILD_MEM, str(a.tmp_dir), wide))
     got: set = set()
     par_h: set = set()
+    tkey = digest(targets)
     for k, job in enumerate(jobs, 1):
-        c, p = _run_isolated(_member_scan, job)
+        name = f"child/{k:04d}"
+        dep = {"targets": tkey, "group": [[b, [[f, *_stat(Path(f))] for f in fs], sc, digest(pt)]
+                                          for b, fs, sc, pt in job[0]]}
+        saved = ck.get(name, dep) if ck is not None else None
+        if saved is None:
+            c, p = _run_isolated(_member_scan, job)
+            if ck is not None:
+                ck.put(name, dep, [[list(x) if wide else x for x in c], [list(x) if wide else x for x in p]])
+        else:
+            c, p = ([tuple(x) for x in v] if wide else v for v in saved)
         got.update(c)
         par_h.update(p)
         if k % 8 == 0 or k == len(jobs):
@@ -368,6 +391,90 @@ def sha256(p: Path) -> str:
     return h.hexdigest()
 
 
+CODE = ("verify_evals.py", "explorer_storage.py", "duck_compat.py", "zobrist.py", "zobrist128.py")
+
+
+def _atomic_json(path: Path, obj) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump(obj, f, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    tmp.replace(path)
+
+
+def _stat(p: Path) -> list:
+    s = p.stat()
+    return [s.st_size, s.st_mtime_ns]
+
+
+def digest(obj) -> str:
+    return hashlib.sha256(json.dumps(obj, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+class Checkpoint:
+    """Durable verification units (see the header). Disabled when root is None."""
+
+    def __init__(self, root, identity: dict):
+        self.dir = None
+        self.reused = 0
+        self.written = 0
+        if root is None:
+            return
+        self.dir = Path(root) / digest(identity)[:24]
+        idp = self.dir / "identity.json"
+        if idp.is_file():
+            if self._load(idp) != identity:
+                raise SystemExit(f"FATAL: checkpoint {self.dir} holds another identity")
+        else:
+            _atomic_json(idp, identity)
+        print(f"checkpoint units: {self.dir}", flush=True)
+
+    @staticmethod
+    def _load(path: Path):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise SystemExit(f"FATAL: unreadable checkpoint unit {path}: {exc}")
+
+    def get(self, name: str, depends):
+        """The stored value of unit `name`, or None. A unit whose recorded dependencies differ stops the run."""
+        if self.dir is None:
+            return None
+        path = self.dir / f"{name}.json"
+        if not path.is_file():
+            return None
+        unit = self._load(path)
+        if not isinstance(unit, dict) or unit.get("name") != name or unit.get("depends") != depends:
+            raise SystemExit(f"FATAL: checkpoint unit {path} does not match its dependencies")
+        self.reused += 1
+        return unit["value"]
+
+    def put(self, name: str, depends, value) -> None:
+        if self.dir is not None:
+            _atomic_json(self.dir / f"{name}.json", {"name": name, "depends": depends, "value": value})
+            self.written += 1
+
+
+def checkpoint_identity(out: Path, meta: dict, book: Path, sources: list[Path], a) -> dict:
+    here = Path(__file__).resolve().parent
+    return {
+        "schema": "verify-evals-checkpoint-v1",
+        "db_meta_sha256": sha256(out / "_build.meta.json"),
+        "manifest_sha256": sha256(out / "_manifest.parquet"),
+        "book_meta_sha256": sha256(book / "_book.meta.json") if (book / "_book.meta.json").is_file() else None,
+        "db_book_meta_sha256": meta.get("inputs", {}).get("book_meta_sha256"),
+        # Every DB file's size and mtime too: with --no-sha an edited bucket must not meet a stored sample.
+        "db_files": {q.name: _stat(q) for q in sorted(out.iterdir()) if q.is_file()},
+        "sources": {_p(f): _stat(f) for f in sources},
+        "code": {f: sha256(here / f) for f in CODE},
+        "settings": {"buckets": a.buckets, "positive": a.positive, "negative": a.negative, "seed": a.seed,
+                     "no_sha": a.no_sha},
+        "schema_db": meta.get("schema"),
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("out", type=Path)
@@ -382,6 +489,8 @@ def main() -> int:
     ap.add_argument("--tmp-dir", type=Path, default=Path("D:/chess_duckdb_tmp_evals"))
     ap.add_argument("--seed", type=int, default=20260930)
     ap.add_argument("--no-sha", action="store_true")
+    ap.add_argument("--checkpoint", type=Path, help="durable verification units (see the header)")
+    ap.add_argument("--result-json", type=Path, help="write the outcome here, atomically, at the end")
     ap.add_argument("--dump-targets", type=Path, help=argparse.SUPPRESS)
     # Debug/timing: sample N child-only rows from the sampled buckets and run only the child check.
     ap.add_argument("--child-check-only", type=int, default=None, metavar="N", help=argparse.SUPPRESS)
@@ -408,6 +517,11 @@ def main() -> int:
           f"{len(cloud_files)} cloud + {len(fish_files)} fishnet files; child sources "
           f"{'all' if len(child_src) == BUCKETS else child_src}", flush=True)
     con = connect(a)
+    if a.checkpoint is not None and a.child_check_only is not None:
+        raise SystemExit("FATAL: --checkpoint is for the full check")
+    ck = Checkpoint(None, {})
+    if a.checkpoint is not None:
+        ck = Checkpoint(a.checkpoint, checkpoint_identity(out, meta, book, cloud_files + fish_files, a))
 
     if a.child_check_only is not None:
         files = [out / f"bkt{b:03d}.parquet" for b in picks]
@@ -439,8 +553,14 @@ def main() -> int:
         md = pq.ParquetFile(p).metadata
         if b in mb and (md.num_rows != mb[b]["rows"] or p.stat().st_size != mb[b]["bytes"]):
             bad.append(f"{p.name}: rows/bytes vs manifest")
-        if not a.no_sha and b in mb and sha256(p) != mb[b]["sha256"]:
-            bad.append(f"{p.name}: sha256 vs manifest")
+        if not a.no_sha and b in mb:
+            dep = _stat(p)
+            got = ck.get(f"sha/bkt{b:03d}", dep)
+            if got is None:
+                got = sha256(p)
+                ck.put(f"sha/bkt{b:03d}", dep, got)
+            if got != mb[b]["sha256"]:
+                bad.append(f"{p.name}: sha256 vs manifest")
     check(not bad, f"every bucket file matches its manifest row (rows, bytes{'' if a.no_sha else ', sha256'}) {bad[:3]}")
     files = [out / f"bkt{b:03d}.parquet" for b in picks]
     probs = {}
@@ -479,72 +599,97 @@ def main() -> int:
     colls = pq.ParquetFile(book / "_collisions.parquet").read(columns=["parent_hash", "parent_epd"]).to_pylist() \
         if (book / "_collisions.parquet").is_file() else []
     coll_h = sorted({r["parent_hash"] for r in colls})
-    con.execute("CREATE TEMP TABLE coll AS SELECT UNNEST(?::BIGINT[]) h", [coll_h])
-    per = max(1, a.positive // 10)
-    fl = lit(files)
-    cols = "position_hash, epd, in_book, source, cp, mate, eval_cp, cloud_depth, cloud_knodes, cloud_cp, " \
-           "cloud_mate, cloud_line, cloud_n_evals, fishnet_cp, fishnet_mate, fishnet_tier, fishnet_n_tier, " \
-           "fishnet_n, hash_ambiguous, fishnet_disagrees"
-    if wide:
-        cols += ", position_hash_hi"
-    # ep-variant candidates: an own pawn next to an enemy pawn on the rank where an ep capture starts.
-    ranks = ("regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace("
-             "regexp_replace(regexp_replace(split_part(split_part(epd, ' ', 1), '/', {i}), '8', '........', 'g'), "
-             "'7', '.......', 'g'), '6', '......', 'g'), '5', '.....', 'g'), '4', '....', 'g'), '3', '...', 'g'), "
-             "'2', '..', 'g'), '1', '.', 'g')")
-    cand = (f"((split_part(epd, ' ', 2) = 'w' AND regexp_matches({ranks.format(i=4)}, 'Pp|pP') "
-            f"OR split_part(epd, ' ', 2) = 'b' AND regexp_matches({ranks.format(i=5)}, 'Pp|pP')) "
-            f"AND split_part(epd, ' ', 4) = '-')")
-    strata = {
-        "cloud": "source = 'cloud'", "fishnet": "source = 'fishnet'", "child": "in_book = 'child'",
-        "ep_candidate": cand, "collision": "position_hash IN (SELECT h FROM coll)", "ambiguous": "hash_ambiguous",
-    }
-    # Oversampled so that the strata's overlaps still leave >= --positive distinct rows.
-    quota = {"cloud": 9 * per // 2, "fishnet": 9 * per // 2, "child": per, "ep_candidate": per, "collision": 10**9,
-             "ambiguous": 20_000}
-    samp = {}
-    # ep variants proper: python-chess finds them among up to 3M candidates (the hash of the EPD's own
-    # board differs from position_hash); every one found joins the sample.
-    cands = con.execute(f"SELECT * FROM (SELECT position_hash, epd FROM read_parquet({fl}) WHERE {cand}) "
-                        f"USING SAMPLE reservoir(3000000 ROWS) REPEATABLE ({a.seed})").fetchall()
-    var_keys = [(h, e) for h, e in cands if zobrist_int64(chess.Board(e + " 0 1")) != h]
-    con.register("vk", pa.table({"h": [k[0] for k in var_keys], "e": [k[1] for k in var_keys]}))
-    rows = duck_arrow(con, f"SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket "
-                           f"FROM read_parquet({fl}) o SEMI JOIN vk ON o.position_hash = vk.h AND o.epd = vk.e"
-                      ).to_pylist()
-    con.unregister("vk")
-    n_var_found = len(rows)
-    print(f"    ep_variant: {n_var_found:,} rows (of {len(cands):,} candidates checked)", flush=True)
-    for r in rows:
-        samp[(r["position_hash"], r["epd"])] = r
-    for name, where in strata.items():
-        q = quota[name]
-        # The sample goes on a subquery: DuckDB samples FROM before WHERE.
-        rows = duck_arrow(con, f"SELECT * FROM (SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} "
-                               f"AS bucket FROM read_parquet({fl}) WHERE {where})"
-                               + (f" USING SAMPLE reservoir({q} ROWS) REPEATABLE ({a.seed})" if q < 10**9 else "")
+    saved = ck.get("sample", None)
+    if saved is None:
+        con.execute("CREATE TEMP TABLE coll AS SELECT UNNEST(?::BIGINT[]) h", [coll_h])
+        per = max(1, a.positive // 10)
+        fl = lit(files)
+        cols = "position_hash, epd, in_book, source, cp, mate, eval_cp, cloud_depth, cloud_knodes, cloud_cp, " \
+               "cloud_mate, cloud_line, cloud_n_evals, fishnet_cp, fishnet_mate, fishnet_tier, fishnet_n_tier, " \
+               "fishnet_n, hash_ambiguous, fishnet_disagrees"
+        if wide:
+            cols += ", position_hash_hi"
+        # ep-variant candidates: an own pawn next to an enemy pawn on the rank where an ep capture starts.
+        ranks = ("regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace("
+                 "regexp_replace(regexp_replace(split_part(split_part(epd, ' ', 1), '/', {i}), '8', '........', 'g'), "
+                 "'7', '.......', 'g'), '6', '......', 'g'), '5', '.....', 'g'), '4', '....', 'g'), '3', '...', 'g'), "
+                 "'2', '..', 'g'), '1', '.', 'g')")
+        cand = (f"((split_part(epd, ' ', 2) = 'w' AND regexp_matches({ranks.format(i=4)}, 'Pp|pP') "
+                f"OR split_part(epd, ' ', 2) = 'b' AND regexp_matches({ranks.format(i=5)}, 'Pp|pP')) "
+                f"AND split_part(epd, ' ', 4) = '-')")
+        strata = {
+            "cloud": "source = 'cloud'", "fishnet": "source = 'fishnet'", "child": "in_book = 'child'",
+            "ep_candidate": cand, "collision": "position_hash IN (SELECT h FROM coll)", "ambiguous": "hash_ambiguous",
+        }
+        # Oversampled so that the strata's overlaps still leave >= --positive distinct rows.
+        quota = {"cloud": 9 * per // 2, "fishnet": 9 * per // 2, "child": per, "ep_candidate": per, "collision": 10**9,
+                 "ambiguous": 20_000}
+        samp = {}
+        # ep variants proper: python-chess finds them among up to 3M candidates (the hash of the EPD's own
+        # board differs from position_hash); every one found joins the sample.
+        cands = con.execute(f"SELECT * FROM (SELECT position_hash, epd FROM read_parquet({fl}) WHERE {cand}) "
+                            f"USING SAMPLE reservoir(3000000 ROWS) REPEATABLE ({a.seed})").fetchall()
+        var_keys = [(h, e) for h, e in cands if zobrist_int64(chess.Board(e + " 0 1")) != h]
+        con.register("vk", pa.table({"h": [k[0] for k in var_keys], "e": [k[1] for k in var_keys]}))
+        rows = duck_arrow(con, f"SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket "
+                               f"FROM read_parquet({fl}) o SEMI JOIN vk ON o.position_hash = vk.h AND o.epd = vk.e"
                           ).to_pylist()
-        print(f"    {name}: {len(rows):,} rows", flush=True)
+        con.unregister("vk")
+        n_var_found = len(rows)
+        print(f"    ep_variant: {n_var_found:,} rows (of {len(cands):,} candidates checked)", flush=True)
         for r in rows:
             samp[(r["position_hash"], r["epd"])] = r
-    target = min(a.positive, sum(mb[b]["rows"] for b in picks if b in mb))
-    if len(samp) < target:
-        # Sparse or overlapping strata can leave fewer distinct checks than requested.
-        con.register("positive_keys", pa.table({
-            "h": pa.array((h for h, _ in samp), type=pa.int64()),
-            "e": pa.array((e for _, e in samp), type=pa.string()),
-        }))
-        rest = f"""SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket
-                   FROM read_parquet({fl}) o ANTI JOIN positive_keys k
-                   ON o.position_hash = k.h AND o.epd = k.e"""
-        extra = duck_arrow(con, f"SELECT * FROM ({rest}) USING SAMPLE reservoir({target - len(samp)} ROWS) "
-                                f"REPEATABLE ({a.seed})").to_pylist()
-        con.unregister("positive_keys")
-        for r in extra:
-            samp[(r["position_hash"], r["epd"])] = r
-        print(f"    additional distinct positives: {len(extra):,}", flush=True)
-    pos = list(samp.values())
-    print(f"    positive sample: {len(pos):,} distinct rows", flush=True)
+        for name, where in strata.items():
+            q = quota[name]
+            # The sample goes on a subquery: DuckDB samples FROM before WHERE.
+            rows = duck_arrow(con, f"SELECT * FROM (SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} "
+                                   f"AS bucket FROM read_parquet({fl}) WHERE {where})"
+                                   + (f" USING SAMPLE reservoir({q} ROWS) REPEATABLE ({a.seed})" if q < 10**9 else "")
+                              ).to_pylist()
+            print(f"    {name}: {len(rows):,} rows", flush=True)
+            for r in rows:
+                samp[(r["position_hash"], r["epd"])] = r
+        target = min(a.positive, sum(mb[b]["rows"] for b in picks if b in mb))
+        if len(samp) < target:
+            # Sparse or overlapping strata can leave fewer distinct checks than requested.
+            con.register("positive_keys", pa.table({
+                "h": pa.array((h for h, _ in samp), type=pa.int64()),
+                "e": pa.array((e for _, e in samp), type=pa.string()),
+            }))
+            rest = f"""SELECT {cols}, ((position_hash % {BUCKETS}) + {BUCKETS}) % {BUCKETS} AS bucket
+                       FROM read_parquet({fl}) o ANTI JOIN positive_keys k
+                       ON o.position_hash = k.h AND o.epd = k.e"""
+            extra = duck_arrow(con, f"SELECT * FROM ({rest}) USING SAMPLE reservoir({target - len(samp)} ROWS) "
+                                    f"REPEATABLE ({a.seed})").to_pylist()
+            con.unregister("positive_keys")
+            for r in extra:
+                samp[(r["position_hash"], r["epd"])] = r
+            print(f"    additional distinct positives: {len(extra):,}", flush=True)
+        pos = list(samp.values())
+        print(f"    positive sample: {len(pos):,} distinct rows", flush=True)
+        # Negative sample: book parents of the sampled buckets with no output row.
+        neg = []
+        per_b = max(1, (2 * a.negative) // max(1, len(picks)))
+        for b, f in zip(picks, files):
+            bf = book_files(book, b)
+            if not bf:
+                continue
+            rows = con.execute(f"""
+                WITH s AS (SELECT DISTINCT parent_hash, parent_epd FROM (SELECT parent_hash, parent_epd
+                           FROM {relation(bf)}
+                           USING SAMPLE reservoir({per_b} ROWS) REPEATABLE ({a.seed})))
+                SELECT s.parent_hash, s.parent_epd FROM s
+                ANTI JOIN read_parquet('{_p(f)}') o ON o.position_hash = s.parent_hash AND o.epd = s.parent_epd""").fetchall()
+            neg += rows
+        rng.shuffle(neg)
+        neg = neg[: max(a.negative, 0)]
+        print(f"    negative sample: {len(neg):,} book parents without an output row", flush=True)
+        ck.put("sample", None, {"pos": pos, "neg": neg, "n_var_found": n_var_found, "target": target})
+    else:
+        pos, n_var_found, target = saved["pos"], saved["n_var_found"], saved["target"]
+        neg = [tuple(x) for x in saved["neg"]]
+        print(f"    sample reused from the checkpoint: {len(pos):,} positive, {len(neg):,} negative rows",
+              flush=True)
     ok_n, var_n, bad = check_identity(pos)
     check(not bad, f"{ok_n:,} sampled rows: the EPD is canonical python-chess, "
                    f"{'zobrist128 gives (position_hash, position_hash_hi)' if wide else 'zobrist_int64 gives position_hash'} "
@@ -552,23 +697,6 @@ def main() -> int:
     check(var_n >= n_var_found, f"every ep-variant row found ({n_var_found:,}) hashes via an ep square its EPD cannot show")
     check(len(pos) >= target, f"the positive sample covers at least {target:,} distinct available rows")
 
-    # Negative sample: book parents of the sampled buckets with no output row.
-    neg = []
-    per_b = max(1, (2 * a.negative) // max(1, len(picks)))
-    for b, f in zip(picks, files):
-        bf = book_files(book, b)
-        if not bf:
-            continue
-        rows = con.execute(f"""
-            WITH s AS (SELECT DISTINCT parent_hash, parent_epd FROM (SELECT parent_hash, parent_epd
-                       FROM {relation(bf)}
-                       USING SAMPLE reservoir({per_b} ROWS) REPEATABLE ({a.seed})))
-            SELECT s.parent_hash, s.parent_epd FROM s
-            ANTI JOIN read_parquet('{_p(f)}') o ON o.position_hash = s.parent_hash AND o.epd = s.parent_epd""").fetchall()
-        neg += rows
-    rng.shuffle(neg)
-    neg = neg[: max(a.negative, 0)]
-    print(f"    negative sample: {len(neg):,} book parents without an output row", flush=True)
     check(len(neg) >= min(a.negative, 1), f"the negative sample is non-empty ({len(neg):,})")
 
     # Targets: every string a source FEN4 may print for each EPD.
@@ -597,24 +725,49 @@ def main() -> int:
     done = {"cloud": 0, "fishnet": 0}
     nfiles = {"cloud": 0, "fishnet": 0}
     t0s = time.time()
-    with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as pool:
-        for job, rows in zip(jobs, pool.map(scan_file, jobs)):
-            kind, path = job[0], job[1]
-            if kind == "cloud":
-                crow += rows
-            else:
-                m = re.search(r"standard_rated_(\d{4})_(\d{2})", Path(path).name)
-                t = tier(int(m.group(1)), int(m.group(2)))
-                for e, cp, mate, n in rows:
-                    fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
-            done[kind] += sizes[path]
-            nfiles[kind] += 1
-            el = time.time() - t0s
-            all_done, all_total = sum(done.values()), sum(total.values())
-            if nfiles[kind] % 12 == 0 or (kind == "fishnet" and nfiles[kind] == len(fish_files)) or                     (kind == "cloud" and nfiles[kind] == len(cloud_files)):
-                print(f"    {kind} {nfiles[kind]} files, {done[kind] / 1e9:,.2f}/{total[kind] / 1e9:,.2f} B rows; "
-                      f"all scans {el:,.0f}s, {all_done / max(el, 1e-9) / 1e6:,.1f}M rows/s, ETA "
-                      f"{(all_total - all_done) / max(all_done, 1) * el / 60:,.0f} min", flush=True)
+    tgt_key = digest(sorted(zip(tgt_epd, tgt_alt)))
+
+    def scan_unit(job):
+        return f"scan/{job[0]}/{Path(job[1]).name}", {"targets": tgt_key, "file": _stat(Path(job[1]))}
+
+    cached = {}
+    for job in jobs:
+        got = ck.get(*scan_unit(job))
+        if got is not None:
+            cached[job[1]] = [tuple(r) for r in got]
+    todo = [j for j in jobs if j[1] not in cached]
+    if cached:
+        print(f"    {len(cached)} of {len(jobs)} source scans reused from the checkpoint", flush=True)
+
+    def scans():
+        # Results in job order, cached or fresh; a fresh scan is stored the moment it returns.
+        with ProcessPoolExecutor(max_workers=1, max_tasks_per_child=1) as pool:
+            fresh = pool.map(scan_file, todo)
+            for job in jobs:
+                if job[1] in cached:
+                    yield job, cached[job[1]]
+                else:
+                    rows = next(fresh)
+                    ck.put(*scan_unit(job), [list(r) for r in rows])
+                    yield job, rows
+
+    for job, rows in scans():
+        kind, path = job[0], job[1]
+        if kind == "cloud":
+            crow += rows
+        else:
+            m = re.search(r"standard_rated_(\d{4})_(\d{2})", Path(path).name)
+            t = tier(int(m.group(1)), int(m.group(2)))
+            for e, cp, mate, n in rows:
+                fishes.setdefault(e, {}).setdefault(t, []).append((cp, mate, n))
+        done[kind] += sizes[path]
+        nfiles[kind] += 1
+        el = time.time() - t0s
+        all_done, all_total = sum(done.values()), sum(total.values())
+        if nfiles[kind] % 12 == 0 or (kind == "fishnet" and nfiles[kind] == len(fish_files)) or                     (kind == "cloud" and nfiles[kind] == len(cloud_files)):
+            print(f"    {kind} {nfiles[kind]} files, {done[kind] / 1e9:,.2f}/{total[kind] / 1e9:,.2f} B rows; "
+                  f"all scans {el:,.0f}s, {all_done / max(el, 1e-9) / 1e6:,.1f}M rows/s, ETA "
+                  f"{(all_total - all_done) / max(all_done, 1) * el / 60:,.0f} min", flush=True)
     tgt_path.unlink(missing_ok=True)
     print(f"    cloud: {len(crow):,} matching rows; fishnet: {sum(len(v) for d in fishes.values() for v in d.values()):,} "
           f"(EPD, month, score) groups ({time.time() - t0s:,.0f}s)", flush=True)
@@ -705,7 +858,7 @@ def main() -> int:
     check(bad == 0, f"{len(par):,} sampled parent rows are book (parent_hash, parent_epd"
                     f"{', parent_hash_hi' if wide else ''}) ({bad} are not)")
     if chi:
-        check_children(book_index(book), child_src, chi, a, wide)
+        check_children(book_index(book), child_src, chi, a, wide, ck)
     else:
         print("    (no child rows in the sample)")
 
@@ -731,6 +884,15 @@ def main() -> int:
 
     el = time.time() - t0
     print(f"\n{'ALL PASS' if not _FAILS else f'{len(_FAILS)} FAILURES'} ({_N} checks, {el:,.0f}s)", flush=True)
+    if ck.dir is not None:
+        print(f"checkpoint units: {ck.reused} reused, {ck.written} written", flush=True)
+    if a.result_json is not None:
+        _atomic_json(a.result_json, {
+            "all_pass": not _FAILS, "checks": _N, "failures": list(_FAILS), "elapsed_s": round(el, 1),
+            "sampled_buckets": picks, "positive_rows": len(pos), "negative_rows": len(neg),
+            "db_meta_sha256": sha256(out / "_build.meta.json"),
+            "checkpoint": str(ck.dir) if ck.dir is not None else None,
+            "units_reused": ck.reused, "units_written": ck.written})
     return 0 if not _FAILS else 1
 
 
