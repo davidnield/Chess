@@ -10,10 +10,12 @@ from pathlib import Path
 BASELINES = {"white": 0.5183137990703003, "black": 0.5195669627673518}
 GATES = {"stricter": {"white": .050, "black": .050, "relative": .060},
          "permissive": {"white": .110, "black": .075, "relative": .095}}
-POLICY = {"name": "otb-ensemble-v1", "model": "maia3-79m-position",
+# v2 (David, 2026-11-20): v1 plus the Maia support gate. Maia is consulted only where effective
+# online support is below 300 (docs/claude-review-fixes-plan-2026-11-19.md, 20 Nov entries).
+POLICY = {"name": "otb-ensemble-v2", "model": "maia3-79m-position",
           "ratings": [2600, 2600], "temperature": 1.35,
           "empirical_strength": 30., "maia_strength": 3., "otb_strength": 10.,
-          "backup_discount": .10, "broad_discount": .01}
+          "backup_discount": .10, "broad_discount": .01, "maia_support_gate": 300.}
 FIXED = {"key_bits": 128, "max_ply": 30, "source_plies": 51, "min_games": 1,
          "eval_weight": .75, "prior_strength": 500., "own_policy": "historical-1000-1799",
          "candidate_pool": "brc1800-p30", "engine_nominations": "shared-verified",
@@ -169,6 +171,10 @@ def validate(m):
             raise ValueError("gate settings drifted")
         if r["mode"]=="reduced" and r["budget"]==2000:
             raise ValueError("do not count the common master twice")
+        # Only the policy sensitivity names a control policy; every other arm runs the current
+        # ensemble recipe. A manifest written for an earlier recipe (v3: otb-ensemble-v1) is refused.
+        if a["family"]!="policy" and r["opponent_policy"]!=POLICY:
+            raise ValueError("opponent ensemble recipe differs from the current one; regenerate the manifest")
     # The horizon comparison changes depth only, on the four 2,000-position masters.
     # Rehashed but incorrectly paired recipes must not pass readiness validation.
     horizons = [a for a in m["sensitivities"] if a["family"]=="horizon"]

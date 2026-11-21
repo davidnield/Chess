@@ -378,3 +378,25 @@ The deployed full coordinator has a resumption gap: it repeats independent eval 
   - Durable verifier units (`verify_evals.py --checkpoint`) mean an interrupted verification resumes, with checks identical to an uninterrupted run.
   - The native binary stays the 2026-11-15 pin's, called by hash.
   - `after_join.py` in the resume folder starts this release once the join-only wrapper leaves a complete DB.
+
+## November 20: opponent ensemble v2 (Maia support gate)
+
+David approved two changes after Claude's held-out check of the ensemble
+(`outputs/otb-u2000-2026-11-13/maia-dag/discount_check.py`, `ensemble_options.py`; plan log in
+`docs/claude-review-fixes-plan-2026-11-19.md`):
+
+- **Recipe `otb-ensemble-v2`** = v1 plus `maia_support_gate` 300. Where effective online support
+  (target + 0.10 x other-1800+ + 0.01 x other all-rating games) is at least 300, Maia is not
+  consulted, and the frontier never sends that board to the model (`stats["maia_skipped"]`). Maia's
+  weight there was under 1%. On the OTB holdout the gate changed Brier by 2e-6. Dropping Maia (+.079)
+  or the all-ratings pool (+.00046 overall, +.003 at thin targets) were both worse, so both stay.
+- **The current manifest is `sweep-manifest-2026-11-20-v4.json`.** Every arm ID changes, because the
+  policy recipe did. `spec.validate` now refuses any non-control arm whose ensemble differs from
+  `spec.POLICY`, so v3 is kept for audit and rejected.
+- **Pool scope for step 8:** the five ply-30 pools the pilot needs (brc-all, brc1800, rapid2200,
+  classical1800, weak1000-1799). brc2200 waits for the policy sensitivity; every p50 pool waits for a
+  decision on the horizon sensitivity, and would then be one p50 export per population with p30 cut
+  from it.
+- Tests: `_test_policy_maia_gate.py` (7). `_test_review_fixes_1119`, `_test_sweep_execution`,
+  `_test_sweep_coordinator` and `_test_sweep_preparation` pass.
+

@@ -12,15 +12,34 @@ def _vector(name, values, size, probability=False):
         raise ValueError(f"{name} probabilities do not sum to one")
     return list(map(float,values))
 
+def support(broad, adult, targeted, *, backup_discount=.10, broad_discount=.01):
+    """Effective online support of a board: target games, plus discounted other-1800+ and
+    other all-rating games (sums over the legal moves)."""
+    B,A,R=sum(broad),sum(adult),sum(targeted)
+    return R+backup_discount*(A-R)+broad_discount*(B-A)
+
+def needs_maia(broad, adult, targeted, otb, *, maia_support_gate=None, backup_discount=.10,
+               broad_discount=.01):
+    """Whether ``ensemble`` reads the Maia vector for these counts (callers skip inference
+    otherwise). Boards with no online and no OTB games always need it."""
+    if sum(broad)==0 and sum(otb)==0: return True
+    if maia_support_gate is None: return True
+    return support(broad,adult,targeted,backup_discount=backup_discount,
+                   broad_discount=broad_discount)<maia_support_gate
+
 def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
-             maia_strength=3., backup_discount=.10, broad_discount=.01):
+             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None):
     """Counts are mutually nested b >= a >= r PER MOVE, and OTB is disjoint. The strengths and
-    discounts are the recipe's (spec.POLICY); the defaults are its approved values."""
+    discounts are the recipe's (spec.POLICY); the defaults are its approved values.
+
+    maia_support_gate G (otb-ensemble-v2: 300; None = v1, Maia everywhere): at support >= G the
+    Maia term is dropped and ``maia`` may be None. Maia's weight there is S/(support+S), under 1%
+    at G=300 and S=3; on the 13 Nov OTB holdout dropping it changed Brier by 2e-6
+    (outputs/otb-u2000-2026-11-13/maia-dag/ensemble_options.py)."""
     L=len(legal)
     if not L or len(set(legal))!=L: raise ValueError("need unique legal moves")
     b,a,r,o=[_vector(n,v,L) for n,v in
              zip(("broad","1800+","target","OTB"),(broad,adult,targeted,otb))]
-    q=_vector("Maia",maia,L,True)
     if any(not (bb>=aa>=rr) for bb,aa,rr in zip(b,a,r)):
         raise ValueError("overlapping/superset counts do not support subtraction")
     for name,v in (("OTB strength",otb_strength),("empirical strength",empirical_strength),
@@ -28,16 +47,23 @@ def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empi
         if not math.isfinite(v) or v<=0: raise ValueError(f"invalid {name}")
     for name,v in (("backup discount",backup_discount),("broad discount",broad_discount)):
         if not math.isfinite(v) or not 0<=v<=1: raise ValueError(f"invalid {name}")
+    if maia_support_gate is not None and (not math.isfinite(maia_support_gate) or maia_support_gate<=0):
+        raise ValueError("invalid Maia support gate")
+    use_maia=needs_maia(b,a,r,o,maia_support_gate=maia_support_gate,backup_discount=backup_discount,
+                        broad_discount=broad_discount)
+    if use_maia:
+        if maia is None: raise ValueError("this board's support is below the gate: Maia is required")
+        q=_vector("Maia",maia,L,True)
     B,A,R,O=map(sum,(b,a,r,o))
     if B==0 and O==0: return q
     k,m=empirical_strength,maia_strength
-    support=R+backup_discount*(A-R)+broad_discount*(B-A)
+    s=support(b,a,r,backup_discount=backup_discount,broad_discount=broad_discount)
     result=[]
-    for bb,aa,rr,oo,qq in zip(b,a,r,o,q):
+    for i,(bb,aa,rr,oo) in enumerate(zip(b,a,r,o)):
         broad_p=(bb+1/L)/(B+1)
         backup=(aa-rr+k*broad_p)/(A-R+k)
         online=(rr+k*backup)/(R+k)
-        pre=(support*online+m*qq)/(support+m)
+        pre=(s*online+m*q[i])/(s+m) if use_maia else online
         result.append((oo+otb_strength*pre)/(O+otb_strength))
     return _vector("ensemble",result,L,True)
 

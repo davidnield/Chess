@@ -63,10 +63,16 @@ class Solver(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown solver"):
             builder.command(bad, python="py", code=HERE, inputs=inputs, out_prefix="p", tmp="t")
 
-    def test_v3_manifest_is_the_generator(self):
-        path = HERE.parent / "docs" / "sweep-manifest-2026-11-19-maia-v3.json"
+    def test_current_manifest_is_the_generator(self):
+        # v4 (2026-11-20): otb-ensemble-v2, the Maia support gate. v3 is kept for audit and refused.
+        docs = HERE.parent / "docs"
+        path = docs / "sweep-manifest-2026-11-20-v4.json"
         if path.exists():
             self.assertEqual(json.loads(path.read_text(encoding="utf8")), spec.manifest())
+        old = docs / "sweep-manifest-2026-11-19-maia-v3.json"
+        if old.exists():
+            with self.assertRaisesRegex(ValueError, "opponent ensemble recipe"):
+                spec.validate(json.loads(old.read_text(encoding="utf8")))
 
 
 class ParentReference(unittest.TestCase):

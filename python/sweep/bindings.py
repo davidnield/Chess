@@ -10,7 +10,7 @@ every receipt would still verify. Each bound pool must carry the ``pool_from_boo
 from __future__ import annotations
 import json
 from pathlib import Path
-from .spec import pool_recipes
+from .spec import POLICY, pool_recipes
 
 OWN_POLICY_POOL = {"historical-1000-1799": "weak1000-1799"}
 ENSEMBLE_SOURCES = {"broad": "brc-all", "adult": "brc1800", "rapid": "rapid2200", "classical": "classical1800"}
@@ -54,7 +54,7 @@ def check_arm(recipe, inputs):
         raise ValueError(f"unknown own post-book policy {recipe['own_policy']!r}")
     check_pool(inputs["weak"], f"{own}-p{depth}", "own post-book policy (--weak-pool)")
     policy = recipe["opponent_policy"]
-    if policy["name"] == "otb-ensemble-v1":
+    if policy["name"] == POLICY["name"]:
         config, overlay = inputs.get("opponent_policy_config"), inputs.get("opponent_overlay")
         if config:
             sources = json.loads(Path(config).read_text(encoding="utf8"))["sources"]

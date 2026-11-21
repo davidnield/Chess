@@ -14,7 +14,7 @@ import chess
 import polars as pl
 import duckdb
 from consumer_keys import PAIR, checked_board, stored_key
-from .policy import ensemble, overlay_rows, validate_overlay_rows, write_overlay
+from .policy import ensemble, needs_maia, overlay_rows, validate_overlay_rows, write_overlay
 from .spec import POLICY, digest
 from .keyed_parquet import KeyedParquet
 from .stages import artifacts, file_sha, atomic_json
@@ -153,18 +153,25 @@ class FrontierOverlay:
             t=time.monotonic()
             data=self.counts.fetch([b for _,_,b in missing])
             self.stats["query_seconds"]+=time.monotonic()-t
+            pr=self.policy_recipe
+            gate=dict(maia_support_gate=pr.get("maia_support_gate"),backup_discount=pr["backup_discount"],
+                      broad_discount=pr["broad_discount"])
+            vecs=[vectors(b,data[k]) for _,k,b in missing]
+            # Only boards below the support gate reach the model (otb-ensemble-v2).
+            ask=[i for i,v in enumerate(vecs) if needs_maia(v[1],v[2],v[3],v[4],**gate)]
             t=time.monotonic()
-            priors=self.predict([b for _,_,b in missing])
+            asked=self.predict([missing[i][2] for i in ask]) if ask else []
             self.stats["model_seconds"]+=time.monotonic()-t
-            if len(priors)!=len(missing): raise ValueError("Maia batch size mismatch")
-            for (_,k,b),prior in zip(missing,priors):
-                legal,bc,ac,rc,oc,outcomes,nonmove=vectors(b,data[k])
-                if set(prior)!=set(legal): raise ValueError("Maia must cover every legal move")
-                pr=self.policy_recipe
-                prob=ensemble(legal,bc,ac,rc,oc,[prior[u] for u in legal],
+            if len(asked)!=len(ask): raise ValueError("Maia batch size mismatch")
+            priors=[None]*len(missing)
+            for i,prior in zip(ask,asked): priors[i]=prior
+            self.stats["maia_skipped"]=self.stats.get("maia_skipped",0)+len(missing)-len(ask)
+            for (_,k,b),prior,v in zip(missing,priors,vecs):
+                legal,bc,ac,rc,oc,outcomes,nonmove=v
+                if prior is not None and set(prior)!=set(legal): raise ValueError("Maia must cover every legal move")
+                prob=ensemble(legal,bc,ac,rc,oc,None if prior is None else [prior[u] for u in legal],
                               otb_strength=pr["otb_strength"],empirical_strength=pr["empirical_strength"],
-                              maia_strength=pr["maia_strength"],backup_discount=pr["backup_discount"],
-                              broad_discount=pr["broad_discount"])
+                              maia_strength=pr["maia_strength"],**gate)
                 observed=sum(ac)
                 # Zero empirical arrivals means a model-only continuation, not a made-up result.
                 # The outcome pool can record only endings at a board other sources saw continue
