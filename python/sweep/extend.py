@@ -13,12 +13,15 @@ from pathlib import Path
 import sys
 import chess
 import chess.engine
+import numpy as np
 import polars as pl
+from eval_arrays import MISSING
 from consumer_keys import ConsumerKeys,checked_board,stored_key
 import engine_candidates as ec
 from .continuations import Search,token
+from .extensions import SEVERITY_MODES
 from .frontier import from_config
-from .spec import digest, DEFAULT_EXTENSION_METRIC
+from .spec import digest, DEFAULT_EXTENSION_METRIC, FIXED
 from .stages import file_sha,atomic_json,artifacts
 
 def load_book(path,colour):
@@ -83,6 +86,10 @@ def main():
     p.add_argument("--threshold",type=float,default=.00003)
     p.add_argument("--metric",choices=["covered-maximum","remaining-maximum"],default=DEFAULT_EXTENSION_METRIC,
                    help="default: remaining-maximum; covered-maximum is the queued legacy control")
+    p.add_argument("--severity",choices=SEVERITY_MODES,default="engine",
+                   help="engine (default): top-three gaps only. engine-or-player: max(engine gaps, our "
+                        "players' expected loss from the pool's explorer book, own post-book population, "
+                        "at least the recipe's weak_min_games games); the player term only ever adds")
     p.add_argument("--steps",type=int,default=1000)
     p.add_argument("--execute",action="store_true")
     a=p.parse_args()
@@ -100,8 +107,19 @@ def main():
     inputs=dict(book=file_sha(a.book),policy=file_sha(a.policy_config),recipe=cfg["recipe"],
                 sources=cfg["artifacts"],code={str(p):file_sha(p) for p in Path(__file__).parent.glob("*.py")})
     contract=dict(inputs=inputs,absolute_floor=meta["absolute_score_floor"],relative_limit=meta["max_score_loss"])
+    own=None
+    if a.severity!="engine":
+        # Our players' moves come from the explorer book the candidate pool was built from (the
+        # pools stop at ply 30, extensions do not), bound by that book's meta sha.
+        from .own_moves import BookOwnMoves
+        pool_meta=json.loads(Path(str(meta["stats"])+".meta.json").read_text(encoding="utf8"))
+        own=BookOwnMoves(pool_meta["book"],own_policy=FIXED["own_policy"],
+                         expected_meta_sha=pool_meta["book_meta_sha256"])
+        book_meta=Path(pool_meta["book"])/"_book.meta.json"
+        pinned.append(dict(path=str(book_meta.resolve()),sha256=file_sha(book_meta)))
     if not a.execute:
-        print(json.dumps(dict(state="ready",starts_jobs=False,metric=a.metric,threshold=a.threshold,contract=contract),indent=2));return
+        print(json.dumps(dict(state="ready",starts_jobs=False,metric=a.metric,threshold=a.threshold,
+                              severity=a.severity,own=own.contract() if own else None,contract=contract),indent=2));return
     a.out.mkdir(parents=True,exist_ok=True)
     keys=ConsumerKeys(meta["eval_lookup128"],expected_sha=meta["eval_lookup_sha256"])
     prior=from_config(a.policy_config,colour=meta["perspective"],keys=keys,pool=meta["stats"],aux=meta["aux_stats"])
@@ -113,11 +131,18 @@ def main():
         return dict(moves={b.parse_san(r["move_san"]).uci():r["policy_p"]*mass/total for r in frame.to_dicts()},
                     stop=nonmove/total,
                     support={name:frame["support_"+name][0] for name in ("broad","adult","target","otb")})
+    player={}
+    if own is not None:
+        def child_score(b):
+            cp=int(keys.scores(np.array([keys.board(b)],dtype=np.int64))[0])
+            return None if cp==int(MISSING) else cp
+        player=dict(severity_mode=a.severity,own=own.moves,own_contract=own.contract(),
+                    child_score=child_score,player_min_games=FIXED["weak_min_games"])
     try:
         search=Search(base=load_book(a.book,meta["perspective"]),white=meta["perspective"]=="white",
                       analyse=engine,reply=reply,contract=contract,threshold=a.threshold,
                       allowed=load_book(a.allowed_book,meta["perspective"]) if a.allowed_book else None,
-                      checkpoint=a.out/"checkpoint.json",metric=a.metric)
+                      checkpoint=a.out/"checkpoint.json",metric=a.metric,**player)
         report=search.run(a.steps)
         # Preserve every policy used over earlier resumptions as well as this invocation.
         # The immutable per-position cache and pinned recipe reproduce earlier records.

@@ -24,11 +24,11 @@ The manifest preserves the builder's current lookahead default (off). The integr
 
 From this worktree's python directory:
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-20-v4.json
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.spec --out ../docs/sweep-manifest-2026-11-21-v5.json
 
 This refuses to overwrite a different manifest. Repeating the same recipe is harmless. v3 is current (it adds the Black polish and the quality-request scope). Its predecessor v2 corrected the four horizon comparisons to independent 2,000-position books paired with their matching ply-30 masters. Weight/policy sensitivities remain at 1,000. The older Maia manifest is archived unchanged; its incorrect horizon design now fails readiness validation. No old output directory should be relabelled or resumed as a corrected horizon arm.
 
-    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-20-v4.json --workspace D:/chess/sweep-inputs
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.prepare --manifest ../docs/sweep-manifest-2026-11-21-v5.json --workspace D:/chess/sweep-inputs
 
 With no source bindings this prints a waiting-for-publication report and starts nothing.
 
@@ -91,6 +91,8 @@ The coordinator records immutable code snapshots, build/verify/audit receipts, r
 Default is read-only readiness. --execute --steps 1000 performs bounded work, saves checkpoint.json, and reports whether the unexplored exposure is bounded below the threshold. Run the same command again to continue. No book-depth limit or nonzero opponent-move cutoff is introduced by --steps. --allowed-book constrains the prescribed moves to the extended master; an uncovered required position is reported as a master hole.
 
 The default metric is remaining-maximum, approved November 19. --metric covered-maximum runs the earlier metric as a comparison control; use a separate output directory for each metric and threshold. The November 19 manifest queues both metrics on all four 2,000-position anchors at all three calibration thresholds (24 extension variants, reusing the same four base books). This deferred stage waits for verified inputs, an accepted Black pilot, closed anchors and the extension cost pilot. Use shared evidence/caches and a common continuation union for comparison. The November 18 manifest remains the historical record. The complete engine/policy history is retained in checkpoint.json and its hash appears in the report. The adapter is deliberately not a production speed claim: its independent 20M MultiPV top-three searches still need hybrid screening and cost calibration. A bounded result creates extensions.json, preserving base and additional prescriptions separately; automatic PGN/ladder publication is not wired in.
+
+`--severity engine-or-player` (2026-11-21) scores each analysed own position as max(engine gaps, our players' expected loss). The player counts come from the candidate pool's explorer book, read by full key (`sweep/own_moves.py`: the recipe's `own_policy` population, every ply, at least `weak_min_games` games). Moves the engine ranked keep its 20M scores, other moves are scored from the eval lookup, and unevaluated moves count as no loss. The player term can only raise severity: the data understates our loss inside a sequence, because players there mostly chose the tactic themselves. The default `engine` is an exact no-op. The v5 manifest queues the variant at the default metric on the four anchors and three thresholds (12 runs, role `player-severity`); its control is the matching `default-calibration` run. The report's `player_severity` block counts positions analysed, positions with enough games and positions the term raised.
 
 Both entrypoints are ready for controlled pilots, not an instruction to launch the production matrix now.
 

@@ -73,15 +73,26 @@ class Specification(unittest.TestCase):
     def test_extension_default_and_paired_queue(self):
         m=spec.manifest();q=m["extension_comparison"]
         self.assertEqual(m["extensions"]["metric"],"remaining-maximum")
-        self.assertEqual(len(q["runs"]),24)
-        self.assertEqual(len({r["id"] for r in q["runs"]}),24)
+        # 24 metric runs (both metrics) + 12 player-severity runs at the default metric (2026-11-21)
+        self.assertEqual(len(q["runs"]),36)
+        self.assertEqual(len({r["id"] for r in q["runs"]}),36)
         anchors={a["id"] for a in m["primary"] if a["recipe"]["mode"]=="independent" and a["recipe"]["budget"]==2000}
         self.assertEqual(len(anchors),4)
         for anchor in anchors:
             for threshold in (1e-5,3e-5,1e-4):
-                pair=[r for r in q["runs"] if r["recipe"]["base_arm"]==anchor and r["recipe"]["extensions"]["threshold"]==threshold]
+                group=[r for r in q["runs"] if r["recipe"]["base_arm"]==anchor and r["recipe"]["extensions"]["threshold"]==threshold]
+                pair=[r for r in group if r["role"]!="player-severity"]
                 self.assertEqual({r["recipe"]["extensions"]["metric"] for r in pair},{"remaining-maximum","covered-maximum"})
-                self.assertTrue(all(r["depends_on"]==[anchor] for r in pair))
+                self.assertTrue(all(r["depends_on"]==[anchor] for r in group))
+                (player,)=[r for r in group if r["role"]=="player-severity"]
+                control=next(r for r in pair if r["role"]=="default-calibration")
+                ext=player["recipe"]["extensions"]
+                self.assertEqual(ext["metric"],"remaining-maximum")
+                self.assertEqual(ext["severity"]["combine"],"max(engine-severity,player-loss)")
+                # the player run differs from its default control by the severity setting alone
+                self.assertEqual({k:v for k,v in ext.items() if k!="severity"},
+                                 {k:v for k,v in control["recipe"]["extensions"].items() if k!="severity"})
+                self.assertEqual(player["cli_args"][-2:],["--severity","engine-or-player"])
         q["runs"][0]["cli_args"][1]="covered-maximum"
         with self.assertRaisesRegex(ValueError,"comparison queue drifted"):spec.validate(m)
 

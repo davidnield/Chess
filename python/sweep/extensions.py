@@ -17,6 +17,36 @@ def severity(scores, legal_count):
     gap3=scores[0]-scores[2] if legal_count>=3 else 0.
     return dict(gap2=gap2,gap3=gap3,severity=max(gap2,.60*gap3))
 
+# "engine" is the approved default. "engine-or-player" (David, 2026-11-21) also counts how our
+# players actually move. Players who reach a mid-sequence position mostly chose to enter the
+# tactic themselves, so their data understates OUR loss there (we arrive because it is booked).
+# The player term is therefore only ever combined by max(): it can add an extension, never
+# lower a position's severity, so it cannot end a sequence the engine gaps would continue.
+SEVERITY_MODES=("engine","engine-or-player")
+
+def player_loss(best, moves):
+    """Expected-score loss of playing as our players do, a lower bound.
+
+    ``best`` is the best move's own-side expected score; ``moves`` is (games, score) per
+    observed move, score None when unevaluated. Unevaluated mass counts as no loss (divided
+    by ALL games), so missing evidence can only understate the term, never inflate it.
+    """
+    if not math.isfinite(best) or not 0<=best<=1: raise ValueError("invalid best expected score")
+    total=0.;loss=0.;evaluated=0.
+    for n,s in moves:
+        if not math.isfinite(n) or n<0: raise ValueError("invalid move count")
+        total+=n
+        if s is None: continue
+        if not math.isfinite(s) or not 0<=s<=1: raise ValueError("invalid move expected score")
+        evaluated+=n;loss+=n*max(0.,best-s)
+    if total<=0: raise ValueError("no observed moves")
+    return dict(loss=loss/total,games=total,evaluated_share=evaluated/total)
+
+def combined_severity(engine, player, mode):
+    if mode not in SEVERITY_MODES: raise ValueError("unknown severity mode")
+    if mode=="engine" or player is None: return engine
+    return max(engine,player)
+
 @dataclass(frozen=True)
 class Route:
     probability: float

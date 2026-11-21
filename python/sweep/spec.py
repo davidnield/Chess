@@ -40,6 +40,14 @@ EXTENSIONS = {"metric": DEFAULT_EXTENSION_METRIC, "threshold": .00003, "calibrat
               "cost": "new-distinct-prescriptions-including-connectors",
               "depth_cap": None, "reply_cutoff": None, "recall_discount": False,
               "unresolved_frontier": "must-bound-or-expand"}
+# Added 2026-11-21 (David): the comparison's player-severity variant. The engine gaps stay the
+# default; this only ever raises a position's severity (max), because players who reached a
+# mid-sequence position mostly chose the tactic themselves and know its next move, so their
+# data understates the loss of someone who arrives there by book (sweep/extensions.py).
+PLAYER_SEVERITY = {"mode": "engine-or-player", "combine": "max(engine-severity,player-loss)",
+                   "population": "own_policy", "source": "candidate-pool-explorer-book-all-plies",
+                   "min_games": "weak_min_games", "move_scores": "engine-top-three-else-lookup",
+                   "unevaluated_moves": "no-loss", "entry_bias": "uncorrected-lower-bound"}
 EVALUATION = {"backend": "maia3-79m-position", "primary_trajectories": 4096,
               "primary_seeds": [1,2,3,4], "finalist_trajectories": 32768,
               "finalist_seeds": list(range(101,109)), "minimum_horizon": 50,
@@ -96,6 +104,16 @@ def extension_comparison(main):
                                  role="default-calibration" if metric==DEFAULT_EXTENSION_METRIC else "legacy-control",
                                  state="queued-waiting-for-prerequisites",
                                  cli_args=["--metric",metric,"--threshold",str(threshold)]))
+        # The player-severity variant at the default metric only: it answers a different
+        # question from the metric comparison, and its control is the default run above.
+        for threshold in EXTENSIONS["calibration"]:
+            settings={k:deepcopy(v) for k,v in EXTENSIONS.items() if k!="calibration"}
+            settings.update(threshold=threshold,severity=deepcopy(PLAYER_SEVERITY))
+            recipe=dict(base_arm=anchor["id"],extensions=settings)
+            runs.append(dict(id=digest(recipe)[:20],recipe=recipe,depends_on=[anchor["id"]],
+                             role="player-severity",state="queued-waiting-for-prerequisites",
+                             cli_args=["--metric",DEFAULT_EXTENSION_METRIC,"--threshold",str(threshold),
+                                       "--severity",PLAYER_SEVERITY["mode"]]))
     return dict(schema=1,default_metric=DEFAULT_EXTENSION_METRIC,
                 prerequisites=["inputs-verified","black-pilot-closed","four-anchors-quality-closed",
                                "extension-cost-pilot-passed"],
@@ -105,6 +123,7 @@ def extension_comparison(main):
                 evaluation="paired-seeds-and-common-horizon",
                 report=["additional-distinct-prescriptions","selected-move-disagreement",
                         "later-unbooked-risk","reach-weighted-coverage","paired-score",
+                        "player-term-coverage-and-raised-positions",
                         "runtime-and-cache-reuse","unresolved-exposure-bounds"],runs=runs)
 
 

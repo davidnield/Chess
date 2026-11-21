@@ -400,3 +400,27 @@ David approved two changes after Claude's held-out check of the ensemble
 - Tests: `_test_policy_maia_gate.py` (7). `_test_review_fixes_1119`, `_test_sweep_execution`,
   `_test_sweep_coordinator` and `_test_sweep_preparation` pass.
 
+
+## November 21: player severity for extensions (manifest v5)
+
+David approved adding our players' expected loss back to extension severity, after jk_182's
+complexity comparison (Lichess blog, 2026-11-12: policy-weighted "ease" predicted mistakes best).
+His standing concern sets its shape: players who reach a mid-sequence position mostly chose the
+tactic themselves and know its next move, but we arrive because it is booked, so the data
+understates our loss exactly inside sequences.
+
+- **`--severity engine-or-player`** in `sweep.extend` / `continuations.Search`: severity =
+  max(engine gaps, player loss). The player term can only add an extension, never lower a
+  position's severity, so it cannot end a sequence the engine gaps would continue. `engine`
+  stays the default and is an exact no-op (identity, state and report).
+- **Player loss** (`extensions.player_loss`): the best move's expected score minus our players'
+  average, a lower bound. Engine-ranked moves keep their 20M scores; others come from the eval
+  lookup; unevaluated moves count as no loss. Below `weak_min_games` (20) games there is no term.
+- **Counts** (`sweep/own_moves.py`): read by full key from the candidate pool's explorer book
+  (bound by its meta sha), `own_policy` population (weak1000-1799 bands), every ply. The pools stop
+  at ply 30 and extensions do not. About 0.3 s per position warm on the real book.
+- **Manifest v5** (`docs/sweep-manifest-2026-11-21-v5.json`): the 24 metric runs keep their IDs;
+  12 `player-severity` runs (default metric x 3 thresholds x 4 anchors) are added; v4 is refused.
+- **Bias measurement**: see the November 21 entry in `docs/claude-review-fixes-plan-2026-11-19.md`.
+- Tests: `_test_extension_player_severity.py` (8); `_test_sweep_preparation` and
+  `_test_review_fixes_1119` updated.

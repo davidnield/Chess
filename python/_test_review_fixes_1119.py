@@ -65,10 +65,19 @@ class Solver(unittest.TestCase):
 
     def test_current_manifest_is_the_generator(self):
         # v4 (2026-11-20): otb-ensemble-v2, the Maia support gate. v3 is kept for audit and refused.
+        # v5 (2026-11-21): the extension comparison's 12 player-severity runs; v4 is refused
+        # (queue drifted), while its 24 metric runs keep their IDs in v5.
         docs = HERE.parent / "docs"
-        path = docs / "sweep-manifest-2026-11-20-v4.json"
+        path = docs / "sweep-manifest-2026-11-21-v5.json"
         if path.exists():
             self.assertEqual(json.loads(path.read_text(encoding="utf8")), spec.manifest())
+        v4 = docs / "sweep-manifest-2026-11-20-v4.json"
+        if v4.exists():
+            m4 = json.loads(v4.read_text(encoding="utf8"))
+            with self.assertRaisesRegex(ValueError, "comparison queue drifted"):
+                spec.validate(m4)
+            now = {r["id"] for r in spec.manifest()["extension_comparison"]["runs"]}
+            self.assertTrue({r["id"] for r in m4["extension_comparison"]["runs"]} <= now)
         old = docs / "sweep-manifest-2026-11-19-maia-v3.json"
         if old.exists():
             with self.assertRaisesRegex(ValueError, "opponent ensemble recipe"):

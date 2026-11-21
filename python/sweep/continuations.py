@@ -11,7 +11,8 @@ import math
 from pathlib import Path
 import chess
 from consumer_keys import stored_key
-from .extensions import Route,severity,package_value,unresolved_bound,residual_exposure,residual_package_value
+from .extensions import (Route,severity,package_value,unresolved_bound,residual_exposure,residual_package_value,
+                         SEVERITY_MODES,player_loss,combined_severity)
 from .quality import score
 from .spec import digest, DEFAULT_EXTENSION_METRIC
 from .stages import atomic_json
@@ -46,14 +47,27 @@ def choose(routes,risks,base,threshold,metric=DEFAULT_EXTENSION_METRIC):
 
 class Search:
     def __init__(self, *, base, white, analyse, reply, contract, threshold=.00003,
-                 checkpoint=None, allowed=None, root_fen=chess.STARTING_FEN,metric=DEFAULT_EXTENSION_METRIC):
+                 checkpoint=None, allowed=None, root_fen=chess.STARTING_FEN,metric=DEFAULT_EXTENSION_METRIC,
+                 severity_mode="engine",own=None,own_contract=None,child_score=None,player_min_games=None):
         if not math.isfinite(threshold) or not 0<threshold<1: raise ValueError("invalid extension threshold")
         if metric not in ("covered-maximum","remaining-maximum"): raise ValueError("unknown extension metric")
-        self.metric=metric
+        if severity_mode not in SEVERITY_MODES: raise ValueError("unknown severity mode")
+        player=severity_mode!="engine"
+        if player and (own is None or child_score is None or own_contract is None
+                       or player_min_games is None or not player_min_games>0):
+            raise ValueError("player severity needs our players' moves, child scores and a game floor")
+        if not player and (own is not None or child_score is not None):
+            raise ValueError("engine severity takes no player inputs")
+        self.metric=metric;self.severity_mode=severity_mode
+        self.own=own;self.child_score=child_score;self.player_min_games=player_min_games
         self.base=dict(base);self.white=white;self.analyse=analyse;self.reply=reply
         self.threshold=threshold;self.allowed=allowed;self.checkpoint=Path(checkpoint) if checkpoint else None
-        self.identity=digest(dict(base=base,white=white,contract=contract,threshold=threshold,
-                                  allowed=allowed,root_fen=root_fen,metric=metric,algorithm="prefix-union-greedy-v1"))
+        recipe=dict(base=base,white=white,contract=contract,threshold=threshold,
+                    allowed=allowed,root_fen=root_fen,metric=metric,algorithm="prefix-union-greedy-v1")
+        if player:   # engine mode keeps the earlier identity, so its checkpoints stay valid
+            recipe.update(severity=dict(mode=severity_mode,own=own_contract,min_games=player_min_games,
+                                        move_scores="engine-top-three-else-lookup",missing="no-loss"))
+        self.identity=digest(recipe)
         self.root_fen=root_fen
         self.state=dict(identity=self.identity,expanded=0,risks={k:0. for k in base},decisions={},
                         analysis={},policies={},model_only_visits=0.,opponent_visits=0.,leaves=[dict(history=[],mass=1.,positions=[],complete=False,blocked=None)])
@@ -75,7 +89,8 @@ class Search:
                    else sum(r.probability for r in routes if not r.complete))
         # This bounds unexplored exposure; it is not a proof of global package optimality.
         closed=remaining<self.threshold
-        return dict(metric=self.metric,known_unbooked_exposure=residual_exposure(routes,self.state["risks"],selected,self.base),
+        extra={} if self.severity_mode=="engine" else dict(player_severity=self.player_summary())
+        return dict(**extra,metric=self.metric,known_unbooked_exposure=residual_exposure(routes,self.state["risks"],selected,self.base),
                     state="bounded" if closed else "open",closed=closed,identity=self.identity,
                     additional={k:self.state["decisions"][k] for k in sorted(selected)},
                     additional_distinct=len(selected),base_distinct=len(self.base),
@@ -89,6 +104,39 @@ class Search:
 
     def save(self):
         if self.checkpoint: atomic_json(self.checkpoint,self.state)
+
+    def _player_severity(self, b, k, engine, top, sign):
+        """max(engine, our players' expected loss) at our-turn board ``b`` (see extensions)."""
+        o=self.own(b.copy(stack=False))
+        moves=o["moves"]
+        if (any(not isinstance(n,int) or n<0 for n in moves.values())
+                or o["games"]!=sum(moves.values())):
+            raise ValueError("our players' move counts must be whole games summing to the total")
+        rec=dict(engine=engine,player=None,games=o["games"],evaluated_share=None)
+        if o["games"]>=self.player_min_games:
+            # Moves the engine ranked keep its 20M scores; the rest are scored from the lookup.
+            ranked={r["uci"]:score(sign*r["cp_white"]) for r in top}
+            scored=[]
+            for u,n in sorted(moves.items()):
+                child=b.copy(stack=False);child.push(b.parse_uci(u))
+                if u in ranked: s=ranked[u]
+                else:
+                    cp=self.child_score(child)
+                    s=None if cp is None else score(sign*cp)
+                scored.append((n,s))
+            loss=player_loss(score(sign*top[0]["cp_white"]),scored)
+            rec.update(player=loss["loss"],evaluated_share=loss["evaluated_share"])
+        rec["severity"]=combined_severity(engine,rec["player"],self.severity_mode)
+        self.state.setdefault("severity_parts",{})[k]=rec
+        return rec["severity"]
+
+    def player_summary(self):
+        parts=list(self.state.get("severity_parts",{}).values())
+        used=[p for p in parts if p["player"] is not None]
+        return dict(severity_mode=self.severity_mode,analysed=len(parts),player_available=len(used),
+                    player_raised=sum(p["player"]>p["engine"] for p in used),
+                    mean_evaluated_share=(sum(p["evaluated_share"] for p in used)/len(used)) if used else None,
+                    min_games=self.player_min_games)
 
     def step(self):
         pending=[(r["mass"],-len(r["history"]),i) for i,r in enumerate(self.state["leaves"])
@@ -132,7 +180,9 @@ class Search:
                     if score(owncp)<self.contract["absolute_floor"]-1e-12 or score(cp[0])-score(owncp)>self.contract["relative_limit"]+1e-12:
                         leaf["blocked"]="engine-gate";return False
                     self.state["analysis"][k]=a
-                    self.state["risks"][k]=severity([score(c) for c in cp],legal)["severity"]
+                    engine=severity([score(c) for c in cp],legal)["severity"]
+                    self.state["risks"][k]=(engine if self.severity_mode=="engine"
+                                            else self._player_severity(b,k,engine,top,sign))
                     self.state["decisions"][k]=move
                 move=self.state["decisions"][k]
             b.parse_uci(move)

@@ -436,10 +436,19 @@ Extensions have no four-move/depth or nonzero reply-frequency cap. Actual histor
 repetition; full keys deduplicate memory cost. David approved remaining-maximum as the
 default on November 19: reduce maximum remaining unbooked risk, so an earlier covered move
 cannot hide an equally difficult later move. Keep covered-maximum as the explicit control.
-The current manifest is docs/sweep-manifest-2026-11-20-v4.json; its extension_comparison queue
-crosses both metrics, all three thresholds and four 2,000-position anchors (24 variants).
-Separate checkpoints by metric/threshold; share frozen engine/policy evidence. Wait for the
+The current manifest is docs/sweep-manifest-2026-11-21-v5.json; its extension_comparison queue
+crosses both metrics, all three thresholds and four 2,000-position anchors (24 variants), plus
+12 player-severity runs at the default metric (36 in all).
+Separate checkpoints by metric/threshold/severity; share frozen engine/policy evidence. Wait for the
 listed pilot/input prerequisites. See the progress log for production cost limitations.
+
+Extension severity is engine gaps by default. `sweep.extend --severity engine-or-player` (David,
+2026-11-21) takes max(engine gaps, our players' expected loss), with our players' counts read by
+full key from the candidate pool's explorer book (`sweep/own_moves.py`; pools stop at ply 30,
+extensions do not). The player term may only ever RAISE a position's severity: players who reach a
+mid-sequence position mostly chose the tactic and know its next move, while we arrive by book, so
+their data understates our loss exactly inside sequences. Never let it lower or replace the engine
+term. Engine mode is an exact no-op (identity, state and report unchanged).
 
 
 Eval verification resumes (2026-11-20): `run_ply51_evals.py` publishes `evals/verification-receipt.json`
@@ -480,7 +489,7 @@ families before OTB training publication. See the fourth-pass progress entry.
 November 19 14:05 decision supersedes pending Allie evaluator selection: David chose
 Maia-3 79M position-only for rollouts and kept the existing Maia construction
 ensemble. Further Allie investigations are deferred, not sweep prerequisites.
-The current manifest is docs/sweep-manifest-2026-11-20-v4.json. Freeze production
+The current manifest is docs/sweep-manifest-2026-11-21-v5.json. Freeze production
 runtime/population bindings before releasing evaluation; the model choice alone
 is not completed integration. The full Cloud/Fishnet eval build started at 14:02
 with child shards on E: after the capacity pilot passed. F: fallback was not needed.
