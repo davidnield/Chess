@@ -108,6 +108,9 @@ first can be judged.
     - Inputs read per pool, from the book's partitions: brc-all 4.50 TB (the whole book), weak 2.94, brc1800 1.33, classical1800 0.02, rapid2200 0.02.
     - Free space at 20:20: D 1.05, E 0.83, H 1.38 TB (the lookup will add ~0.11 TB to D). The eval work dirs hold ~1.7 TB on E: (`eval-work-p51-20261115-child`) plus H:; they are deletable only with David's OK, after publication.
     - **Capacity pilot = classical1800-p30**, then project the big three from measured output/input before launching them.
+- *21 Nov, 07:13.* **Ply-51 eval DB and lookup published:** status "eval DB and lookup verified", which names `verification_receipt`. 11,715,795,322 full-key scores. `sample_lookup` checked 8,192 eval rows and 2,048 known mates. The lookup's mate pass and bucket pass slowed down inside the coordinator's single process (CLAUDE.md: DuckDB in-process decay). They were finished by fresh processes running the pinned functions (`D:/chess/ply51-migration-20261115/resume-20261120/`: `mate_fill.py` and `lookup_fill.py`). Spot buckets were identical to the coordinator's own output. The restarted coordinator then re-verified every shard and bucket checkpoint and published.
+  - **Deleted 07:15, with David's OK:** the junction `H:\chess\eval-work-p51-20261115\c`, then `E:\chess\eval-work-p51-20261115-child`, then `H:\chess\eval-work-p51-20261115`. Kept: the `-sample` dir and the verifier receipt and checkpoint. Free space now: D 0.92, E 2.77, H 2.25 TB. Recorded in `E:\chess\README.md` and the new `H:\chess\README.md`.
+  - **Step 8:** `make_bindings.py` wrote `D:/chess/sweep-inputs/bindings.json`, and all five pools check "ready". The **classical1800-p30** trial started 07:15 (log `D:/chess/sweep-inputs/classical1800-p30.prepare.log`). The big three wait for its size and time numbers and for David.
 ---
 
 ## History: the 19 November review fixes (done)
