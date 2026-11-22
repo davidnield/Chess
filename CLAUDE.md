@@ -536,9 +536,13 @@ fishnet and terminal mates are untouched, and the published lookup is never modi
 new source codes 4 (gap) and 5 (over legacy fishnet). Choosing it for builds is a separate,
 default-off sweep decision; letting ChessDB lead over 2021+ fishnet waits for a validation panel.
 
-Stockfish 19 everywhere (David, 2026-11-21): every tool launches `python/engine_path.STOCKFISH`
-(the official sf_19 release pinned under `D:/chess/bin/stockfish-19`; `CHESS_STOCKFISH` overrides).
-Never hard-code another binary (`_test_engine_path.py` fails on one). Search caches pin the engine
-binary's sha256 and the referee cache's sidecar names the engine, so Stockfish 18 results are
-refused or keyed apart, never mixed; caches with no engine record (annotation, referee and
-alignment defaults) use `_sf19` file names. The Stockfish 18 caches stay on disk as history.
+One Stockfish for every tool: `python/engine_path.STOCKFISH`, **Stockfish 18** (pinned copy of the
+WinGet binary under `D:/chess/bin/stockfish-18`, same sha256, so its caches stay valid;
+`CHESS_STOCKFISH` overrides). Never hard-code another binary (`_test_engine_path.py` fails on one).
+**Do not switch engines without re-measuring the cp scale.** Stockfish 19 was the default for one
+day (2026-11-21) and went back on 2026-11-22: at the same depth its scores are ~1.47x Stockfish 18's,
+while everything the project measures in centipawns (the eval DB's cloud/fishnet scores, the fitted
+eval-to-score curve, soundness limits, critical-move gaps, extension severities) is on Stockfish
+18's / Lichess's scale. Search caches pin the binary's sha256 and the referee cache's sidecar names
+the engine, so engines are never mixed; caches with no engine record use one file per engine (the
+Stockfish 19 day's rows are in the `_sf19` files).

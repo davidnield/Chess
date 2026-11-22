@@ -61,7 +61,7 @@ if hasattr(sys.stdout, "reconfigure"):
 DEFAULT_REPERTOIRE = Path("E:/chess/repertoire/repertoire.parquet")
 DEFAULT_STATS      = Path("E:/chess/position-stats/position_stats.parquet")
 DEFAULT_OUTPUT     = Path("E:/chess/repertoire/repertoire_safe.parquet")
-DEFAULT_CACHE      = Path("E:/chess/engine-cache/evals_sf19.parquet")  # one cache file per engine
+DEFAULT_CACHE      = Path("E:/chess/engine-cache/evals.parquet")  # Stockfish 18 (one cache file per engine)
 
 MATE_SCORE  = 10000  # cp equivalent used to flatten forced-mate scores
 
@@ -276,7 +276,7 @@ def main():
     parser.add_argument("--output",           default=str(DEFAULT_OUTPUT))
     parser.add_argument("--cache",            default=str(DEFAULT_CACHE))
     parser.add_argument("--stockfish",        default=STOCKFISH,
-                        help="Path to Stockfish binary (default: engine_path.STOCKFISH, Stockfish 19)")
+                        help="Path to Stockfish binary (default: engine_path.STOCKFISH, Stockfish 18)")
     parser.add_argument("--depth",        type=int, default=18,
                         help="Stockfish search depth (default: 18)")
     parser.add_argument("--threads",      type=int, default=4,

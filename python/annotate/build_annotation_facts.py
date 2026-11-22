@@ -50,7 +50,7 @@ PRIORS = {
     "white": "E:/chess/repertoire/_plan/canon_white_prior.parquet",
     "black": "E:/chess/repertoire/_plan/canon_black_prior.parquet",
 }
-DEFAULT_ENGINE_CACHE = "E:/chess/engine-cache/annotation_evals_sf19.parquet"  # engine_pass.CACHE
+DEFAULT_ENGINE_CACHE = "E:/chess/engine-cache/annotation_evals.parquet"  # engine_pass.CACHE
 
 
 def main() -> None:

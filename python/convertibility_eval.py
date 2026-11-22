@@ -1018,7 +1018,7 @@ class StockfishFill:
             e.quit()
 
 
-from engine_path import STOCKFISH as SF_PATH  # noqa: E402  (Stockfish 19 since 2026-11-21)
+from engine_path import STOCKFISH as SF_PATH  # noqa: E402  (Stockfish 18; see engine_path)
 
 
 def main():
@@ -1044,8 +1044,8 @@ def main():
     ap.add_argument("--no-maia-cache", dest="maia_cache", action="store_const", const=None,
                     default=argparse.SUPPRESS, help="ask Maia afresh in every run")
 
-    # engine-specific default: the Stockfish 18 cache refuses this engine (its sidecar names it)
-    ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf19_cache.parquet",
+    # engine-specific default: the Stockfish 18 cache (its sidecar names the engine; another engine is refused)
+    ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache.parquet",
                     help="persistent (hash, depth) -> cp cache for --stockfish-depth leaves")
     ap.add_argument("--max-ply", type=int, default=30)
     ap.add_argument("--recall", type=float, default=1.0, help="probability of remembering a "

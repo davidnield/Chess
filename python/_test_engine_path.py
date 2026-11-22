@@ -1,4 +1,4 @@
-"""One Stockfish for every tool (engine_path.py, David 2026-11-21: Stockfish 19 everywhere).
+"""One Stockfish for every tool (engine_path.py: Stockfish 18 since 2026-11-22, after one day of Stockfish 19).
 
 Every module that launches Stockfish resolves to engine_path.STOCKFISH; no Python file names another
 Stockfish binary; the default caches that carry no engine record are engine-specific files; and the
@@ -42,7 +42,7 @@ class EnginePath(unittest.TestCase):
     def test_engineless_caches_are_engine_specific(self):
         import annotate.build_annotation_facts as facts
         import annotate.engine_pass as ep
-        self.assertTrue(str(ep.CACHE).endswith("annotation_evals_sf19.parquet"))
+        self.assertTrue(str(ep.CACHE).endswith("annotation_evals.parquet"))
         self.assertEqual(Path(facts.DEFAULT_ENGINE_CACHE), Path(ep.CACHE))
 
     def test_binary_identity(self):

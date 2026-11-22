@@ -17,7 +17,7 @@ concrete variations annotations quote, for exactly the annotation targets:
 Targets are the union over both colors' fact sheets (deduped by EPD). Resumable:
 cache is keyed (epd, mode); skip anything already present at >= requested depth.
 
-Cache E:/chess/engine-cache/annotation_evals_sf19.parquet (Stockfish 19; one file per engine), one row per PV:
+Cache E:/chess/engine-cache/annotation_evals.parquet (Stockfish 18; one file per engine), one row per PV:
   epd | mode | rank | cp | pv_uci | depth | multipv | evaluated_at
 
 DO NOT run while the recompression job is using the CPU — this wants all cores.
@@ -51,9 +51,9 @@ from trainer_app.config import resolve_data_dir
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-# The cache rows carry no engine name, so each engine gets its own file (Stockfish 19 since
-# 2026-11-21; the Stockfish 18 rows stay in annotation_evals.parquet).
-CACHE = Path("E:/chess/engine-cache/annotation_evals_sf19.parquet")
+# The cache rows carry no engine name, so each engine gets its own file (Stockfish 18 here; the one
+# day of Stockfish 19 rows, 2026-11-21, stays in annotation_evals_sf19.parquet).
+CACHE = Path("E:/chess/engine-cache/annotation_evals.parquet")
 MATE = 10000
 
 
