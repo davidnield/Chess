@@ -535,3 +535,10 @@ positions with no score and replaces scores that come only from pre-2021 fishnet
 fishnet and terminal mates are untouched, and the published lookup is never modified. Same layout,
 new source codes 4 (gap) and 5 (over legacy fishnet). Choosing it for builds is a separate,
 default-off sweep decision; letting ChessDB lead over 2021+ fishnet waits for a validation panel.
+
+Stockfish 19 everywhere (David, 2026-11-21): every tool launches `python/engine_path.STOCKFISH`
+(the official sf_19 release pinned under `D:/chess/bin/stockfish-19`; `CHESS_STOCKFISH` overrides).
+Never hard-code another binary (`_test_engine_path.py` fails on one). Search caches pin the engine
+binary's sha256 and the referee cache's sidecar names the engine, so Stockfish 18 results are
+refused or keyed apart, never mixed; caches with no engine record (annotation, referee and
+alignment defaults) use `_sf19` file names. The Stockfish 18 caches stay on disk as history.

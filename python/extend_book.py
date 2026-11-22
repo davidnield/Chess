@@ -48,7 +48,7 @@ from eval_arrays import MISSING, lookup_evals, open_eval_arrays  # noqa: E402
 from stage3_backwards_induction import LICHESS_CP_SCALE  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
 
-SF = "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe"
+from engine_path import STOCKFISH as SF  # noqa: E402  (Stockfish 19 since 2026-11-21)
 WEAK = "E:/chess/position-stats/weak_edges_b1000_1800_on_ge1800.parquet"
 
 

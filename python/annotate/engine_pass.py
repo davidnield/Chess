@@ -17,7 +17,7 @@ concrete variations annotations quote, for exactly the annotation targets:
 Targets are the union over both colors' fact sheets (deduped by EPD). Resumable:
 cache is keyed (epd, mode); skip anything already present at >= requested depth.
 
-Cache E:/chess/engine-cache/annotation_evals.parquet, one row per PV:
+Cache E:/chess/engine-cache/annotation_evals_sf19.parquet (Stockfish 19; one file per engine), one row per PV:
   epd | mode | rank | cp | pv_uci | depth | multipv | evaluated_at
 
 DO NOT run while the recompression job is using the CPU — this wants all cores.
@@ -26,7 +26,7 @@ Usage:
     set PYTHONPATH=<repo>\\python
     .venv\\Scripts\\python.exe -m annotate.engine_pass
         [--data DIR] [--workers 5] [--threads 2] [--depth 18] [--threat-depth 14]
-        [--multipv 3] [--stockfish stockfish] [--limit N]  (--limit = smoke test)
+        [--multipv 3] [--stockfish PATH (default engine_path.STOCKFISH)] [--limit N]  (--limit = smoke test)
 """
 
 from __future__ import annotations
@@ -45,12 +45,15 @@ import chess
 import chess.engine
 import polars as pl
 
+from engine_path import STOCKFISH
 from trainer_app.config import resolve_data_dir
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
-CACHE = Path("E:/chess/engine-cache/annotation_evals.parquet")
+# The cache rows carry no engine name, so each engine gets its own file (Stockfish 19 since
+# 2026-11-21; the Stockfish 18 rows stay in annotation_evals.parquet).
+CACHE = Path("E:/chess/engine-cache/annotation_evals_sf19.parquet")
 MATE = 10000
 
 
@@ -174,7 +177,7 @@ def main() -> None:
     ap.add_argument("--depth", type=int, default=18)
     ap.add_argument("--threat-depth", type=int, default=14)
     ap.add_argument("--multipv", type=int, default=3)
-    ap.add_argument("--stockfish", default="stockfish")
+    ap.add_argument("--stockfish", default=STOCKFISH)
     ap.add_argument("--cache", default=str(CACHE))
     ap.add_argument("--limit", type=int, default=None, help="smoke test: first N targets")
     ap.add_argument("--save-every", type=int, default=200)

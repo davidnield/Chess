@@ -126,7 +126,7 @@ def main():
     ap.add_argument("--mismatch-top", type=int, default=500)
     ap.add_argument("--mismatch-only", action="store_true",
                     help="with --dump: only the exit-ply measurement, skipping V0/VB at the top exits")
-    ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf_cache_align.parquet")
+    ap.add_argument("--sf-cache", default="E:/chess/calibration/convertibility_sf19_cache_align.parquet")
     ap.add_argument("--sf-procs", type=int, default=3)
     ap.add_argument("--out", required=True)
     a = ap.parse_args()

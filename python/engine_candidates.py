@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from consumer_keys import PAIR, checked_board, full_column, stored_key
 from month_archive import file_lock, sha
 
-SF = "C:/Users/David/AppData/Local/Microsoft/WinGet/Links/stockfish.exe"
+from engine_path import STOCKFISH as SF  # noqa: E402  (Stockfish 19 since 2026-11-21)
 SCHEMA = {"position_hash": pl.Int64, "position_epd": pl.Utf8, "move_san": pl.Utf8,
           "child_hash": pl.Int64, "child_cp_white": pl.Int32, "nodes": pl.Int64,
           "depth": pl.Int32, "engine": pl.Utf8, "searched": pl.Utf8, "reason": pl.Utf8}
