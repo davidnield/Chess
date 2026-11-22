@@ -528,3 +528,10 @@ Derive cuts within a stored rating band from the exact-rating ledger. Player/eve
 cluster uncertainty additionally needs an identity-aligned frozen mapping; those
 IDs are not present in this count ledger. Usage and artifact receipts are linked
 from `docs/sweep-preparation-usage.md`.
+
+ChessDB step 1 (David, 2026-11-21): `python/eval_lookup_cdb.py` builds a NEW eval-lookup generation
+from the published one plus the ChessDB move-menu import (positions with >= 2 book games). It fills
+positions with no score and replaces scores that come only from pre-2021 fishnet; cloud, 2021+
+fishnet and terminal mates are untouched, and the published lookup is never modified. Same layout,
+new source codes 4 (gap) and 5 (over legacy fishnet). Choosing it for builds is a separate,
+default-off sweep decision; letting ChessDB lead over 2021+ fishnet waits for a validation panel.
