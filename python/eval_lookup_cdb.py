@@ -114,52 +114,9 @@ def make_bucket(base_npy: Path, db_bucket: Path, menus_bucket: Path, b: int) -> 
 
 
 def build(base: Path, db: Path, menus: Path, out: Path, buckets: list[int] | None = None) -> dict:
-    base_meta = read_json(base / "lookup.json")
-    if base_meta["schema"] != SCHEMA:
-        raise ValueError("base is not an eval-lookup-128-v1")
-    if base_meta["source"]["build_meta_sha256"] != sha(db / "_build.meta.json"):
-        raise ValueError("base lookup was not built from this eval DB")
-    mp = read_json(menus / "_params.json")
-    if mp["book_meta_sha256"] != base_meta["book_meta_sha256"]:
-        raise ValueError("ChessDB menus were built on another explorer book")
-    out.mkdir(parents=True, exist_ok=True)
-    identity = dict(variant=VARIANT, base_lookup_sha256=sha(base / "lookup.json"),
-                    menus_params_sha256=sha(menus / "_params.json"), producer_sha256=sha(Path(__file__)))
-    ident_file = out / "_identity.json"
-    if ident_file.exists() and read_json(ident_file) != identity:
-        raise ValueError(f"{out} was built with other inputs or code: use a new directory")
-    write_json(ident_file, identity)
-    records = {}
-    for b in (buckets if buckets is not None else range(512)):
-        name = f"bkt{b:03d}.npy"
-        dst, ck = out / name, out / "_done" / f"{b:03d}.json"
-        menus_done = menus / "_done" / f"bkt{b:03d}.json"
-        if not menus_done.exists():
-            raise ValueError(f"ChessDB bucket {b} not imported yet")
-        if ck.exists():
-            rec = read_json(ck)
-            if rec["sha256"] != sha(dst):
-                raise ValueError(f"checkpoint differs at {dst}")
-        else:
-            md = read_json(menus_done)
-            if md["positions_sha256"] != sha(menus / "positions" / f"bkt{b:03d}.parquet"):
-                raise ValueError(f"ChessDB positions file {b} differs from its done record")
-            values, stats = make_bucket(base / name, db / f"bkt{b:03d}.parquet",
-                                        menus / "positions" / f"bkt{b:03d}.parquet", b)
-            tmp = dst.with_suffix(".tmp")
-            with tmp.open("wb") as f:
-                np.save(f, values, allow_pickle=False)
-            tmp.replace(dst)
-            rec = dict(stats, sha256=sha(dst))
-            ck.parent.mkdir(exist_ok=True)
-            write_json(ck, rec)
-        records[name] = rec
-    done = sorted(p.stem for p in (out / "_done").glob("*.json"))
-    if len(done) == 512:
-        meta = {**{k: v for k, v in base_meta.items() if k != "buckets"}, **identity,
-                "buckets": {f"bkt{int(s):03d}.npy": read_json(out / "_done" / f"{s}.json") for s in done}}
-        write_json(out / "lookup.json", meta)
-    return records
+    """Compatibility entry point; v2 always verifies input bytes on resume."""
+    from chessdb_lookup_run import run
+    return run(base, db, menus, out, buckets, workers=1)
 
 
 if __name__ == "__main__":

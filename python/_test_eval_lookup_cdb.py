@@ -64,6 +64,11 @@ def fixture(td: Path, menus_book="book-sha", db_meta="db-meta"):
     (menus / "_params.json").write_text(json.dumps({"book_meta_sha256": menus_book}), encoding="utf8")
     (menus / "_done" / f"bkt{B:03d}.json").write_text(json.dumps(
         {"positions_sha256": sha(menus / "positions" / f"bkt{B:03d}.parquet")}), encoding="utf8")
+    # Bind both source bucket contents, as required by the v2 checkpoint contract.
+    bm = json.loads((base / "lookup.json").read_text(encoding="utf8"))
+    bm["buckets"] = {f"bkt{B:03d}.npy": {"sha256": sha(base / f"bkt{B:03d}.npy")}}
+    (base / "lookup.json").write_text(json.dumps(bm), encoding="utf8")
+    pq.write_table(pa.table({"bucket": [B], "sha256": [sha(db / f"bkt{B:03d}.parquet")]}), db / "_manifest.parquet")
     return base, db, menus, out
 
 
@@ -108,7 +113,7 @@ class Build(unittest.TestCase):
             base, db, menus, out = fixture(Path(td))
             (menus / "_done" / f"bkt{B:03d}.json").write_text(json.dumps({"positions_sha256": "0"}),
                                                                encoding="utf8")
-            with self.assertRaisesRegex(ValueError, "differs from its done record"):
+            with self.assertRaisesRegex(ValueError, "content differs"):
                 build(base, db, menus, out, [B])
             (menus / "_done" / f"bkt{B:03d}.json").unlink()
             with self.assertRaisesRegex(ValueError, "not imported yet"):

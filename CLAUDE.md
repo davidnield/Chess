@@ -546,3 +546,16 @@ eval-to-score curve, soundness limits, critical-move gaps, extension severities)
 18's / Lichess's scale. Search caches pin the binary's sha256 and the referee cache's sidecar names
 the engine, so engines are never mixed; caches with no engine record use one file per engine (the
 Stockfish 19 day's rows are in the `_sf19` files).
+
+
+## ChessDB takeover integrity (2026-11-22)
+
+Maintained imports live in python/chessdb_import; the former scratch tree and overwritten
+historical pins are evidence, not deployable releases. Publish menus with
+python/chessdb_publication.py: _MENUS.COMPLETE.json avoids the Windows _DONE/_done collision.
+The candidate lookup runs through python/chessdb_lookup_run.py under one exclusive OS lock.
+Fresh per-bucket processes never publish global metadata. Resume hashes actual input bytes
+and compares them to versioned source identities; timestamps alone are not acceptance.
+Use a new output for changed inputs/code. Old receipts must be validated by reconstruction,
+not upgraded with invented provenance. Keep original outputs until byte comparisons pass.
+The active execution record is docs/repertoire-takeover-plan-2026-11-22.md.
