@@ -64,3 +64,10 @@ Default verification checks coverage/manifests and hashes every archive file wit
 `_test_chessdb_archive_e2e.py` explicitly uses fresh bounded test directories and a recent full source
 verification receipt to compare a forcibly interrupted/resumed real export with an uninterrupted one.
 It is not part of lightweight default tests and must be invoked with explicit data/release paths.
+
+
+## Parallel independent verification
+
+The verifier also supports `--deep --workers 4 --scratch D:/chess/chessdb-final-audit-spool --reserve-gb 250 --staging-gb 24 --progress STATUS.json`. Choose worker count with a same-shard benchmark. A single reader bypasses the Windows cache, checks archive bytes and stages those exact bytes to NVMe; concurrent native auditors read the staged files, checking their physical SHA-256, row/key bounds and both logical digests. Full manifest, inventory, provenance and coverage checks still precede success. Parallel mode does not issue concurrent reads against the archive HDD.
+
+Use a separate frozen verifier release when the exporter is already running. The verifier checks that its native auditor matches the binary pinned by the archive identity. Scratch is locked, disjoint from the archive and verifier release, bounded by total staged bytes and a free-space reserve. Successful staged files are removed only from their invocation-owned directory. Failed/interrupted files remain for inspection, count against the cap, and are never treated as verified checkpoints. A restarted verifier rechecks the complete archive. `python/_test_chessdb_archive_verify.py` covers serial/parallel equivalence and corruption/coverage/resource failures.

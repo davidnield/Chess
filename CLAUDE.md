@@ -84,7 +84,7 @@ Publication requires exact source-range coverage and count, matching source/writ
 digests, and verified durable archive bytes before each receipt. Resume rehashes sources and
 completed files, holds exclusive archive/spool locks, and rejects identity drift. Bounded test
 markers are not full-source completion. `python/chessdb_archive_verify.py` audits a completed
-archive without the source database. Retain original copies until separately accepted;
+archive without the source database. Its optional parallel mode stages sequential unbuffered reads to bounded NVMe scratch, then runs independent native audits on those copies; both logical digests, physical checksums and full coverage remain mandatory. The native auditor must match the archived producer. Scratch and archive locks prevent competing writers; failed staging is retained and counts against the cap. Never modify an active frozen exporter to update its verifier: deploy a separate verifier release and update the post-conversion launcher. Tests: `python/_test_chessdb_archive_verify.py`. Retain original copies until separately accepted;
 the exporter never deletes them. Full contract: `rust/chessdb_archive/README.md`.
 
 ## Data paths — critical
