@@ -63,3 +63,16 @@ Use synthetic regression tests for input changes, interrupted publication, missi
 - Final acceptance stage implemented and three additional regressions passed (46 focused tests total across the relevant modules). It waits for the existing coordinator, checks all output hashes and old comparisons, and creates a fresh immutable final snapshot. It never adopts a source policy or changes bindings.
 - Runtime status is authoritative while this document is a saved snapshot: D:/chess/eval-lookup-p51-cdb2-20261122/_status.json and D:/chess/takeover-20261122/completion-status.json. Final evidence/receipt paths will be written into the latter.
 - Pending decisions/dependencies: source aggregation adoption after interpretation of diagnostics; truly fresh OTB confirmation and real-pilot Maia rate after accepted policy inputs; storage/source strategy for large pool exports; NAS archive and cleanup after output acceptance. None has been silently launched or marked complete.
+
+
+## Execution snapshot — 2026-11-22 16:09 PST
+
+- Branch: codex/takeover-hardening-20261122. Implementation commits: eb05705 and fd3867f.
+- Publication and resume repairs are implemented; maintained import sources are committed. 46 relevant regressions passed.
+- Full lookup: 60/512 buckets verified at 16:08:50; all 60 comparisons with original outputs match. Four workers, maximum observed worker peak ~3.14 GiB. About 2 hours 5 minutes remaining at that snapshot, plus final output/evidence verification; ETA is provisional.
+- Full coordinator PID 9432 (launcher cmd 40500); log D:/chess/takeover-20261122/lookup-full.log. Output D:/chess/eval-lookup-p51-cdb2-20261122. Original 167 checkpoints remain untouched.
+- Final acceptance launcher cmd 39604 is waiting for build completion. Its immutable code is D:/chess/bin/chessdb-acceptance-20261122-v1 (fd3867f). Runtime state D:/chess/takeover-20261122/completion-status.json. It will hash all outputs, confirm old comparisons, and publish a new immutable final evidence snapshot. Any build/audit failure is recorded and prevents acceptance.
+- D:/chess/restart_jobs.bat resumes the locked lookup then final acceptance. It no longer launches the completed scan, panel, probe, or superseded lookup loop. Both current stages refuse duplicate coordinators through OS locks.
+- Candidate adoption, cleanup, NAS archival verification, fresh OTB model confirmation, and large pool exports remain outside the completed acceptance checks. No canonical book or active pool binding has changed.
+
+Read the two runtime status JSON files above for current progress; this document records checkpoints in time.
