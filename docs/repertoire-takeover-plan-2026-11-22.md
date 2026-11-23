@@ -117,3 +117,11 @@ Progress: implementation started. Existing benchmark and evaluation jobs are com
 - Approved four-shard production head start launched at ~19:46 PST, coordinator PID 45420, currently rehashing source bytes. Hard limit --max-new-chunks 4; at most 80M new records, then automatic checkpoint stop. No unbounded run tonight. Session 46415; log D:/chess/chessdb-archive-headstart-20261122.log. Actual status: F:/chess/chessdb-archive-20260702-v1/status.json.
 - Separate Monday launcher saved but NOT started: D:/chess/run_chessdb_archive.bat. It resumes verified work and runs the independent deep audit after full publication. Existing restart_jobs.bat remains assigned to the completed eval lookup/acceptance work.
 - Full handoff, exact commands, stopping procedure and caveats: docs/chessdb-archive-resume-2026-11-23.md. Original sources and canonical bindings remain untouched.
+
+
+## Final review correction — 2026-11-22 19:56 PST
+
+- Deterministically reproduced a staging-space accounting race: one worker could remove a completed attempt between another worker's `is_file()` and `stat()`, raising FileNotFoundError and unnecessarily aborting the run. The new helper uses one stat per entry and ignores only disappearance; other access errors still propagate. The new regression passes, bringing focused tests to 16.
+- Frozen v4 stopped gracefully after verifying all original source files, before exporting any production shards (0 records, 0 receipts). Its source-verification evidence remains in F:/chess/chessdb-archive-20260702-v1. No completed production data was discarded.
+- A separate frozen v5 release is used for production, with a fresh output F:/chess/chessdb-archive-20260702-v2 and spool D:/chess/chessdb-archive-spool-v2, preserving strict identity checks. The four-shard head start and tomorrow's launcher use these paths. Never resume the empty v4 archive as the production run.
+- Also corrected the head-start batch's exit-code text redirection; the process exit code had been correct, but `echo 0>file` was parsed as redirection and left an empty text receipt.

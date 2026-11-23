@@ -7,6 +7,19 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--release',type=Path,required=True);p.add_argument('--work',type=Path,required=True);a=p.parse_args();a.work.mkdir(parents=True,exist_ok=False)
     sys.path.insert(0,str(a.release));import chessdb_archive as ar;import chessdb_archive_source as source
     tests=[]
+    class Gone:
+        def stat(self):raise FileNotFoundError('another worker finished cleanup')
+    class Denied:
+        def stat(self):raise PermissionError('unexpected access failure')
+    class Listed:
+        def __init__(self,paths):self.paths=paths
+        def glob(self,pattern):return iter(self.paths)
+    retained=a.work/'retained.tmp';retained.write_bytes(b'12345')
+    assert ar.staged_bytes(Listed([Gone(),retained,Gone()]))==5
+    try:ar.staged_bytes(Listed([Denied()]))
+    except PermissionError:pass
+    else:raise AssertionError('unexpected staging error was ignored')
+    tests.append('concurrent staging cleanup is benign; other stat failures propagate')
     def rejects(name,fn):
         try:fn()
         except (ValueError,RuntimeError,FileNotFoundError):tests.append(name);return

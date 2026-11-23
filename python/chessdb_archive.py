@@ -10,7 +10,7 @@ all ranges, the exact source count, and a last-written ARCHIVE.COMPLETE.json rec
 Test mode: --test-prefix-rows N --source-verified PATH (fresh preflight receipt required).
 Test archives are permanently labeled bounded and cannot be published as full snapshots.
 """
-import argparse,concurrent.futures as cf,datetime as dt,hashlib,json,math,os,re,shutil,subprocess,sys,threading,time,uuid
+import argparse,concurrent.futures as cf,datetime as dt,hashlib,json,math,os,re,shutil,stat,subprocess,sys,threading,time,uuid
 from pathlib import Path
 from month_archive import file_lock,read_json,write_json,sha,disjoint
 from chessdb_archive_windows import unbuffered_sha,kill_children_on_exit
@@ -88,6 +88,16 @@ def preserve_provenance(out,source):
         else:shutil.copyfile(src,dest)
     write_json(root/'manifest.json',{p.relative_to(root).as_posix():sha(p) for p in root.rglob('*') if p.is_file() and p.name!='manifest.json'})
 
+def staged_bytes(root):
+    total=0
+    for p in root.glob('r*-c*-*/*'):
+        # Another worker can finish and remove its owned attempt after globbing.
+        # Count each remaining file from a single stat; only disappearance is benign.
+        try:s=p.stat()
+        except FileNotFoundError:continue
+        if stat.S_ISREG(s.st_mode):total+=s.st_size
+    return total
+
 class Coordinator:
     def __init__(self,a,inv,identity):
         self.a=a;self.out=a.out;self.spool=a.spool;self.inv=inv;self.identity=identity;self.stop=threading.Event();self.mutex=threading.Lock();self.copy_lock=threading.Lock();self.issued=0;self.finished=0
@@ -97,7 +107,7 @@ class Coordinator:
     def capacity(self):
         if shutil.disk_usage(self.out).free<self.a.archive_reserve_gb*1e9:raise RuntimeError('archive free-space reserve reached')
         if shutil.disk_usage(self.spool).free<self.a.spool_reserve_gb*1e9:raise RuntimeError('spool drive free-space reserve reached')
-        used=sum(p.stat().st_size for p in self.spool.glob('r*-c*-*/*') if p.is_file())
+        used=staged_bytes(self.spool)
         if used>self.a.spool_limit_gb*1e9:raise RuntimeError('bounded spool limit reached')
     def take(self):
         with self.mutex:
