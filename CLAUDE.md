@@ -85,7 +85,7 @@ digests, and verified durable archive bytes before each receipt. Resume rehashes
 completed files, holds exclusive archive/spool locks, and rejects identity drift. Bounded test
 markers are not full-source completion. `python/chessdb_archive_verify.py` audits a completed
 archive without the source database. Its optional parallel mode stages sequential unbuffered reads to bounded NVMe scratch, then runs independent native audits on those copies; both logical digests, physical checksums and full coverage remain mandatory. The native auditor must match the archived producer. Scratch and archive locks prevent competing writers; failed staging is retained and counts against the cap. Never modify an active frozen exporter to update its verifier: deploy a separate verifier release and update the post-conversion launcher. Tests: `python/_test_chessdb_archive_verify.py`. Retain original copies until separately accepted;
-the exporter never deletes them. Full contract: `rust/chessdb_archive/README.md`.
+the exporter never deletes them. Staging accounting must tolerate an owned attempt directory disappearing during enumeration as well as files disappearing during stat; permission and root-directory failures remain fatal. Use the single-level scandir implementation and regression tests, not a multi-level glob. Full contract: `rust/chessdb_archive/README.md`.
 
 ## Data paths — critical
 

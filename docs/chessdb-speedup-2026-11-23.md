@@ -36,3 +36,31 @@ Deferred validator wrapper: `D:/chess/archive-speedup-20261123/resume-pilot-vali
 ## Current progress
 
 Implementation and regression tests complete; controlled audit benchmark running. Check live `status.json`, `audit-arms.json`, `conversion-arms.json`, and `decision.json` rather than treating this snapshot as current job state. Do not independently resume the archive while this controller holds the benchmark stop request.
+
+## First measurements and corrected conversion harness — 09:16 PST
+
+The audit benchmark passed on the same 80M records: serial 117.125s, two workers 60.219s, four workers 43.781s (2.675x versus serial). Four-worker projection is about 9.73 hours for 64B records, versus 26.03 hours serial; regional variation and disk rates still matter.
+
+The first conversion harness failed before producing any benchmark shards: each isolated arm lacked its required copy of `source-verified.json`. The source guard rejected it. The controller resumed production automatically with its original four-worker/Zstd-9 settings; no completed production data changed. The corrected harness passed a 10,000-record Zstd-3 full-pipeline smoke test, including native audit and durable archive read-back.
+
+**Current controller:** `D:/chess/archive-speedup-20261123-v2/archive_speedup.py control`, hidden PID 3188; use this directory's `status.json`, logs, arm results and decision from now on. It reuses the successful audit benchmark, waits for the required production source recheck and the mini's main-PC exact comparison, then checkpoints and runs the worker/compression matrix. Corrected per-arm outputs go to `F:/chess/chessdb-speed-benchmark-20261123-v2`. The first harness and its failure evidence remain preserved. Production launcher PID after the first automatic resume was 35168, coordinator 28752.
+
+The mini aggregation succeeded in 1,538.622 seconds (25.64 minutes), peak whole-job commit 19,001,532,416 bytes. Its exact comparison is underway; do not confuse successful aggregation with accepted equivalence.
+
+## Controller v3 and accepted mini pilot — 09:23 PST
+
+The v2 controller's launcher guard encountered the project's virtual-environment Python wrapper between the coordinator and cmd.exe and stopped before issuing its stop request. The corrected controller identifies exactly one cmd.exe ancestor whose command line names the archive launcher. Current control script/status/logs: **D:/chess/archive-speedup-20261123-v3**, PID **39280**. It reuses the completed audit benchmark and writes conversion arm outputs under `F:/chess/chessdb-speed-benchmark-20261123-v3`. Source preflight passed all 291 files; the second graceful stop is waiting for already-started completed-shard rehashes to finish. Neither setup error bypassed a guard or changed a completed production shard.
+
+The mini pilot is now accepted: both full tables match exactly in both directions and all non-timing statistics agree. Bucket 000 production job `7ac943ca7fbc48edb076f10a3b4c478d` started at 09:20:10 PST with the same 24 GiB job / 16 GB DuckDB limits. It is independent of the main CPU benchmark. Full pilot evidence and output paths are in `docs/mini-pool-pilot-2026-11-23.md`.
+
+## Confirmed exporter race and immutable v6 deployment — 09:30 PST
+
+The v3 concurrent benchmark exposed a real v5 production bug: `staged_bytes` caught a disappeared file at `stat()`, but its multi-level `Path.glob` could itself raise `FileNotFoundError` when another worker removed a completed attempt directory before descent. Eight 5M-record benchmark shards had already verified; the affected attempt aborted safely. This is a concurrency/accounting failure, not a digest mismatch or lost accepted data.
+
+Fixed in `python/chessdb_archive.py`: enumerate the spool root once, then scan each explicitly matched attempt with a narrow disappearance handler; file disappearance remains benign, while root/permission/other errors propagate. Eighteen archive regressions passed, including the new directory-enumeration case. New immutable exporter: **D:/chess/bin/chessdb-archive-20261123-v6**. Its release manifest and source ZIP were regenerated; native reader, writer, auditor and source-verification code are unchanged. Do not mutate v5 in place.
+
+Stopped the fallback's repeated source preflight (before it could start any shard conversion), verified no corresponding WSL source checker remained, and retained the last complete atomic source receipt. All 1,590,712,400 old production records remain in v2. Its mutable status now explicitly says `stopped-for-exporter-race-fix`; this is not a new acceptance marker.
+
+**Current and only active benchmark controller:** `D:/chess/archive-speedup-20261123-v4/archive_speedup.py control`, hidden PID **23984**, started 09:29:49 PST. It writes arm outputs under `F:/chess/chessdb-speed-benchmark-20261123-v4`. Earlier controller versions have exited. The benchmark now uses v6 in every arm and reuses the successful independent-audit scaling result. A failure holds with the stop file for investigation, instead of repeatedly restarting source preflight.
+
+Because producer code is identity-bound, production will restart into a **new** archive/spool generation `...-v6-zstd3` or `...-v6-zstd9` after the benchmark. The old 2.5% is preserved separately, not silently rebound to different code. Both candidate projections now include a full 64B-record run; choose Zstd 3 only for a >10% duration improvement and sufficient space including 10% size margin and the existing 500 GB reserve. Worker selection still requires >5% median gain to choose six over four. Four audit workers will follow the completed archive.

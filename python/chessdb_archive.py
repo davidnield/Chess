@@ -89,13 +89,22 @@ def preserve_provenance(out,source):
     write_json(root/'manifest.json',{p.relative_to(root).as_posix():sha(p) for p in root.rglob('*') if p.is_file() and p.name!='manifest.json'})
 
 def staged_bytes(root):
+    # Enumerate the root once; never use a multi-level glob whose directory
+    # enumeration can race another worker's completed-attempt cleanup.
+    with os.scandir(root) as entries:
+        attempts=[Path(e.path) for e in entries if re.fullmatch(r'r\d{3}-c\d{6}-[0-9a-f]{32}',e.name)]
     total=0
-    for p in root.glob('r*-c*-*/*'):
-        # Another worker can finish and remove its owned attempt after globbing.
-        # Count each remaining file from a single stat; only disappearance is benign.
-        try:s=p.stat()
-        except FileNotFoundError:continue
-        if stat.S_ISREG(s.st_mode):total+=s.st_size
+    for attempt in attempts:
+        try:
+            with os.scandir(attempt) as entries:
+                for entry in entries:
+                    try:s=entry.stat(follow_symlinks=False)
+                    except FileNotFoundError:continue
+                    if stat.S_ISREG(s.st_mode):total+=s.st_size
+        except FileNotFoundError:
+            # A disappeared owned attempt is benign; root/permission/other I/O
+            # errors still fail closed. UUID attempt names are never reused.
+            if attempt.exists():raise
     return total
 
 class Coordinator:

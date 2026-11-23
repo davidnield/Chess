@@ -53,3 +53,9 @@ Estimated complete remote bucket-phase footprint is about 2.47 TB (selected move
 
 The main ChessDB archive remains independent and running under `D:/chess/run_chessdb_archive.bat`; its live status is `F:/chess/chessdb-archive-20260702-v2/status.json`. Do not interrupt it or change its frozen release for this test.
 
+
+## Pilot accepted; first production bucket launched — 09:20 PST
+
+Exact comparison passed at 09:18:25 PST: 23,877,125 move rows and 20,371,938 auxiliary rows, with zero differences in either direction and all non-timing statistics equal. Acceptance: `D:/chess/mini-pool-20261123/pilot-accepted.json`. Aggregation took 1,465.032s; total remote job 1,538.622s. Peak whole-job commit was 19,001,532,416 bytes (17.70 GiB); sampled spill peaked at 2,954,657,792 bytes. Collection and exact comparison are complete.
+
+Production bucket 000 is now running with the same code/runtime/settings: job `7ac943ca7fbc48edb076f10a3b4c478d`, request `d925593b89ca467da4827457c9ee592d`, submitted 09:20:10 PST. Manifest/submission: `D:/chess/mini-pool-20261123/b000-manifest.json` and `b000-submission.json`. Bundle SHA-256 `01cb524dc520830465c692ddda439df389703d14c56530ddc0f199102fed7748`; 3,202,721,723 bytes; packaging 206.453s. The eight original production buckets remain untouched. No global final merge is queued. Further automatic bucket scheduling still needs its own durable coordinator; bucket 000 alone is currently submitted.

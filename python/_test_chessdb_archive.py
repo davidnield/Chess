@@ -7,19 +7,38 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--release',type=Path,required=True);p.add_argument('--work',type=Path,required=True);a=p.parse_args();a.work.mkdir(parents=True,exist_ok=False)
     sys.path.insert(0,str(a.release));import chessdb_archive as ar;import chessdb_archive_source as source
     tests=[]
+    from unittest.mock import patch
+    from types import SimpleNamespace
+    from contextlib import contextmanager
     class Gone:
-        def stat(self):raise FileNotFoundError('another worker finished cleanup')
-    class Denied:
-        def stat(self):raise PermissionError('unexpected access failure')
-    class Listed:
-        def __init__(self,paths):self.paths=paths
-        def glob(self,pattern):return iter(self.paths)
-    retained=a.work/'retained.tmp';retained.write_bytes(b'12345')
-    assert ar.staged_bytes(Listed([Gone(),retained,Gone()]))==5
-    try:ar.staged_bytes(Listed([Denied()]))
-    except PermissionError:pass
-    else:raise AssertionError('unexpected staging error was ignored')
-    tests.append('concurrent staging cleanup is benign; other stat failures propagate')
+        def stat(self,**kw):raise FileNotFoundError('another worker finished cleanup')
+    class Retained:
+        def stat(self,**kw):return SimpleNamespace(st_mode=0o100600,st_size=5)
+    class Scan:
+        def __init__(self,entries):self.entries=entries
+        def __enter__(self):return iter(self.entries)
+        def __exit__(self,*args):pass
+    staging=a.work/'staging';staging.mkdir()
+    gone=staging/('r000-c000000-'+'a'*32);live=staging/('r001-c000000-'+'b'*32)
+    roots=[SimpleNamespace(name=x.name,path=str(x)) for x in (gone,live)]
+    def fake_scan(path):
+        if Path(path)==staging:return Scan(roots)
+        if Path(path)==gone:raise FileNotFoundError('attempt disappeared before directory enumeration')
+        if Path(path)==live:return Scan([Gone(),Retained(),Gone()])
+        raise AssertionError(path)
+    with patch.object(ar.os,'scandir',side_effect=fake_scan):assert ar.staged_bytes(staging)==5
+    tests.append('directory and file disappearance during staging enumeration are benign')
+    def denied(path):
+        if Path(path)==staging:return Scan(roots)
+        raise PermissionError('unexpected access failure')
+    with patch.object(ar.os,'scandir',side_effect=denied):
+        try:ar.staged_bytes(staging)
+        except PermissionError:pass
+        else:raise AssertionError('unexpected staging error was ignored')
+    tests.append('staging directory permission errors propagate')
+    try:ar.staged_bytes(a.work/'missing-root')
+    except FileNotFoundError:tests.append('missing staging root is fatal')
+    else:raise AssertionError('missing root ignored')
     def rejects(name,fn):
         try:fn()
         except (ValueError,RuntimeError,FileNotFoundError):tests.append(name);return
