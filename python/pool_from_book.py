@@ -67,6 +67,14 @@ Usage (pin a copy under D:/chess/bin first; never run long jobs from a worktree)
 
   # a subset of buckets (smoke / gates); finalize refuses until all 512 exist
   python pool_from_book.py ... --phase buckets --buckets 0 156 511
+
+Execution experiments (opt-in; do not change the recipe or output schemas):
+  --bucket-optimizations finishes edge accounting before releasing its table,
+      and omits all-zero contributions only from the terminal summary.
+  --edge-partitions N groups disjoint signed-low-half ranges separately. Full
+      128-bit equality remains the grouping key; null-key errors are retained.
+Compare full outputs and total elapsed time on representative data before
+selecting these switches for a frozen production run.
 """
 from __future__ import annotations
 
@@ -180,7 +188,7 @@ _BOOK_TYPES = {"parent_hash": "BIGINT", "parent_epd": "VARCHAR", "move_san": "VA
                "draws": "BIGINT", "black_wins": "BIGINT", "total": "BIGINT"}
 
 
-def _read(files: list[str], cols: str, where: str, wide=False) -> str:
+def _read(files: list[str], cols: str, where: str, wide=False, parent_range=None) -> str:
     if not files:
         # A bucket no chosen slice reaches (small populations): an empty, typed
         # relation, so every later step runs unchanged and writes empty outputs.
@@ -188,7 +196,19 @@ def _read(files: list[str], cols: str, where: str, wide=False) -> str:
         return "(SELECT " + ", ".join(f"NULL::{types[c.strip()]} AS {c.strip()}"
                                       for c in cols.split(",")) + " WHERE FALSE)"
     # hive_partitioning off: event/elo_band are in-file columns too (README).
-    return (f"(SELECT {cols} FROM {moves_with_keys(files, wide)} "
+    source = moves_with_keys(files, wide)
+    if parent_range is not None:
+        from explorer_storage import relation
+        lo, hi = parent_range
+        # Filter the raw signed low half before struct reconstruction so sorted
+        # source row groups can be pruned. Include nulls in the first range:
+        # the existing incomplete-key error must still fire, never drop them.
+        nulls = " OR parent_hash IS NULL" if lo == -(1 << 63) else ""
+        source = f"(SELECT * FROM {relation(files)} WHERE (parent_hash BETWEEN {lo} AND {hi}{nulls}))"
+        if wide:
+            pairs = ", ".join(f"{position_key_sql(c, True)} AS {c}" for c in ("parent_hash", "child_hash"))
+            source = f"(SELECT * EXCLUDE(parent_hash_hi, child_hash_hi) REPLACE ({pairs}) FROM {source})"
+    return (f"(SELECT {cols} FROM {source} "
             f"WHERE {where})")
 
 
@@ -431,10 +451,12 @@ def check_population(book, events, bands):
     return coverage
 
 
-def _bucket_task(task: tuple, *, wide=False, sparse_endings=False, release_edges=False) -> tuple:
+def _bucket_task(task: tuple, *, wide=False, sparse_endings=False, release_edges=False, edge_partitions=1) -> tuple:
     (i, book, events, bands, max_ply, min_games, eval_arrays, work, adir, coll_list,
      root_hash, threads, mem, tmp, allow_coll_survivors) = task
     t0 = time.time()
+    if edge_partitions not in (1, 2, 4, 8, 16, 32, 64):
+        raise ValueError('edge_partitions must be a power of two from 1 through 64')
     from eval_arrays import MISSING, lookup_evals, open_eval_arrays
     # Imported, never redefined: the cp -> expected-score curve must be the one
     # Stage 3 blends evals with (build_pooled_stats does the same).
@@ -459,14 +481,18 @@ def _bucket_task(task: tuple, *, wide=False, sparse_endings=False, release_edges
         s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
         # Edges over the pool's plies: ply leaves the key (MIN kept), EPD and child
         # are carried with MIN and MAX so single-valuedness can be ASSERTED.
-        con.execute(f"""
-            CREATE TEMP TABLE e AS
+        for part in range(edge_partitions):
+            width = (1 << 64) // edge_partitions
+            lower = -(1 << 63) + part * width
+            bounds = (lower, lower + width - 1) if edge_partitions > 1 else None
+            con.execute(f"""
+            {'CREATE TEMP TABLE e AS' if part == 0 else 'INSERT INTO e'}
             SELECT parent_hash, move_san,
                    MIN(parent_epd) AS parent_epd, MAX(parent_epd) AS epd_max,
                    MIN(child_hash) AS child_hash, MAX(child_hash) AS child_max,
                    MIN(ply)::INTEGER AS ply, {s}
             FROM {_read(files, 'parent_hash, parent_epd, move_san, child_hash, ply, '
-                        + ', '.join(SUMS), f'ply <= {max_ply}', wide)}
+                        + ', '.join(SUMS), f'ply <= {max_ply}', wide, bounds)}
             GROUP BY parent_hash, move_san
         """)
         con.execute("ALTER TABLE e ADD COLUMN is_coll BOOLEAN")
@@ -661,7 +687,10 @@ def phase_buckets(a, buckets: list[int]) -> None:
               str(a.eval_lookup128 or a.eval_arrays), str(work), str(adir), coll, rh, a.threads, a.mem,
               str(a.tmp_dir), a.allow_collision_survivors)
              for i in todo]
-    _pool_run(partial(_bucket_task, wide=wide), tasks, a.workers,
+    _pool_run(partial(_bucket_task, wide=wide,
+                      sparse_endings=a.bucket_optimizations,
+                      release_edges=a.bucket_optimizations,
+                      edge_partitions=a.edge_partitions), tasks, a.workers,
               lambda r: (f"bucket {r[0]:3d}: {r[1]['survivors']:,} survivors / "
                          f"{r[1]['edges_prefloor']:,} edges, {r[1]['pool_parents']:,} parents, "
                          f"eval {r[1]['eval_lookup_s']}s ({r[1]['secs']:.0f}s)"))
@@ -989,6 +1018,10 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--threads", type=int, default=4, help="DuckDB threads per process")
     ap.add_argument("--mem", default="8GB", help="DuckDB memory_limit per process")
     ap.add_argument("--workers", type=int, default=3, help="Concurrent fresh processes")
+    ap.add_argument("--bucket-optimizations", action="store_true",
+                    help="Release finished edge tables early and sparsify terminal summaries; exact outputs.")
+    ap.add_argument("--edge-partitions", type=int, choices=(1,2,4,8,16,32,64), default=1,
+                    help="Disjoint signed-key ranges per edge aggregation (execution only).")
     ap.add_argument("--phase", choices=["arrivals", "buckets", "finalize", "meta", "all"],
                     default="all")
     ap.add_argument("--arrivals-from", type=Path, default=None,

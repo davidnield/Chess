@@ -41,3 +41,19 @@ Probe receipts and `queries.jsonl` bind module hashes and record wall time, CPU 
 Do not remove the production stop file while benchmark jobs are active/queued. Do not modify a running frozen script. If a benchmark fails, retain its outputs/logs and inspect the failure before further tests or deployment. Production's original one-at-a-time queue is still resumable from `D:/chess/bin/mini-pool-queue-20261123-v1/mini_pool_queue.py`; its saved input state and nine accepted new buckets remain authoritative. No final pool merge or publication is part of this experiment.
 
 Independent exact-acceptance job: `3a22903394ff4c5f8e4ada1532c5c3a7`, queued after the three arms. Frozen prefetch coordinator: `D:/chess/bin/mini-pool-queue-20261123-v2`; six tests passed, not yet started. All benchmark jobs retain the 24 GiB whole-job ceiling and run serially.
+
+## Measured bottleneck and fourth arm — 14:25 PST
+
+Baseline's initial edge aggregation took 661.875 seconds (754.859 CPU seconds); writing edges took 45.69 seconds; departures aggregation took 112.45 seconds. The empty Other Moves queries took effectively zero time, so no extra specialization is justified there. The source bucket has 74,174,671 rows in 12 files / 291 row groups (2.592 GB).
+
+A fourth arm tests eight disjoint signed-low-half ranges for the first edge aggregation, retaining full 128-bit grouping and all validation. Job `d5f77c32c55f43e1b81c4f96d6873036`, request `5163a69def964186bfc473d5e4d210b2`. Unit parity passed with four ranges, including high-half twins, floors 1/5/1000, signed extremes, and errors for incomplete keys. All new execution options remain opt-in in the maintained CLI.
+
+The original queued verifier was cancellation-requested before starting; its attempt is retained. Replacement verifier `aa3f96f6465d44c0b8d5cae51d9f296f`, request `186ca00c90f24ae59c565221a1f605f5`, runs after all four arms. Its manifest SHA-256 is `3518473d0488aa5b8cea9e9d0006988b46716bf3d5203f43be7ad2ea2f3c0d04`.
+
+An automatic finish controller is armed: `D:/chess/mini-pool-speedup-20261123/finish_pool_speedup.py`, launcher PID **26060**. Read `controller-status.json`, `controller.stdout.log`, and `controller.stderr.log` there. It requires the pinned successful verifier attempt, complete exact comparisons, and at least 1.10x throughput including compaction before selecting a new query implementation. Otherwise it retains the original worker with the tested prefetch queue. Five selection tests passed.
+
+The optimized adapter requires a hash-pinned exact-acceptance receipt, matching result/module and flags; five adapter/compaction tests passed. A selected worker is frozen under `D:/chess/bin/mini-pool-optimized-20261123-v1`, with matching mini files under `C:/chess-worker/inputs/pool-optimized-20261123-v1`. Existing bucket receipts retain their original identities; new receipts also bind the optimization configuration. Regenerable compact-arrival scratch is removed only after full output checks, while source inputs and its receipt remain.
+
+The controller removes only its own benchmark stop marker, checks the mini is healthy/idle, records a persistent launch intent before resuming, and starts exactly one new queue with at most one prefetched input batch. A changed stop marker, failed benchmark/verification, ambiguous launch or identity drift holds for investigation. Do not rerun a controller with `launch.json`; reconcile the launched queue first. Prepared old bucket 010 keeps its original manifest; subsequent buckets use the selected worker.
+
+The controller does not publish a final pool, start the other populations, change the main ChessDB archive, or delete accepted production buckets. Its selection uses one representative bucket and a material-gain threshold; verify sustained speed on subsequent production buckets before tightening the ETA.

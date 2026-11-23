@@ -25,7 +25,7 @@ class BucketOptimizations(unittest.TestCase):
                         for optimized in (False,True):
                             work=root/f'f{floor}-b{bucket}-opt{optimized}';(work/'buckets').mkdir(parents=True)
                             task=(bucket,str(book),['Rapid'],[1800,2000],5,floor,str(lookup),str(work),str(root/'source'/'arrivals'),[],None,2,'256MB',str(work/'spill'),False)
-                            _,st=pool._bucket_task(task,wide=True,sparse_endings=optimized,release_edges=optimized)
+                            _,st=pool._bucket_task(task,wide=True,sparse_endings=optimized,release_edges=optimized,edge_partitions=4 if optimized else 1)
                             results.append({k:v for k,v in st.items() if k not in ('secs','eval_lookup_s')});paths.append(pool.bucket_paths(work,bucket))
                         self.assertEqual(*results)
                         for kind in ('edges','aux'):

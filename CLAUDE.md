@@ -108,13 +108,13 @@ drive; every drive's `chess` folder has a `README.md` map of what remains.
 a deleted path, and pipelines that pointed at it silently produced incomplete output rather than
 failing.
 
-The pool bucket builder has opt-in internal `sparse_endings` and `release_edges`
-execution switches. They change query scheduling and intermediate tables, not the
+The pool bucket builder has opt-in `--bucket-optimizations` and `--edge-partitions`
+execution switches (internal sparse/release/range options). They change query scheduling and intermediate tables, not the
 pool recipe: preserve the full ended-flow validation and accounting, omit only
 all-zero contributions from the terminal summary, and finish edge accounting
 before releasing its wide table. `_test_pool_bucket_optimizations.py` compares
 complete outputs/statistics at multiple floors and checks terminal rejection.
-Real-data speed claims require exact row-multiset comparisons against the frozen
+Range batching covers the full signed low-half domain while retaining complete 128-bit equality and null-key errors (`_test_pool_edge_ranges.py`). Real-data speed claims require exact row-multiset comparisons against the frozen
 producer; do not modify running frozen snapshots or silently rebind receipts.
 ## Running things
 
