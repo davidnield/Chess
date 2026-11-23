@@ -1,5 +1,34 @@
 # ChessDB speedup implementation and controlled tests — November 23, 2026
 
+## Current outcome — production restarted at 09:44 PST
+
+All three recommendations were implemented and measured. **Active archive: F:/chess/chessdb-archive-20260702-v6-zstd3**. The immutable v6 exporter fixes the confirmed directory-enumeration race. Production runs **six workers, Zstd 3, 20M records/shard**, with the unchanged 24 GB spool cap, 250 GB D: reserve and 500 GB F: reserve. The launcher automatically follows full conversion with **four-worker independent deep verification**, sequential unbuffered F: reads and bounded D: staging.
+
+| Configuration | Median records/second | Two 60M-record run times |
+|---|---:|---|
+| Four workers, Zstd 9 | 471,558 | 127.984s; 126.500s |
+| Six workers, Zstd 9 | 547,660 | 113.594s; 105.797s |
+| Four workers, Zstd 3 | 591,963 | 102.985s; 99.781s |
+| Six workers, Zstd 3 | 693,018 | 86.453s; 86.703s |
+
+Each arm processed the **same 60M records across twelve distributed source regions**, not a different dataset. All eight arms passed production per-shard source/writer/auditor digest checks and durable F: read-back; counts, endpoints and both logical digests matched across arms. The repetition reversed configuration order. Six/Zstd-3 gives **1.4696x** baseline throughput; six versus four at Zstd 3 gives **1.1707x**; Zstd 3 versus 9 with six workers gives **1.2654x**. Files increase **7.45%**, projecting **2.095 TB** total. F: had 3.059 TB free after the test outputs and preserved old archive, implying roughly 0.96 TB remaining after the new archive, above the 0.50 TB reserve.
+
+Independent audit: the same 80M accepted records took **117.125s serial, 60.219s with two workers, 43.781s with four**. Four workers improve throughput **2.675x**. Small benchmark pipeline fill/drain effects and later source-region/disk variation limit precision.
+
+Projection from these measurements: **25.65 hours conversion + 9.73 hours independent audit = 35.38 hours**, excluding the fresh source preflight. Use **36–42 hours** as the current planning range, roughly Tuesday evening through early Wednesday, November 24–25. This includes restarting from the beginning with the corrected producer; it is not an ETA based on reusing the old 2.5%.
+
+### Live paths and resumption
+
+- Launcher: `D:/chess/run_chessdb_archive.bat`; hidden launcher PID **15248**, coordinator PID **44192** at startup. The fresh source check passed all 291 files and production entered exporting. Live status: `F:/chess/chessdb-archive-20260702-v6-zstd3/status.json`; combined log: `D:/chess/chessdb-archive-production.log`.
+- Exporter: `D:/chess/bin/chessdb-archive-20261123-v6`; release-manifest SHA-256 `c7b2ce9859a108cd48417e295b9dbc48c8a0354cabc2a50f3a666169a6fd9469`.
+- Spool: `D:/chess/chessdb-archive-spool-v6-zstd3`. Final verifier: `D:/chess/bin/chessdb-verifier-20261123-v1`; manifest SHA-256 `9a8de9e30c5f2dde96edf04183b2942536999a9935d5cf4fb4465717a9c3203b`.
+- Final audit scratch: `D:/chess/chessdb-final-audit-spool`; status `D:/chess/chessdb-final-audit-status.json`; acceptance report `D:/chess/chessdb-archive-independent-verification.json`.
+- Benchmark controller v4 has completed and relaunched production. Evidence: `D:/chess/archive-speedup-20261123-v4/CONVERSION.BENCHMARK.COMPLETE.json`, `AUDIT.BENCHMARK.COMPLETE.json`, `decision.json`, `measured-summary.json`, and per-arm logs/receipts. Do not rerun that controller; resume normal production through the launcher.
+- Graceful conversion stop remains `D:/chess/chessdb-archive.STOP`; wait for the active generation's checkpoint state/process exit. Do not resume the old v2 archive. Its **1,590,712,400 verified records remain intact**, but its producer identity is different and its directory-scan bug is unresolved there. Original raw database copies also remain untouched. No cleanup is authorized by mere conversion completion; require full independent acceptance.
+- Code commits: `402b440` (parallel verifier) and `18a9b5f` (directory race fix), branch `codex/takeover-hardening-20261122`. Fourteen new verifier tests plus eighteen archive regressions passed. The frozen exporter and independent verifier are intentionally separate releases.
+
+## Historical implementation and execution record
+
 User authorized implementing all three recommendations: parallel independent verification, a six-worker conversion test, and Zstd 3 versus 9 testing. Do not interpret this as permission to skip verification or delete original data.
 
 ## Implementation
@@ -61,6 +90,6 @@ Fixed in `python/chessdb_archive.py`: enumerate the spool root once, then scan e
 
 Stopped the fallback's repeated source preflight (before it could start any shard conversion), verified no corresponding WSL source checker remained, and retained the last complete atomic source receipt. All 1,590,712,400 old production records remain in v2. Its mutable status now explicitly says `stopped-for-exporter-race-fix`; this is not a new acceptance marker.
 
-**Current and only active benchmark controller:** `D:/chess/archive-speedup-20261123-v4/archive_speedup.py control`, hidden PID **23984**, started 09:29:49 PST. It writes arm outputs under `F:/chess/chessdb-speed-benchmark-20261123-v4`. Earlier controller versions have exited. The benchmark now uses v6 in every arm and reuses the successful independent-audit scaling result. A failure holds with the stop file for investigation, instead of repeatedly restarting source preflight.
+**Historical benchmark controller (now completed):** `D:/chess/archive-speedup-20261123-v4/archive_speedup.py control`, hidden PID **23984**, started 09:29:49 PST. It writes arm outputs under `F:/chess/chessdb-speed-benchmark-20261123-v4`. Earlier controller versions have exited. The benchmark now uses v6 in every arm and reuses the successful independent-audit scaling result. A failure holds with the stop file for investigation, instead of repeatedly restarting source preflight.
 
 Because producer code is identity-bound, production will restart into a **new** archive/spool generation `...-v6-zstd3` or `...-v6-zstd9` after the benchmark. The old 2.5% is preserved separately, not silently rebound to different code. Both candidate projections now include a full 64B-record run; choose Zstd 3 only for a >10% duration improvement and sufficient space including 10% size margin and the existing 500 GB reserve. Worker selection still requires >5% median gain to choose six over four. Four audit workers will follow the completed archive.

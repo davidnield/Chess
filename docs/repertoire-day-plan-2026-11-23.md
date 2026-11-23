@@ -34,3 +34,9 @@ Integration details retained for future worker jobs: Windows PowerShell 5.1 need
 ## Remote pool pilot — 08:47 PST
 
 The user authorized a representative pool test on the mini while the main archive continues. A pinned user-local Python/native-DuckDB runtime and hash-bound bucket input bundle are staged. The dedicated 32 GB mini now runs the pilot with a 24 GiB job limit and 16 GB DuckDB limit (the initial conservative attempt was cancelled after 55 seconds). Job b5359340c0184999b659b1fd98ad2bbc is rebuilding known bucket 005; automatic collection and exact two-way row-multiset comparison are armed. Production buckets remain gated on pilot acceptance. Full details, hashes, logs and resume boundaries: [mini-pool-pilot-2026-11-23.md](mini-pool-pilot-2026-11-23.md).
+
+## Speedups applied and pool queue running — 09:49 PST
+
+The user authorized all three archive speedup investigations. Controlled tests selected **six conversion workers / Zstd 3**, followed by **four-worker parallel deep verification**. Conversion throughput improved 47%; audit throughput improved 2.68x. A real directory-enumeration race was found and fixed in immutable exporter v6. The old 1.59B verified records remain separately preserved; the new identity starts fresh. Production restarted at 09:44 into `F:/chess/chessdb-archive-20260702-v6-zstd3` via the updated `D:/chess/run_chessdb_archive.bat`; planning ETA is 36–42 hours through full independent acceptance. Full evidence and resume instructions: `docs/chessdb-speedup-2026-11-23.md`.
+
+The mini pool pilot matched exactly; production bucket 000 has been collected/verified. The persistent one-at-a-time queue (PID 43648 at launch) is preparing bucket 001 and will continue the remaining independent buckets. It preserves the original eight outputs and stops on failures/ambiguous submissions. No full-pool merge is queued. See `docs/mini-pool-pilot-2026-11-23.md` and `D:/chess/mini-pool-20261123/queue/status.json`.

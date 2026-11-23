@@ -1,5 +1,7 @@
 # ChessDB lossless archive: overnight stop and Monday resume
 
+**Superseded at 09:44 PST November 23:** production now uses the race-fixed v6 exporter, six workers, Zstd 3 and four-worker final verification. Resume through `D:/chess/run_chessdb_archive.bat`, targeting `F:/chess/chessdb-archive-20260702-v6-zstd3`. Preserve the old v2 shards but do not resume its old producer. Current measurements and instructions: [chessdb-speedup-2026-11-23.md](chessdb-speedup-2026-11-23.md). The details below describe the earlier v5/v2 run.
+
 Prepared November 22, 2026. This is the F: archive job, separate from the completed eval lookup rebuild. No canonical repertoire, active eval source binding, original ChessDB copy, or pool has been replaced.
 
 ## Scope and implementation
