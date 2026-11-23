@@ -349,12 +349,15 @@ def check_ended_nonnegative(con, label: str) -> None:
                            f"so the flows are wrong. Sample: {rows}")
 
 
-def split_endings(con, book, bucket, events, bands, cap, wide=False):
+def split_endings(con, book, bucket, events, bands, cap, wide=False, *, sparse=False):
     """Reconcile classified endings against the independent move flows at each ply."""
     book = Path(book)
     lock = book / "_merge_params.json"
     sliced = lock.exists() and json.loads(lock.read_text(encoding="utf-8")).get("input_params", {}).get("term_slices")
     cols = ", ".join(SUMS)
+    # Flow validation and accounting retain every cell. Only the downstream
+    # terminal summary may omit cells whose four contributions are all zero.
+    nonzero = " WHERE " + " OR ".join(f"{c} <> 0" for c in SUMS) if sparse else ""
     if sliced:
         ids = json.loads((book / "_book.meta.json").read_text(encoding="utf-8"))["term_event_ids"]
         get_ids = ", ".join(str(ids.index(e)) for e in events)
@@ -369,7 +372,7 @@ def split_endings(con, book, bucket, events, bands, cap, wide=False):
     else:
         legacy = [f"0::BIGINT AS {g}_{c}" for g in ("term_normal", "term_flag") for c in SUMS]
         legacy.extend(f"SUM({c})::BIGINT AS term_other_{c}" for c in SUMS)
-        con.execute(f"CREATE TEMP TABLE terminal AS SELECT x,{', '.join(legacy)} FROM en GROUP BY x")
+        con.execute(f"CREATE TEMP TABLE terminal AS SELECT x,{', '.join(legacy)} FROM en{nonzero} GROUP BY x")
         return
     sums = ", ".join(f"SUM({c}) AS {c}" for c in SUMS)
     impossible = " OR ".join(f"t.{c} > COALESCE(en.{c},0)" for c in SUMS)
@@ -385,7 +388,7 @@ def split_endings(con, book, bucket, events, bands, cap, wide=False):
     con.execute(f"""
         CREATE TEMP TABLE terminal AS
         WITH contributions AS (
-            SELECT x,2 AS reason,{cols} FROM en
+            SELECT x,2 AS reason,{cols} FROM en{nonzero}
             UNION ALL SELECT x,reason,{cols} FROM classified WHERE reason IN (0,1)
             UNION ALL SELECT x,2 AS reason,{', '.join('-'+c for c in SUMS)} FROM classified WHERE reason IN (0,1)
         ), by_reason AS (SELECT x,reason,{signed} FROM contributions GROUP BY x,reason)
@@ -428,7 +431,7 @@ def check_population(book, events, bands):
     return coverage
 
 
-def _bucket_task(task: tuple, *, wide=False) -> tuple:
+def _bucket_task(task: tuple, *, wide=False, sparse_endings=False, release_edges=False) -> tuple:
     (i, book, events, bands, max_ply, min_games, eval_arrays, work, adir, coll_list,
      root_hash, threads, mem, tmp, allow_coll_survivors) = task
     t0 = time.time()
@@ -541,16 +544,34 @@ def _bucket_task(task: tuple, *, wide=False) -> tuple:
             GROUP BY e.parent_hash
         """)
 
-        # Flows: departures, arrivals, ended. The gate is part of the build.
-        derive_flows(con, files, _p(agl) if has_arr else None, max_ply, wide)
-        check_ended_nonnegative(con, f"bucket {i}")
-
         con.execute(f"""
             CREATE TEMP TABLE keys AS
             SELECT DISTINCT parent_hash AS position_hash FROM e
             WHERE NOT is_coll AND total >= {min_games}
         """)
-        split_endings(con, book, i, events, bands, max_ply, wide)
+        # Complete edge accounting before the independent flow joins so the
+        # wide string-bearing edge table need not occupy the query memory budget.
+        q = lambda sql: [int(v or 0) for v in con.execute(sql).fetchone()]
+        (st["survivors"], st["survivor_mass"], st["pool_parents"],
+         st["other_edges"], st["other_mass"]) = q(f"""
+            SELECT COUNT(*) FILTER (WHERE total >= {min_games}),
+                   SUM(total) FILTER (WHERE total >= {min_games}),
+                   COUNT(DISTINCT parent_hash) FILTER (WHERE total >= {min_games}),
+                   COUNT(*) FILTER (WHERE total < {min_games}),
+                   SUM(total) FILTER (WHERE total < {min_games})
+            FROM e WHERE NOT is_coll""")
+        (st["other_covered_mass"], st["aux_other_covered_mass"]) = q(f"""
+            SELECT SUM(e.total),
+                   SUM(e.total) FILTER (WHERE e.parent_hash IN (SELECT position_hash FROM keys))
+            FROM e JOIN ev ON ev.child_hash = e.child_hash
+            WHERE NOT e.is_coll AND e.total < {min_games}""")
+        if release_edges:
+            con.execute("DROP TABLE e")
+            con.execute("DROP TABLE ev")
+        # Flows: departures, arrivals, ended. Keep the full validation gate.
+        derive_flows(con, files, _p(agl) if has_arr else None, max_ply, wide)
+        check_ended_nonnegative(con, f"bucket {i}")
+        split_endings(con, book, i, events, bands, max_ply, wide, sparse=sparse_endings)
         terminal_cols = ", ".join(f"COALESCE(t.{g}_{c}, 0)::BIGINT AS {g}_{c}"
                                   for g in _GROUPS[:3] for c in ("total","white_wins","draws","black_wins"))
         tsel = lambda g, al: ", ".join(f"COALESCE({al}.{c}, 0)::BIGINT AS {g}_{c}"
@@ -575,24 +596,10 @@ def _bucket_task(task: tuple, *, wide=False) -> tuple:
         """)
 
         # Accounting for the meta and the gates.
-        q = lambda sql: [int(v or 0) for v in con.execute(sql).fetchone()]
-        (st["survivors"], st["survivor_mass"], st["pool_parents"],
-         st["other_edges"], st["other_mass"]) = q(f"""
-            SELECT COUNT(*) FILTER (WHERE total >= {min_games}),
-                   SUM(total) FILTER (WHERE total >= {min_games}),
-                   COUNT(DISTINCT parent_hash) FILTER (WHERE total >= {min_games}),
-                   COUNT(*) FILTER (WHERE total < {min_games}),
-                   SUM(total) FILTER (WHERE total < {min_games})
-            FROM e WHERE NOT is_coll""")
         (st["aux_rows"], st["aux_other_mass"], st["aux_term_mass"],
          st["aux_horizon_mass"]) = q(f"""
             SELECT COUNT(*), SUM(other_total), SUM(term_other_total + term_normal_total + term_flag_total), SUM(horizon_total)
             FROM read_parquet('{_p(tmps['aux'])}')""")
-        (st["other_covered_mass"], st["aux_other_covered_mass"]) = q(f"""
-            SELECT SUM(e.total),
-                   SUM(e.total) FILTER (WHERE e.parent_hash IN (SELECT position_hash FROM keys))
-            FROM e JOIN ev ON ev.child_hash = e.child_hash
-            WHERE NOT e.is_coll AND e.total < {min_games}""")
         (st["ended_mass_all"], st["ended_cells"]) = q("SELECT SUM(total), COUNT(*) FROM en")
         st["horizon_mass_all"] = q(f"SELECT SUM(total) FROM d WHERE q = {max_ply + 1}")[0]
         st["arrivals_mass"] = q("SELECT SUM(total) FROM a")[0]
