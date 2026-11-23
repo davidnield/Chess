@@ -125,3 +125,12 @@ Progress: implementation started. Existing benchmark and evaluation jobs are com
 - Frozen v4 stopped gracefully after verifying all original source files, before exporting any production shards (0 records, 0 receipts). Its source-verification evidence remains in F:/chess/chessdb-archive-20260702-v1. No completed production data was discarded.
 - A separate frozen v5 release is used for production, with a fresh output F:/chess/chessdb-archive-20260702-v2 and spool D:/chess/chessdb-archive-spool-v2, preserving strict identity checks. The four-shard head start and tomorrow's launcher use these paths. Never resume the empty v4 archive as the production run.
 - Also corrected the head-start batch's exit-code text redirection; the process exit code had been correct, but `echo 0>file` was parsed as redirection and left an empty text receipt.
+
+
+## Bounded production result â€” 2026-11-22 20:08 PST
+
+- Stopped automatically with exit code 0. Exactly **80,000,000 original records** in **four 20M-record shards** are retained on F: for the next run (2.407 GB compressed).
+- Source preflight freshly verified all 291 payloads in 521.0 seconds. Each production shard passed source/writer/native-auditor digest checks and durable F: copy plus unbuffered checksum read-back before receipt publication.
+- Coordinator PID 32020 exited. No active attempts, partial F: files or shard staging directories remain. The archive is intentionally incomplete, with no full completion marker.
+- Free space: D: 507.1 GB; F: 3.121 TB. Original sources remain intact.
+- Exact machine-readable result: D:/chess/chessdb-archive-headstart-20261122-result.json. Resume with D:/chess/run_chessdb_archive.bat tomorrow; no automatic overnight work is armed by these launchers.
