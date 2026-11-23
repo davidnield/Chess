@@ -134,3 +134,8 @@ Progress: implementation started. Existing benchmark and evaluation jobs are com
 - Coordinator PID 32020 exited. No active attempts, partial F: files or shard staging directories remain. The archive is intentionally incomplete, with no full completion marker.
 - Free space: D: 507.1 GB; F: 3.121 TB. Original sources remain intact.
 - Exact machine-readable result: D:/chess/chessdb-archive-headstart-20261122-result.json. Resume with D:/chess/run_chessdb_archive.bat tomorrow; no automatic overnight work is armed by these launchers.
+
+
+## Mini worker accepted — 2026-11-23
+
+User authorized suitable independent jobs on chess-mini. Live dispatcher health, disk and runtime checks completed. One 20M-record / 596 MB native archive audit passed through persistent launcher, disconnected submission, hash-verified staging and result collection; all source/local/remote digests agree. Upload 5.81s (~104 MB/s); audit mini 14.35s vs main 22.56s. Worker now healthy/idle; no queued job. Prefer CPU-heavy independent engine batches with small inputs; larger pool/bucket jobs require their existing input/policy and measured memory/storage prerequisites. Keep the WSL ChessDB exporter on the main PC for now. No canonical data or acceptance bindings changed. Operational contract, limits, dependencies and evidence: docs/chess-mini-worker-pilot-2026-11-23.md.
