@@ -404,3 +404,10 @@ Experimental parameter-sweep execution is documented in
 [the tracked progress log](docs/sweep-preparation-progress.md). These isolated,
 receipt-checked preparation commands do not change the deployed migration jobs or
 the canonical repertoires; the Black production pilot remains a release prerequisite.
+
+## ChessDB source archive
+
+The lossless ChessDB archive preserves the full original logical key/value database in
+compressed Parquet, alongside readable chess fields. See the
+[archive implementation and verification contract](rust/chessdb_archive/README.md)
+for maintained entry points, resume guarantees and source-independent auditing.

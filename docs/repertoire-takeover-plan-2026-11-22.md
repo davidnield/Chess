@@ -76,3 +76,44 @@ Use synthetic regression tests for input changes, interrupted publication, missi
 - Candidate adoption, cleanup, NAS archival verification, fresh OTB model confirmation, and large pool exports remain outside the completed acceptance checks. No canonical book or active pool binding has changed.
 
 Read the two runtime status JSON files above for current progress; this document records checkpoints in time.
+
+
+## Completed acceptance and archive pilot — 2026-11-22 evening
+
+- Lookup build and final acceptance are complete: 512 new buckets verified; all 167 preserved old outputs match. Final evidence: D:/chess/acceptance/chessdb-takeover-20261122-final-b4c90b5d923e. Candidate-only; no active binding changes.
+- David requested a bounded lossless Parquet archive pilot before moving ChessDB to the NAS. The existing filtered move menus cannot substitute for a full source archive. No NAS transfer or source deletion has started.
+- Pilot completed: 3,000,000 distinct original records across 12 source regions, four layouts/codecs, all source-byte and Parquet round-trip comparisons passed. 129.6 seconds runtime; ~0.745 GB retained artifacts.
+- Projected full size: binary keys/values ~0.970 TB (Zstd 9), or original bytes plus decoded chess fields ~1.935 TB (Zstd 9); approximate coverage-sample projections, not guaranteed sizes. Existing specialized database ~1.19 TB.
+- Full-scale export needs a native streaming throughput benchmark, NAS capacity check, complete schema/metadata and coverage verification. The Python prototype is for compression/correctness evidence, not the production exporter. No full conversion queued.
+- Report: docs/chessdb-parquet-archive-pilot-2026-11-22.md. Artifacts/status/report/checkpoints: D:/chess/chessdb-parquet-pilot-20261122-v1. Both original copies remain untouched.
+
+
+## Native archive benchmark completed — 2026-11-22 evening
+
+- User approved the native streaming benchmark and requested investigating Rust. Both completed: Rust writer 3.93x faster at Zstd 3, 2.49x at Zstd 9 on identical 3M-record input/schema. Reader remains the known C++/TerarkDB implementation with verified faster FEN conversion.
+- Streaming 1/2/4/8-worker arms passed 15M source-record comparisons including repeated ranges; throughput 154k/271k/308k/325k records/s. Four workers are a sensible starting point; full export extrapolates to ~55-60h at the measured 4-8 worker rates, not a scheduled ETA.
+- NAS capacity is ample (~24.63 TB free), but measured throughput is low: one-file 5.31 MB/s write, four-file 11.43 MB/s write and 10.32 MB/s read-back; native robocopy 7.25 MB/s. All test hashes matched. At best observed rates ~1.94TB takes ~47h write +52h read-back, before contention. Cause not established; PC's link is 1Gbps and SMB uses local IPs. No network/NAS settings changed.
+- Full archive remains unstarted. Next: investigate NAS throughput; implement complete range coverage, both-orientation metadata, native verification, immutable/checkpoint receipts and a bounded spool before full export. Keep both raw copies until verified NAS acceptance.
+- Report: docs/chessdb-native-archive-benchmark-2026-11-22.md. Frozen source/code/results: D:/chess/chessdb-archive-native-20261122-v1, including benchmark-source.zip and benchmark-provenance.json. Benchmark NAS files are explicitly labeled and total ~1.75GiB.
+
+
+- F: alternative evaluated at David's request: 3.1246 TB free, enough for projected 1.94 TB archive with ~1.18 TB remaining. Verified 1-GiB test: 117 MB/s flushed writes and 136 MB/s unbuffered read+SHA-256, roughly 10x/13x the parallel NAS rates. Recommend F: primary archive and optional NAS copy later; NAS speed investigation can leave the critical path if this destination is chosen. Full exporter still unstarted; no original deleted. Results appended to docs/chessdb-native-archive-benchmark-2026-11-22.md.
+
+
+## Tonight's implementation plan — approved 2026-11-22 19:14 PST
+
+Destination F: accepted. Shutdown target approximately 21:12 PST; do not start an unbounded export tonight.
+1. Implement maintained native source range enumeration/chunk reader, Rust writer/auditor and checkpoint coordinator.
+2. Bind receipts to source/code/schema; preserve original bytes and both orientations' distance metadata; bounded staging and disk reserves.
+3. Test corruption, range/count coverage, duplicate coordinators, source/settings changes and deliberate interruption/resume against an uninterrupted real bounded run.
+4. Freeze a release, document tomorrow's exact launch/resume command, and stop bounded work safely before shutdown. Full extraction tomorrow only after these checks pass.
+Progress: implementation started. Existing benchmark and evaluation jobs are complete; only WSL cache housekeeping was running at initial check.
+
+
+## Archive implementation verified — 2026-11-22 19:47 PST
+
+- Production exporter, native writer/auditor and independent archive verifier implemented. Frozen release D:/chess/bin/chessdb-archive-20261122-v4; release manifest SHA256 9efefcee4d55d028fbcb544d73196d4ac03a4d06d05e358d5332605e95b60869.
+- All 291 source payload checksums passed. Final release passes 15 focused regressions and a real interruption/resume comparison: retained two completed shards unchanged; resumed four-shard archive equals uninterrupted output byte-for-byte. Duplicate workers, changed settings, same-size/same-mtime corruption and disk reserve tests pass. Source-independent deep audit passes on all 2M test records.
+- Approved four-shard production head start launched at ~19:46 PST, coordinator PID 45420, currently rehashing source bytes. Hard limit --max-new-chunks 4; at most 80M new records, then automatic checkpoint stop. No unbounded run tonight. Session 46415; log D:/chess/chessdb-archive-headstart-20261122.log. Actual status: F:/chess/chessdb-archive-20260702-v1/status.json.
+- Separate Monday launcher saved but NOT started: D:/chess/run_chessdb_archive.bat. It resumes verified work and runs the independent deep audit after full publication. Existing restart_jobs.bat remains assigned to the completed eval lookup/acceptance work.
+- Full handoff, exact commands, stopping procedure and caveats: docs/chessdb-archive-resume-2026-11-23.md. Original sources and canonical bindings remain untouched.

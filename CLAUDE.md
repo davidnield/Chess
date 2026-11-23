@@ -76,6 +76,17 @@ always play their sampled games in Rust (`convertibility_eval.rollouts`; `rollou
 reference) and keep Maia's answers in `D:/chess/maia/answer_cache` by default
 (`--no-maia-cache` to opt out). Cache shards become visible only after a complete write/close and atomic rename. The reader ignores legacy `part-*.tmp.npz` files; new temporary shards live outside the completed-file glob. Do not delete another writer's temporary files or silently skip corrupt completed shards. Publication/retry regressions are in `python/_test_maia_cache.py`.
 
+`python/chessdb_archive.py` coordinates the lossless ChessDB archive with the native
+reader in `python/chessdb_import/cpp/cdb_archive.cpp` and writer/auditor in
+`rust/chessdb_archive/`. Run only frozen releases. Preserve raw key/value bytes and both
+orientations' distance metadata; readable score normalization is not lossless by itself.
+Publication requires exact source-range coverage and count, matching source/writer/auditor
+digests, and verified durable archive bytes before each receipt. Resume rehashes sources and
+completed files, holds exclusive archive/spool locks, and rejects identity drift. Bounded test
+markers are not full-source completion. `python/chessdb_archive_verify.py` audits a completed
+archive without the source database. Retain original copies until separately accepted;
+the exporter never deletes them. Full contract: `rust/chessdb_archive/README.md`.
+
 ## Data paths — critical
 
 | Path | Role |
