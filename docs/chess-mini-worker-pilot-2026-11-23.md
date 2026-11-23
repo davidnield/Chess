@@ -56,3 +56,8 @@ No new substantive source-policy or repertoire choices were made. Main archive s
 Main artifacts: `D:/chess/mini-pilot-20261123-v1`, including immutable staged inputs, job manifest, transfer/preflight receipts, current-main audit, submission/status, collected attempt, summary and checksum evidence manifest. The payload remains in the versioned remote inputs directory (~605 MB including executable); no automatic cleanup was performed.
 
 The unrelated minor installer preflight correction is still staged/unapplied as described by the side session. It does not block jobs; the administrator installer was not run. No accounts, permissions, network/router settings or dispatcher configuration changed.
+
+
+## Follow-up: native SF18 CPU benchmark
+ 12 fixed existing-panel boards at 20M nodes each, fresh engines, one thread / 128 MB hash per engine. Serial 215.3s; four independent workers 85.1s (2.53x throughput). Both arms produced identical nodes, best moves and scores. Three matched main-PC searches also match exactly: main 113.5s vs mini 55.1s, 2.06x on this sample. Peak mini committed memory 1.16 GiB. Job c51479c8f21c43eeaf86386e8f518248 succeeded and was collected; mini now idle. Evidence: D:/chess/day-20261123/mini-stockfish-v2. Do not adopt these benchmark values as new reference-cache verdicts.
+- Suitable next mini workload is a fixed independent SF18 verification batch with four single-thread workers, 128 MB hash each, within the existing 16 GiB / 75% job limits. Runtime/code/input receipts and application checkpointing must accompany a production batch. Existing prepared mini script is a bounded benchmark, not a general resume coordinator.
