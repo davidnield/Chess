@@ -53,13 +53,24 @@ def run_bounded(command, *, timeout, input_text=None, check=False):
 def remote(script, *, timeout=180):
     script = "$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';" + script
     encoded = base64.b64encode(script.encode('utf-16le')).decode('ascii')
-    # Read one complete base64 line, not EOF from an inherited shell pipe.
-    bootstrap = ("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);"
-                 "$e=[Console]::In.ReadLine();"
-                 "& ([scriptblock]::Create([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($e))))")
-    command = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -OutputFormat Text -EncodedCommand ' + base64.b64encode(bootstrap.encode('utf-16le')).decode('ascii')
+    prefix = 'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -OutputFormat Text '
+    if len(encoded) <= 6000:
+        command = prefix + '-EncodedCommand ' + encoded
+    else:
+        # Avoid Windows SSH stdin delivery and command-line length limits.
+        # Retain the unique request script as reconciliation evidence.
+        import uuid
+        remote("[IO.Directory]::CreateDirectory('C:/chess-worker/inputs/transport-requests')|Out-Null", timeout=30)
+        name = uuid.uuid4().hex + '.ps1'
+        target = 'C:/chess-worker/inputs/transport-requests/' + name
+        with tempfile.TemporaryDirectory() as td:
+            request = Path(td)/name
+            request.write_text(script, encoding='utf-8-sig')
+            scp(request, 'chess-mini:' + target, timeout=60)
+        command = prefix + '-File ' + target
     return run_bounded([SSH, *OPTIONS, '-T', 'chess-mini', command],
-                       timeout=timeout, input_text=encoded+'\n', check=True).stdout
+                       timeout=timeout, check=True).stdout
+
 
 
 def scp(source, destination, *, recursive=False, timeout=900):

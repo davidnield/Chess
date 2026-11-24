@@ -13,6 +13,19 @@ import mini_worker_transport as transport
 
 @unittest.skipUnless(os.name == 'nt', 'Windows transport contract')
 class TransportTests(unittest.TestCase):
+    def test_short_remote_uses_command_not_stdin(self):
+        with patch.object(transport, 'run_bounded', return_value=subprocess.CompletedProcess([],0,'ok','')) as call:
+            self.assertEqual(transport.remote('Write-Output ok'), 'ok')
+            self.assertNotIn('input_text',call.call_args.kwargs)
+            self.assertIn('-EncodedCommand',call.call_args.args[0][-1])
+
+    def test_long_remote_stages_script_without_stdin(self):
+        with patch.object(transport,'run_bounded',return_value=subprocess.CompletedProcess([],0,'ok','')) as call, patch.object(transport,'scp') as copy:
+            transport.remote('#'+'x'*5000+'\nWrite-Output ok')
+            self.assertEqual(copy.call_count,1)
+            self.assertIn('-File C:/chess-worker/inputs/transport-requests/',call.call_args.args[0][-1])
+            self.assertTrue(all('input_text' not in c.kwargs for c in call.call_args_list))
+
     def test_large_stdout_does_not_fill_a_pipe(self):
         r = transport.run_bounded([sys.executable, '-c', "print('x'*300000)"], timeout=10, check=True)
         self.assertEqual(len(r.stdout.strip()), 300000)

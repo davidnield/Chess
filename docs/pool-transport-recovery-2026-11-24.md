@@ -38,3 +38,13 @@ Logs: `D:/chess/mini-pool-20261123/queue-transport-v2.stdout.log` and `.stderr.l
 All **71 previously accepted buckets** (eight original plus 63 newly built) remain usable. At the pre-stall ~4.9-minute cadence, the remaining bucket phase is approximately **36–40 hours from resumption**, excluding the final global merge/validation. The outage moves the expected bucket finish to Wednesday midday/afternoon rather than Wednesday morning.
 
 ChessDB was unaffected: the midnight snapshot counted **49,560,469,617 / 63,996,865,341 records (77.44%)**, with approximately four hours of conversion remaining at the preceding hour's throughput, then the planned independent final audit. Its final archive/source-deletion rules remain unchanged.
+
+## Follow-up transport verification — 00:18 PST
+
+Bucket 065 succeeded in 217.15 seconds, was collected, and passed the output checks: **72/512 buckets accepted in total**. Automatic preparation and transfer of bucket 066 completed, but the first automatic Submit exposed a second problem in stdin request delivery. The remote bootstrap waited without creating a job. Crucially, the new timeout returned after 120 seconds and the queue safely entered `held-error`, rather than hanging indefinitely.
+
+Removed SSH stdin request delivery entirely: short scripts use `-EncodedCommand`; long scripts are copied to unique retained files under `C:/chess-worker/inputs/transport-requests` and executed with `-File`. Read-only short and long live probes passed. All **nine** transport regressions pass outside the filesystem sandbox (the initial sandbox run could not create its temporary test directories). No remote launcher/package or privileges changed.
+
+Reconciled bucket 066 separately, confirming that its old bootstrap had exited and no matching job existed before submitting once. Evidence: `recovery-20261124/reconciliation-b066.json`, `b066-before.json`, and `b066-recovered-submission.json`. Job `a420f99008ee4e728eab0121f88389e4`, request `2de0326e35fc4693bbc3e6800d26acf1`, submitted 00:17:20 PST and confirmed **running** at 00:17:55. Its normalized manifest SHA-256 is `ecb54e391bad2edd44c3ecff1c20e41f48c93ff40bd99b08f676ab3978758405`.
+
+**Current release supersedes v1:** `D:/chess/bin/mini-pool-queue-20261124-v2`, with hashes/tests in `release.json`; launcher PID **1624**. Current logs are `queue-transport-v3.stdout.log` / `queue-transport-v3.stderr.log` under `D:/chess/mini-pool-20261123`. It is rehashing the accepted checkpoints while bucket 066 computes. Automatic next-job turnover with this final release has not yet been observed at this snapshot; the earlier release did complete collection and next-input preparation. Old releases and logs are retained.
