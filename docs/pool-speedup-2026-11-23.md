@@ -66,3 +66,21 @@ The controller does not publish a final pool, start the other populations, chang
 - At this checkpoint the baseline is still finishing; the three candidate arms and replacement verifier remain queued. No speedup or new production ETA has yet been accepted. Allow roughly another 1–2 hours for the serial candidate runs and complete comparisons; this is a planning estimate, not a measured completion deadline.
 - The production queue is deliberately held at 17 completed buckets total (eight original plus nine newly accepted), with bucket 010 prepared. It resumes automatically after successful selection/verification. ChessDB remains independent and running.
 - Code commits: `8b3edfa` (sparse/release queries and parity tests), `f182abf` (range batching, CLI options, boundary tests). All execution options remain opt-in; the benchmark-selected frozen worker records which were used.
+## Accepted results and resumed production — 16:20 PST
+
+All four arms passed exact schema/row-multiset and non-timing-stat comparisons against the accepted reference: 23,877,125 edges and 20,371,938 auxiliary rows, zero differences in both directions. Acceptance: `D:/chess/mini-pool-speedup-20261123/verified-comparisons/ACCEPTED.json`, SHA-256 `65f5c7a1dbfc6919f68dcbbb1d77f6efc265f240bb30eca1ebf22177f3d696c6`. Decision: `decision.json` in the same experiment directory.
+
+| Arm | Aggregation + compaction seconds |
+|---|---:|
+| Frozen baseline | 1376.890 |
+| Early release and sparse ending summary | 998.359 |
+| Same queries plus compact arrivals | 774.204 |
+| Same plus eight edge ranges | **137.267** |
+
+Selected `partition`: **10.0307x** measured computation throughput including compaction. The finish controller resumed production at **15:17 PST** and confirmed a live job. Queue launcher PID **44632**; frozen queue `D:/chess/bin/mini-pool-optimized-20261123-v1/mini_pool_queue.py`, with `policy.json` beside it. The pre-staged bucket 010 ran under its original manifest; buckets 011 onward use the accepted optimized module and individually pinned optimizer identity. Old source/producer receipts remain intact.
+
+Seven optimized production buckets (011–017) have now been accepted and collected. Their mean aggregation time is **122.50s**. Real compaction takes about **79s**, appreciably more than the warm benchmark's 10.8s, and full remote execution/collection adds overhead. The measured end-to-end cadence from bucket 011's start to bucket 017's accepted receipt is **294.69s/bucket (4.91 minutes)**. Use this real cadence, not the 10x inner-computation ratio, for projections: **about 40–45 hours remaining for bucket construction**, versus the previous 10–11 days. This remains a seven-bucket sample and excludes final global merge/validation.
+
+At the snapshot: **25/512 total buckets complete** (eight original plus seventeen new), bucket 018 running, bucket 019 preparing in parallel. Queue status: `D:/chess/mini-pool-20261123/queue/status.json`; prefetch status beside it. `queue-speedup.stderr.log` and the finish controller stderr contain no reported errors. Mini worker is healthy; 3.789 TB free. H: has 2.266 TB free for collected outputs. Do not infer that the final global sort is already storage-approved or queued.
+
+The independent ChessDB run is also healthy: 1,198 accepted shard receipts, **23,099,210,304 / 63,996,865,341 records (36.09%)**, 755.55 GB accepted archive bytes. Last-hour throughput gives about **12 hours remaining conversion**, followed by the previously measured ~10-hour independent final audit. F: free space is 2.351 TB, above the 500 GB reserve with room for the remaining projected archive. D: free is 497.69 GB, above its 250 GB reserve. These are live estimates as of this snapshot, not fixed completion promises.

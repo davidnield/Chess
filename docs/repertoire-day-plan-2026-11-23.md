@@ -45,3 +45,8 @@ The mini pool pilot matched exactly; production bucket 000 has been collected/ve
 ## Pool speed experiment — 14:30 PST
 
 The user approved optimizing pool construction. Production is held at a safe boundary with 17 of 512 buckets complete. Four isolated mini benchmarks (baseline, sparse/released tables, compact arrivals, range-batched edge aggregation) and full exact-output acceptance run serially. A tested finish controller selects a candidate only above 1.10x measured throughput including compaction, then resumes one compute job plus one input prefetch. All accepted buckets and source inputs remain preserved. See [pool speed experiment](pool-speedup-2026-11-23.md) for code commits, tests, job IDs, acceptance requirements, and current controller/resume paths. No final pool publication is queued.
+
+
+## Pool speed experiment accepted — 16:20 PST
+
+All four full-data benchmark arms passed exact comparisons. Eight edge ranges plus early table release, sparse endings and compact arrivals delivered 10.03x benchmark computation throughput. The new prefetch queue resumed at 15:17; seven optimized production buckets confirm about 4.91 minutes per accepted bucket end to end. Total complete: 25/512; estimated remaining bucket phase 40–45 hours. Final global merge/validation is separate and not queued. Full metrics, receipts, code and live paths are in [pool speed experiment](pool-speedup-2026-11-23.md).
