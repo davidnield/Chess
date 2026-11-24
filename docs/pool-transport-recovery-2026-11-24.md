@@ -64,3 +64,27 @@ David asked to stop main-PC work for shutdown and resume in the morning. Both ma
 3. Launch `D:/chess/run_chessdb_archive.bat` hidden. It resumes the same frozen v6 archive and launches the independent verifier after full conversion completion. Preserve original ChessDB sources until independent acceptance.
 4. Launch the venv Python with `-B -u D:/chess/bin/mini-pool-queue-20261124-v2/mini_pool_queue.py D:/chess/bin/mini-pool-optimized-20261123-v1/policy.json`, hidden, with fresh timestamped stdout/stderr logs; update `queue.pid`. Do not launch the older queue releases. It rehashes accepted checkpoints, collects existing bucket 068, and then submits prepared bucket 069.
 5. Confirm live progress and refresh ETAs; prior wall-clock completion dates must move by the overnight pause plus startup verification time.
+
+## Mini-only resume — 00:43 PST November 24
+
+David opted to leave the main PC on to assess noise while supporting only the mini. Resumed the mini coordinator after confirming a healthy idle worker and no existing coordinator. Removed only `mini-pool-20261123/queue.STOP`. **ChessDB remains stopped; its STOP marker is retained.** This supersedes the overnight hold for the mini only.
+
+Launcher PID 35896; unchanged frozen queue v2 and optimized policy. Logs: `D:/chess/mini-pool-20261123/queue-mini-only-20261124-004334.stdout.log` and `.stderr.log`. Launch record: `mini-only-resume-20261124.json` in that directory. At 00:43:41 the coordinator was progressing through checkpoint verification with no stderr. It will collect completed bucket 068 and submit prepared bucket 069, then resume normal prefetch. Allow roughly 5–10 minutes for startup verification/collection before judging steady-state fan noise. No full-load ChessDB conversion or audit was launched.
+
+## Quiet overnight hold and scheduled restart — November 24, 00:50 PST
+
+David found mini support too loud and requested another pause, leaving the PC on for an unrelated crawler. Do not touch the crawler. The mini queue STOP marker now reads `User requested quiet overnight hold; resume 2026-11-24 09:30 America/Los_Angeles`. ChessDB's original overnight STOP marker remains intact; its checkpoint remains 51,161,276,358 records.
+
+At 00:49:26 the mini coordinator stopped further submissions with 67 new accepted buckets (75 including the eight original). Bucket 069 was already submitted as job `cab1cfb2d6c340cab694c87155310994`; preserve and collect its result rather than resubmitting. Preparation of bucket 070 was allowed to finish safely, without submission.
+
+Created and verified Codex one-time thread automation **`resume-chessdb-and-mini-pool-at-9-30`**, ACTIVE, scheduled at **09:30 Pacific on November 24, 2026** (one occurrence). OS timezone confirmed Pacific Standard Time. It will check processes/storage/mini health, remove only the documented overnight STOP markers, resume both existing pipelines hidden with fresh logs, verify progress, and report revised ETAs. No separate Windows scheduled task or duplicate restart was installed. Leave the PC awake and Codex running for this local automation.
+
+## Both jobs resumed early — 08:47 PST November 24
+
+David requested cancellation of the 09:30 restart and immediate resumption with progress tracking. Deleted automation `resume-chessdb-and-mini-pool-at-9-30` through the app; confirmed deletion. Both documented overnight STOP markers were checked and removed. No existing chess coordinators were running; unrelated crawler left untouched.
+
+Launch record: `D:/chess/morning-resume-20261124.json`. Mini launcher PID 23992, child 14936; unchanged frozen v2 queue and optimized policy. Logs `D:/chess/mini-pool-20261123/queue-morning-20261124-084721.stdout.log` / `.stderr.log`. Checkpoint verification advanced through bucket 007 by 08:47:46, with no stderr. Bucket 069's remote job is confirmed succeeded (228.099 seconds, exit 0); it awaits collection, not recomputation. Bucket 070 remains prepared.
+
+ChessDB batch launcher PID 15560, coordinator 20828 (Python wrapper 15232). Source verification is actively advancing (8/291 files at 08:47), using the unchanged v6 release/output and subsequent independent audit. Conversion checkpoint remains **51,161,276,358 records / 79.94%**; startup source/archive verification adds time beyond remaining conversion and the final audit. Do not interpret `new_completed` after restart as the total archive count. Free space before resume: D 496.6 GB, F 1429.5 GB, H 2184.5 GB, above existing reserves.
+
+Created ACTIVE hourly thread monitor **`track-chessdb-and-mini-pool-progress`** at David's request. It checks actual advancing logs/processes, phases, receipts, remote health, storage, and ETAs; investigates/fixes reversible operational faults; honors any later user-requested pause; and must stop monitoring after the archive's independent audit and the mini bucket phase finish. No duplicate monitor or Windows scheduler entry was created. Final global pool merge remains distinct and is not authorized by this monitoring schedule alone.
