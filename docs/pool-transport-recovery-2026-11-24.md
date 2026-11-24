@@ -1,0 +1,40 @@
+# Mini pool transport recovery — November 24, 2026
+
+## Incident and impact
+
+The status check around midnight found the mini idle. Bucket 064 had completed, been collected and accepted at about 20:04 PST on November 23, but the coordinator was stuck submitting bucket 065 from 20:05. The top-level status still said `collecting` because it had not published a new status before Submit. The idle interval was approximately four hours. No accepted output was lost and no chess computation needs repeating.
+
+The old coordinator used `subprocess.run(..., capture_output=True, timeout=120)` to invoke the PowerShell client. Its PowerShell process (35332) had exited, but SSH child 44372 remained alive holding inherited capture handles. Python's timeout cleanup was waiting for pipe EOF. Thus the timeout did not bound wall-clock waiting. A new regression safely reproduces this failure under an independent outer deadline.
+
+## Fix and verification
+
+Maintained helper: `python/mini_worker_transport.py`; regression suite: `python/_test_mini_worker_transport.py`.
+
+- Invoke Windows OpenSSH directly, retaining the configured `chess-mini` alias, existing agent and host verification.
+- Use file-backed stdin/stdout/stderr, a single-line encoded request, explicit connection/keepalive limits, and process-tree termination on timeout. No PowerShell pipeline/EOF dependency or captured descendant output pipe remains.
+- Continue calling the existing standard-user `Jobs.ps1` launcher. No remote package installation, privilege or worker-limit change.
+- Preserve terminal-attempt checks before and after collection and preserve partial copies on failure.
+- Never automatically retry an unknown Submit. Reconcile its intent before any resubmission.
+- Publish `submitting` and `verifying-checkpoints` statuses so the displayed phase tracks actual work.
+
+Seven tests passed: large stdout; complete file-backed input; bounded timeout with inheriting child cleanup; reproduction of the legacy capture-pipe hang; no automatic Submit retry; invalid job ID rejection; changed collection attempt rejection. Read-only Health/List and a real recovered Submit succeeded using the new transport.
+
+## Reconciliation and resumption
+
+Stopped only old main-PC coordinator processes 44632/41632 and orphan SSH 44372. The mini's worker and the independent ChessDB run were left running. A remote CIM process query was unavailable to the standard account, so the reconciliation used permitted `Get-Process` information instead; no privileges were changed.
+
+Confirmed that the old remote submission bootstrap no longer existed, no manifest/job for production bucket 065 existed, and the mini was healthy and idle. Preserved the old intent in `D:/chess/mini-pool-20261123/recovery-20261124/b065-before.json` and the complete reconciliation evidence in `reconciliation.json` there. The already-prepared manifest checksum was unchanged.
+
+Recovered bucket 065 was submitted once at **00:04:47 PST**:
+
+- Job: `8b593bf2a7044a308913fbbe1893e9a4`
+- Request: `d1b123a619c44218acc4176221586088`
+- Normalized manifest SHA-256: `7567d481c6e7e8a0f8bb04c0a517c8eb32e15c12be967d565a16bef2cb5c1e31`
+
+The repaired queue is frozen at `D:/chess/bin/mini-pool-queue-20261124-v1/mini_pool_queue.py`, alongside its pinned transport helper and `release.json`. Launcher PID **34812**. It uses the unchanged optimized producer policy at `D:/chess/bin/mini-pool-optimized-20261123-v1/policy.json`.
+
+Logs: `D:/chess/mini-pool-20261123/queue-transport-v2.stdout.log` and `.stderr.log`. Status remains `queue/status.json`; prefetch remains `queue/prefetch-status.json`; `queue.pid` records the current launcher. Old queue logs/releases remain retained. On restart, accepted outputs are fully rehashed before the queue reaches the recovered job. The separately submitted job runs while those checks proceed.
+
+All **71 previously accepted buckets** (eight original plus 63 newly built) remain usable. At the pre-stall ~4.9-minute cadence, the remaining bucket phase is approximately **36–40 hours from resumption**, excluding the final global merge/validation. The outage moves the expected bucket finish to Wednesday midday/afternoon rather than Wednesday morning.
+
+ChessDB was unaffected: the midnight snapshot counted **49,560,469,617 / 63,996,865,341 records (77.44%)**, with approximately four hours of conversion remaining at the preceding hour's throughput, then the planned independent final audit. Its final archive/source-deletion rules remain unchanged.

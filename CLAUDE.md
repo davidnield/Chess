@@ -116,6 +116,13 @@ before releasing its wide table. `_test_pool_bucket_optimizations.py` compares
 complete outputs/statistics at multiple floors and checks terminal rejection.
 Range batching covers the full signed low-half domain while retaining complete 128-bit equality and null-key errors (`_test_pool_edge_ranges.py`). Real-data speed claims require exact row-multiset comparisons against the frozen
 producer; do not modify running frozen snapshots or silently rebind receipts.
+Remote mini jobs use the existing standard-user launcher. Main-PC queue transport
+is maintained in `python/mini_worker_transport.py`: file-backed stdio, bounded
+process-tree cleanup, and single-line encoded SSH requests prevent an orphaned
+SSH child from defeating a captured-pipe timeout. Never retry an unknown Submit
+without reconciling its persisted intent against remote jobs. Partial collections
+and original attempt identities must be preserved; the regression suite includes
+a bounded reproduction of the legacy inherited-pipe hang.
 ## Running things
 
 For practical book comparisons see [practical repertoire experiments](docs/practical-repertoire.md).
