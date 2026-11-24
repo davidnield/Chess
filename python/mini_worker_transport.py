@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 SSH = 'C:/Windows/System32/OpenSSH/ssh.exe'
@@ -109,4 +110,16 @@ def client(action, **kwargs):
     script = ("$o=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('"+payload+"'))|ConvertFrom-Json;"
               "$a=@{};foreach($p in $o.PSObject.Properties){$a[$p.Name]=$p.Value};"
               "& 'C:\\chess-worker\\launcher-v1\\Jobs.ps1' @a")
-    return json.loads(remote(script, timeout=120))
+    # Worker writes can briefly hold heartbeat/state files exclusively on Windows.
+    # Only retry recognized sharing violations in read-only actions. Never retry
+    # Submit, transport timeouts, malformed JSON, or unrelated errors here.
+    for attempt in range(4):
+        try:
+            return json.loads(remote(script, timeout=120))
+        except RuntimeError as exc:
+            detail = str(exc).lower()
+            sharing_violation = ('readalltext' in detail and
+                                 'being used by another process' in detail)
+            if action not in {'Health', 'Status', 'List', 'Logs'} or not sharing_violation or attempt == 3:
+                raise
+            time.sleep(0.25 * (2 ** attempt))

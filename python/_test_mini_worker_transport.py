@@ -13,6 +13,33 @@ import mini_worker_transport as transport
 
 @unittest.skipUnless(os.name == 'nt', 'Windows transport contract')
 class TransportTests(unittest.TestCase):
+    def test_read_only_sharing_violation_recovers(self):
+        error = RuntimeError('ReadAllText: file is being used by another process')
+        for action in ('Health', 'Status', 'List', 'Logs'):
+            with self.subTest(action=action), patch.object(transport,'remote',side_effect=[error, '{}']) as remote, patch.object(transport.time,'sleep') as sleep:
+                self.assertEqual(transport.client(action,JobId='a'*32),{})
+                self.assertEqual(remote.call_count,2)
+                sleep.assert_called_once_with(0.25)
+
+    def test_read_only_sharing_violation_is_bounded(self):
+        error = RuntimeError('ReadAllText: file is being used by another process')
+        with patch.object(transport,'remote',side_effect=error) as remote, patch.object(transport.time,'sleep') as sleep:
+            with self.assertRaises(RuntimeError):transport.client('Health')
+            self.assertEqual(remote.call_count,4)
+            self.assertEqual([c.args[0] for c in sleep.call_args_list],[0.25,0.5,1.0])
+
+    def test_submit_sharing_violation_is_never_retried(self):
+        with tempfile.TemporaryDirectory() as td:
+            f=Path(td)/'manifest.json';f.write_text('{}')
+            with patch.object(transport,'remote',side_effect=RuntimeError('ReadAllText: file is being used by another process')) as remote:
+                with self.assertRaises(RuntimeError):transport.client('Submit',ManifestPath=f)
+                self.assertEqual(remote.call_count,1)
+
+    def test_unrelated_read_error_is_not_retried(self):
+        with patch.object(transport,'remote',side_effect=RuntimeError('permission denied')) as remote:
+            with self.assertRaises(RuntimeError):transport.client('Health')
+            self.assertEqual(remote.call_count,1)
+
     def test_short_remote_uses_command_not_stdin(self):
         with patch.object(transport, 'run_bounded', return_value=subprocess.CompletedProcess([],0,'ok','')) as call:
             self.assertEqual(transport.remote('Write-Output ok'), 'ok')
