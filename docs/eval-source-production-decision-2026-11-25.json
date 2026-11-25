@@ -1,0 +1,42 @@
+{
+  "schema": "eval-source-production-decision-v1",
+  "id": "cloud-nnue-chessdb-score-334-v1",
+  "status": "user-approved-for-integration; activation-pending-acceptance",
+  "user_approval": "November 25: accept recommendation to freeze the intended production recipe and validate integration before activation",
+  "complete_case": {
+    "sources": ["cloud", "nnue_fishnet", "chessdb"],
+    "weights": [0.3, 0.3, 0.4],
+    "space": "expected_score",
+    "perspective": "white",
+    "conversion": "1 / (1 + exp(-0.00368208 * cp_white))",
+    "normalization": "Retain the verified source orientation, decisive-score handling and +/-2000 cp clipping used in the study",
+    "fishnet_eligibility": "fishnet_tier == nnue; do not silently include legacy Fishnet"
+  },
+  "missing_sources": {
+    "cloud_missing_chessdb_available": "ChessDB alone",
+    "other_cases": "Preserve existing pre-change bound source-policy behavior; explicitly bind that reference generation in implementation receipts",
+    "universal_renormalization": false,
+    "no_usable_evidence": "Remain unresolved under existing verification policy; never silently substitute equality",
+    "chessdb_missing_followup": "Measure actual coverage and retained-graph importance before any conditional validation of Cloud-Fishnet fallback"
+  },
+  "precedence": "Preserve existing authoritative terminal handling and qualified local Stockfish overrides ahead of cached-source selection; never downgrade evaluation quality",
+  "unchanged": ["absolute gates", "relative gates", "gate baselines", "opponent policy", "eval-weight", "optimizer settings"],
+  "implementation": "Rust policy computation; versioned provider/lookup and receipts, preserving old generations and source evidence",
+  "evidence": {
+    "selection_report": "chessdb-ensemble-selection-rationale-2026-11-25.md",
+    "confirmation_report": "chessdb-ensemble-confirmation-results-2026-11-25.md",
+    "ablation_report": "chessdb-fishnet-ablation-2026-11-25.md",
+    "final_choice_sha256": "9d74bbeb258d969ba09adfb453cc92733ee0de7308a057d45711e10b2a0afb38"
+  },
+  "activation_requirements": [
+    "Native recipe and serialization parity, source orientation/missingness/provenance tests",
+    "Preserved terminal/local override precedence and no quality downgrade",
+    "Versioned input/cache bindings and measured lookup materialization capacity",
+    "Targeted White gate-disagreement review",
+    "Accepted required pools and opponent-policy inputs",
+    "Paired Black stricter 2000-position ply-30 pilot with full child-gate, menu and verification checks"
+  ],
+  "is_executable_manifest": false,
+  "production_binding_changed": false,
+  "additional_weight_search_planned": false
+}

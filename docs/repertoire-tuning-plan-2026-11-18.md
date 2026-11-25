@@ -545,3 +545,13 @@ ChessDB, establish its actual coverage/retained-graph importance, then validate
 genuinely missing cases if material. This is a pending conditional audit, not a
 queued large extraction/search. Keep final confirmation closed to new tuning and
 preserve production bindings until the planned book-level checks pass.
+
+**Production-policy decision accepted November 25:** freeze 30/30/40
+Cloud/NNUE-Fishnet/ChessDB in expected-score space for complete eligible cases;
+ChessDB alone when Cloud is absent; preserve other bound fallbacks and authoritative
+terminal/local evidence. Stop broad weight tuning. Follow
+`eval-production-integration-plan-2026-11-25.md` and its machine-readable decision
+contract for Rust implementation, the prepared 45-position White gate audit,
+versioned lookup/provider acceptance, required pool publication and the paired
+Black stricter 2,000-position ply-30 pilot before active binding changes. This
+approval authorizes those steps; it does not claim they are already completed.

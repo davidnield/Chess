@@ -1,0 +1,30 @@
+{
+  "counts": [
+    {
+      "candidate_false_admissions": 10,
+      "disagreements": 6,
+      "gate": "permissive",
+      "n": 1008,
+      "new_false_admissions": 1,
+      "queued_rows": 15,
+      "threshold": 0.4083137990703003
+    },
+    {
+      "candidate_false_admissions": 26,
+      "disagreements": 13,
+      "gate": "stricter",
+      "n": 1008,
+      "new_false_admissions": 9,
+      "queued_rows": 30,
+      "threshold": 0.4683137990703003
+    }
+  ],
+  "input_sha256": "b7fef772a430385760a80814da280e3d4e0e6a35fe38d36613d5644e07c96ff9",
+  "interpretation": "Prepared diagnostic cases; not a completed production integration or reach-weighted acceptance test.",
+  "needs_stronger_reference_unique": 14,
+  "new_engine_searches": 0,
+  "output_sha256": "17f53c9ca459f1275ead5f8ee876d887fbd731b08000bcde2087ef6083f960c3",
+  "reference_parity_checked": true,
+  "selection_only": true,
+  "unique_positions": 45
+}
