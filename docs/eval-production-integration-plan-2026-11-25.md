@@ -74,6 +74,13 @@ shared count inputs are all-rating BRC (`brc-all-p30`) and our post-book
 See the integration-results document's input inventory for checked evidence and
 the distinction between first-pilot inputs and later sweep controls.
 
+Also connect the frozen OTB opponent ensemble to the post-book W/R stop-value
+calculation and paired rollout adapter. Role tracing found that the current
+short stop model still reads raw adult-pool opponent counts, even when graph
+construction uses the ensemble. Require a differing-distribution regression and
+a selective-query cost check before the pilot; apply the correction to both
+evaluation-policy arms. Details are recorded in the integration-results document.
+
 Then run the planned **Black stricter 2,000-position, ply-30 pilot**, including
 a fixed-control comparison that changes only evaluation-source policy. Retain
 the established Black baseline solver/settings so optimizer changes cannot

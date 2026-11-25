@@ -239,3 +239,30 @@ paired seeds and leaf-referee bindings frozen. The full sweep's BRC2200 controls
 50-ply exports, improved-own-play sensitivities and complete evaluation-panel
 matrix are later stages, not blanket prerequisites for this first Black pilot.
 Finishing the two jobs currently running does not by itself make the pilot ready.
+
+### Opponent-policy continuity check found during role tracing
+
+The selective OTB ensemble already supplies opponent edges during graph
+construction (`FrontierOverlay.attach`). However,
+`build_budget_books.py` currently calls `weak_stop_values(..., pool=stats, ...)`
+without an opponent-policy adapter, and `weak_stop.py` derives post-book opponent
+probabilities directly from the adult pool's raw move counts. A selective policy
+is published and closed before this stop-value calculation. Recording its recipe
+in stop-table metadata does not make the stop calculation use it.
+
+Before the intended OTB-policy pilot, connect the same frozen opponent ensemble
+to the short post-book continuation used for both W(our turn) and R(opponent
+turn), including newly reached off-graph boards, and to the matched rollout
+configuration. Test a position where raw-adult and ensemble replies differ;
+the expected stop value must use the latter. Preserve complete legal vectors,
+real nonmove mass, terminal behavior, cache identities, both key halves and local
+engine precedence. Do not apply another Maia pseudocount to completed ensemble
+probabilities. Measure selective-query/model costs before a full book launch.
+Apply the same corrected opponent path to both evaluation-policy arms so the
+comparison still changes only evaluation-source policy.
+
+The own-side stop policy is distinct: weak1000–1799 move counts, with the existing
+min-weak-games20 fallback to the adult pool. This fallback is a current modeling
+choice, not evidence that a thinly observed position is easy for a weak player.
+No code/model behavior was changed during this inventory; this integration gap
+is now an explicit pilot prerequisite.
