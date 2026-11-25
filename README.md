@@ -422,3 +422,8 @@ does not publish or change the builder's active evaluation policy.
 [three-source ensemble comparison](docs/chessdb-ensemble-study-2026-11-25.md):
 freeze development-selected finalists, sample independent positions, then run
 checkpointed references and paired held-out comparisons. Production adoption is separate.
+
+`python/chessdb_ensemble_confirmation.py` adds a
+[separate blinded confirmation panel](docs/chessdb-confirmation-plan-2026-11-25.md).
+Its `pipeline` stops at sealed reference completion; `lock-choice` must precede
+`report`, which compares only the chosen contender and its fixed controls.

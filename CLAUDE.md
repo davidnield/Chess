@@ -105,6 +105,15 @@ binds raw source hashes. Consistent global/bucket ranking is required for bottom
 sampling. A full run resumes sample/search receipts; no interim holdout leaderboard
 or automatic policy adoption. Tests: `python/_test_chessdb_ensemble_study.py`.
 
+`python/chessdb_ensemble_confirmation.py` reserves additional independent positions
+for the final contender. Engine records under `sealed/` must not inform selection.
+The pipeline emits operational counts and never reports policy results automatically.
+Use only the preceding study to choose a contender and write a rationale, then
+`lock-choice` before `report`. The immutable receipt binds the chosen recipe, controls
+and preceding evidence; reporting refuses unopened/unlocked or changed identities.
+Do not run all candidates on this last panel or pool its results with selection data
+to claim independent confirmation. Tests: `python/_test_chessdb_ensemble_confirmation.py`.
+
 The approved optimizer study lives in `rust/book_builder/src/optimizer/`; its native
 runner and optional extension APIs are documented in `rust/book_builder/OPTIMIZERS.md`.
 All new optimizers, exact oracles, model construction and benchmarks stay in Rust.

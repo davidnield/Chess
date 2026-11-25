@@ -1,0 +1,31 @@
+{
+  "verified_utc": "2026-11-25T18:10:48.549171+00:00",
+  "tests_passed": 4,
+  "sample_positions": 300,
+  "all_three_sources": true,
+  "nnue_only": true,
+  "counts": {
+    "deep_repeated": 75,
+    "shallow_once": 75,
+    "deep_once": 75,
+    "shallow_repeated": 75
+  },
+  "duplicate_keys": 0,
+  "duplicate_canonical_boards": 0,
+  "overlap_with_prior_known_boards": 0,
+  "reference_preflight": true,
+  "manifest_sha256": "aa64e675fdefac8986c9dac1e3a5cde978214e965f076322d26e3828279ccf2d",
+  "inputs_sha256": "11ed937bdb647ff2094731ac29af23bd81b92c936e3b46119e5318e33bd4d504",
+  "definition_sha256": "4b09749b51c01717a42e1ddaa4d50ce0a6d89c23f43529a8fc6c61f996d5dd5f",
+  "code": {
+    "chessdb_ensemble_confirmation.py": "2d99c2c6ae7a34a53aa9bef0659b4ab6eb2b510a49c9049565df075b55fc9f61",
+    "chessdb_ensemble_study.py": "b3fbc4abea7b5063bdcba86be68e44cf1cae4ffafce1fa2c85c6a83aac6c71a7",
+    "chessdb_policy_validation.py": "1c94bf4374f3dcacb3089c04ea6027c762584fdb08130e841ed0728cf5cd773d",
+    "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+    "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "zobrist128.py": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+  },
+  "scores_opened": false,
+  "contender_locked": false,
+  "adopted": false
+}

@@ -521,3 +521,9 @@ both approved gate arms unchanged; compare false admissions and tails as well as
 expected-score error. This is calibration of cached evaluation sources, not a new
 repertoire optimizer or replacement for the Black production pilot. No policy
 is adopted merely because it ranks first on the exposed development panel.
+
+David also approved a separate 300-position modern-Fishnet triple-overlap
+confirmation panel. Freeze its sample now and keep its scores out of selection
+until the final contender is locked from the preceding study. Compare that contender
+with the current proposal and best single source. See
+`chessdb-confirmation-plan-2026-11-25.md`; no production policy is automatically adopted.

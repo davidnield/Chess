@@ -187,3 +187,13 @@ After completion, inspect `summary.json`, `holdout-metrics.csv`, `holdout-gates.
 `targeted-stress-*`. No automatic source-policy adoption. Full blended-child relative
 gate behavior, move regret, and reach-weighted book effects still require the Black
 pilot after pool publication.
+
+## Additional final confirmation approved
+
+David subsequently approved **300 further NNUE triple-overlap positions**, 75 in
+each of the four primary source-quality strata. They are sampled from new buckets
+and exclude this study's positions and all previous known boards/mirrors. Their
+scores stay separate until one final contender is selected and recorded from this
+study's reports. Follow `chessdb-confirmation-plan-2026-11-25.md` for the queued job,
+blinding, immutable choice and final comparison. This study's existing frozen
+definition, finalists, data and running worker are unchanged.
