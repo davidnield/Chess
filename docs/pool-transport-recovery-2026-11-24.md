@@ -106,3 +106,70 @@ Added narrowly scoped, bounded retry to maintained `python/mini_worker_transport
 New frozen release **`D:/chess/bin/mini-pool-queue-20261124-v3`** supersedes v2; `release.json` pins helper/queue hashes and test count. Queue/producer policy unchanged. Restart at 10:51:37; launcher PID **11576**; record `D:/chess/mini-pool-20261123/read-retry-resume-20261124.json`; logs `queue-read-retry-20261124-105137.stdout.log` / `.stderr.log` in that directory. At 10:51:56 checkpoint verification was advancing through bucket 006, with no stderr. It will verify saved outputs, then submit prepared bucket 085; actual next-job submission is not yet observed at this snapshot. No STOP marker or existing coordinator was present at launch. Hourly monitor prompt updated to consult this latest release/record.
 
 ChessDB unaffected: coordinator 20828 read count advanced from approximately 490 GB at 09:55 to **936.615 GB at 10:51**, so the completed-archive rehash is progressing. Saved conversion remains 79.94%, `new_completed: 0` since restart; source verification already passed 291/291. Free space D **499.8 GB**, F **1429.5 GB**, H **2158.5 GB**, above reserves. Expect about 1.5–2 hours more archive rechecking, then 3–4 hours conversion and roughly 10 hours independent audit if rates hold (early Wednesday acceptance). Mini bucket phase remains roughly 33–36 hours from recovery, excluding final merge/validation. Neither job's original inputs or accepted outputs were modified.
+
+## Hourly check — 11:48 PST November 24
+
+Healthy progression; no intervention. Mini has **102/512 accepted** (94 new plus eight originals), bucket 096 running and 097 preparing. Since the v3 recovery, eleven further buckets (085–095) have completed/been collected, confirming automatic turnover works. No new stderr; remote worker healthy with the matching active job. Remaining bucket phase about 32–35 hours at recent cadence, excluding global merge/validation.
+
+ChessDB coordinator 20828 remains in completed-archive byte verification: read counter **1,369,958,102,575 bytes**, up from 936.6 GB at 10:51; CPU time also increasing. No new converted shard yet; saved 79.94% remains valid. Roughly 0.3 TB of saved archive remains to recheck (about 40–60 minutes at current rates), then remaining conversion and independent audit. Tentative final acceptance remains early Wednesday. Free space D 499.7 GB, F 1429.5 GB, H 2140.5 GB. No reserve concern or user action needed.
+
+## Hourly check — 12:51 PST November 24
+
+ChessDB has resumed **new conversion** after the archive recheck: 59 newly completed shards since restart, **1,106,207,516 new rows** from the appended production log. Combined with the saved checkpoint: **52,267,483,874 / 63,996,865,341 = 81.67%**. No full F receipt scan was needed. Coordinator 20828 is live; new shards run around 130–142 seconds for 20M rows. Roughly 3–4 hours conversion remain, followed by approximately 10 hours independent audit; early Wednesday acceptance remains the estimate.
+
+Mini is healthy, **115/512 accepted** (107 new plus eight originals), bucket 110 running, 111 preparing. No stderr or renewed transport failure. Remaining bucket phase roughly 31–34 hours, excluding global merge/validation. Space D 497.0 GB, F 1392.4 GB, H 2119.3 GB; reserves intact. No intervention or user action needed.
+
+## Hourly check — 13:49 PST November 24
+
+Both jobs progressing normally; no intervention. ChessDB now **55,304,127,740 rows (86.42%)**, 219 new shards since morning resume. About 3.04 billion rows added since the 12:51 snapshot; roughly 2.5–3 hours conversion remain at this rate, then the independent audit (approximately 10 hours). Mini **127/512 accepted** (119 new plus eight originals), bucket 122 running, 123 preparing; worker healthy, no stderr. Remaining mini bucket phase about 30–33 hours, excluding final merge/validation. Free space D 493.5 GB, F 1289.7 GB, H 2099.8 GB, all above reserves. No user action needed.
+
+## Hourly check — 14:47 PST November 24
+
+Healthy progress, no intervention. ChessDB **58,442,115,264 records (91.32%)**, 384 new shards since resume; about 3.14B additional rows since 13:49. Roughly 1.5–2 hours conversion remain, then independent final audit (~10 hours). Mini **139/512 accepted**, bucket 134 running, 135 preparing; worker healthy and no stderr. About 29–32 hours remain for bucket construction, excluding global merge/validation. D 496.6 GB, F 1186.0 GB, H 2080.2 GB free; reserves remain sufficient. No user action needed.
+
+## Hourly check — 15:56 PST November 24
+
+Healthy progression; no intervention. ChessDB **62,265,279,885 rows (97.29%)**, 582 new shards since resume; 1.732B records remain. Rough estimate **30–60 minutes** of conversion plus finalization, then independent audit (~10 hours); allow tail imbalance as fewer ranges remain. Mini **153/512 accepted**, bucket 149 running, 150 preparing, healthy remote heartbeat and no stderr. About **28–31 hours** for remaining buckets, excluding final merge/validation. Free space D 494.2 GB, F 1065.9 GB, H 2057.4 GB; reserves sufficient. No user action needed.
+
+## Conversion complete; independent audit running — 17:00 PST November 24
+
+ChessDB conversion completed and its launcher automatically started the independent deep verifier at **16:30:48 PST**. `ARCHIVE.COMPLETE.json` and final conversion status agree: **63,996,865,341 records**, **3,345 shards**, **2,093,381,470,759 Parquet bytes** (~2.09 TB decimal), `bounded: false`, `sources_deleted: false`. This is conversion completion, not independent acceptance; retain original sources.
+
+Verifier wrapper/coordinator PIDs 25248/15840, four workers, existing 24 GB staging cap and 250 GB D reserve. `D:/chess/chessdb-final-audit-status.json` advanced to **222/3345 shards** at 16:59 with a fresh timestamp. Allow roughly **7–10 hours remaining** conservatively until a steadier audit rate is measured; final report remains `D:/chess/chessdb-archive-independent-verification.json`. No audit errors observed.
+
+Mini healthy: **167/512 accepted**, bucket 163 running, 164 preparing; no stderr. Remaining bucket construction roughly 27–30 hours, excluding final global merge/validation. Free space D 497.0 GB, F 1011.6 GB, H 2034.6 GB. No intervention required; hourly monitor remains active for audit and pool completion.
+
+## Hourly check — 18:02 PST November 24
+
+Healthy, no intervention. Independent ChessDB audit advanced to **705/3345 shards (21.1%)**, up 483 shards since 16:59; live verifier PID 15840. Recent throughput implies roughly **5.5–7 hours remaining**, tentatively around midnight–01:00 Wednesday; completion still requires the final report. Mini **180/512 accepted**, bucket 176 running, 177 preparing, remote healthy, no stderr. Remaining bucket phase approximately 26–29 hours, excluding global merge/validation. Free space D 496.5 GB, F 1011.6 GB, H 2013.4 GB; reserves adequate. No user action needed.
+
+## Hourly check — 19:07 PST November 24
+
+Healthy, no intervention. ChessDB independent audit **1210/3345 shards (36.2%)**, live verifier with advancing CPU and fresh progress timestamp; approximately **4.5–6 hours** remaining at recent throughput. Mini **194/512 accepted**, bucket 190 running, 191 preparing; healthy matching remote job, no stderr. Remaining bucket phase approximately **25–28 hours**, excluding global merge/validation. Free space D 497.0 GB, F 1011.6 GB, H 1990.5 GB; reserves adequate. No user action needed.
+
+## Hourly check — 20:04 PST November 24
+
+Healthy, no intervention. ChessDB independent audit **1660/3345 shards (49.6%)**, advancing CPU and fresh progress timestamp; roughly **3.5–5 hours** remain. Mini **206/512 accepted**, bucket 202 running, 203 prepared; matching healthy worker, no stderr. Roughly **24–27 hours** remain for bucket construction, excluding global merge/validation. Free space D 494.7 GB, F 1011.6 GB, H 1971.0 GB, above reserves. No user action needed.
+
+## Hourly check — 21:06 PST November 24
+
+Healthy, no intervention. Independent ChessDB audit **2138/3345 shards (63.9%)**, live verifier with fresh status and advancing CPU; roughly **2.5–4 hours** remain. Mini **220/512 accepted**, bucket 216 running, 217 preparing; matching healthy worker, no stderr. Roughly **23–26 hours** remain for bucket construction, excluding final merge/validation. Free space D 497.7 GB, F 1011.6 GB, H 1948.2 GB; reserves adequate. No user action needed.
+
+## Hourly check — 22:04 PST November 24
+
+Healthy, no intervention. ChessDB independent audit **2570/3345 shards (76.8%)**, live verifier with fresh status and advancing CPU; roughly **1.5–3 hours** remain. Mini **232/512 accepted**, bucket 228 running, 229 preparing; matching healthy worker, no stderr. Roughly **22–25 hours** remain for bucket construction, excluding global merge/validation. Free space D 497.4 GB, F 1011.6 GB, H 1928.6 GB; reserves adequate. No user action needed.
+
+## Hourly check — 23:07 PST November 24
+
+Healthy, no intervention. ChessDB independent audit **3043/3345 shards (91.0%)**, live verifier with fresh progress and advancing CPU; approximately **40–90 minutes** plus final report work remain. Mini bucket 241 succeeded remotely (234.48 seconds, exit 0) and its local state is now `accepted: true`, bringing the total to **246/512**; the displayed collecting status briefly lags acceptance. Bucket 242 is prepared. Worker healthy and momentarily idle during normal collection/turnover, no stderr. Remaining bucket phase approximately **21–24 hours**, excluding global merge/validation. Free space D 494.4 GB, F 1011.6 GB, H 1906.0 GB; reserves adequate. No user action needed.
+
+## Overnight hold and successful ChessDB acceptance — 23:48 PST November 24
+
+David explicitly requested pausing both jobs and the monitor for the night. Automation **`track-chessdb-and-mini-pool-progress` is PAUSED** (not deleted); no scheduled restart exists. Both STOP markers now read `User requested overnight pause 2026-11-24 23:45 PST; do not restart until asked`. Unrelated crawler untouched.
+
+**ChessDB conversion and independent audit are COMPLETE and PASSED.** The verifier finished naturally while the requested stop drained, after all 3,345 shards had already been checked. Final report `D:/chess/chessdb-archive-independent-verification.json`: `verified: true`, `deep: true`, `bounded: false`, **63,996,865,341 records**, **3,345 shards**, **2,093,381,470,759 bytes**, audit elapsed **26,065.406 seconds (~7h14m)**. Independently matched its marker hash to the current `ARCHIVE.COMPLETE.json`: `a19025416d8f7adbb60c16ba72b6a5899907539383533c9e1ce9553ffaebc13e`. Verifier SHA-256 `7c5220e33b9a674b08ffdec805f27a65134e5627f88c429706d77fe157fb4c47`. Source data remains preserved; no deletion authorized by this pause. **Do not rerun conversion or audit on morning resume.** Any subsequent migration/cleanup is a separate next step.
+
+Mini: **254/512 buckets accepted** (246 new plus eight originals) before pausing. Current bucket 250 job `4aa393fc36bf49d5a70c684e9c67c613`, request `8a22f0dada4b42928770644f9e197af5`, was allowed to finish on the mini without further submissions. Bucket 251 finished input preparation at 23:46:42. Main coordinator processes have exited; frozen v3 queue is the current release. Retain saved bucket 250 submission and collect its result rather than resubmitting tomorrow. On user-requested resume, check Health/current state, remove only the mini STOP marker, launch the v3 coordinator hidden with fresh logs and updated queue.pid, and resume the monitor with its prompt revised to acknowledge ChessDB acceptance. Keep the archive STOP marker to prevent accidental rerun. No global pool merge/validation was started.
+
+Final confirmation at 23:48: bucket 250 **succeeded** at 23:47:33 (233.59 seconds, exit 0); remote worker healthy and idle with no active or queued requests. Its result is retained remotely and awaits collection/acceptance. Both main-PC coordinators are exited, both STOP markers remain, and monitor status is PAUSED.
+
