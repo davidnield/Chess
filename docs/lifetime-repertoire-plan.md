@@ -2,6 +2,8 @@
 
 Agreed November 9, 2026, on `codex/practical-repertoire`. Keep this page current when a decision changes. Consult the local run receipts for progress.
 
+**Current specification:** the [consolidated tuning plan](repertoire-tuning-plan-2026-11-18.md) supersedes the historical recipes and experiment order below. Its November 25 amendment adds the approved Rust optimizer calibration/comparison before the main matrix: multiple starts, exact bounded-problem benchmarks, large-neighborhood search, and DP cap/exact-tree diagnostics. Preserve the old experiments as evidence; do not use their pool, gate-baseline or solver defaults for new sweep arms. Implementation remains pending as recorded in the consolidated checklist.
+
 ## Objective and fixed settings
 
 Choose one book per color, each with 2,000 distinct positions at which we prescribe a move. It should be learnable now (1800 Lichess Rapid, 1700 Blitz, provisional 1100 USCF) and useful through at least 2000 online and 2000 USCF classical. Compare practical expected score after book exit, ease of conversion with weaker human play, and objective safety against strong replies.

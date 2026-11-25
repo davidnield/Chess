@@ -424,3 +424,37 @@ understates our loss exactly inside sequences.
 - **Bias measurement**: see the November 21 entry in `docs/claude-review-fixes-plan-2026-11-19.md`.
 - Tests: `_test_extension_player_severity.py` (8); `_test_sweep_preparation` and
   `_test_review_fixes_1119` updated.
+
+## November 25: approved Rust optimizer study added to the plan
+
+David accepted the optimizer recommendations and explicitly requires Rust implementations
+to retain speed and memory efficiency. Updated `repertoire-tuning-plan-2026-11-18.md` in
+place: replaced the fixed-by-color solver conclusion with baseline controls, inserted
+O1 calibration / O2 anchor comparison / O3 selection, and updated execution order,
+stability accounting, deliverables and the timing caveat. The older lifetime plan now
+links to that controlling specification.
+
+- Rust owns the new optimizers, exact oracle/model construction, fixtures, calibration
+  and benchmark machinery. An external native MIP solver may be called through Rust;
+  no Python optimization/modeling/benchmark fallback. Existing lightweight launch plumbing
+  is not a reason to move graph computation out of Rust.
+- Compare DP+matching+polish, price+polish, multiple starts and portfolio plus joint
+  neighborhood search on both colors/gates at B=2,000; check shortlisted methods at
+  independent B=500. Test DP caps 256/512/1,024 and exact uncompressed tree allocation
+  separately, without multiplying the entire main matrix.
+- Use exhaustive small-DAG and bounded real-graph calibration with declared boundary
+  semantics, feasible incumbents, solver status and valid bounds. Larger-neighborhood
+  candidates include unselected alternatives and receive whole-book checks.
+- Reuse shared frozen graphs/evidence/policies, compare quality versus total compute,
+  and apply paired finalist rollouts with unchanged evaluation/extension recipes.
+- The v5 executable manifest remains unchanged and does not encode the new study.
+  A new manifest/validator and native execution support are explicit pending tasks;
+  the plan does not claim implementation or launch. The 20-arm main design and
+  existing sensitivity/extension decisions are preserved.
+- The updated consolidated plan and this progress record are mirrored into the main
+  checkout's `docs/` for the user's normal entry point. No production jobs, monitor,
+  paused state, canonical books or frozen releases are changed by this documentation update.
+- Documentation verification: reviewed the staged-design dependencies and unchanged
+  experiment constants, checked local links and mirror hashes, and ran `git diff --check`.
+  No runtime tests are needed for this documentation-only change. Executable manifest v5
+  remains SHA256 `36f3e3dbd2c5bb2d639bb0f03610f21c50b56d06b47d22f378dffcac102bb613`.

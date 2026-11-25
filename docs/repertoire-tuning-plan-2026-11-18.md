@@ -2,6 +2,10 @@
 
 Decision date November 18, 2026. This is the current experiment specification. It supersedes the older six-book centipawn sweep and the four-book-only score-gate plan. The historical reports remain evidence. The user approved the additional recommended numerical settings and staged tests on November 18. The constants below are the adopted starting recipe, with changes permitted only through the documented calibration and sensitivity stages.
 
+Latest planning amendment: **November 25, 2026**. David approved the staged optimizer comparison below and requires its implementations and benchmark machinery to be in Rust. The existing machine-readable recipe is `sweep-manifest-2026-11-21-v5.json`; it does **not** yet encode this optimizer study. Its fixed per-color solvers are baseline controls, not the outcome of the new comparison. Publish a new versioned manifest only when the corresponding execution support and validation are ready; preserve v5 and its receipts. The November 18 production status and timing sections below are dated historical snapshots, not current job status.
+
+For the baseline recipe, retain the later approved v5 settings: `otb-ensemble-v2` (Maia consulted only below effective support 300), Black DP plus distinct-position matching **and polish**, and the 12 additional `engine-or-player` severity controls alongside the 24 extension-metric controls. Engine-only severity remains the default. These amendments are recorded in [sweep preparation progress](sweep-preparation-progress.md); the optimizer experiment changes none of them.
+
 ## Goal and experimental units
 
 Choose one repertoire per color that works now and through the user's 2000 online and 2000 USCF goals, with acceptable learning effort, strong-opponent safety, and useful middlegames when recall fails. Report practical expected score, conversion, objective quality and learning burden separately.
@@ -46,7 +50,7 @@ The reduced learning ladder must also preserve prescriptions after extension. Us
 | Own-move and opponent-reply historical cutoff | min_games=1 for observed moves; use stored evaluations for initial selection and trigger fresh checks by consequential evaluation uncertainty |
 | Maia checkpoint | Maia-3 79M, position-only, immutable checkpoint and inference recipe |
 | Incumbent stickiness for independent arms | Off; measure switching cost afterward |
-| Solver | Existing validated Rust price+polish for White and DP with distinct-position matching for Black; freeze solver settings within color |
+| Solver | Baseline controls: Rust price+polish for White and DP with distinct-position matching plus polish for Black. Select and freeze the production recipe through the November 25 optimizer study below before completing the main matrix. |
 | Gates on extensions and inherited moves | On, same configuration as the arm |
 | Neural or recall discount in extension selection | None |
 | Fixed extension depth limit | None |
@@ -59,6 +63,85 @@ Horizon means game plies, not additional plies after the book ends. Translate it
 Keep the existing verified computational pruning initially, with its actual settings in the manifest. Audit omitted reachable mass at the lowest extension threshold and on at least one stricter and one permissive 500-position case with tighter pruning. The earlier base epsilon of 0.0005 must not silently exclude extension branches with reach around 0.0001. Extension expansion needs its own certified bounds. Computational pruning is an approximation-control check, not a repertoire preference.
 
 The old pool-specific empirical score priors and the absolute gate baseline share one parameter in some code paths. Record that coupling; if reply-policy variants also alter outcome data, label the comparison accordingly. Prefer a shared empirical outcome source in the policy sensitivity experiment.
+
+## Approved Rust optimizer study — November 25, 2026
+
+David accepted the recommendation to evaluate multiple starts, exact optimization on bounded problems, larger joint neighborhood search, and DP approximation sensitivity. This is an approved implementation and evaluation workstream; it is not a claim that those additions have been implemented or run. Keep the existing heuristics as baselines. Do not assume that the historical White/Black solver split remains best on the new graph.
+
+The objective remains the existing construction value under a hard budget of distinct prescribed positions. Delayed-payoff sequences, changing reach after early move switches, and shared costs across transpositions must all be represented. Gates, stop values, opponent probabilities and the extension objective do not change in this study. Reductions with fixed parent prescriptions remain a separate learning-ladder constraint, not an alternative unrestricted optimizer.
+
+### Rust implementation and resource contract
+
+- Implement all new optimizer logic, exact enumeration/oracles, synthetic graph generation, real-subgraph calibration, benchmark execution and result checks in Rust, sharing production graph/value semantics with `rust/book_builder` or a companion Rust crate. Do not implement a Python optimizer, modeling layer, benchmark engine or fallback. Existing launch/report plumbing may invoke native artifacts without moving graph search or benchmark computation into Python.
+- If the mixed-integer benchmark uses a solver such as SCIP, construct and run the model from Rust through a native interface. The external solver is an explicitly versioned native dependency, not a Python wrapper. Record its version, build, numerical tolerances and resource settings; do not imply that this dependency itself is written in Rust.
+- Reuse the frozen graph, engine evidence, stop/continuation values and opponent-policy cache across methods. Avoid per-arm re-extraction or copying the full graph into a general-purpose solver. Restrict exact-model construction to bounded calibration graphs and selected neighborhoods, with explicit memory/time limits.
+- Preserve 128-bit position identity, unique-position accounting, deterministic tie handling and the existing horizon/repetition contract. Distinct horizon states may share one positional prescription; do not charge them separately or give them inconsistent moves. State the scope of any boundary-fixed subproblem.
+- Version optimizer parameters, random seeds, input hashes, executable/backend identity and checkpoint state. Persist completed benchmark cells and best feasible books so an interruption need not restart the whole comparison. A resumed run must reject recipe drift.
+
+### Methods to implement and compare
+
+| Method | Planned work | Interpretation |
+|---|---|---|
+| DP + distinct-position matching + polish | Retain as a baseline for both colors; optionally record unpolished DP as a diagnostic | The current compressed/greedy DP is approximate, including on some trees. Distinct-position matching does not make it exact on a DAG. |
+| Price + polish | Retain as a baseline for both colors with its existing starts | Pricing can skip feasible intermediate budgets; current DAG reach pricing is heuristic. |
+| Multiple-start portfolio | Polish both DP and price-derived starts with a common configuration, deduplicate starts and retain the best feasible result; complete Rust support for externally supplied starts if absent | A different starting opening/allocation can escape another start's local optimum. Charge the full cost of obtaining every start in end-to-end timings. |
+| Exact mixed-integer model on bounded graphs | Use binary booking/move choices and continuous expected values to model the hard distinct-position budget and fixed opponent probabilities, with the same stop, horizon and repetition semantics | Establish reference optima where proved, or report feasible incumbents and valid bounds where time-limited. A subgraph bound applies only to its stated boundary conditions. |
+| Large-neighborhood search | Begin from the strongest feasible portfolio result, unlock related branches and alternatives, jointly reallocate prescriptions, and reoptimize the restricted problem using the native exact-model machinery where practical | This extends the existing line/switch/exchange polish with broader coordinated replacements. It remains a heuristic for the whole graph. |
+| DP representation/allocation diagnostics | Compare package caps 256, 512 and 1,024; implement uncompressed budget tables with exact budget-allocation convolution on small trees | Increasing the cap tests compression sensitivity, not exactness. Exact convolution over already-fused child curves cannot recover discarded policies; the tree oracle must avoid both earlier fusion and greedy allocation. |
+
+The mixed-integer model must be checked against a separate exhaustive Rust oracle on tiny DAGs and against exact tree DP where independence holds. Reuse historical fixture data and results, not a Python execution dependency. Validate the independent oracle/evaluator against hand-worked cases as well as the production evaluator, so sharing the same implementation defect cannot produce a misleading agreement.
+
+For neighborhood search, freeze choices outside each neighborhood but include connecting moves, alternative opening choices, shared transpositions and budget released or consumed by the joint change. Sample neighborhoods containing credible alternatives absent from every starting book, not just their union. Recompute affected reach/value dependencies and accept only books that pass the whole-book evaluator, gates and global distinct-budget check. If the local solver stops early, its feasible output may still be useful; never describe it as locally optimal without a valid proof. Preserve the best feasible incumbent. Existing polish already supports line and branch proposals; the experiment must demonstrate what the larger neighborhoods add.
+
+Do not initially add genetic algorithms, reinforcement learning, generic MCTS or another full fixed-point pricing sweep. Revisit them only if the measured residual errors justify another method. No full multimillion-node mixed-integer solve is a prerequisite.
+
+### Stage O1: calibration and approximation measurements
+
+This implementation stage can proceed while infrastructure jobs are paused or incomplete, using synthetic fixtures. Real-data calibration waits for accepted input snapshots.
+
+1. Cover indivisible budget packages, long delayed-payoff lines, early switches requiring several coordinated prescriptions, shared children reached by multiple move orders, changed reach, unselected but superior alternatives, unreachable prescriptions, exact-budget boundaries, both colors, and horizon/repetition cases. Include cases larger or structurally harder than the historical at-most-18-own-node oracle panel. Use separate development and held-out seeds.
+2. Prove equivalence of the mixed-integer formulation, exhaustive oracle and production book evaluator on tractable cases, within declared numerical tolerances; test budget/gate feasibility independently. Record solver status explicitly. An unresolved bound is not evidence that a heuristic is optimal. Do not treat the existing price-search diagnostic called an upper bound as a certified bound for the distinct-cost DAG problem.
+3. Extract representative real subgraphs across depth, reach, empirical support, transposition density and delayed payoff, including alternatives outside current books. Record their boundary choices/values and all restrictions. Increase size until measured time/memory or unresolved solver gaps make further scaling unhelpful. Local optima and local bounds do not establish a full-book optimality gap.
+4. Measure DP cap binding at 256/512/1,024, affected budget breakpoints, realized book value, prescriptions, memory and runtime. Separate losses from representation compression, package allocation and shared-cost accounting where the controlled fixtures permit it. A stable cap result alone does not establish global optimality.
+5. Select bounded neighborhood sizes, scheduling rules, solver time/memory limits and benchmark checkpoints from measured calibration performance, then freeze them before the production comparison. Publish these settings and their rationale; do not silently introduce an unmeasured hours-per-book default.
+
+Historical synthetic results in [dag-price-report.md](dag-price-report.md) and [polish-start-report.md](polish-start-report.md) justify the baselines, but are not guarantees for 500- or 2,000-position real books. Report mean, tail and worst-case gaps, not just the percentage of cases solved exactly.
+
+### Stage O2: production anchors and budget sensitivity
+
+After input verification and the Black stricter pilot, compare these four methods on **both colors x both gate settings at independent B=2,000**: DP+matching+polish, price+polish, the multiple-start portfolio, and portfolio plus large-neighborhood search. These are 16 nominal method/context cells before reuse; the portfolio reuses its component starts, and identical final books share an evaluation identity. Exact whole-graph MIP is not an additional required arm.
+
+Keep horizon 30, eval-weight 0.75, empirical prior 500, the v5 OTB ensemble, common candidate menus, engine evidence, stop values, pruning and gates fixed. Incumbent stickiness stays off. Apply the DP cap study to the same contexts without multiplying every other optimizer setting by every cap. Use calibration to shortlist settings. If tighter pruning is audited, label it separately from a solver change.
+
+Then repeat the baseline-versus-shortlist comparison at **independent B=500 for both colors and gates** to detect budget-dependent rankings. Run a focused B=1,000 check only if the smaller-budget results or unresolved interactions require it. Do not cross every optimizer with all 20 main arms or all policy/weight/horizon sensitivities. Reduced books remain subject to their exact parent-prescription and nesting constraints.
+
+Hold inputs fixed within a comparison. New verification evidence discovered by one method must be merged into a shared versioned overlay, then every affected contender revalidated and, where needed, re-solved before final comparison. Reuse common Stockfish/Maia work. A different candidate graph, evaluation quality or reply model must not be credited as an optimizer improvement.
+
+### Stage O3: selection, reporting and integration
+
+Report independently recomputed construction value, distinct feasible size, gate and policy consistency, optimum/bound gaps where valid, changed prescriptions/openings and their reach, wall time, CPU time, peak memory, cache reuse, and best feasible value versus elapsed time. Provide both equal-resource comparisons and each method's completed-run cost. Include graph loading and start generation in end-to-end totals, with optimization-only timing separately, so reused work does not make the portfolio appear free.
+
+Use paired held-out rollouts on the finalists under the existing common scenarios, horizons and random streams. Keep solver selection on development evidence and reserve fresh confirmation for frozen finalists. Report search-objective improvement separately from practical-score improvement and model uncertainty. The existing 0.002 expected-score scale is a practical evaluation reference, not a numerical optimization tolerance. Do not retune the human evaluator to reward the solver's choices.
+
+Compare base books first. For practical finalist checks with extensions, apply the same default `remaining-maximum`, engine-only severity and threshold 0.00003 until extension calibration; report actual total prescriptions. Do not let varying extension effort hide base-budget differences. After solver selection, use its four accepted parent books for the planned extension calibration and preserve all alternative optimizer books as controls.
+
+Select a shared method/configuration where supported. Permit color- or budget-specific settings only if repeatable results demonstrate a useful quality/resource tradeoff; otherwise retain the simpler baseline when improvement is unresolved. Freeze the choice before completing the primary matrix. A later material ranking reversal triggers a focused comparison, not an automatic expansion of the entire sweep. No winner is selected by this planning amendment.
+
+Produce a versioned optimizer experiment manifest, bounded-graph fixtures with boundary receipts, native benchmark reports, per-run feasibility/bound records, time/memory curves, and a short selection report. Extend the manifest generator/validator and release gates only after the Rust execution path exists. Bind the selected optimizer/configuration to each arm identity; never relabel an old book as if it used the new method. Identical book content may share evaluations only when the evaluator recipes also match. Do not rewrite historical manifests or frozen run artifacts.
+
+Optimizer alternatives also enter the opening/prescription stability report as a separately labeled family. Deduplicate identical books and do not count copied multi-start results or successive neighborhood-search incumbents as independent votes. Report both stability across solver choices and stability across the original gate/budget families.
+
+### Implementation and execution checklist
+
+- [x] Record the approved study, Rust requirement, dependencies and decision rules (November 25).
+- [ ] Implement native oracle/model calibration, fixtures and benchmark/resource reporting (O1).
+- [ ] Verify/complete Rust multiple-start integration and DP cap instrumentation (O1).
+- [ ] Implement and calibrate native large-neighborhood search with whole-book acceptance (O1).
+- [ ] Publish the new executable experiment manifest and native validation evidence; retain v5 unchanged.
+- [ ] Run the four B=2,000 anchor contexts and B=500 shortlist checks on accepted shared inputs (O2).
+- [ ] Evaluate finalists, freeze the solver recipe, and bind the main sweep/extension anchors to that decision (O3).
+
+This amendment does not resume the paused jobs or monitor. Implementation readiness, queued experiments and actually running work must remain separately reported. Optimizer engineering and runtime are additional, currently unmeasured costs; update the forecast after O1 and the first production comparison instead of extending the old Python timing estimates to Rust or promising a fixed speedup.
 
 ## Approved uncut counts and evaluation-quality verification — November 18, 2026
 
@@ -203,7 +286,7 @@ Produce these outputs for every completed book, including intermediate calibrati
 1. Opening presence and opening reach. Replay named ECO routes and detect transpositions by verified position identity. Record code, name, representative move order, whether our choices permit the route, whether its endpoint is covered by the book, and its probability under a common reference opponent policy. A catalog name beginning in the prefix of another must not be treated as a disjoint event.
 2. Exact prescriptions. For each verified position key and legal UCI move, record SAN, representative PGN, first-reach ply, base/extension/inherited provenance, eligibility, objective evaluation, reference reach and model support.
 3. Conditional choice stability. Among independently optimized books that reach and prescribe at a board where the move is eligible, report how many choose it. Also report the unconditional presence rate across books, coverage/reach denominator, and eligibility rate. Separate out-of-book, unreachable, gate-disqualified, missing evidence, and an explicitly different choice.
-4. Family-balanced summaries. The primary independent evidence is six books per color, two gate settings times independent budgets 500/1,000/2,000. The four reduced books per color measure retention and learning progression. They do not cast independent votes. Report gate, budget, weight, policy and horizon stability separately. Any composite family-balanced index is descriptive sensitivity evidence, never a probability of correctness.
+4. Family-balanced summaries. The primary independent evidence is six books per color, two gate settings times independent budgets 500/1,000/2,000. The four reduced books per color measure retention and learning progression. They do not cast independent votes. Report gate, budget, weight, policy, horizon and optimizer stability separately. Optimizer calibration variants form their own family; identical books, reused starts and successive improvements do not cast additional independent votes. Any composite family-balanced index is descriptive sensitivity evidence, never a probability of correctness.
 5. Exposure and switching. Report exact and reach-weighted overlap, disagreement at common boards, opening-family changes, total reach of controversial decisions, and conflict cost from the current canonical and between budget rungs.
 6. Engine and data robustness. Attach gate margin, verified evaluation, outcome support and recurrence across game-resampled models where available. A universally copied or forced choice is labeled separately from a repeated choice among viable alternatives.
 
@@ -221,16 +304,17 @@ Use paired uncertainty intervals and practical scale 0.002 expected score in dev
 
 ## Execution order and deliverables
 
-1. Finish and verify the explorer/eval migration, integrate the intended Rust score gates and OTB policy, export min-games-1 inputs, decouple count-based inclusion from evaluation-quality verification, and run the Black stricter pilot. Verify horizon/transposition behavior, complete candidate menus, provenance, no evaluation-quality downgrade, and retained-graph correction parity.
-2. Build the four independent 2,000-position anchors at primary settings.
-3. Calibrate extension threshold on those anchors, then freeze the rule.
-4. Complete the primary 20 base arms and their extensions, with the nested reduced ladders.
-5. Score the matrix and publish the opening/prescription stability tables.
-6. Run the objective-weight cross, opponent-policy cross and horizon cross on the stated smaller designs. Reuse exact reference cells.
-7. Run focused interactions and refine paired evaluation where needed. Rebuild parents and ladders if selected settings change.
-8. Confirm finalists, report actual learning cost and switching cost, and prepare the chosen learning ladder.
+1. Complete the Rust optimizer implementation/calibration stage O1 where independent of production inputs. In parallel where resources permit and jobs are authorized to run, finish and verify the explorer/eval migration, integrate the intended Rust score gates and OTB policy, export min-games-1 inputs, decouple count-based inclusion from evaluation-quality verification, and run the Black stricter pilot. Verify horizon/transposition behavior, complete candidate menus, provenance, no evaluation-quality downgrade, and retained-graph correction parity.
+2. Publish validated optimizer execution support and a new versioned manifest. Run O2 on the four independent 2,000-position contexts plus the B=500 shortlist checks; reuse baseline anchors and shared inputs where their complete recipes match.
+3. Complete O3's paired finalist checks and solver decision, then freeze the four selected 2,000-position parents. Preserve alternative optimizer books as controls and stability evidence.
+4. Calibrate extension threshold/metric/severity on those selected anchors under the approved design, then freeze the main extension rule.
+5. Complete the primary 20 base arms and their extensions, with the nested reduced ladders.
+6. Score the matrix and publish the opening/prescription stability tables, keeping optimizer and inherited-book families separate.
+7. Run the objective-weight cross, opponent-policy cross and horizon cross on the stated smaller designs. Reuse exact reference cells.
+8. Run focused interactions and refine paired evaluation where needed. Rebuild parents and ladders if selected settings change.
+9. Confirm finalists, report actual learning cost and switching cost, and prepare the chosen learning ladder.
 
-Required planned artifacts are an experiment manifest, immutable per-book receipts, base and extended PGNs/position tables, evaluation summaries with uncertainty, opening-selection and exact-prescription stability tables, learning/switching reports, and runtime/cache measurements. These artifacts are planned deliverables; this document does not claim that the new sweep or extension implementation has run.
+Required planned artifacts are an experiment manifest, immutable per-book receipts, base and extended PGNs/position tables, evaluation summaries with uncertainty, opening-selection and exact-prescription stability tables, learning/switching reports, runtime/cache measurements, and the optimizer calibration/bound/resource reports and selection decision specified above. These artifacts are planned deliverables; this document does not claim that the new sweep, optimizer study or extension implementation has run.
 
 ## Production preparation and queue status — November 18, 2026
 
@@ -258,6 +342,8 @@ Online construction counts use the archived game-mean rating slices. Mover-ratin
 Add an explicit downstream preparation coordinator after the verified explorer and lookup publications. Receipt-check each shared input before starting dependent builds. This is an outstanding implementation step; this plan edit does not deploy or queue that coordinator.
 
 ## Timing budget approved for planning
+
+**November 25 amendment:** the table below is the November 18 historical planning allowance. It excludes the newly approved native optimizer engineering/calibration and production method comparison; those costs are not yet measured. Refresh the total after O1 and the first O2 context, using separate implementation time, CPU-hours, peak memory and elapsed time. Do not add a speculative solver multiplier to every main arm.
 
 These are provisional engineering estimates on this PC, using cache sharing and staged comparisons. Full production 128-bit/OTB/extension throughput has not yet been benchmarked. At November 18 08:56 Pacific the live merge estimate is about 17 hours remaining, with additional final verification.
 
