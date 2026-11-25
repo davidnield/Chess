@@ -242,3 +242,60 @@ mini C **2,605,506,359,296 bytes** (~2,426.6 GiB). Reserves are adequate. The ar
 remains accepted and untouched. No new merge, source adoption, cleanup or unrelated
 job was launched; hourly monitoring continues.
 
+## Hourly check — 11:29 PST November 25
+
+Healthy; no job intervention required. Mini **277/512 accepted** (269 new plus
+eight originals), bucket 273 running as job `d8daa4fdf5a94ec98bf2cac21010ef31`,
+274 packaging. Remote Health confirms one active, unpaused worker with no queued
+requests. Logs show advancing CPU/I/O and memory, no spill and empty stderr;
+limits remain 24 GiB / 75% / six hours. Recent accepted output sizes, small stats
+checksums, manifest hashes and successful remote receipts agree. Twenty-one
+post-resume start-to-start intervals average **285.96 seconds**, projecting
+**18.7 hours** of remaining buckets; allow **19–22 hours** for variation. This
+excludes global merge/publication. Main coordinator PID 20540 remains healthy.
+
+The fresh 1,000-position SF18 study advanced to **414 completed / 413 qualified**;
+the one unqualified search remains unresolved under the frozen rules. Four engines
+belong only to this batch. Current throughput projects about **49 minutes** left,
+with a planning range of **45–75 minutes**. Pooled analysis (PID 36468) and the
+300-position confirmation worker (PID 44696) remain in their expected waits.
+Pooling adds no searches; final confirmation then needs roughly another 30–60
+minutes, subject to actual throughput. No partial ranking or sealed result was read.
+
+All four local stderr logs are empty, frozen selection/confirmation/pooling
+identities pass, and no final choice or opening marker exists. The targeted
+diagnostic remains completed at 942 attempted / 939 qualified. No source-policy
+adoption, raw-source cleanup, archive restart or global merge was performed.
+
+Free space: D **465.1 GiB**, E **1,048.0 GiB**, F **942.2 GiB**, H **1,727.8 GiB**;
+mini C **2,540,170,383,360 bytes** (~2,365.7 GiB). Reserves remain adequate.
+Direct remote CIM process inspection is denied for the intentionally standard
+worker account; launcher Health/Status and per-process progress logs provide the
+needed evidence. No permissions were changed.
+
+## Hourly check — 12:28 PST November 25
+
+Mini remains healthy: **290/512 accepted**, bucket 286 running, 287 packaging.
+Launcher Health/Status, advancing workload logs, empty stderr and recent accepted
+receipt/file-size/small-stats checks agree. Thirty-four start intervals average
+**284.44 seconds**, projecting **17.5 hours** of buckets remaining; allow **18–21
+hours** for variation, before global merge/publication. Limits and reserves are
+unchanged. Free D/E/F/H: **465.1 / 1,048.0 / 942.2 / 1,709.6 GiB**; mini workload
+reports about **2.482 TB** free (~2,311 GiB).
+
+The fresh study completed at **12:13 PST**, **999/1,000 qualified**. Pooling
+completed at **12:14**, retaining **2,499 unique parents** and all **1,008 NNUE
+triple overlaps**. Complete evidence/receipt checks passed. The selected research
+contender `score_3_3_4` was locked at **12:26:13 PST**, before final score access,
+against `proposal` and ChessDB alone. See the immutable selection rationale and
+`chessdb-selection-review-2026-11-25.json` for the mean-error advantage, stricter-
+White gate regression and no-Cloud fallback regression. No production change.
+
+The final 300-position confirmation started after the study and is at **175/300
+attempted, 174 qualified** at 12:27:51, with scores unopened. Four one-thread
+engines belong only to this batch. Allow roughly **10–25 minutes** more based on
+observed throughput; qualification/reporting still follows completion. The monitor
+now follows the already locked choice and will use only the pooling wrapper's
+`report-confirmation` after sealed completion, never select again. No raw-source
+cleanup, archive restart, global merge or unrelated job changes occurred.
+

@@ -127,3 +127,14 @@ exclusions, sealed checkpoint/resume, refusal to read results before a choice,
 refusal to select before the preceding study finishes, immutable choice/evidence
 checks, the final limited comparison end to end, and result-corruption rejection.
 The reused native sampler/search components retain their previous passing tests.
+
+## Choice locked — 12:26 PST November 25
+
+Pooled evidence completed and passed its receipts. The immutable final choice is
+`score_3_3_4` (30/30/40 Cloud/Fishnet/ChessDB in expected-score space), with controls
+`proposal` and `cp_0_0_10`. Read `chessdb-ensemble-selection-rationale-2026-11-25.md`;
+the documented stricter-White and missing-Cloud regressions preclude automatic
+adoption. Do not select again or alter the locked recipe. Final engine searches
+are ongoing with unopened scores; use the pooling runner's `report-confirmation`
+after `SEALED.COMPLETE.json` exists. This is the next research action, not another
+`lock-choice` invocation.

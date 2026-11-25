@@ -138,3 +138,21 @@ The real preflight reads old and completed-targeted evidence plus new sampling
 metadata only; it does not inspect interim new scores or any sealed final scores.
 See `chessdb-pooling-verification-2026-11-25.json` for measured checks and launch
 identities. No final contender has been selected at setup time.
+
+## Completion and locked selection — 12:28 PST
+
+The main study finished at 12:13 PST (999/1,000 qualified) and pooling at 12:14
+(2,499 retained, 1,008 NNUE triple overlaps). The completion receipt and all bound
+evidence verified. At **12:26:13 PST**, `score_3_3_4` was immutably locked against
+`proposal` and ChessDB alone, before any sealed result was read. See
+[the selection rationale](chessdb-ensemble-selection-rationale-2026-11-25.md) and
+`chessdb-selection-review-2026-11-25.json`. Do not rerun `lock-choice` or change the
+contender. Choice SHA256:
+`9d74bbeb258d969ba09adfb453cc92733ee0de7308a057d45711e10b2a0afb38`.
+
+The mean-error advantage has stricter-White gate and missing-Cloud tradeoffs;
+production remains unchanged. Confirmation is still searching (175/300 attempted,
+174 qualified at 12:27:51). Its scores remain unopened. After its sealed completion,
+the next action is the pooling runner's `report-confirmation`, followed by review
+of the limited comparisons. The hourly monitor now knows the choice is already
+locked and must not select again.

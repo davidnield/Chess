@@ -1,0 +1,63 @@
+{
+  "adopted": false,
+  "bucket_intervals": 34,
+  "checked_utc": "2026-11-25T20:27:51.217113+00:00",
+  "choice_sha256": "9d74bbeb258d969ba09adfb453cc92733ee0de7308a057d45711e10b2a0afb38",
+  "comparators": [
+    "proposal",
+    "cp_0_0_10"
+  ],
+  "confirmation_scores_opened": false,
+  "confirmation_status": {
+    "active": 3,
+    "completed": 175,
+    "pid": 44696,
+    "qualified": 174,
+    "scores_opened": false,
+    "state": "searching-sealed",
+    "total": 300,
+    "utc": "2026-11-25T20:27:51.212595+00:00"
+  },
+  "contender": "score_3_3_4",
+  "locked_utc": "2026-11-25T20:26:13.600702+00:00",
+  "mean_bucket_seconds": 284.4399685,
+  "mini_status": {
+    "bucket": 286,
+    "completed": 282,
+    "job_id": "463ba166b34b477dbafdfe3239fbaaa7",
+    "remaining": 222,
+    "state": "running",
+    "utc": "2026-11-25T20:27:33.363555+00:00"
+  },
+  "pooled_complete_sha256": "53c5e97edd2dd2ea3719f2e7dde986017a02bc420ff25c537e10026a5f4e887c",
+  "pooled_complete_verified": true,
+  "pooled_summary": {
+    "adopted": false,
+    "all_three": 1124,
+    "best_single_pooled": "cp_0_0_10",
+    "confirmation_scores_read": false,
+    "deduplicated_rows": 0,
+    "excluded_unqualified_new": 1,
+    "input_new": 1000,
+    "input_old": 1500,
+    "nnue_all_three": 1008,
+    "notes": [
+      "Pooled/new-only/old-only rankings are selection evidence, not independent final confirmation.",
+      "Old references report requested depth; actual old completed depths were not recorded.",
+      "Old deeper rechecks were targeted; deep-only and cohort sensitivities are not unbiased population estimates.",
+      "Primary ranking gives equal weight to four NNUE triple-overlap strata, equal rows within each stratum.",
+      "Gap rows and missing-Fishnet cases are separated in fallback strata; no coverage mixing in complete-case comparisons.",
+      "The final 300 positions remain excluded; gate and tail tradeoffs still require judgment."
+    ],
+    "old_rechecks_retained_old": 1,
+    "qualified_old_upgrades": 451,
+    "retained": 2499,
+    "retained_by_panel": {
+      "new": 999,
+      "old": 1500
+    }
+  },
+  "projected_bucket_hours": 17.540464724166668,
+  "rationale_sha256": "d6fcdd26fa1cdf4c2fa364df8846e1f8576dc6836c64fb54d632d7095a59362c",
+  "total_buckets_accepted": 290
+}

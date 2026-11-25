@@ -208,3 +208,9 @@ new-only, original-reference and depth sensitivities. The final 300 remain separ
 Follow `chessdb-pooling-plan-2026-11-25.md` and use its runner for the immutable
 contender lock and final reporting. This study's frozen code/reports stay intact;
 pooling is a separate waiting analysis job and adds no engine searches.
+
+Completed **12:13 PST November 25**, with 999/1,000 qualified references; the one
+excluded reference is in `no_cloud_repeated`. All 600 new NNUE triple overlaps
+qualified, 595 at actual depth >=28. The pooled review and pre-confirmation choice
+are in `chessdb-ensemble-selection-rationale-2026-11-25.md`. This study's reports
+remain frozen; final confirmation and production adoption are separate.
