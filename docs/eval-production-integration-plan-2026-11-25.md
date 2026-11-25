@@ -66,6 +66,14 @@ counts as applicable. Do not relabel this one pool as the other populations or
 silently run the pilot with an older opponent model. OTB count publication is
 already complete, but binding/consumer validation is a separate requirement.
 
+Inventory correction at approximately 14:00 PST November 25: Rapid2200-p30 and
+Classical1800-p30 exports already have completed/validated receipts under
+`D:/chess/sweep-inputs`; preserve and rebind these accepted counts. The missing
+shared count inputs are all-rating BRC (`brc-all-p30`) and our post-book
+1000–1799 population (`weak1000-1799-p30`). Neither is in the current mini queue.
+See the integration-results document's input inventory for checked evidence and
+the distinction between first-pilot inputs and later sweep controls.
+
 Then run the planned **Black stricter 2,000-position, ply-30 pilot**, including
 a fixed-control comparison that changes only evaluation-source policy. Retain
 the established Black baseline solver/settings so optimizer changes cannot

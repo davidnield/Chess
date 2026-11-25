@@ -197,3 +197,45 @@ lookup generations and the ChessDB archive/raw data.
 5. Review gate-critical choices against independent local evidence, including
    the documented White limitation. Activate only after the agreed checks; then
    continue the Rust optimizer comparison and approved tuning matrix.
+
+## Input inventory checked November 25, approximately 14:00 PST
+
+The generic earlier checklist understated completed work. Both targeted online
+components already have completed export/validation receipts under
+`D:/chess/sweep-inputs`: `rapid2200-p30` (170,549,231 move rows) and
+`classical1800-p30` (297,201,156 move rows). Their metadata and gate-report hashes
+match the saved receipts, all four reported validation gates pass, the Parquet
+footers have full 128-bit keys, and both have cap30/min-games1/zero Other Moves
+mass. They use the same accepted explorer generation as the current work. This
+inventory checks receipts, metadata and footers, not a fresh hash of every large
+Parquet; content hashes must be checked again when freezing pilot bindings.
+
+The corrected OTB production publication is also complete:
+`D:/chess/sweep-inputs-20261119/otb-counts-v2-20261119`. Its independent receipt
+marks `training_counts_ready: true`, and the consumer checks already passed.
+Use only the training-role p30 table for construction; retain validation/test
+partitions for their designated evaluation purposes.
+
+The substantive missing count inputs are **`brc-all-p30`** and
+**`weak1000-1799-p30`**. Neither has an accepted export in the current shared-input
+workspace, and neither is being built by the current mini queue. The first is
+the broad empirical fallback in the OTB opponent ensemble; the second is the
+construction-time model of our weaker post-book play. The current builder's arm
+validator requires both, alongside adult/targeted/OTB components. Do not substitute
+an older 64-bit pool or label the mini's 1800+ pool as either of them.
+
+Before pilot construction we still need the current adult pool's global
+merge/verification, the finished evaluation overlay and pilot-ready receipt,
+accepted broad/weak counts, and frozen policy/model/cache/engine bindings with a
+small production-path smoke check. Maia inference can remain selective and
+populate the versioned cache as positions are reached; an all-position prediction
+precompute is not a prerequisite. The existing targeted pools' count rows should
+be reused under explicit new bindings, without overwriting their historical
+metadata or inferring that a changed evaluation policy requires re-aggregating
+evaluation-independent counts.
+
+The paired rollout portion additionally needs its player/population settings,
+paired seeds and leaf-referee bindings frozen. The full sweep's BRC2200 controls,
+50-ply exports, improved-own-play sensitivities and complete evaluation-panel
+matrix are later stages, not blanket prerequisites for this first Black pilot.
+Finishing the two jobs currently running does not by itself make the pilot ready.
