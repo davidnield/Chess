@@ -425,5 +425,8 @@ checkpointed references and paired held-out comparisons. Production adoption is 
 
 `python/chessdb_ensemble_confirmation.py` adds a
 [separate blinded confirmation panel](docs/chessdb-confirmation-plan-2026-11-25.md).
-Its `pipeline` stops at sealed reference completion; `lock-choice` must precede
-`report`, which compares only the chosen contender and its fixed controls.
+Its `pipeline` stops at sealed reference completion. The later approved
+[pooled selection protocol](docs/chessdb-pooling-plan-2026-11-25.md), maintained in
+`python/chessdb_ensemble_pooling.py`, combines old/new selection evidence without
+new engine work. Use its `lock-choice` before `report-confirmation`; only the chosen
+contender and fixed controls are evaluated on the separate final panel.

@@ -49,18 +49,23 @@ from them before locking the final contender.** This is a workflow blind, not
 encrypted storage. Hashing/verifying records inside the worker does not expose them
 to ensemble selection.
 
-After the 1,000-position study finishes:
+**Later approved amendment:** selection now pools the older 1,500 parents with the
+new 1,000, using qualified deeper replacements and panel-specific sensitivities.
+Follow `chessdb-pooling-plan-2026-11-25.md`. Keep this final 300 separate. Existing
+search workers and their frozen inputs are unchanged.
 
-1. Review only its reports and the earlier targeted stress test. Assess paired
+After the 1,000-position study and the separate pooling analysis finish:
+
+1. Review the pooled, older-only and new-only reports and the targeted stress test. Assess paired
    error/uncertainty, tails and gate mistakes; select one final contender from the
    already frozen candidate suite. Write the rationale before opening confirmation
    scores. A small mean improvement is insufficient by itself; retaining the
    existing proposal is an allowed conclusion.
-2. Run `lock-choice`. It requires completion of the preceding study, hashes its
+2. Run the **pooling runner's** `lock-choice`. It requires verified pooled completion, hashes its
    evidence, copies the selected recipe, and identifies the best individual source
-   by the same NNUE triple-overlap macro-MAE objective. The controls are the current
+   by the pooled NNUE triple-overlap macro-MAE objective. The controls are the current
    November 23 proposal and that single source. The choice cannot be overwritten.
-3. Once the 300 reference searches finish, run `report`. It refuses to read sealed
+3. Once the 300 reference searches finish, run the pooling runner's `report-confirmation`. It refuses to read sealed
    results without the locked choice. It verifies all result/input identities,
    records `OPENED.json`, and evaluates only the locked contender and controls.
 4. Report expected-score errors, tails, signed bias, cp errors, gate false
@@ -108,13 +113,13 @@ new work; current searches drain. Remove it only on authorized resume. No automa
 report is chained after the engines, even when a choice has already been recorded.
 
 ```powershell
-$runner = 'D:\chess\bin\chessdb-ensemble-confirmation-20261125-v1\chessdb_ensemble_confirmation.py'
-$output = 'D:\chess\chessdb-ensemble-confirmation-20261125-v1'
-# After reviewing the preceding study, replace both placeholders with that decision.
+$runner = 'D:\chess\bin\chessdb-ensemble-pooling-20261125-v1\chessdb_ensemble_pooling.py'
+$output = 'D:\chess\chessdb-ensemble-pooling-20261125-v1'
+# After reviewing verified pooled evidence, replace both placeholders with that decision.
 & 'C:\Users\David\Documents\Chess\.venv\Scripts\python.exe' -B $runner lock-choice `
   --out $output --contender SELECTED_RECIPE_NAME --rationale ABSOLUTE_RATIONALE_FILE
 # Only after SEALED.COMPLETE.json exists and the choice is locked:
-& 'C:\Users\David\Documents\Chess\.venv\Scripts\python.exe' -B $runner report --out $output
+& 'C:\Users\David\Documents\Chess\.venv\Scripts\python.exe' -B $runner report-confirmation --out $output
 ```
 
 Four focused regression tests passed. They cover full-width keys and mirror

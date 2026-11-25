@@ -1,0 +1,84 @@
+{
+  "adopted": false,
+  "checked_utc": "2026-11-25T18:59:09.575969+00:00",
+  "code": {
+    "chessdb_ensemble_confirmation.py": "2d99c2c6ae7a34a53aa9bef0659b4ab6eb2b510a49c9049565df075b55fc9f61",
+    "chessdb_ensemble_pooling.py": "dc99a0f8c4b4100122c952b3cfd6e1668e581dc5f4d38c063921abf6c89f1f7d",
+    "chessdb_ensemble_study.py": "b3fbc4abea7b5063bdcba86be68e44cf1cae4ffafce1fa2c85c6a83aac6c71a7",
+    "chessdb_policy_validation.py": "1c94bf4374f3dcacb3089c04ea6027c762584fdb08130e841ed0728cf5cd773d",
+    "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+    "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "zobrist128.py": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+  },
+  "confirmation_choice_locked": false,
+  "confirmation_manifest_sha256": "aa64e675fdefac8986c9dac1e3a5cde978214e965f076322d26e3828279ccf2d",
+  "confirmation_scores_opened": false,
+  "confirmation_selection_marker_sha256": "f1bff2489613e96f04b100c779849aad3efb02e9da4e25b7f19cc0aff8e2b72f",
+  "data_preflight": {
+    "canonical_unique": 2500,
+    "confirmation_reference_labels_read": false,
+    "confirmed_excluded_overlap": 0,
+    "new_parents": 1000,
+    "new_reference_labels_read": false,
+    "nnue_triple_overlap": 1008,
+    "old_actual_unknown": 1049,
+    "old_parents": 1500,
+    "old_qualified_upgrades": 451,
+    "retained_original_after_unqualified": 1,
+    "triple_overlap": 1124,
+    "unique_old_retained": 1500
+  },
+  "definition_sha256": "478c344cfdd192a13b7f00eec508c41715bd10208928edccdbc2c6300bcdce4e",
+  "existing_workers_unchanged": true,
+  "extra_engine_searches": 0,
+  "launch": {
+    "adoption": false,
+    "engines": 0,
+    "out": "D:\\chess\\chessdb-ensemble-pooling-20261125-v1",
+    "phase": "Wait for completed study, pool selection evidence; preserve sealed confirmation",
+    "pid": 13980,
+    "release": "D:\\chess\\bin\\chessdb-ensemble-pooling-20261125-v1",
+    "started": "2026-11-25T10:58:14.1991939-08:00"
+  },
+  "main_study_status": {
+    "active": 3,
+    "completed": 51,
+    "pid": 20860,
+    "qualified": 51,
+    "state": "searching",
+    "total": 1000,
+    "utc": "2026-11-25T18:59:04.865102+00:00"
+  },
+  "mini_status": {
+    "bucket": 267,
+    "completed": 263,
+    "job_id": "52ff07d429de44b3aaba8f8bebc94656",
+    "remaining": 241,
+    "state": "running",
+    "utc": "2026-11-25T18:59:08.848703+00:00"
+  },
+  "monitor_updated": true,
+  "output": "D:\\chess\\chessdb-ensemble-pooling-20261125-v1",
+  "runtime": {
+    "chess": "1.11.2",
+    "duckdb": "1.5.2",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "pyarrow": "24.0.0"
+  },
+  "status": {
+    "confirmation_scores_read": false,
+    "pid": 36468,
+    "preceding_state": "searching",
+    "state": "waiting-for-study",
+    "utc": "2026-11-25T18:58:45.478353+00:00"
+  },
+  "tests": {
+    "commands": [
+      "python -B -m unittest _test_chessdb_ensemble_pooling.PoolingTests -v (first 8 tests passed)",
+      "python -B -m unittest _test_chessdb_ensemble_pooling.PoolingTests.test_complete_build_receipts_counts_and_child_exclusion -v (additional ninth test passed)"
+    ],
+    "failed": 0,
+    "passed": 9
+  }
+}

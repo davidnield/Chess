@@ -220,3 +220,25 @@ show advancing aggregation I/O/CPU with no stderr, and main prefetch is packagin
 The hourly monitor also follows the new bounded-budget ChessDB source diagnostic;
 see `chessdb-next-steps-2026-11-25.md`. Archive conversion/audit remain complete.
 
+## Hourly check — 10:23 PST November 25
+
+Healthy; no intervention required. Mini **263/512 accepted** (255 new plus eight
+originals), bucket 259 running under job `df272eacfcd041c4a846d9bf3ec02c53`,
+260 packaging. Matching remote Health/Status, advancing CPU/I/O and empty stderr.
+Main coordinator PID 20540 remains live. Seven post-resume start-to-start intervals
+average **289.96 seconds/bucket**; allow approximately **20–23 hours remaining**
+for the bucket phase, excluding global merge/publication.
+
+Targeted SF18 diagnostic advanced to **558/942 completed, 556 qualified** at 10:22:44,
+PID 29120. Two searches remain unqualified under the frozen rules; no evidence was
+downgraded or silently promoted. Recent throughput suggests roughly **30–50 minutes**
+remaining. The 1,000-position study (PID 20860) and separate 300-position confirmation
+(PID 44696) are healthy in their expected sequential waits. All four local stderr
+logs are empty and all three frozen evaluation releases still match their code
+receipts. Confirmation scores remain unopened; no contender is locked.
+
+Free space: D **462.5 GiB**, E **1,048.0 GiB**, F **942.2 GiB**, H **1,749.1 GiB**;
+mini C **2,605,506,359,296 bytes** (~2,426.6 GiB). Reserves are adequate. The archive
+remains accepted and untouched. No new merge, source adoption, cleanup or unrelated
+job was launched; hourly monitoring continues.
+

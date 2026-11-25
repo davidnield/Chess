@@ -108,11 +108,20 @@ or automatic policy adoption. Tests: `python/_test_chessdb_ensemble_study.py`.
 `python/chessdb_ensemble_confirmation.py` reserves additional independent positions
 for the final contender. Engine records under `sealed/` must not inform selection.
 The pipeline emits operational counts and never reports policy results automatically.
-Use only the preceding study to choose a contender and write a rationale, then
-`lock-choice` before `report`. The immutable receipt binds the chosen recipe, controls
+Use the approved pooled selection evidence to choose a contender and write a rationale,
+then the pooling runner's `lock-choice` before `report-confirmation`.
+The immutable receipt binds the chosen recipe, controls
 and preceding evidence; reporting refuses unopened/unlocked or changed identities.
 Do not run all candidates on this last panel or pool its results with selection data
 to claim independent confirmation. Tests: `python/_test_chessdb_ensemble_confirmation.py`.
+
+`python/chessdb_ensemble_pooling.py` implements the later approved old+new selection
+pool, qualified parent-reference replacement, deduplication, provenance and separate
+panel/depth/weight sensitivities. It waits for complete studies and launches no
+engines. Follow `docs/chessdb-pooling-plan-2026-11-25.md`; `POOL_SELECTION_REQUIRED.json`
+routes final selection/reporting through this wrapper while frozen engine releases
+stay unchanged. Bind pooled evidence and the pooled-best single-source comparator
+before any sealed-score inspection. Tests: `python/_test_chessdb_ensemble_pooling.py`.
 
 The approved optimizer study lives in `rust/book_builder/src/optimizer/`; its native
 runner and optional extension APIs are documented in `rust/book_builder/OPTIMIZERS.md`.

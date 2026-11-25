@@ -527,3 +527,11 @@ confirmation panel. Freeze its sample now and keep its scores out of selection
 until the final contender is locked from the preceding study. Compare that contender
 with the current proposal and best single source. See
 `chessdb-confirmation-plan-2026-11-25.md`; no production policy is automatically adopted.
+
+Later November 25 approval: pool the older 1,500-parent panel with the new 1,000
+for ensemble selection, replace older references with qualified deeper parent
+rechecks, and preserve panel-specific and depth sensitivities. Keep the final
+300 strictly separate. Pre-exclusion selection N is 2,500 / 1,124 all-three /
+1,008 NNUE all-three. See `chessdb-pooling-plan-2026-11-25.md`; the separate pooling
+runner binds the pooled evidence and pooled-best individual comparator before
+opening final confirmation. No additional engine searches or running-job changes.

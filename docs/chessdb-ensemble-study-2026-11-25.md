@@ -197,3 +197,14 @@ scores stay separate until one final contender is selected and recorded from thi
 study's reports. Follow `chessdb-confirmation-plan-2026-11-25.md` for the queued job,
 blinding, immutable choice and final comparison. This study's existing frozen
 definition, finalists, data and running worker are unchanged.
+
+## Approved pooling amendment
+
+David approved pooling the older 1,500 parents and this study's 1,000 parents for
+selection: up to 2,500 unique positions, 1,124 all-source overlaps and 1,008 NNUE
+all-source overlaps, before qualification exclusions. Use qualified deeper parent
+rechecks as replacements, never additional observations. Preserve old-only,
+new-only, original-reference and depth sensitivities. The final 300 remain separate.
+Follow `chessdb-pooling-plan-2026-11-25.md` and use its runner for the immutable
+contender lock and final reporting. This study's frozen code/reports stay intact;
+pooling is a separate waiting analysis job and adds no engine searches.
