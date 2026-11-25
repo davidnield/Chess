@@ -510,3 +510,14 @@ The approved horizon comparison remains **30 versus 50 game plies at independent
 The legacy `convertibility_eval.MaiaCache` reader now ignores old `part-*.tmp.npz` files without deleting them. New writes use unique temporary names outside the completed-shard glob, close and flush/fsync before atomic publication, and retain pending answers for retry on failed writes/renames. Readers close the NPZ and its file handle even if opening fails. Corrupt completed shards still fail; finished old shards, exact probability order/values, rating-pair identity and full-key reuse are preserved. This does not redesign the model/runtime identity contract or modify the live shared cache.
 
 Validation: four focused pre-fix regressions reproduced the two defects; the post-fix suite passed **25/25 tests, no skips, in 38.516 seconds**. Coverage includes interrupted/failed writes, concurrent readers/writers, old temporary files, corruption rejection, wrong/rehashed horizon recipes, and native full-key builder/referee cache reuse across different run-local IDs. The current manifest is reproduced exactly; attempts to overwrite the historical manifest are refused. Evidence and exact commands: `docs/repertoire-review-fixes-verification-2026-11-19.json` and `docs/evidence/review-fixes-20261119/`. No production worker, pinned release, or canonical book changed.
+
+## November 25: evaluation-source ensemble calibration
+
+David authorized a broader Cloud / Fishnet / ChessDB comparison. Follow
+`chessdb-ensemble-study-2026-11-25.md`: 135 fixed candidate recipes, matched
+single-source comparisons, development-selected finalists, a new 1,000-position
+holdout and the existing deeper targeted panel as a separate stress test. Keep
+both approved gate arms unchanged; compare false admissions and tails as well as
+expected-score error. This is calibration of cached evaluation sources, not a new
+repertoire optimizer or replacement for the Black production pilot. No policy
+is adopted merely because it ranks first on the exposed development panel.

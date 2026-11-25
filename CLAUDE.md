@@ -96,6 +96,15 @@ the required reference depth remains unresolved. Tests are in
 `python/_test_chessdb_policy_validation.py`. This exposed-panel diagnostic is not
 a holdout, full blended-child gate validation or authorization to adopt a source policy.
 
+`python/chessdb_ensemble_study.py` is the maintained ensemble calibration experiment.
+Freeze candidate definitions and development-selected finalists before obtaining new
+holdout labels. Keep independent complete-case source comparisons separate from
+explicit deployment fallbacks, and the targeted diagnostic separate from the holdout.
+Sampling preserves full keys, validates FENs, excludes known boards/mirrors, and
+binds raw source hashes. Consistent global/bucket ranking is required for bottom-K
+sampling. A full run resumes sample/search receipts; no interim holdout leaderboard
+or automatic policy adoption. Tests: `python/_test_chessdb_ensemble_study.py`.
+
 The approved optimizer study lives in `rust/book_builder/src/optimizer/`; its native
 runner and optional extension APIs are documented in `rust/book_builder/OPTIMIZERS.md`.
 All new optimizers, exact oracles, model construction and benchmarks stay in Rust.

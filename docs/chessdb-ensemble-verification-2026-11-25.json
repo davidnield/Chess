@@ -1,0 +1,34 @@
+{
+  "utc": "2026-11-25T17:58:32.627624+00:00",
+  "tests_passed": 5,
+  "native_sample_pilot_passed": true,
+  "fresh_positions": 1000,
+  "three_source_positions": 700,
+  "primary_nnue_triple_positions": 600,
+  "no_duplicate_keys_or_canonical_boards": true,
+  "current_policy_parity_rows": 1500,
+  "current_policy_max_cp_difference": 0.0,
+  "development_report_metric_rows": 1620,
+  "development_report_paired_intervals": 15,
+  "reference_preflight": true,
+  "manifest_sha256": "f6a1012b3527df37051b353d9a2b86edd536deabf11f2953cb755c9d84833b09",
+  "holdout_sha256": "a19562fc86fbaa5df5cbad6fcc7c2580c8e681f2c984b72c4a476a0be801077a",
+  "definition_sha256": "d0f94b27e13ed659153ca4a2ee4e0eec6efe18d53388796c654a553cb5baafd8",
+  "finalists_sha256": "5798bb2bedcbe2c96d8c4bd2809f9a144232c837825879d41249e2e56acfaf8e",
+  "code": {
+    "chessdb_ensemble_study.py": "b3fbc4abea7b5063bdcba86be68e44cf1cae4ffafce1fa2c85c6a83aac6c71a7",
+    "chessdb_policy_validation.py": "1c94bf4374f3dcacb3089c04ea6027c762584fdb08130e841ed0728cf5cd773d",
+    "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+    "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "zobrist128.py": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+  },
+  "runtime": {
+    "chess": "1.11.2",
+    "duckdb": "1.5.2",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "pyarrow": "24.0.0"
+  },
+  "state": "queued behind existing targeted diagnostic",
+  "adopted": false
+}

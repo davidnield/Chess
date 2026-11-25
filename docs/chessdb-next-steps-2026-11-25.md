@@ -52,6 +52,13 @@ control subset separately; do not extrapolate its aggregate error rate to all po
 No new blend weights, thresholds or Stockfish scale are tuned on these results.
 Whether the proposal is safe to adopt remains a later acceptance decision.
 
+**Later November 25 authorization:** David requested a broader three-source ensemble
+comparison. The [ensemble study](chessdb-ensemble-study-2026-11-25.md) freezes 135
+rules and development-selected finalists, adds 1,000 fresh held-out references,
+and uses this targeted diagnostic as a separate stress test. That new study supersedes
+the earlier no-new-weights restriction for research; active lookup adoption still
+requires review and the Black pilot. The current diagnostic's frozen recipe is unchanged.
+
 ## Progress
 
 - Archive completion marker rechecked against the independent full-audit receipt.

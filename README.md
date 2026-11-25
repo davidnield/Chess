@@ -417,3 +417,8 @@ for maintained entry points, resume guarantees and source-independent auditing.
 The [November 25 execution plan](docs/chessdb-next-steps-2026-11-25.md) describes
 selection, reference qualification and limits of interpretation. This diagnostic
 does not publish or change the builder's active evaluation policy.
+
+`python/chessdb_ensemble_study.py` runs the broader
+[three-source ensemble comparison](docs/chessdb-ensemble-study-2026-11-25.md):
+freeze development-selected finalists, sample independent positions, then run
+checkpointed references and paired held-out comparisons. Production adoption is separate.
