@@ -299,3 +299,19 @@ now follows the already locked choice and will use only the pooling wrapper's
 `report-confirmation` after sealed completion, never select again. No raw-source
 cleanup, archive restart, global merge or unrelated job changes occurred.
 
+## Confirmation completed — 12:51 PST November 25
+
+While answering David's fallback-policy question, observed sealed completion at
+12:36:49 and executed the authorized pooling wrapper's final report at 12:50:54.
+The pre-locked choice and all evidence verified before score access. **299/300
+qualified**, including 297 at actual depth >=28. The 30/30/40 blend improved mean
+error versus both controls with simultaneous intervals excluding zero; stricter-
+White gate safety remains worse and missing-source handling is not established by
+this all-source panel. See `chessdb-ensemble-confirmation-results-2026-11-25.md`.
+No production change. All source-study batches/pooling/confirmation are now finished
+and reviewed; their receipts remain intact. The hourly monitor was updated to
+follow the mini queue without repeating already reported research completions.
+
+Mini queue at 12:51:46: **295/512 accepted**, bucket 291 running and 292 packaging.
+No restart, source deletion, global merge or unrelated-job action was performed.
+

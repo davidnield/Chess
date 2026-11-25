@@ -138,3 +138,13 @@ adoption. Do not select again or alter the locked recipe. Final engine searches
 are ongoing with unopened scores; use the pooling runner's `report-confirmation`
 after `SEALED.COMPLETE.json` exists. This is the next research action, not another
 `lock-choice` invocation.
+
+## Final comparison completed — 12:50 PST
+
+All 300 searches finished at 12:36:49 PST. The pooling wrapper verified the earlier
+choice and all evidence before opening scores at 12:50:54; 299 qualified, 297 at
+actual depth >=28. The blend improved mean error against both locked controls,
+including simultaneous paired intervals, but gate safety remains mixed. See
+`chessdb-ensemble-confirmation-results-2026-11-25.md`. Final-panel research is
+complete and reviewed; preserve its choice/completion/opening receipts and do not
+retune on these labels. No production adoption occurred.

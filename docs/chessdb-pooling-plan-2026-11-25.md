@@ -156,3 +156,9 @@ production remains unchanged. Confirmation is still searching (175/300 attempted
 the next action is the pooling runner's `report-confirmation`, followed by review
 of the limited comparisons. The hourly monitor now knows the choice is already
 locked and must not select again.
+
+At **12:50:54 PST**, the final comparison was verified, opened and reported using
+the already locked choice; 299/300 qualified. Its reviewed results are documented
+in `chessdb-ensemble-confirmation-results-2026-11-25.md`. The all-source mean-error
+advantage survived independent confirmation; missing-source behavior and gate
+safety still preclude automatic adoption. This research sequence is complete.
