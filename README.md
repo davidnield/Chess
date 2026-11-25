@@ -411,3 +411,9 @@ The lossless ChessDB archive preserves the full original logical key/value datab
 compressed Parquet, alongside readable chess fields. See the
 [archive implementation and verification contract](rust/chessdb_archive/README.md)
 for maintained entry points, resume guarantees and source-independent auditing.
+
+`python/chessdb_policy_validation.py prepare` freezes a source-policy diagnostic;
+`run` searches it with pinned Stockfish and resumable, identity-checked results.
+The [November 25 execution plan](docs/chessdb-next-steps-2026-11-25.md) describes
+selection, reference qualification and limits of interpretation. This diagnostic
+does not publish or change the builder's active evaluation policy.

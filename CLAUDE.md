@@ -87,6 +87,15 @@ markers are not full-source completion. `python/chessdb_archive_verify.py` audit
 archive without the source database. Its optional parallel mode stages sequential unbuffered reads to bounded NVMe scratch, then runs independent native audits on those copies; both logical digests, physical checksums and full coverage remain mandatory. The native auditor must match the archived producer. Scratch and archive locks prevent competing writers; failed staging is retained and counts against the cap. Never modify an active frozen exporter to update its verifier: deploy a separate verifier release and update the post-conversion launcher. Tests: `python/_test_chessdb_archive_verify.py`. Retain original copies until separately accepted;
 the exporter never deletes them. Staging accounting must tolerate an owned attempt directory disappearing during enumeration as well as files disappearing during stat; permission and root-directory failures remain fatal. Use the single-level scandir implementation and regression tests, not a multi-level glob. Full contract: `rust/chessdb_archive/README.md`.
 
+`python/chessdb_policy_validation.py` freezes and runs the source-policy follow-up.
+Use a new frozen release and experiment directory after code, input or recipe changes;
+resume rejects identity drift and verifies individual result receipts. Each engine
+score and depth must come from the same complete UCI iteration: python-chess's
+aggregate info can retain stale aspiration-bound flags. A time-capped search below
+the required reference depth remains unresolved. Tests are in
+`python/_test_chessdb_policy_validation.py`. This exposed-panel diagnostic is not
+a holdout, full blended-child gate validation or authorization to adopt a source policy.
+
 The approved optimizer study lives in `rust/book_builder/src/optimizer/`; its native
 runner and optional extension APIs are documented in `rust/book_builder/OPTIMIZERS.md`.
 All new optimizers, exact oracles, model construction and benchmarks stay in Rust.

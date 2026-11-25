@@ -173,3 +173,50 @@ Mini: **254/512 buckets accepted** (246 new plus eight originals) before pausing
 
 Final confirmation at 23:48: bucket 250 **succeeded** at 23:47:33 (233.59 seconds, exit 0); remote worker healthy and idle with no active or queued requests. Its result is retained remotely and awaits collection/acceptance. Both main-PC coordinators are exited, both STOP markers remain, and monitor status is PAUSED.
 
+## User-requested resume — 09:25 PST November 25
+
+David authorized resuming the data jobs and hourly monitor after optimizer implementation.
+Confirmed the ChessDB independent audit and its exact current archive completion-marker
+SHA256 match. **ChessDB is already finished; neither conversion nor audit was relaunched.**
+Its STOP marker and original source data remain preserved.
+
+The mini was healthy, idle and unpaused. Saved bucket 250 still had the same successful
+job/request identity, exit 0, with no active/queued requests. Worker/runtime paths were
+present and the optimized driver/config hashes matched. Available space: main D 462.5
+GiB, H 1,762.8 GiB, F 942.2 GiB; mini C approximately 2,466 GiB. The last 30 accepted
+outputs average 1.627 GB decimal each, projecting about 391 GiB additional H space for
+the remaining 258 collections. Bucket construction/collection fits the current reserve;
+this is not a new final-sort capacity acceptance.
+
+Removed only the mini's exact overnight STOP marker. Launched the unchanged frozen v3
+coordinator hidden at 09:25:10 PST: launcher PID **24564**, record
+`D:/chess/mini-pool-20261123/resume-20261125.json`, logs
+`queue-resume-20261125-092510.stdout.log` / `.stderr.log` in that directory.
+`queue.pid` is updated. Startup rehashing advanced normally with no stderr; its
+`completed` count during rehashing is not the total retained count. **254/512 remain
+accepted**, plus completed remote bucket 250 awaiting collection. Prepared 251 is reused.
+
+Resumed automation `track-chessdb-and-mini-pool-progress` as ACTIVE, hourly, with the
+prompt revised to acknowledge completed ChessDB and follow the current mini launch.
+It retains the existing restrictions on duplicate coordinators, ambiguous submissions,
+reserves, accepted data, source deletion, unrelated jobs and the crawler. Global merge
+and other populations are not automatically started by this bucket coordinator.
+
+Thirty recent buckets (220–249, 29 start-to-start intervals) average **279.039 seconds**
+per bucket. The remaining 257 computations project to **19.92 hours** before startup
+rehashing/collection and variation. Planning range: **20–23 hours from resume**, roughly
+**05:30–08:30 PST Thursday November 26** for bucket construction, not a published final
+pool. Verify actual new-job submission after rehashing before closing this resume task.
+
+Resume verified at 09:41 PST: checkpoint rehashing completed without errors; saved
+bucket 250 was collected and accepted, bringing the total to **255/512** (247 new
+plus eight original buckets). NEW bucket 251 is running remotely, job
+`ff3969de5b9e4a7ba8c82ba7b813ade7`, request `c344de27401649c6ae39ee8f12d3f7af`,
+started 09:40:38 PST, worker child PID 4480. Remote Status confirms the expected
+24 GiB / 75% / six-hour limits. No duplicate of bucket 250 was submitted.
+Main coordinator child PID **20540** (venv wrapper 24564). At 09:42, remote logs
+show advancing aggregation I/O/CPU with no stderr, and main prefetch is packaging
+252. Free space D 465.1 GiB, E 1,048.1 GiB, F 942.2 GiB, H 1,761.2 GiB.
+The hourly monitor also follows the new bounded-budget ChessDB source diagnostic;
+see `chessdb-next-steps-2026-11-25.md`. Archive conversion/audit remain complete.
+
