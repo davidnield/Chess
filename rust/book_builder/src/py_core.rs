@@ -37,6 +37,8 @@ fn opt_keys(k: Vec<i64>, has: Vec<bool>) -> Vec<Option<crate::reach::Key>> {
 pub struct RsGraph {
     core: Core,
     curves: Vec<Vec<Curve>>,
+    #[cfg(feature = "optimizer")]
+    position_ids: Option<crate::position_ids::SharedIds>,
 }
 
 fn book_dict<'py>(py: Python<'py>, g: &Core, b: &Book) -> PyResult<Bound<'py, PyDict>> {
@@ -115,6 +117,8 @@ impl RsGraph {
         let set_order = so.iter().map(|&k| id.get(&key(k)).copied()
             .ok_or_else(|| PyValueError::new_err("set_order holds a key that is not a node")))
             .collect::<PyResult<Vec<u32>>>()?;
+        #[cfg(feature = "optimizer")]
+        let shared_position_ids = position_ids.as_ref().map(|p| p.inner.clone());
         let mut core = Core {
             sort_aliases: position_ids.map(|p| p.inner.lock().unwrap().ordering_exceptions()).unwrap_or_default(),
             keys, n_our, id, root: key(root), l_node,
@@ -125,7 +129,10 @@ impl RsGraph {
             stick: false, inc_bare: vec![-1; n_our], margin: 0.0,
         };
         core.link();
-        Ok(RsGraph { core, curves: Vec::new() })
+        Ok(RsGraph { core, curves: Vec::new(),
+            #[cfg(feature = "optimizer")]
+            position_ids: shared_position_ids,
+        })
     }
 
     /// g.meta["stick"] = (moves, margin): per our node (key) the incumbent's bare code; a
@@ -376,9 +383,135 @@ impl RsGraph {
         Ok((PyArray1::from_vec(py, booked.iter().map(|&(u, _)| g.pyk(u)).collect()),
             PyArray1::from_vec(py, booked.iter().map(|&(_, s)| s).collect()), d))
     }
+
+    /// Opt-in native optimizer study on the already resident graph. Python supplies
+    /// only configuration/receipts and source-move arrays; no graph materialization.
+    #[cfg(feature = "optimizer")]
+    #[staticmethod]
+    fn optimizer_validate_config(config_json: &str) -> PyResult<usize> {
+        let cfg:crate::optimizer::benchmark::Config=serde_json::from_str(config_json)
+            .map_err(|e|PyValueError::new_err(e.to_string()))?;
+        cfg.validate().map_err(PyValueError::new_err)?;
+        Ok(cfg.budget)
+    }
+
+    #[cfg(feature = "optimizer")]
+    fn optimizer_compare(&self, py: Python<'_>, config_json: &str, provenance_json: &str,
+        output_dir: &str,
+        source_keys: PyReadonlyArray1<i64>, source_sans: PyReadonlyArray1<i64>, move_names:Vec<String>) -> PyResult<String> {
+        use crate::optimizer::{benchmark,snapshot,Book};
+        let config:benchmark::Config=serde_json::from_str(config_json).map_err(|e|PyValueError::new_err(e.to_string()))?;
+        config.validate().map_err(PyValueError::new_err)?;
+        self.optimizer_check_names(&move_names)?;
+        let provenance:std::collections::BTreeMap<String,String>=serde_json::from_str(provenance_json).map_err(|e|PyValueError::new_err(e.to_string()))?;
+        for name in ["candidate-graph","engine-overlay","opponent-policy","stop-values","horizon-and-cuts","price-source-policy"] {
+            if !provenance.get(name).is_some_and(|v|v.len()==64 && v.bytes().all(|c|c.is_ascii_hexdigit())) {
+                return Err(PyValueError::new_err(format!("missing SHA256 input receipt binding: {name}")));
+            }
+        }
+        let (keys,sans)=(source_keys.as_slice()?,source_sans.as_slice()?);crate::same_len(keys.len(),&[sans.len()])?;
+        let mut source=Book::new();
+        let mut seen=std::collections::HashSet::new();
+        let (mut absent,mut inadmissible)=(0usize,0usize);
+        for (&k,&s) in keys.iter().zip(sans){
+            if !seen.insert(k){return Err(PyValueError::new_err("duplicate source prescription"));}
+            // The unconstrained source policy is normally a superset of the
+            // admitted graph. Match legacy policy_reach's ignore behavior,
+            // explicitly reporting each exclusion rather than rejecting it.
+            let Some(&u)=self.core.id.get(&key(k)) else {absent+=1;continue;};
+            if !self.core.is_our(u) || !self.core.cands(u as usize).any(|j|self.core.c_san[j]==s){inadmissible+=1;continue;}
+            source.insert(u,s);
+        }
+        let ids=self.position_ids.clone().ok_or_else(||PyValueError::new_err("optimizer comparison requires the graph's original full-key registry"))?;
+        let g=&self.core;
+        py.detach(||{
+            let table=ids.lock().map_err(|_|PyValueError::new_err("position ID table poisoned"))?;
+            let decode=|k|table.pair(pk(k)).map(|(lo,hi)|((hi as u64 as u128)<<64)|(lo as u64 as u128)).ok_or_else(||"graph key absent from full-key registry".to_string());
+            let graph_sha=snapshot::core_digest(g,decode).map_err(PyValueError::new_err)?;
+            drop(table);
+            let input=snapshot::digest(&(graph_sha,&provenance,&move_names)).map_err(PyValueError::new_err)?;
+            let report=benchmark::run_core(g,&source,&input,&config,std::path::Path::new(output_dir),env!("OPTIMIZER_CODE_SHA")).map_err(PyValueError::new_err)?;
+            // Export full identities for every result; run-local indices alone are not portable.
+            let table=ids.lock().map_err(|_|PyValueError::new_err("position ID table poisoned"))?;
+            let mut books=std::collections::BTreeMap::new();
+            let mut content_ids=std::collections::BTreeMap::new();
+            for cell in &report.cells {
+                let mut prescriptions=Vec::new();
+                let mut content=std::collections::BTreeMap::new();
+                for (&u,&san) in &cell.outcome.book {
+                    let (lo,hi)=table.pair(g.pyk(u)).ok_or_else(||PyValueError::new_err("result key missing from full-key registry"))?;
+                    prescriptions.push(serde_json::json!({"lo":lo,"hi":hi,"san_code":san,"san":move_names[san as usize]}));
+                    content.insert(snapshot::hex(((hi as u64 as u128)<<64)|(lo as u64 as u128)),move_names[san as usize].clone());
+                }
+                content_ids.insert(cell.name.clone(),snapshot::digest(&content).map_err(PyValueError::new_err)?);
+                books.insert(cell.name.clone(),prescriptions);
+            }
+            let result=serde_json::json!({"report":report,"full_key_books":books,"provenance":provenance,
+                "book_content_sha256":content_ids,"move_names":move_names,
+                "source_filter":{"input":keys.len(),"accepted":source.len(),"absent":absent,"inadmissible":inadmissible}});
+            benchmark::publish_json(&std::path::Path::new(output_dir).join("portable-results.json"),&result).map_err(PyValueError::new_err)?;
+            serde_json::to_string(&result).map_err(|e|PyValueError::new_err(e.to_string()))
+        })
+    }
+
+    /// Bounded real-data calibration export, with native full-key decoding.
+    #[cfg(feature = "optimizer")]
+    fn optimizer_snapshot(&self, py:Python<'_>, root:i64,
+        base_keys:PyReadonlyArray1<i64>, base_sans:PyReadonlyArray1<i64>,
+        max_nodes:usize, max_depth:usize, output_file:&str, move_names:Vec<String>) -> PyResult<()> {
+        use crate::optimizer::{Book,View,snapshot,benchmark};
+        self.optimizer_check_names(&move_names)?;
+        let root=*self.core.id.get(&key(root)).ok_or_else(||PyValueError::new_err("cone root absent"))?;
+        let (keys,sans)=(base_keys.as_slice()?,base_sans.as_slice()?);crate::same_len(keys.len(),&[sans.len()])?;
+        let mut base=Book::new();
+        for (&k,&s) in keys.iter().zip(sans){
+            let u=*self.core.id.get(&key(k)).ok_or_else(||PyValueError::new_err("boundary policy key absent"))?;
+            if base.insert(u,s).is_some(){return Err(PyValueError::new_err("duplicate boundary prescription"));}
+        }
+        let ids=self.position_ids.clone().ok_or_else(||PyValueError::new_err("cone export requires the graph's original full-key registry"))?;
+        py.detach(||{
+            let v=View::new(&self.core).map_err(PyValueError::new_err)?;
+            let table=ids.lock().map_err(|_|PyValueError::new_err("position ID table poisoned"))?;
+            let decode=|k|table.pair(pk(k)).map(|(lo,hi)|((hi as u64 as u128)<<64)|(lo as u64 as u128)).ok_or_else(||"graph key absent from full-key registry".to_string());
+            let mut s=snapshot::extract_decoded(&v,root,&base,max_nodes,max_depth,decode).map_err(PyValueError::new_err)?;
+            s.provenance.insert("move_names_json".into(),serde_json::to_string(&move_names).map_err(|e|PyValueError::new_err(e.to_string()))?);
+            benchmark::write_new(std::path::Path::new(output_file),&s).map_err(PyValueError::new_err)
+        })
+    }
+
+    /// Supply independent starts without exporting the graph to Python.
+    #[cfg(feature = "optimizer")]
+    fn optimizer_polish_starts<'py>(&self,py:Python<'py>,starts:Vec<(Vec<i64>,Vec<i64>)>,target:usize)
+        ->PyResult<Bound<'py,PyDict>> {
+        use crate::optimizer::{Book,View,search};
+        let mut books=Vec::<Book>::new();
+        for (keys,sans) in starts {
+            crate::same_len(keys.len(),&[sans.len()])?;let mut book=Book::new();
+            for (k,s) in keys.into_iter().zip(sans) {
+                let u=self.core.id.get(&key(k)).copied().ok_or_else(||PyValueError::new_err("start position absent"))?;
+                if book.insert(u,s).is_some(){return Err(PyValueError::new_err("duplicate start prescription"));}
+            }
+            books.push(book);
+        }
+        let (out,pos,stat)=py.detach(||{
+            let v=View::new(&self.core)?;let out=search::polish_starts(&v,&books,target)?;
+            Ok::<_,String>((out,v.pos,v.stat))
+        }).map_err(PyValueError::new_err)?;
+        let m=out.book.into_iter().collect();let region=polish::book_region(&self.core,&m,&pos,&stat);
+        region_dict(py,&self.core,&region,&pos)
+    }
 }
 
 impl RsGraph {
+    #[cfg(feature = "optimizer")]
+    fn optimizer_check_names(&self,names:&[String])->PyResult<()> {
+        if names.iter().any(|s|s.is_empty()) || names.iter().collect::<std::collections::HashSet<_>>().len()!=names.len()
+            || self.core.c_san.iter().any(|&s|s<0 || s as usize>=names.len()) {
+            return Err(PyValueError::new_err("optimizer export needs an unambiguous SAN dictionary covering every candidate"));
+        }
+        Ok(())
+    }
+
     fn moves_of(&self, keys: &[i64], sans: &[i64]) -> PyResult<HashMap<u32, i64>> {
         crate::same_len(keys.len(), &[sans.len()])?;
         if !self.core.closed() {

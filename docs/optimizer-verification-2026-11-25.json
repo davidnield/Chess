@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "date": "2026-11-25",
+  "branch": "codex/takeover-hardening-20261122",
+  "compiled_source_sha256": "0330f099a33f46bfd560dc9e3b6adca7dea15b6d09b406ab6b2f338f510b8716",
+  "standalone_binary_sha256": "d86b57aec52e0e74bef030396d7f771e808ee893c53ae1e0459609045c9342c5",
+  "extension_sha256": "d80a2b185848161d7fe9594c8d523f5612634945072632b9a55282f46588be08",
+  "smoke_summary_sha256": "a2427fcab21154a45f4ddf07032c2c03eb073c74f81923a80893c3712a744b3f",
+  "study_specification_sha256": "5a16bdee22f6d6b7343329cfe5defc7744cd9eba50a2193ef2e806784f879e39",
+  "main_manifest_v5_sha256": "36f3e3dbd2c5bb2d639bb0f03610f21c50b56d06b47d22f378dffcac102bb613",
+  "native_tests_with_python": 22,
+  "native_tests_without_python": 22,
+  "ffi_tests": 3,
+  "smoke_cases": 7,
+  "smoke_cells": 54,
+  "smoke_resume_identical": true,
+  "legacy_parity": "passed; collector rerun with workspace TEMP/TMP",
+  "production_calibration": "not run",
+  "production_jobs_resumed": false,
+  "smoke_receipt_directory": "scratch/optimizer-native-smoke-20261125-final-v2"
+}

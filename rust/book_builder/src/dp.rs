@@ -103,6 +103,8 @@ pub fn cap_curve(mut c: Curve, bmax: i64, k_atoms: usize) -> Curve {
         let keep = c.cum_costs.partition_point(|&x| x <= bmax);
         c = Curve::new(c.base, c.costs[..keep].to_vec(), c.gains[..keep].to_vec());
     }
+    #[cfg(feature = "optimizer")]
+    crate::optimizer::search::record_cap(c.costs.len(), k_atoms);
     if c.costs.len() <= k_atoms {
         return c;
     }

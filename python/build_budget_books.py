@@ -642,6 +642,12 @@ def main() -> int:
     ap.add_argument("--uncut-own-moves", type=Path, metavar="CACHE",
                     help="Use a complete native own-move lookup prepared by uncut_own_moves.py. "
                          "Give --stats and --aux-stats for its original population.")
+    ap.add_argument("--optimizer-study-config", type=Path,
+                    help="Opt-in Rust optimizer comparison config; stops after the study, before production book output.")
+    ap.add_argument("--optimizer-study-receipts", type=Path,
+                    help="JSON map of accepted input SHA256 receipt bindings for the native study.")
+    ap.add_argument("--optimizer-study-out", type=Path,
+                    help="Separate resumable native study directory (never a production book directory).")
     a = ap.parse_args()
     from consumer_keys import ConsumerKeys, is_wide
     # the builder runs on its Rust core (2026-11-12); budget_core.py is the tests' reference
@@ -650,6 +656,30 @@ def main() -> int:
         print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
         return 1
     keys = ConsumerKeys.for_pool(a.stats)
+    study_fields = (a.optimizer_study_config, a.optimizer_study_receipts, a.optimizer_study_out)
+    study_config = study_receipts = None
+    if any(study_fields):
+        if not all(study_fields):
+            ap.error("all three --optimizer-study-* arguments are required")
+        if not keys or a.incumbent or a.allowed_book or a.stick_margin:
+            ap.error("optimizer study needs full 128-bit keys, independent choices and stickiness off")
+        if any((a.dump_engine_targets, a.dump_stop_positions, a.dump_other_positions)):
+            ap.error("optimizer study cannot be combined with an early-exit dump mode")
+        import book_builder_rs
+        if not hasattr(book_builder_rs.RsGraph, "optimizer_validate_config"):
+            ap.error("build the opt-in extension with rust/book_builder/build.ps1 -Optimizer")
+        study_config = a.optimizer_study_config.read_text(encoding="utf-8-sig")
+        study_budget = book_builder_rs.RsGraph.optimizer_validate_config(study_config)
+        if set(a.budget) != {study_budget}:
+            ap.error("study config and --budget must specify the same single budget")
+        study_receipts = json.loads(a.optimizer_study_receipts.read_text(encoding="utf-8-sig"))
+        required = ("candidate-graph", "engine-overlay", "opponent-policy", "stop-values",
+                    "horizon-and-cuts", "price-source-policy")
+        if not isinstance(study_receipts, dict) or any(
+            not isinstance(study_receipts.get(k), str) or len(study_receipts[k]) != 64
+            or any(c not in "0123456789abcdefABCDEF" for c in study_receipts[k]) for k in required
+        ):
+            ap.error("study receipts must contain all six SHA256 input bindings")
     if Path(a.weak_pool).is_file() and is_wide(a.weak_pool, "parent_hash") != bool(keys):
         ap.error("--weak-pool and --stats must use matching position-key widths")
     legacy = a.legacy_gates or a.max_eval_loss is not None
@@ -731,6 +761,8 @@ def main() -> int:
             "--other-cov-blend)")
 
     outs = {b: Path(f"{a.out_prefix}_b{b}.parquet") for b in budgets}
+    if study_config and any(p.exists() for p in outs.values()):
+        ap.error("use a fresh --out-prefix for optimizer study graph evidence")
     uncut = None
     if a.uncut_own_moves:
         from uncut_own_moves import load
@@ -1296,6 +1328,22 @@ def main() -> int:
         other_report = so.apply_rs(g, rsg, keys.encode(sample, "hash") if keys else sample)
         log(f"  sampled other buckets: {other_report}")
     g.other = {}
+
+    if study_config:
+        # Thin orchestration only: native code borrows this fully prepared graph,
+        # computes every search/oracle, verifies and checkpoints the results.
+        study_receipts["builder-launch"] = hashlib.sha256(json.dumps(
+            vars(a), sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        study_keys, study_sans = budget_rs.rs_moves(rep_moves, rs_sans)
+        log(f"native optimizer study; graph ready after {time.time()-t0:,.1f}s")
+        report = json.loads(rsg.optimizer_compare(
+            study_config, json.dumps(study_receipts, sort_keys=True),
+            str(a.optimizer_study_out), study_keys, study_sans, rs_sans))
+        for cell in report["report"]["cells"]:
+            o = cell["outcome"]
+            log(f"  {cell['name']}: {o['value']:.8f}, {len(o['book'])} prescriptions, {o['status']}")
+        log(f"study receipts and full-key books: {a.optimizer_study_out}; production books not emitted")
+        return 0
 
     if a.method == "price":
         curves, diag = {}, {"stranded_cycle_nodes": None}

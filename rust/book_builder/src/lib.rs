@@ -11,14 +11,27 @@ pub mod graph;
 pub mod polish;
 mod position_ids;
 pub mod price;
+#[cfg(feature = "python")]
 mod py_collect;
+#[cfg(feature = "python")]
 mod py_core;
+#[cfg(feature = "python")]
 mod py_graph;
+#[cfg(feature = "python")]
 mod py_rollout;
 pub mod reach;
 pub mod rollout;
 pub mod value;
 
+#[cfg(feature = "optimizer")]
+pub mod optimizer;
+
+#[cfg(feature = "python")]
+pub(crate) use python_api::{blend, same_len, csr, key, lo, score_limit};
+
+#[cfg(feature = "python")]
+mod python_api {
+use super::*;
 use numpy::{PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -159,7 +172,7 @@ pub(crate) fn csr(ptr: &[i64], n: usize, len: usize, what: &str) -> PyResult<()>
     Ok(())
 }
 
-fn score_limit(score: Option<f64>, cp: f64) -> PyResult<Option<f64>> {
+pub(crate) fn score_limit(score: Option<f64>, cp: f64) -> PyResult<Option<f64>> {
     if score.is_some_and(|s| !cp.is_nan() || !(0.0..=1.0).contains(&s)) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "max_score_loss must be in [0,1] and cannot be combined with max_eval_loss"));
@@ -333,3 +346,4 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
+} // python_api

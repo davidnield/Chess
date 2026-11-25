@@ -1,0 +1,168 @@
+{
+  "backend": "microlp-0.8.0",
+  "calibration_settings": "provisional-until-O1-measured",
+  "changes_main_defaults": false,
+  "decision": "2026-11-25",
+  "dp_cap_diagnostic": [
+    256,
+    512,
+    1024
+  ],
+  "fixed": {
+    "absolute_gate_white_score_baselines": {
+      "black": 0.5195669627673518,
+      "white": 0.5183137990703003
+    },
+    "eval_weight": 0.75,
+    "horizon": 30,
+    "match_inflate": 1.5,
+    "opponent_policy": "otb-ensemble-v2",
+    "prior_strength": 500,
+    "stickiness": 0
+  },
+  "gates": {
+    "permissive": {
+      "black_absolute": 0.075,
+      "relative": 0.095,
+      "white_absolute": 0.11
+    },
+    "stricter": {
+      "black_absolute": 0.05,
+      "relative": 0.06,
+      "white_absolute": 0.05
+    }
+  },
+  "language": "Rust",
+  "main_sweep_manifest": "sweep-manifest-2026-11-21-v5.json",
+  "main_sweep_manifest_sha256": "36f3e3dbd2c5bb2d639bb0f03610f21c50b56d06b47d22f378dffcac102bb613",
+  "prerequisites": [
+    "native-tests-pass",
+    "O1-calibration-accepted",
+    "inputs-verified",
+    "black-pilot-closed"
+  ],
+  "required_input_receipts": [
+    "candidate-graph",
+    "engine-overlay",
+    "opponent-policy",
+    "stop-values",
+    "horizon-and-cuts",
+    "price-source-policy"
+  ],
+  "runs": [
+    {
+      "budget": 2000,
+      "color": "white",
+      "gate": "stricter",
+      "input_binding": "white-stricter-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-anchors",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 500,
+      "color": "white",
+      "gate": "stricter",
+      "input_binding": "white-stricter-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-shortlist",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 2000,
+      "color": "white",
+      "gate": "permissive",
+      "input_binding": "white-permissive-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-anchors",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 500,
+      "color": "white",
+      "gate": "permissive",
+      "input_binding": "white-permissive-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-shortlist",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 2000,
+      "color": "black",
+      "gate": "stricter",
+      "input_binding": "black-stricter-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-anchors",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 500,
+      "color": "black",
+      "gate": "stricter",
+      "input_binding": "black-stricter-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-shortlist",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 2000,
+      "color": "black",
+      "gate": "permissive",
+      "input_binding": "black-permissive-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-anchors",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    },
+    {
+      "budget": 500,
+      "color": "black",
+      "gate": "permissive",
+      "input_binding": "black-permissive-p30",
+      "methods": [
+        "dp-match-polish",
+        "price-polish",
+        "portfolio",
+        "portfolio-neighborhood"
+      ],
+      "phase": "O2-shortlist",
+      "state": "waiting-for-accepted-inputs-and-calibrated-resource-settings"
+    }
+  ],
+  "schema": 1,
+  "selection": "O3-paired-development-rollouts-quality-versus-total-compute; no winner yet"
+}

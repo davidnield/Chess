@@ -134,14 +134,23 @@ Optimizer alternatives also enter the opening/prescription stability report as a
 ### Implementation and execution checklist
 
 - [x] Record the approved study, Rust requirement, dependencies and decision rules (November 25).
-- [ ] Implement native oracle/model calibration, fixtures and benchmark/resource reporting (O1).
-- [ ] Verify/complete Rust multiple-start integration and DP cap instrumentation (O1).
-- [ ] Implement and calibrate native large-neighborhood search with whole-book acceptance (O1).
+- [x] Implement native oracle/model machinery, fixtures and benchmark/resource reporting (November 25; small checks passed).
+- [x] Integrate Rust multiple-start search and DP cap instrumentation; preserve legacy parity (November 25).
+- [x] Implement native large-neighborhood search, whole-book acceptance and durable neighborhood checkpoints (November 25).
+- [x] Publish an unbound Rust-generated study specification and opt-in resident-graph runner: `optimizer-study-2026-11-25-v1.json`. This is not an executable production queue.
+- [ ] Calibrate on accepted representative real subgraphs and freeze resource/neighborhood settings (O1 execution).
 - [ ] Publish the new executable experiment manifest and native validation evidence; retain v5 unchanged.
 - [ ] Run the four B=2,000 anchor contexts and B=500 shortlist checks on accepted shared inputs (O2).
 - [ ] Evaluate finalists, freeze the solver recipe, and bind the main sweep/extension anchors to that decision (O3).
 
 This amendment does not resume the paused jobs or monitor. Implementation readiness, queued experiments and actually running work must remain separately reported. Optimizer engineering and runtime are additional, currently unmeasured costs; update the forecast after O1 and the first production comparison instead of extending the old Python timing estimates to Rust or promising a fixed speedup.
+
+Implementation evidence and remaining acceptance work are recorded in
+[the November 25 implementation report](optimizer-implementation-2026-11-25.md).
+All new graph/search/model/benchmark work is Rust, including the standalone CLI and
+full-key bounded exports. The existing Python launcher only prepares inputs and calls
+the native comparison. Synthetic results establish implementation checks, not a solver
+winner or production resource settings. Data jobs and the monitor remain paused.
 
 ## Approved uncut counts and evaluation-quality verification — November 18, 2026
 

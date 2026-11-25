@@ -2,8 +2,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "python")]
 use numpy::{PyArray1, PyReadonlyArray1};
+#[cfg(feature = "python")]
 use pyo3::exceptions::PyValueError;
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 #[derive(Default)]
@@ -55,11 +58,13 @@ impl PositionIds {
 
 pub type SharedIds = Arc<Mutex<PositionIds>>;
 
+#[cfg(feature = "python")]
 #[pyclass(module = "book_builder_rs")]
 pub struct RsPositionIds {
     pub inner: SharedIds,
 }
 
+#[cfg(feature = "python")]
 #[pymethods]
 impl RsPositionIds {
     #[new]

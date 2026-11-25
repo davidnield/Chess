@@ -458,3 +458,32 @@ links to that controlling specification.
   experiment constants, checked local links and mirror hashes, and ran `git diff --check`.
   No runtime tests are needed for this documentation-only change. Executable manifest v5
   remains SHA256 `36f3e3dbd2c5bb2d639bb0f03610f21c50b56d06b47d22f378dffcac102bb613`.
+
+## November 25: native optimizer implementation and small checks
+
+Implemented the authorized code work in `rust/book_builder/src/optimizer/`: independent
+small-DAG oracle, exact uncompressed tree DP, bounded pure-Rust MIP, cap diagnostics,
+DP/price portfolio, joint neighborhood search and a resumable native benchmark runner.
+Added the no-Python standalone binary and optional resident-graph extension APIs,
+including full-key/SAN exports and bounded real-subgraph extraction. The existing
+Python builder gained only thin study invocation flags, before ordinary curve construction.
+
+- 22 native tests pass with and without Python. The cases include 72 oracle/MIP
+  comparisons, a 25-decision delayed chain, real 256-package cap binding on a 320-branch
+  tree, shared/released costs, fixed choices, limits and checkpoint corruption/resume.
+  Boolean reachability preserves fixed moves even on extremely rare positive branches.
+- Three FFI checks pass; colliding low halves remain distinct and exported books carry
+  SAN names/content IDs. The existing differential checks retain bit-for-bit parity;
+  the collector's sandbox TEMP issue was resolved by rerunning it inside the workspace.
+- The standalone smoke covers seven cases and 54 cells with repeatable receipt reuse.
+  A weak MIP relaxation discovered by the longer chain was tightened using valid
+  backwards-induction node ceilings.
+- `optimizer-study-2026-11-25-v1.json` is the new **unbound specification**. It does not
+  start jobs or replace v5. Representative calibration, bound execution manifests,
+  production comparisons and integration of the eventual winner remain pending.
+- Details, commands, limitations and next steps:
+  [optimizer-implementation-2026-11-25.md](optimizer-implementation-2026-11-25.md) and
+  [native optimizer guide](C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation/rust/book_builder/OPTIMIZERS.md).
+- Data jobs/monitor remain paused. No canonical book or frozen release was replaced.
+  The consolidated plan and this report/progress record are mirrored into the main
+  checkout's docs; implementation stays on the maintained branch/worktree.

@@ -6,6 +6,12 @@ reference. This crate replaces it stage by stage, and each stage must give the s
 Since 2026-11-12 `build_budget_books.py` runs only on this crate (no Python fallback); the
 Python stages stay as the tests' reference.
 
+The opt-in November 25 [optimizer study](OPTIMIZERS.md) adds Rust exact benchmarks,
+multiple starts, larger-neighborhood search and a standalone resumable runner. New
+algorithms use independent Rust oracles; legacy exports retain bit-for-bit parity.
+Build with `--no-default-features --features optimizer` for the interpreter-free
+benchmark, or `build.ps1 -Optimizer` for optional methods on the existing extension.
+
 ## Build
 
 ```powershell

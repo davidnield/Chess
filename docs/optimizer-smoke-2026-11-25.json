@@ -1,0 +1,375 @@
+[
+  {
+    "case": "diamond",
+    "cells": 8,
+    "identity": "c8d15592130b2bccef73f949c86b1a27481621aa2280984f3331f2172508900f",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0002295,
+        "status": "dp-match-polish-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0000862,
+        "status": "dp-match-polish-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0000924,
+        "status": "dp-match-polish-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000949,
+        "status": "price-polish-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000535,
+        "status": "portfolio-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0100603,
+        "status": "neighborhood-feasible",
+        "value": 0.9
+      },
+      {
+        "method": "oracle",
+        "seconds": 0.0000556,
+        "status": "oracle-optimal",
+        "value": 0.9
+      },
+      {
+        "method": "mip",
+        "seconds": 0.000386,
+        "status": "mip-ProvenOptimal",
+        "value": 0.9
+      }
+    ]
+  },
+  {
+    "case": "chain-12",
+    "cells": 7,
+    "identity": "b93bd0863c0ff3427b32e07279c2886b32d68807b432f6d30c58b5e06fba8a2e",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0001135,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0001142,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0001242,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000812,
+        "status": "price-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000748,
+        "status": "portfolio-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0065657,
+        "status": "neighborhood-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "mip",
+        "seconds": 0.0016563,
+        "status": "mip-ProvenOptimal",
+        "value": 0.95
+      }
+    ]
+  },
+  {
+    "case": "chain-24",
+    "cells": 7,
+    "identity": "813720b4a370c8fa6dcf3c4d803551fb4e5e7b7a367f0e60cc2e879e5816d472",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0002354,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0002657,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0001786,
+        "status": "dp-match-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "price",
+        "seconds": 0.0001666,
+        "status": "price-polish-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0001142,
+        "status": "portfolio-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0116699,
+        "status": "neighborhood-feasible",
+        "value": 0.95
+      },
+      {
+        "method": "mip",
+        "seconds": 0.0060619,
+        "status": "mip-ProvenOptimal",
+        "value": 0.95
+      }
+    ]
+  },
+  {
+    "case": "random-0",
+    "cells": 8,
+    "identity": "23e4f365f374c8bbd57c760c59b9120e530f55eb264b7955c7c84eea2c916b50",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0001119,
+        "status": "dp-match-polish-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0001161,
+        "status": "dp-match-polish-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0001219,
+        "status": "dp-match-polish-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000683,
+        "status": "price-polish-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000526,
+        "status": "portfolio-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0101556,
+        "status": "neighborhood-feasible",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "oracle",
+        "seconds": 0.0004481,
+        "status": "oracle-optimal",
+        "value": 0.5237222222222222
+      },
+      {
+        "method": "mip",
+        "seconds": 0.000729,
+        "status": "mip-ProvenOptimal",
+        "value": 0.5237222222222222
+      }
+    ]
+  },
+  {
+    "case": "random-1",
+    "cells": 8,
+    "identity": "4da6ce6cba1836a26de1e1e9a3aace0a760f93e9717fc17d4a2062868d191559",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0000711,
+        "status": "dp-match-polish-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0000775,
+        "status": "dp-match-polish-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0000714,
+        "status": "dp-match-polish-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000416,
+        "status": "price-polish-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000359,
+        "status": "portfolio-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0035701,
+        "status": "neighborhood-feasible",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "oracle",
+        "seconds": 0.000242,
+        "status": "oracle-optimal",
+        "value": 0.6316666666666666
+      },
+      {
+        "method": "mip",
+        "seconds": 0.0001655,
+        "status": "mip-ProvenOptimal",
+        "value": 0.6316666666666666
+      }
+    ]
+  },
+  {
+    "case": "random-2",
+    "cells": 8,
+    "identity": "de29eaa601906e770f5f8d99e5c33090a1de424e3bef568f14d1672211a595a7",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0000753,
+        "status": "dp-match-polish-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.000075,
+        "status": "dp-match-polish-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0000839,
+        "status": "dp-match-polish-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000449,
+        "status": "price-polish-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000303,
+        "status": "portfolio-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0050378,
+        "status": "neighborhood-feasible",
+        "value": 0.717
+      },
+      {
+        "method": "oracle",
+        "seconds": 0.0001091,
+        "status": "oracle-optimal",
+        "value": 0.717
+      },
+      {
+        "method": "mip",
+        "seconds": 0.000416,
+        "status": "mip-ProvenOptimal",
+        "value": 0.717
+      }
+    ]
+  },
+  {
+    "case": "random-3",
+    "cells": 8,
+    "identity": "3d783aad7ef85aef8b4ce6f8caa8ca52d94119afb8b2c1aec70eac772e32fffa",
+    "results": [
+      {
+        "method": "dp-256",
+        "seconds": 0.0000667,
+        "status": "dp-match-polish-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "dp-512",
+        "seconds": 0.0000662,
+        "status": "dp-match-polish-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "dp-1024",
+        "seconds": 0.0000608,
+        "status": "dp-match-polish-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "price",
+        "seconds": 0.0000366,
+        "status": "price-polish-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "portfolio",
+        "seconds": 0.0000261,
+        "status": "portfolio-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "neighborhood",
+        "seconds": 0.0001528,
+        "status": "neighborhood-feasible",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "oracle",
+        "seconds": 0.000056,
+        "status": "oracle-optimal",
+        "value": 0.42700000000000005
+      },
+      {
+        "method": "mip",
+        "seconds": 0.0000943,
+        "status": "mip-ProvenOptimal",
+        "value": 0.42700000000000005
+      }
+    ]
+  }
+]
