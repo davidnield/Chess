@@ -535,3 +535,13 @@ rechecks, and preserve panel-specific and depth sensitivities. Keep the final
 1,008 NNUE all-three. See `chessdb-pooling-plan-2026-11-25.md`; the separate pooling
 runner binds the pooled evidence and pooled-best individual comparator before
 opening final confirmation. No additional engine searches or running-job changes.
+
+November 25 follow-up: matched Fishnet ablations support keeping it in the
+three-source candidate and suggest Cloud–Fishnet is useful with ChessDB artificially
+withheld. Naturally missing-Cloud positions behave differently from artificially
+masked ones; ChessDB alone has lower mean/tail error there, with gate tradeoffs.
+See `chessdb-fishnet-ablation-2026-11-25.md`. Before adopting a fallback for missing
+ChessDB, establish its actual coverage/retained-graph importance, then validate
+genuinely missing cases if material. This is a pending conditional audit, not a
+queued large extraction/search. Keep final confirmation closed to new tuning and
+preserve production bindings until the planned book-level checks pass.

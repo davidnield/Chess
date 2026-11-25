@@ -1,0 +1,72 @@
+{
+  "adopted": false,
+  "best_no_fish_selected_on_old": "score_3_0_7",
+  "bootstrap": 10000,
+  "code_sha256": "4d01fd0644aa283ecbbdd17bce52b1b8d9c2490c6f1d5c613110a6fedb830f9a",
+  "comparisons": [
+    [
+      "three_vs_cloud_chessdb_equal",
+      "all3",
+      "score_3_3_4",
+      "score_5_0_5"
+    ],
+    [
+      "three_vs_drop_fish_preserve_ratio",
+      "all3",
+      "score_3_3_4",
+      "score_drop_fish_3_0_4"
+    ],
+    [
+      "three_vs_old_selected_no_fish",
+      "all3",
+      "score_3_3_4",
+      "score_3_0_7"
+    ],
+    [
+      "simulate_no_chessdb",
+      "all3",
+      "score_5_5_0",
+      "cp_10_0_0"
+    ],
+    [
+      "simulate_no_cloud",
+      "all3",
+      "score_drop_cloud_0_3_4",
+      "cp_0_0_10"
+    ],
+    [
+      "natural_no_cloud",
+      "natural_no_cloud",
+      "score_drop_cloud_0_3_4",
+      "cp_0_0_10"
+    ]
+  ],
+  "final_confirmation_scores_read": false,
+  "input_hashes": {
+    "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\COMPLETE.json": "53c5e97edd2dd2ea3719f2e7dde986017a02bc420ff25c537e10026a5f4e887c",
+    "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\definition.json": "478c344cfdd192a13b7f00eec508c41715bd10208928edccdbc2c6300bcdce4e",
+    "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\old-best-metrics.csv": "cd72dc0dc70ecd7f2cc02c80321917b6b947ef2d96dfb1f720fc9ad1a3819ce7",
+    "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\pooled-best-metrics.csv": "2867e74a8b104a0c4152454e2fcee80706cf2b7dd3be8d86c3ca456049bff701",
+    "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\pooled-positions.parquet": "b7fef772a430385760a80814da280e3d4e0e6a35fe38d36613d5644e07c96ff9"
+  },
+  "limitations": [
+    "Old and new data were already exposed; these are exploratory comparisons, not a new independent confirmation.",
+    "Within-panel simultaneous intervals cover the six listed contrasts only, not selection among the full grid or all subgroups/panels.",
+    "Position/stratum bootstrap does not account for opening-family dependence or systematic reference error.",
+    "Artificially deleting ChessDB on overlap positions does not establish behavior where ChessDB is naturally missing.",
+    "Artificially deleting Cloud and naturally missing Cloud are different populations; do not pool them as independent evidence."
+  ],
+  "new_engine_searches": 0,
+  "original_metric_parity": true,
+  "output_hashes": {
+    "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\fishnet-ablation-20261125\\error-correlations.csv": "f29e4ebb98b882e408649c68705a0d3a4f40568af57a0522ab8a8838dd519a6c",
+    "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\fishnet-ablation-20261125\\gates.csv": "fbd9ad174a45faec2486d01fbc1ec57920d8b74e867584100539a95409da6931",
+    "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\fishnet-ablation-20261125\\metrics.csv": "3bd6e4ad66ef4b2f6414a085249655082838fddd1f90f5e1f5cf0edf594ec9f8",
+    "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\fishnet-ablation-20261125\\paired.csv": "4cf746afb387bf0e3bcc0a5ded353ee9b2eb5be812a9c6f8fdd43ef02e00298a"
+  },
+  "primary_panel_for_consistency": "new (600 all-three;199 naturally no-Cloud)",
+  "purpose": "Exploratory matched Fishnet ablations on selection data only",
+  "seed": 202611253,
+  "utc": "2026-11-25T20:59:22.025539+00:00",
+  "zero_weight_erasure_checks": true
+}
