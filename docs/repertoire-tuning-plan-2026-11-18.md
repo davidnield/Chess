@@ -555,3 +555,13 @@ contract for Rust implementation, the prepared 45-position White gate audit,
 versioned lookup/provider acceptance, required pool publication and the paired
 Black stricter 2,000-position ply-30 pilot before active binding changes. This
 approval authorizes those steps; it does not claim they are already completed.
+
+Implementation update, November 25: the native source policy, fractional sparse
+lookup, consumer precision fixes and targeted White review are implemented and
+tested. The real-bucket pilot passed independent source checks. Full candidate
+materialization started at 13:27 PST (approximately 3–4 hours, 46.5 GiB), alongside
+the unchanged mini pool queue. See `eval-production-integration-results-2026-11-25.md`.
+Stricter-White false admissions remain in the deliberately adverse review set;
+independent local verification is still required. No gates or canonical bindings
+changed. Full generation acceptance, required pools/opponent bindings and the
+paired Black pilot remain ahead of the optimizer/sweep runs.

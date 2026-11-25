@@ -430,3 +430,10 @@ Its `pipeline` stops at sealed reference completion. The later approved
 `python/chessdb_ensemble_pooling.py`, combines old/new selection evidence without
 new engine work. Use its `lock-choice` before `report-confirmation`; only the chosen
 contender and fixed controls are evaluated on the separate final panel.
+
+The [November 25 native evaluation integration](docs/eval-production-integration-results-2026-11-25.md)
+implements the approved score-space policy in Rust. `python/eval_policy_overlay.py`
+materializes a versioned sparse lookup; `eval_policy_overlay_verify.py` checks it
+against raw sources. `eval_white_audit.py` records checkpointed stronger references
+and `eval_policy_acceptance.py` performs the frozen selection-only White review.
+Candidate publication and canonical adoption remain separate acceptance steps.

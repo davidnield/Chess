@@ -134,8 +134,8 @@ def main():
     player={}
     if own is not None:
         def child_score(b):
-            cp=int(keys.scores(np.array([keys.board(b)],dtype=np.int64))[0])
-            return None if cp==int(MISSING) else cp
+            cp=float(keys.scores(np.array([keys.board(b)],dtype=np.int64))[0])
+            return None if cp==MISSING else cp
         player=dict(severity_mode=a.severity,own=own.moves,own_contract=own.contract(),
                     child_score=child_score,player_min_games=FIXED["weak_min_games"])
     try:

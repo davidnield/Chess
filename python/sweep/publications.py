@@ -26,13 +26,37 @@ def validate(bindings):
     if ev["lookup_sha256"]!=pinned[str(lookup/"lookup.json")]:raise ValueError("lookup publication metadata changed")
     db=Path(ev["db"]).resolve();dbmeta=checked(db/"_build.meta.json")
     if ev["db_meta_sha256"]!=pinned[str(db/"_build.meta.json")]:raise ValueError("eval DB metadata changed")
-    if (meta.get("schema")!="eval-lookup-128-v1" or meta.get("terminal") is not True
+    overlay = meta.get("schema")=="eval-lookup-128-score-overlay-v1"
+    if (meta.get("schema") not in {"eval-lookup-128-v1","eval-lookup-128-score-overlay-v1"} or meta.get("terminal") is not True
         or meta.get("book_meta_sha256")!=book_sha or dbmeta["inputs"]["book_meta_sha256"]!=book_sha
         or Path(meta["source"]["source"]).resolve()!=db
         or meta["source"]["build_meta_sha256"]!=ev["db_meta_sha256"]):
         raise ValueError("lookup, eval DB and explorer generations disagree")
     if set(meta["buckets"])!={f"bkt{i:03d}.npy" for i in range(512)}:
         raise ValueError("incomplete full-key lookup publication")
+    if overlay:
+        if meta.get("complete") is not True or meta.get("policy")!="cloud-nnue-chessdb-score-334-v1":
+            raise ValueError("unpublished or unknown source-policy overlay")
+        fallback=Path(meta["base"]["root"]).resolve()/"lookup.json"
+        prior=checked(fallback)
+        if (pinned[str(fallback)]!=meta["base"]["sha256"] or prior.get("schema")!="eval-lookup-128-v1"
+                or prior.get("source")!=meta["source"] or prior.get("book_meta_sha256")!=book_sha):
+            raise ValueError("source-policy fallback generation mismatch")
+        proof_path=ev.get("policy_verification_receipt")
+        if not proof_path:raise ValueError("source-policy pilot-ready acceptance receipt required")
+        proof=checked(proof_path)
+        required={"native_tests","real_source_check","white_review","materialization"}
+        if (proof.get("schema")!="eval-policy-pilot-ready-v1" or proof.get("policy")!=meta["policy"]
+            or proof.get("lookup_sha256")!=ev["lookup_sha256"]
+            or proof.get("fallback_sha256")!=meta["base"]["sha256"]
+            or proof.get("native_sha256")!=meta["identity"]["producer"]["native"]
+            or set(proof.get("checks",{}))!=required or any(v is not True for v in proof["checks"].values())
+            or set(proof.get("evidence",{}))!=required):
+            raise ValueError("source-policy acceptance evidence does not match this generation")
+        for item in proof["evidence"].values():
+            path=str(Path(item["path"]).resolve())
+            if pinned.get(path)!=item["sha256"]:
+                raise ValueError("source-policy acceptance evidence is not pinned")
     # Recovery publishes the independent check bundle explicitly. Older verified
     # coordinators have only the completed status receipt, also pinned above.
     if "verification_receipt" in ex:

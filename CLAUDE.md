@@ -629,3 +629,19 @@ and compares them to versioned source identities; timestamps alone are not accep
 Use a new output for changed inputs/code. Old receipts must be validated by reconstruction,
 not upgraded with invented provenance. Keep original outputs until byte comparisons pass.
 The active execution record is docs/repertoire-takeover-plan-2026-11-22.md.
+
+## Approved source policy integration (2026-11-25)
+
+Follow `docs/eval-production-integration-results-2026-11-25.md`. The native
+`rust/book_builder/src/eval_policy.rs` policy blends eligible Cloud/NNUE-Fishnet/
+ChessDB expected scores 30/30/40, uses ChessDB without Cloud, otherwise preserves
+the explicitly pinned step-1 fallback. `python/eval_policy_overlay.py` is I/O and
+receipt orchestration; do not replace native policy arithmetic with a Python
+production implementation. The float64 sparse schema avoids centipawn rounding.
+`eval_policy_overlay_verify.py`, `eval_white_audit.py` and `eval_policy_acceptance.py`
+provide independent source checks and the targeted White diagnostic. All existing
+sources/caches remain intact. Candidate materialization is running under its
+immutable D:/ release; do not edit it or treat completion as canonical adoption.
+The sweep publication validator requires full materialization and pinned
+pilot-ready evidence before candidate bindings. Paired Black and White-risk
+acceptance still precede production activation.

@@ -1,0 +1,34 @@
+{
+  "schema": "eval-policy-execution-verification-v1",
+  "utc": "2026-11-25T13:33:06.816044-08:00",
+  "native_rust_policy_tests": {
+    "passed": 4
+  },
+  "overlay_integration_tests": {
+    "passed": 6
+  },
+  "legacy_wide_lookup_tests": {
+    "passed": 1
+  },
+  "full_key_builder_referee_tests": {
+    "passed": 2
+  },
+  "full_key_verification_tests": {
+    "passed": 4,
+    "skipped": 1,
+    "skip_reason": "optional installed-engine smoke; 14 real SF18 searches ran separately"
+  },
+  "publication_tests": {
+    "passed": 2
+  },
+  "native_differential_suite": "PASS; no differences",
+  "native_sha256": "76bd48af7786067b05333eff3797961078fdb3f010fecf1646c86d463eed5a9e",
+  "logs": {
+    "native-differential-tests.log": "b67dc661b80bf4bc79ab92de19d6e0ad164067bf38e33bc19926f99c2f34cabb",
+    "overlay-tests.log": "1139fba2852a649c9b98812f8411dd8ff93546bc28a0f10c186806acc9ff500f",
+    "verification-tests.log": "10ea24bf020f6083f4af575b2f42a3d43db4e5918ec13be2fd9e7d770601bc05",
+    "book-tests.log": "02252230f4a9812534177d8b22fa90efd0561265f9430a9c4cbc3d3e94388d3c"
+  },
+  "full_overlay": "D:/chess/eval-lookup-p51-score334-20261125-v1",
+  "production_binding_changed": false
+}

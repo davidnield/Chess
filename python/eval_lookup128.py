@@ -19,6 +19,9 @@ from zobrist128 import zobrist128
 SCHEMA = "eval-lookup-128-v1"
 KEY = np.dtype([("lo", "<i8"), ("hi", "<i8")])
 ROW = np.dtype(KEY.descr + [("cp", "<i2"), ("source", "u1")])
+OVERLAY_SCHEMA = "eval-lookup-128-score-overlay-v1"
+OVERLAY_ROW = np.dtype(KEY.descr + [("cp", "<f8"), ("source", "u1")])
+POLICY = "cloud-nnue-chessdb-score-334-v1"
 CLOUD, FISHNET, TERMINAL = 1, 2, 3
 
 
@@ -30,10 +33,31 @@ def keys(lo, hi):
 
 
 class WideEvalLookup:
-    def __init__(self, root):
+    def __init__(self, root, *, allow_partial=False, verify_hashes=False):
         self.root = Path(root)
-        meta = read_json(self.root / "lookup.json")
-        if meta["schema"] != SCHEMA:
+        manifest = self.root / "lookup.json"
+        if allow_partial and not manifest.exists():
+            manifest = self.root / "pilot.json"
+        meta = read_json(manifest)
+        self.base = None
+        self.row = ROW
+        self.verify_hashes = verify_hashes
+        if meta["schema"] == OVERLAY_SCHEMA:
+            if meta.get("policy") != POLICY or (not meta.get("complete") and not allow_partial):
+                raise ValueError("unpublished or unknown score-policy overlay")
+            if meta.get("complete") and set(meta["buckets"]) != {f"bkt{b:03d}.npy" for b in range(512)}:
+                raise ValueError("incomplete overlay bucket set")
+            base_root = Path(meta["base"]["root"])
+            if base_root.resolve() == self.root.resolve():
+                raise ValueError("self-referential evaluation overlay")
+            if sha(base_root / "lookup.json") != meta["base"]["sha256"]:
+                raise ValueError("bound fallback generation changed")
+            if read_json(base_root / "lookup.json")["schema"] != SCHEMA:
+                raise ValueError("overlay must bind the pre-change lookup, not another overlay")
+            self.base = WideEvalLookup(base_root, verify_hashes=True)
+            self.row = OVERLAY_ROW
+            self.verify_hashes = True
+        elif meta["schema"] != SCHEMA:
             raise ValueError(f"unexpected lookup schema in {self.root}")
         self.files = meta["buckets"]
         self.mapped = {}
@@ -42,16 +66,22 @@ class WideEvalLookup:
         """Return White-POV cp and source. Missing pairs return (MISSING, 0)."""
         queries = keys(lo, hi)
         q = queries.reshape(-1)
-        cp = np.full(len(q), MISSING, dtype=np.int16)
-        sources = np.zeros(len(q), dtype=np.uint8)
+        if self.base is None:
+            cp = np.full(len(q), MISSING, dtype=np.int16)
+            sources = np.zeros(len(q), dtype=np.uint8)
+        else:
+            cp, sources = self.base.lookup(q["lo"], q["hi"])
+            cp = cp.astype(np.float64)
         buckets = q["lo"] % 512
         for b in np.unique(buckets):
             name = f"bkt{b:03d}.npy"
             if name not in self.files:
                 continue
             if name not in self.mapped:
+                if self.verify_hashes and sha(self.root / name) != self.files[name]["sha256"]:
+                    raise ValueError(f"lookup content differs from receipt: {name}")
                 arr = np.load(self.root / name, mmap_mode="r", allow_pickle=False)
-                if arr.dtype != ROW or len(arr) != self.files[name]["rows"]:
+                if arr.dtype != self.row or len(arr) != self.files[name]["rows"]:
                     raise ValueError(f"unexpected array layout in {name}")
                 self.mapped[name] = arr
             arr = self.mapped[name]
@@ -62,6 +92,12 @@ class WideEvalLookup:
             index, selected = index[valid], selected[valid]
             equal = both[index] == q[selected]
             index, selected = index[equal], selected[equal]
+            if self.base is not None:
+                values, provenance = arr["cp"][index], arr["source"][index]
+                if (not np.isfinite(values).all() or (abs(values) > 2000).any()
+                        or not np.isin(provenance, [6, 7]).all()
+                        or (sources[selected] == TERMINAL).any()):
+                    raise ValueError("invalid overlay value/provenance or terminal override")
             cp[selected], sources[selected] = arr["cp"][index], arr["source"][index]
         return cp.reshape(queries.shape), sources.reshape(queries.shape)
 

@@ -1,0 +1,150 @@
+{
+  "cases": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\eval-production-acceptance-20261125\\white-gate-review.csv",
+  "code": {
+    "chessdb_policy_validation.py": "1c94bf4374f3dcacb3089c04ea6027c762584fdb08130e841ed0728cf5cd773d",
+    "eval_white_audit.py": "796ab46e053178a1948e467010a348818d67c92003c8e971b106eb4c6b4b88d7",
+    "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+    "zobrist.py": "225bba9a61712c7986a181554757856fac1615a09dfd0beb7f6a533da06d98b5",
+    "zobrist128.py": "7933ad59ce93d00de3d7e4205485cfd5ee1ab7f6725159c426b30f7f07e60757"
+  },
+  "engine": "D:\\chess\\bin\\stockfish-18\\stockfish-windows-x86-64-avx2.exe",
+  "engine_sha256": "c86215fa1977d53b82ed854540a4c7b025be4cd042276c85ba3de53fb9118911",
+  "production_binding_changed": false,
+  "schema": "white-gate-reference-audit-v1",
+  "selection_only": true,
+  "settings": {
+    "time_seconds": 180,
+    "workers": 4
+  },
+  "sources": {
+    "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\eval-production-acceptance-20261125\\white-gate-review.csv": "17f53c9ca459f1275ead5f8ee876d887fbd731b08000bcde2087ef6083f960c3"
+  },
+  "tasks": [
+    {
+      "fen": "r1bqkb1r/ppp2ppp/3p1n2/4P3/8/5B2/PPP2PPP/RNBQK2R b KQkq - 0 1",
+      "id": "-414372199061713906:5276996902243609274",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -106.0,
+      "parent": "-414372199061713906:5276996902243609274",
+      "target_depth": 30
+    },
+    {
+      "fen": "r3kb1r/p4ppp/1qp1p3/3p1b2/3PnB2/1QP2N2/PP1N1PPP/R3K2R b KQkq - 0 1",
+      "id": "-5249418534084592118:-5463071078360941398",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -102.0,
+      "parent": "-5249418534084592118:-5463071078360941398",
+      "target_depth": 30
+    },
+    {
+      "fen": "rn1qk2r/pp2bppp/3pbn2/2pNp3/2B1P3/P4N1P/1PPP1PP1/R1BQK2R b KQkq - 0 1",
+      "id": "7795453686918307866:1095003019082964591",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -106.0,
+      "parent": "7795453686918307866:1095003019082964591",
+      "target_depth": 30
+    },
+    {
+      "fen": "r1bq1rk1/pp2bppp/2n1pn2/2Pp4/3B4/2N1PN2/PPP2PPP/R2QKB1R w KQ - 0 1",
+      "id": "-2248099480488620542:-2510943427045736739",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -19.0,
+      "parent": "-2248099480488620542:-2510943427045736739",
+      "target_depth": 30
+    },
+    {
+      "fen": "r4rk1/pppnqpp1/3bpn1p/3pNb2/3P1P2/2P1P1B1/PP1NB1PP/R2QK2R b KQ - 0 1",
+      "id": "-2609329244751405034:8242360979865943325",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -36.0,
+      "parent": "-2609329244751405034:8242360979865943325",
+      "target_depth": 30
+    },
+    {
+      "fen": "r1bqk1r1/ppp1bp2/2np1n2/4p2p/2B1P1p1/2PP1N1P/PP3PPN/R1BQ1RK1 w q - 0 1",
+      "id": "-2995134593594847202:-982515174507240835",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -47.0,
+      "parent": "-2995134593594847202:-982515174507240835",
+      "target_depth": 30
+    },
+    {
+      "fen": "rnbqkbnr/1p2pppp/p1p5/3p2B1/4P3/2NP4/PPP2PPP/R2QKBNR b KQkq - 0 1",
+      "id": "-3120386401110211054:5377884015765113647",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -46.0,
+      "parent": "-3120386401110211054:5377884015765113647",
+      "target_depth": 30
+    },
+    {
+      "fen": "r1bqk2r/pppnbppp/5n2/3pp3/3P4/4P1P1/PPP1NPBP/RNBQK2R w KQkq - 0 1",
+      "id": "-3440012436711742946:-6920408152752841710",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -35.0,
+      "parent": "-3440012436711742946:-6920408152752841710",
+      "target_depth": 30
+    },
+    {
+      "fen": "r1bqk2r/ppp1b1pp/2np1n2/4p3/3P4/2P2N2/PP2QPPP/RNB1KB1R w KQkq - 0 1",
+      "id": "-3932821105160542178:-8222726592422693108",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -54.0,
+      "parent": "-3932821105160542178:-8222726592422693108",
+      "target_depth": 30
+    },
+    {
+      "fen": "rn1qkb1r/ppp1pppp/1n1p4/4Pb2/5P2/6Q1/PPPP2PP/RNB1KBNR w KQkq - 0 1",
+      "id": "-620086619793880574:1941498036141091987",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -40.0,
+      "parent": "-620086619793880574:1941498036141091987",
+      "target_depth": 30
+    },
+    {
+      "fen": "rnbqkb1r/ppp1p1pp/5n2/3p1p2/3P3N/6P1/PPP1PP1P/RNBQKB1R b KQkq - 0 1",
+      "id": "1140636897844889618:-427598132343597166",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -48.0,
+      "parent": "1140636897844889618:-427598132343597166",
+      "target_depth": 30
+    },
+    {
+      "fen": "rn2kb1r/pp2pppp/1qp2n2/3p1bB1/3P4/1QP2N2/PP2PPPP/RN2KB1R b KQkq - 0 1",
+      "id": "2512185262647822878:-1113421357719633715",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -35.0,
+      "parent": "2512185262647822878:-1113421357719633715",
+      "target_depth": 30
+    },
+    {
+      "fen": "rnbqkbnr/pp1pppp1/8/2p4p/7P/6PN/PPPPPP2/RNBQKB1R b KQkq - 0 1",
+      "id": "7394668879952971786:-431615628196964255",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -41.0,
+      "parent": "7394668879952971786:-431615628196964255",
+      "target_depth": 30
+    },
+    {
+      "fen": "rnb1qr1k/ppp3bp/5np1/4ppB1/2P5/1QNBPN2/PP3PPP/R4RK1 w - - 0 1",
+      "id": "7942280571237006878:7203767668073265595",
+      "kind": "parent",
+      "minimum_depth": 28,
+      "old_reference": -50.0,
+      "parent": "7942280571237006878:7203767668073265595",
+      "target_depth": 30
+    }
+  ]
+}

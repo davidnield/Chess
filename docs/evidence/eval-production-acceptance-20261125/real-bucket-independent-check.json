@@ -1,0 +1,56 @@
+{
+  "manifest": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\eval-policy-pilot-20261125-v1\\overlay\\pilot.json",
+  "manifest_sha256": "b5476f95006f30cb98ae90a76e4f9237ec88773ebbaa2b60e8560c5d146e15ab",
+  "production_binding_changed": false,
+  "records": [
+    {
+      "base_warm_seconds": 0.15320000000065193,
+      "bucket": 0,
+      "cold_seconds": 1.702999999979511,
+      "max_score_error": 2.220446049250313e-16,
+      "queried": 5631,
+      "source_counts": {
+        "1": 5,
+        "2": 1663,
+        "3": 574,
+        "6": 558,
+        "7": 2831
+      },
+      "warm_seconds": 0.19679999999934808
+    },
+    {
+      "base_warm_seconds": 0.19679999999934808,
+      "bucket": 255,
+      "cold_seconds": 1.875,
+      "max_score_error": 2.220446049250313e-16,
+      "queried": 5632,
+      "source_counts": {
+        "1": 4,
+        "2": 1673,
+        "3": 562,
+        "6": 542,
+        "7": 2851
+      },
+      "warm_seconds": 0.2593999999924563
+    },
+    {
+      "base_warm_seconds": 0.15940000000409782,
+      "bucket": 511,
+      "cold_seconds": 1.75,
+      "max_score_error": 3.3306690738754696e-16,
+      "queried": 5630,
+      "source_counts": {
+        "1": 3,
+        "2": 1665,
+        "3": 575,
+        "6": 550,
+        "7": 2837
+      },
+      "warm_seconds": 0.18759999999310822
+    }
+  ],
+  "sampled_positions": 16893,
+  "schema": "eval-policy-overlay-independent-check-v1",
+  "script_sha256": "c3a8bea490f0e7a2efa4e56c9427ea4a1625bf86dfd165324efdd5700ce9c50f",
+  "verified": true
+}

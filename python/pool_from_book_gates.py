@@ -198,15 +198,32 @@ def _rem(x: int) -> int:
     return x % 512
 
 
-def audit_wide_cp(children, lookup):
+def audit_wide_cp(children, lookup, _verify=False):
     """Independent lookup: bisect only the low column, then compare high halves."""
     from eval_arrays import MISSING
+    from month_archive import sha
+    root = Path(lookup)
+    meta = json.loads((root/'lookup.json').read_text(encoding='utf8'))
     lo = children.struct.field("lo").to_numpy()
     hi = children.struct.field("hi").to_numpy()
-    cp = np.full(len(lo), np.nan)
+    if meta['schema'] == 'eval-lookup-128-score-overlay-v1':
+        base = Path(meta['base']['root'])
+        if (meta.get('complete') is not True or base.resolve() == root.resolve()
+                or sha(base/'lookup.json') != meta['base']['sha256']
+                or json.loads((base/'lookup.json').read_text(encoding='utf8'))['schema'] != 'eval-lookup-128-v1'):
+            raise ValueError('unpublished overlay or changed fallback in independent audit')
+        cp = audit_wide_cp(children, base, _verify=True)
+        _verify = True
+    elif meta['schema'] == 'eval-lookup-128-v1':
+        cp = np.full(len(lo), np.nan)
+    else:
+        raise ValueError('unknown evaluation schema in independent audit')
     buckets = lo % 512
     for b in np.unique(buckets):
-        arr = np.load(Path(lookup) / f"bkt{b:03d}.npy", mmap_mode="r", allow_pickle=False)
+        name = f'bkt{b:03d}.npy'
+        if _verify and sha(root/name) != meta['buckets'][name]['sha256']:
+            raise ValueError('changed evaluation bucket in independent audit')
+        arr = np.load(root/name, mmap_mode="r", allow_pickle=False)
         indices = np.flatnonzero(buckets == b)
         first = np.searchsorted(arr["lo"], lo[indices])
         last = np.searchsorted(arr["lo"], lo[indices], side="right")

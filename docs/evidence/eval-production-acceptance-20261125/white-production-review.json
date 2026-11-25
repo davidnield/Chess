@@ -1,0 +1,64 @@
+{
+  "all_review_references_depth_at_least_28": true,
+  "counts": [
+    {
+      "candidate_clear_false_admissions": 4,
+      "candidate_false_admissions": 9,
+      "candidate_only_false_admissions": 1,
+      "control_false_admissions": 12,
+      "gate": "permissive",
+      "reference_admission_changes": 1,
+      "reviewed": 15
+    },
+    {
+      "candidate_clear_false_admissions": 19,
+      "candidate_false_admissions": 20,
+      "candidate_only_false_admissions": 9,
+      "control_false_admissions": 12,
+      "gate": "stricter",
+      "reference_admission_changes": 6,
+      "reviewed": 30
+    }
+  ],
+  "inputs": {
+    "cases": {
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\eval-production-acceptance-20261125\\white-gate-review.csv",
+      "sha256": "17f53c9ca459f1275ead5f8ee876d887fbd731b08000bcde2087ef6083f960c3"
+    },
+    "panel": {
+      "path": "D:\\chess\\chessdb-ensemble-pooling-20261125-v1\\pooled-positions.parquet",
+      "sha256": "b7fef772a430385760a80814da280e3d4e0e6a35fe38d36613d5644e07c96ff9"
+    },
+    "references": {
+      "identity": "7473b3dbb3d7a36e06cffbdfa67a577709997ff38ad687ef4b5c3f25a2531dfb",
+      "path": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\white-audit-20261125-v1\\results"
+    }
+  },
+  "integer_rounding_gate_changes": 0,
+  "interpretation": "Targeted admission errors remain diagnostic: neither random nor reach-weighted. Control is the frozen research proposal, not the step-1 Black pilot control. Relative gates and actual book effects require the paired pilot.",
+  "max_integer_rounding_score_error": 0.0004571567074131977,
+  "max_native_parity_error": 1.1102230246251565e-16,
+  "producer": {
+    "arrow": "24.0.0",
+    "duckdb": "1.5.2",
+    "native": "76bd48af7786067b05333eff3797961078fdb3f010fecf1646c86d463eed5a9e",
+    "numpy": "2.4.4",
+    "python": {
+      "chessdb_integrity.py": "4e1c051b08659d959043281ee5fd808342090d9c102a2432c0ef008c7ffde497",
+      "chessdb_lookup_run.py": "02e1e70dfbc485d4aa42b3f9d25825a8cabdb29ab561cfafa23545e9cd98a1ee",
+      "chessdb_publication.py": "362a8aa99cad57bd8a818c080a42ca23b7434f7f8ed3b287974452da7d68f0bd",
+      "eval_lookup128.py": "3f0ce227cec8eb497b72bff6f9750f1d825399f7eeed2571c4f69fb51d3bbd25",
+      "eval_lookup_cdb.py": "a73e20b2641cac91f7ef417b722533a0c5301a8cb98950cf1c0c34fffe54b6ba",
+      "eval_policy_overlay.py": "e1b6e2a85a142cf52675573da2dd6cae97671ae0a68a4630d6285d7737bda181",
+      "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb"
+    }
+  },
+  "production_binding_changed": false,
+  "results_sha256": "3a2bb7527df03cd3d23a48fd12961d349f274f1d4fc2e56c9488ed5d413a1ef9",
+  "review_script_sha256": "4412596974f3c06ed984d730749534bcb3c0852a5f07797ae7fe06af57c18ad7",
+  "reviewed": 45,
+  "schema": "eval-white-production-path-review-v1",
+  "selection_only": true,
+  "stronger_qualified": 14,
+  "stronger_requested": 14
+}

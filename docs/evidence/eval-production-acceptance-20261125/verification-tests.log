@@ -1,0 +1,98 @@
+arrivals: 2 groups of 1 source buckets, 2 to build -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpmkvfando\work\arrivals
+buckets: 2 requested, 2 to build (0 collision hashes dropped as parents)
+  position_stats_pooled_rounds.parquet: 7 rows
+  position_stats_aux_pooled_rounds.parquet: 5 rows
+finalize: metas written, C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpmkvfando\work\_POOL.DONE
+Prepared 1/2 source parts (0s)
+Prepared 2/2 source parts (0s)
+eval weight 1 (default)
+slice prior 0.5581; eps 0.0001; budgets [2]; method dp
+2 source decisions loaded for collection
+min-games 5 (the pool's floor)
+collecting subgraph edges...
+uncut own moves: black, recipe 700a0251c13646d5bbcac72204661e52d25c184767f274cfd2da2dbd69e114d3
+  level 1: fetched 1 nodes, frontier 3, edges so far 3
+  level 2: fetched 4 nodes, frontier 4, edges so far 8
+  level 3: fetched 8 nodes, frontier 0, edges so far 10
+  10 edges, 6 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Rapid' elo_band=1800
+  2 source decisions in slice
+evals (mmap)...
+  9 of 11 positions eval-covered
+  aux rows for 6 subgraph nodes
+building graph...
+  3 our nodes, 3 opponent nodes (seconds: {'convert_in': 0.007523059844970703, 'rust': 0.0, 'convert_out': 0.0009996891021728516})
+  weak stop: 5 our-turn and 2 opponent-turn positions
+  weak stop model: {'x_weak': 2, 'x_fallback_pool': 3, 'moves_engine_only': 2, 'x_walked': 2, 'x_engine_only': 2, 'x_none': 1, 'y_walked': 0, 'y_engine_only': 2, 'applied_our_l': 2, 'applied_cand_leaf': 2, 'applied_opp_leaf': 2, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 2 (path-sum)
+b=2: booked 2 distinct (2 path-charged), root value 0.6284
+       curve 0.6284 -> book_b2.parquet
+
+done in 0s; peak commit 0.6 GB
+2 parents to verify: {'rare prescription': 2}
+2 parents, {'parents_searched': 2, 'parent_cache_hits': 0, 'restricted_searched': 4, 'restricted_cache_hits': 0, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpmkvfando\rounds\round-00\overlay.parquet
+{"round": 0, "book": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\book_b2.parquet", "root_value": 0.6284098085302787, "subgraph_nodes": 6, "our_nodes": 3, "peak_commit_gb": 0.58, "disputes": 2, "disputes_booked": 2, "build_seconds": 0.4059999999590218, "build_reused": false, "verify_seconds": 0.875, "verify_reused": false, "requested": 2, "by_reason": {"rare prescription": 2}, "searches": {"parents_searched": 2, "parent_cache_hits": 0, "restricted_searched": 4, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "deep_searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "retried_parents": 0, "deep_carried_forward": 0, "engine_choice_unplayed": 0, "receipts": ["C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\build.receipt.json", "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\verify.receipt.json"]}
+eval weight 1 (default)
+slice prior 0.5581; eps 0.0001; budgets [2]; method dp
+2 source decisions loaded for collection
+min-games 5 (the pool's floor)
+collecting subgraph edges...
+uncut own moves: black, recipe 700a0251c13646d5bbcac72204661e52d25c184767f274cfd2da2dbd69e114d3
+  level 1: fetched 1 nodes, frontier 3, edges so far 3
+  level 2: fetched 4 nodes, frontier 2, edges so far 8
+  level 3: fetched 6 nodes, frontier 0, edges so far 9
+  9 edges, 5 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Rapid' elo_band=1800
+  2 source decisions in slice
+evals (mmap)...
+  8 of 10 positions eval-covered
+  aux rows for 5 subgraph nodes
+  engine candidates at 2 positions; 3 differ from the cached eval by more than 25 cp (the fresh eval is used)
+building graph...
+  3 our nodes, 2 opponent nodes (seconds: {'convert_in': 0.017033100128173828, 'rust': 0.0, 'convert_out': 0.0010106563568115234})
+  weak stop: 4 our-turn and 1 opponent-turn positions
+  weak stop model: {'x_weak': 2, 'x_fallback_pool': 2, 'moves_engine_only': 2, 'x_walked': 2, 'x_none': 1, 'x_engine_only': 1, 'y_walked': 0, 'y_engine_only': 1, 'applied_our_l': 2, 'applied_cand_leaf': 1, 'applied_opp_leaf': 1, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 2 (path-sum)
+b=2: booked 2 distinct (2 path-charged), root value 0.5254
+       curve 0.5254 -> book_b2.parquet
+
+done in 0s; peak commit 0.7 GB
+0 parents to verify: {}
+0 parents, {'parents_searched': 0, 'parent_cache_hits': 0, 'restricted_searched': 0, 'restricted_cache_hits': 0, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpmkvfando\rounds\round-01\overlay.parquet
+{"round": 1, "book": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\book_b2.parquet", "root_value": 0.525407523190444, "subgraph_nodes": 5, "our_nodes": 3, "peak_commit_gb": 0.65, "disputes": 0, "disputes_booked": 0, "build_seconds": 0.5160000000032596, "build_reused": false, "verify_seconds": 0.9689999999827705, "verify_reused": false, "requested": 0, "by_reason": {}, "searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "deep_searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "retried_parents": 0, "deep_carried_forward": 0, "engine_choice_unplayed": 0, "receipts": ["C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\build.receipt.json", "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\verify.receipt.json"]}
+stable
+{"round": 0, "book": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\book_b2.parquet", "root_value": 0.6284098085302787, "subgraph_nodes": 6, "our_nodes": 3, "peak_commit_gb": 0.58, "disputes": 2, "disputes_booked": 2, "build_seconds": 0.4059999999590218, "build_reused": true, "verify_seconds": 0.875, "verify_reused": true, "requested": 2, "by_reason": {"rare prescription": 2}, "searches": {"parents_searched": 2, "parent_cache_hits": 0, "restricted_searched": 4, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "deep_searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "retried_parents": 0, "deep_carried_forward": 0, "engine_choice_unplayed": 0, "receipts": ["C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\build.receipt.json", "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-00\\verify.receipt.json"]}
+{"round": 1, "book": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\book_b2.parquet", "root_value": 0.525407523190444, "subgraph_nodes": 5, "our_nodes": 3, "peak_commit_gb": 0.65, "disputes": 0, "disputes_booked": 0, "build_seconds": 0.5160000000032596, "build_reused": true, "verify_seconds": 0.9689999999827705, "verify_reused": true, "requested": 0, "by_reason": {}, "searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "deep_searches": {"parents_searched": 0, "parent_cache_hits": 0, "restricted_searched": 0, "restricted_cache_hits": 0, "nodes": 0, "search_seconds": 0.0}, "retried_parents": 0, "deep_carried_forward": 0, "engine_choice_unplayed": 0, "receipts": ["C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\build.receipt.json", "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpmkvfando\\rounds\\round-01\\verify.receipt.json"]}
+stable
+2 positions to propose for, 0 cached, 2 to search
+2 positions to propose for, 1 cached, 1 to search
+  1/1
+2 proposals -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmphxtvrhra\proposals.parquet
+2 positions to propose for, 2 cached, 0 to search
+2 positions to propose for, 0 cached, 2 to search
+  2/2
+2 proposals -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmphxtvrhra\split-proposals.parquet
+1 parents to verify: {'rare prescription': 1}
+1 parents, {'parents_searched': 0, 'parent_cache_hits': 1, 'restricted_searched': 0, 'restricted_cache_hits': 2, 'nodes': 0, 'search_seconds': 0.0, 'legacy_parents_reused': 1} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\first-overlay.parquet
+1 parents to verify: {'rare prescription': 1}
+1 parents, {'parents_searched': 1, 'parent_cache_hits': 0, 'restricted_searched': 2, 'restricted_cache_hits': 0, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\second-overlay.parquet
+1 parents to verify: {'rare prescription': 1}
+1 parents, {'parents_searched': 0, 'parent_cache_hits': 1, 'restricted_searched': 1, 'restricted_cache_hits': 2, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\new-rival-overlay.parquet
+1 parents to verify: {'rare prescription': 1}
+1 parents, {'parents_searched': 0, 'parent_cache_hits': 1, 'restricted_searched': 0, 'restricted_cache_hits': 3, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\repeat-overlay.parquet
+0 parents to verify: {}
+0 parents, {'parents_searched': 0, 'parent_cache_hits': 0, 'restricted_searched': 0, 'restricted_cache_hits': 0, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\closed-overlay.parquet
+1 parents to verify: {'frontier dispute': 1}
+1 parents, {'parents_searched': 0, 'parent_cache_hits': 1, 'restricted_searched': 1, 'restricted_cache_hits': 1, 'nodes': 0, 'search_seconds': 0.0} -> C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\test-tmp\tmpd6hxumx6\front-overlay.parquet
+1 parents to verify: {'rare prescription': 1}
+.s...
+----------------------------------------------------------------------
+Ran 5 tests in 12.305s
+
+OK (skipped=1)

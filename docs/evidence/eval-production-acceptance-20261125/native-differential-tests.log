@@ -1,0 +1,19 @@
+  [PASS] V: cp_to_expected_score = stage3's (math.exp) on every int16  0 of 65536 differ
+  [PASS] V: ... and = the polars expression the eval loaders use  0 differ
+  [PASS] V: ws_to_cp = budget_core's (our_white=True)  0 of 20007 differ
+  [PASS] V: ws_to_cp = budget_core's (our_white=False)  0 of 20007 differ
+  [PASS] L: leaf_edge_value, every blend and colour  0 differ
+  [PASS] L: leaf_node_value, every blend and colour (empty nodes included)  0 differ
+  [PASS] A: aux_row_buckets, both colours (missing rows and evals included)  0 differ
+  [PASS] A: aux_opp_mix, both colours, both coverage rules, dynamic weights  0 differ
+  [PASS] G: final_candidates (gates, loss limit, rare verification, strict source, engine moves, vetoes) = budget_core's  252,000 node solves (6,284 disputes, 121,962 restored, 45,788 rejected sources), 0 differ
+  [PASS] R: optimistic_reach and route_plies = budget_core's (orders, reach bits, plies)  800 graphs, 10,575 reached positions (3,264 with a route ply other than the legacy ply), 0 differ
+  [PASS] B: build_graph (Rust CSR, back as a Graph) = budget_core's: nodes, candidates, kids, floors, reach/ply/route orders, meta, disputes, other  1000 graphs, 16,208 nodes, 0 differ; exercised: disputes 431, crack_edges 2,691, named 479, engine 534, rejected 820, other 636, loss_exceptions 752, floors 2,730, restored 1,220
+  [PASS] D: RsGraph = budget_core: set order, topo_up (order, cuts), topo_down, stop positions and values, every curve, extract_book, match_distinct (probe curves, plain bmax, scan cap), stickiness  436 graphs, 16,968 nodes, 4604 extractions; exercised: 136 with cycles cut, 2258 flattened curves, 183 sticky, 6954 matches charged above the target; differ: {'set order': 0, 'topo_up': 0, 'topo_down': 0, 'stop positions': 0, 'stop values': 0, 'curves': 0, 'extract': 0, 'match': 0}
+  [PASS] P: RsGraph book_result and polish_book = budget_core's (dict path and compiled path): the book in insertion order, value, size, trims, steps, moves by kind, the sticky objective  431 graphs (5 not closed, skipped), 2820 polishes (185 trimmed, 907 improved, 454 sticky, 2366 also on the compiled path); moves by kind {'switch': 61, 'fill': 709, 'exchange': 82, 'rebook': 216, 'drop': 38, 'swap': 1, 'line': 4}; differ: {'book_result': 0, 'polish': 0, 'compiled': 0}
+  [PASS] S: RsGraph price_search and policy_reach = budget_core's: the book, its reach and values, lam, the sweep, the nearest sizes, the bound, every polish's stats; optimistic and seeded reach, polish on and off, stickiness  494 graphs (6 not closed, skipped; 132 sticky), 4740 searches (1412 landing exactly on the target); differ: {'policy_reach': 0, 'search': 0}
+  [PASS] C: the columnar path = the dict path: build_graph_csr's input arrays from the collector's frame, the graph view (node sets, reach, ply, EPDs, meta) and the RsGraph made straight from the Rust output (orders, curves, books, price search)  263 graphs, 8,156 nodes; differ: {'inputs': 0, 'view': 0, 'rsgraph': 0}
+  [PASS] T: the sampled tables on the Rust graph = sampled_stop / sampled_other on the Graph: the stop dump (rows, order, plies, refusals past the horizon), the other dump, the other table's application (report and every const_base), finished-game outcomes  123 graphs, 1,394 stop rows, 63 with other buckets, 38 calibrated; differ: {'stop dump': 0, 'other dump': 0, 'other apply': 0, 'terminal': 0}
+  [PASS] W: the collector's walk in Rust = collect_subgraph_edges on random pools (floors, uncut own moves, engine proposals, an opponent prior's replaced replies): the same frame; that frame through frame_inputs = the builder's dicts through graph_to_csr; the engine-target rows from the graph view = from the Graph  100 pools (65 with a prior), 2,142 rows; differ: {'frame': 0, 'inputs': 0, 'targets': 0}
+
+PASS

@@ -94,11 +94,15 @@ gate-critical choices and practical book effects.
 - [x] Independent confirmation and matched Fishnet follow-up completed and recorded.
 - [x] Machine-readable decision contract saved; existing active bindings preserved.
 - [x] Targeted White review cases prepared and checked against existing gate counts.
-- [ ] Rust provider/materializer implementation and tests.
-- [ ] Stronger-reference/production-path White audit and bounded lookup acceptance.
+- [x] Rust provider/materializer implementation and tests.
+- [x] Stronger-reference/production-path White audit and bounded lookup acceptance.
+- [ ] Full versioned overlay materialization (started 13:27 PST November 25), final receipts and pilot-ready bindings.
 - [ ] Full required pool publication and opponent-input binding.
 - [ ] Paired Black pilot and final source-policy activation.
 - [ ] Continue native optimizer experiments and main repertoire tuning matrix.
 
-These unchecked stages are planned work, not background jobs already running.
-The mini's existing bucket coordinator and hourly monitor continue unchanged.
+The full overlay materialization is now running alongside the existing mini pool
+coordinator. Other unchecked stages are prerequisites/planned work, not background
+jobs already running. See `eval-production-integration-results-2026-11-25.md` for
+the implementation, verification, White audit limitations, current job paths and
+resume commands. Active production bindings have not changed.

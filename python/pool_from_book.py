@@ -543,7 +543,7 @@ def _bucket_task(task: tuple, *, wide=False, sparse_endings=False, release_edges
         st["other_children"] = children.num_rows
         st["other_children_covered"] = int(hit.sum())
         ev = pa.table({"child_hash": children.column("child_hash").filter(hit),
-                       "cp": pa.array(cp[hit].astype(np.int32), pa.int32())})
+                       "cp": pa.array(cp[hit].astype(np.float64), pa.float64())})
         con.register("ev_arrow", ev)
         con.execute("CREATE TEMP TABLE ev AS SELECT * FROM ev_arrow")
         con.unregister("ev_arrow")

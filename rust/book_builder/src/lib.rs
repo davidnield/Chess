@@ -6,6 +6,7 @@
 pub mod collect;
 pub mod core;
 pub mod dp;
+pub mod eval_policy;
 pub mod gates;
 pub mod graph;
 pub mod polish;
@@ -59,6 +60,31 @@ fn cp_to_expected_score<'py>(py: Python<'py>, cp: PyReadonlyArray1<'py, f64>)
                              -> PyResult<Bound<'py, PyArray1<f64>>> {
     let v: Vec<f64> = cp.as_slice()?.iter().map(|&c| value::cp_to_expected_score(c)).collect();
     Ok(PyArray1::from_vec(py, v))
+}
+
+/// Versioned cached-source evaluation policy; NaN means absent, never equality.
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn eval_source_policy<'py>(py: Python<'py>, cloud_cp: PyReadonlyArray1<'py, f64>,
+    cloud_mate: PyReadonlyArray1<'py, f64>, fishnet_cp: PyReadonlyArray1<'py, f64>,
+    fishnet_mate: PyReadonlyArray1<'py, f64>, nnue: PyReadonlyArray1<'py, u8>,
+    chessdb_stm: PyReadonlyArray1<'py, f64>, white_to_move: PyReadonlyArray1<'py, u8>,
+    fallback_cp: PyReadonlyArray1<'py, f64>, fallback_source: PyReadonlyArray1<'py, u8>)
+    -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<u8>>)> {
+    let c=cloud_cp.as_slice()?; let cm=cloud_mate.as_slice()?;
+    let f=fishnet_cp.as_slice()?; let fm=fishnet_mate.as_slice()?;
+    let n=nnue.as_slice()?; let cb=chessdb_stm.as_slice()?; let w=white_to_move.as_slice()?;
+    let b=fallback_cp.as_slice()?; let bs=fallback_source.as_slice()?;
+    same_len(c.len(), &[cm.len(), f.len(), fm.len(), n.len(), cb.len(), w.len(), b.len(), bs.len()])?;
+    let mut cps=Vec::with_capacity(c.len()); let mut scores=Vec::with_capacity(c.len());
+    let mut sources=Vec::with_capacity(c.len());
+    for i in 0..c.len() {
+        if n[i]>1 || w[i]>1 { return Err(PyValueError::new_err("invalid source boolean")); }
+        let r=eval_policy::select(c[i],cm[i],f[i],fm[i],n[i]==1,cb[i],w[i]==1,b[i],bs[i])
+            .map_err(PyValueError::new_err)?;
+        cps.push(r.cp); scores.push(r.score); sources.push(r.source);
+    }
+    Ok((PyArray1::from_vec(py,cps),PyArray1::from_vec(py,scores),PyArray1::from_vec(py,sources)))
 }
 
 /// ws_to_cp over an array of expected scores.
@@ -332,6 +358,8 @@ fn reach_batch<'py>(
 fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<position_ids::RsPositionIds>()?;
     m.add_function(wrap_pyfunction!(cp_to_expected_score, m)?)?;
+    m.add_function(wrap_pyfunction!(eval_source_policy, m)?)?;
+    m.add("EVAL_SOURCE_POLICY", eval_policy::POLICY)?;
     m.add_function(wrap_pyfunction!(ws_to_cp, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_edge_values, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_node_values, m)?)?;
