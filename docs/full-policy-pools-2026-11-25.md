@@ -52,6 +52,27 @@ After that first bucket, the larger all-ratings pilot range measured about 202 M
 
 ## Later input-consumption milestone
 
+### Mini bucket production completed November 26
+
+At **05:32:26 PST November 26**, the mini coordinator completed all 504 assigned
+buckets; together with eight retained original buckets, all **512/512** are present.
+The worker is healthy and idle, with no queued or active requests. Do not restart
+its completed producer. Main weak/broad construction remains independent and active.
+
+The 05:57 PST review checked all 504 collected completion-receipt hashes and
+identities, receipt/file-list agreement, stored sizes, and stats hashes. Across all
+512 buckets it checked Parquet footer row counts and the no-Other/no-surviving-
+collision contract. All checks passed. Totals: **12,228,962,459 edge rows**,
+**10,431,861,875 auxiliary rows**, **833,202,077,982 Parquet bytes**. Existing
+collection-time payload hashes remain bound to their receipts; this review did not
+rehash the full 833 GB. The eight originals received existence/footer/contract
+checks, not a new independent full-byte audit.
+
+Evidence and reproducible audit: `docs/evidence/mini-bucket-completion-20261126/`.
+This is **completed raw bucket production, not a published adult pool**. Independent
+acceptance and sorted final publication still remain. The separate finalization
+stage is not armed; recheck joint capacity and acceptance requirements before launch.
+
 The [November 25 publication/cache implementation](pool-publication-and-prediction-cache-2026-11-25.md)
 adds a separate adult edge/aux publisher and production reader, integrated with
 the native builder and shared human policies. Raw mini buckets are unsorted, so
