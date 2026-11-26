@@ -29,6 +29,10 @@ def validate(recipe):
         raise ValueError("own ratings outside the planned calibration grid")
     if own.get("strength") not in (10.,30.,100.) or own.get("temperature") not in (1.,1.35):
         raise ValueError("own parameters outside the planned calibration grid")
+    # David 2026-11-26: cap the observations that count, so the model keeps a share where many weak players
+    # are still in their own book. None (absent) is the uncapped formula.
+    if own.get("observation_cap") not in (None,100.,1000.):
+        raise ValueError("own observation cap outside the planned calibration grid")
     threshold=recipe.get("min_expand")
     if not isinstance(threshold,(int,float)) or not math.isfinite(threshold) or not 0<=threshold<=1:
         raise ValueError("invalid expansion threshold")
@@ -38,6 +42,15 @@ def validate(recipe):
 
 
 def calibration_grid():
-    """36 transforms over six raw rating-pair predictions; no final-test tuning."""
-    return [dict(name="weak-maia-v1",model="maia3-79m-position",ratings=[a,b],temperature=t,strength=k)
-            for a in (1200,1450,1700) for b in (1800,2200) for t in (1.,1.35) for k in (10.,30.,100.)]
+    """108 transforms over six raw rating-pair predictions; no final-test tuning. The observation cap
+    (David 2026-11-26) adds no inference: it changes only how counts and predictions combine."""
+    grid=[]
+    for a in (1200,1450,1700):
+        for b in (1800,2200):
+            for t in (1.,1.35):
+                for k in (10.,30.,100.):
+                    for cap in (None,100.,1000.):
+                        r=dict(name="weak-maia-v1",model="maia3-79m-position",ratings=[a,b],temperature=t,strength=k)
+                        if cap is not None: r["observation_cap"]=cap
+                        grid.append(r)
+    return grid

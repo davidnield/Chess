@@ -56,7 +56,7 @@ class NativePolicies(unittest.TestCase):
     def test_no_probability_loss(self):
         self.assertEqual(rs.bounded_expectation([.991,.009],[1.,0.],[1.,0.]),(.991,.991))
         self.assertEqual(rs.bounded_expectation([.5,.5],[.8,0.],[.8,1.]),(.4,.9))
-        self.assertEqual(len(calibration_grid()),36)
+        self.assertEqual(len(calibration_grid()),108)
         validate(recipe())
         with self.assertRaises(ValueError):validate(recipe()|dict(status="production"))
         with self.assertRaises(ValueError):validate(recipe()|dict(count_cap=29))

@@ -28,18 +28,18 @@ def needs_maia(broad, adult, targeted, otb, *, maia_support_gate=None, backup_di
                    broad_discount=broad_discount)<maia_support_gate
 
 def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
-             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None):
+             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None, otb_mix=None):
     """Production arithmetic is native; ensemble_reference is the independent oracle."""
     from book_builder_rs import opponent_policy
     if not legal or len(set(legal))!=len(legal): raise ValueError("need unique legal moves")
     if any(len(v)!=len(legal) for v in (broad,adult,targeted,otb)):
         raise ValueError("count vector differs from legal moves")
     return opponent_policy(broad,adult,targeted,otb,maia,otb_strength,empirical_strength,
-                           maia_strength,backup_discount,broad_discount,maia_support_gate)
+                           maia_strength,backup_discount,broad_discount,maia_support_gate,otb_mix)
 
 
 def ensemble_reference(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
-             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None):
+             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None, otb_mix=None):
     """Counts are mutually nested b >= a >= r PER MOVE, and OTB is disjoint. The strengths and
     discounts are the recipe's (spec.POLICY); the defaults are its approved values.
 
@@ -60,6 +60,8 @@ def ensemble_reference(legal, broad, adult, targeted, otb, maia, *, otb_strength
         if not math.isfinite(v) or not 0<=v<=1: raise ValueError(f"invalid {name}")
     if maia_support_gate is not None and (not math.isfinite(maia_support_gate) or maia_support_gate<=0):
         raise ValueError("invalid Maia support gate")
+    if otb_mix is not None and (not math.isfinite(otb_mix) or not 0<=otb_mix<=1):
+        raise ValueError("invalid OTB mix")
     use_maia=needs_maia(b,a,r,o,maia_support_gate=maia_support_gate,backup_discount=backup_discount,
                         broad_discount=broad_discount)
     if use_maia:
@@ -75,7 +77,9 @@ def ensemble_reference(legal, broad, adult, targeted, otb, maia, *, otb_strength
         backup=(aa-rr+k*broad_p)/(A-R+k)
         online=(rr+k*backup)/(R+k)
         pre=(s*online+m*q[i])/(s+m) if use_maia else online
-        result.append((oo+otb_strength*pre)/(O+otb_strength))
+        otb_part=(oo+otb_strength*pre)/(O+otb_strength)
+        # v3: explicit population mix; None is v2 (OTB counts override the online model as they grow)
+        result.append(otb_part if otb_mix is None else otb_mix*otb_part+(1-otb_mix)*pre)
     return _vector("ensemble",result,L,True)
 
 def overlay_rows(board, distributions, *, empirical, nonmove, move_mass=None, wide=True):

@@ -68,7 +68,8 @@ class OwnProvider:
                 for (i,fen,legal,n,_),q in zip(pending,answers):
                     if set(q)!=set(legal):raise ValueError("own Maia must cover all legal moves")
                     p,_=self.cache.get_or_compute(fen,legal,n,
-                        lambda:own_policy(n,[q[u] for u in legal],self.recipe["strength"]),commit=False)
+                        lambda:own_policy(n,[q[u] for u in legal],self.recipe["strength"],
+                                          self.recipe.get("observation_cap")),commit=False)
                     results[i]=dict(zip(legal,p));self.stats["predicted"]+=1
         return results
     def close(self):

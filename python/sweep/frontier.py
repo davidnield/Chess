@@ -15,7 +15,7 @@ import polars as pl
 import duckdb
 from consumer_keys import PAIR, checked_board, stored_key
 from .policy import ensemble, needs_maia, overlay_rows, validate_overlay_rows, write_overlay
-from .spec import POLICY, digest
+from .spec import POLICIES, digest
 from .keyed_parquet import KeyedParquet
 from .stages import artifacts, file_sha, atomic_json
 
@@ -116,7 +116,7 @@ class FrontierOverlay:
     def __init__(self, *, colour, keys, counts, predict, cache, recipe, input_artifacts,
                  pool, aux, verify_artifacts=True, cache_components=None, semantics="legacy-nonmove-v1"):
         if keys is None: raise ValueError("selective OTB policy requires full keys")
-        if recipe!=POLICY: raise ValueError("unexpected OTB ensemble recipe")
+        if POLICIES.get(recipe.get("name"))!=recipe: raise ValueError("unexpected OTB ensemble recipe")
         if verify_artifacts: artifacts(input_artifacts)
         self.colour,self.keys,self.counts,self.predict=colour,keys,counts,predict
         self.policy_recipe=recipe
@@ -191,7 +191,7 @@ class FrontierOverlay:
                 if prior is not None and set(prior)!=set(legal): raise ValueError("Maia must cover every legal move")
                 prob=ensemble(legal,bc,ac,rc,oc,None if prior is None else [prior[u] for u in legal],
                               otb_strength=pr["otb_strength"],empirical_strength=pr["empirical_strength"],
-                              maia_strength=pr["maia_strength"],**gate)
+                              maia_strength=pr["maia_strength"],otb_mix=pr.get("otb_mix"),**gate)
                 observed=sum(sum(v) for v in outcomes.values())
                 # Zero empirical arrivals means a model-only continuation, not a made-up result.
                 # The outcome pool can record only endings at a board other sources saw continue
@@ -298,7 +298,9 @@ class FrontierOverlay:
 def from_config(path,*,colour,keys,pool,aux):
     from .maia_policy import MaiaPolicy,runtime_identity
     cfg=json.loads(Path(path).read_text(encoding="utf8"))
-    if cfg["schema"]!=1 or cfg["recipe"]!=POLICY: raise ValueError("unsupported selective policy config")
+    if cfg["schema"]!=1 or POLICIES.get(cfg["recipe"].get("name"))!=cfg["recipe"]:
+        raise ValueError("unsupported selective policy config")
+    recipe=cfg["recipe"]
     separate=Path(cfg["sources"]["adult"]).resolve()!=Path(pool).resolve()
     if ((separate and cfg.get("nonmove_semantics")!="conditional-board-v1")
         or Path(cfg["aux"]).resolve()!=Path(aux).resolve()):
@@ -324,8 +326,8 @@ def from_config(path,*,colour,keys,pool,aux):
     counts=Counts(cfg["sources"],aux,outcome_pool=pool if separate else None)
     model_config=dict(cfg["model"])
     model_config.setdefault("raw_cache",str(Path(cfg["cache"]).parent/"maia-raw-v1.sqlite"))
-    model=MaiaPolicy(model_config,POLICY,runtime=runtime)
+    model=MaiaPolicy(model_config,recipe,runtime=runtime)
     return FrontierOverlay(colour=colour,keys=keys,counts=counts,predict=model,cache=cfg["cache"],
-                           recipe=POLICY,input_artifacts=bound,pool=pool,aux=aux,
+                           recipe=recipe,input_artifacts=bound,pool=pool,aux=aux,
                            verify_artifacts=False,cache_components=cache_components,
                            semantics=cfg.get("nonmove_semantics","legacy-nonmove-v1"))

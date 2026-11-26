@@ -16,6 +16,13 @@ POLICY = {"name": "otb-ensemble-v2", "model": "maia3-79m-position",
           "ratings": [2600, 2600], "temperature": 1.35,
           "empirical_strength": 30., "maia_strength": 3., "otb_strength": 10.,
           "backup_discount": .10, "broad_discount": .01, "maia_support_gate": 300.}
+# v3 (David, 2026-11-26; docs/claude-review-of-chatgpt-2026-11-26.md, "David's decisions"): v2 with an
+# explicit population mix. v2's (o + 10*online)/(O + 10) lets OTB counts override the online model as they grow
+# (>= 90% OTB weight at 18,590 positions, 86% of them at plies 1-16). v3: reply = mix*that + (1-mix)*online,
+# for one book that serves both OTB classical and online play against stronger players. mix .5 is the
+# starting value; it is to be set from rescoring evidence before the main sweep.
+POLICY_V3 = dict(POLICY, name="otb-ensemble-v3", otb_mix=.5)
+POLICIES = {r["name"]: r for r in (POLICY, POLICY_V3)}
 FIXED = {"key_bits": 128, "max_ply": 30, "source_plies": 51, "min_games": 1,
          "eval_weight": .75, "prior_strength": 500., "own_policy": "historical-1000-1799",
          "candidate_pool": "brc1800-p30", "engine_nominations": "shared-verified",

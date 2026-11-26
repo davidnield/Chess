@@ -1,6 +1,6 @@
 """Prepare independent source headers and concrete commands from frozen sweep recipes."""
 from pathlib import Path
-from .spec import POLICY, digest
+from .spec import POLICIES, digest
 
 def empty_source(path, *, prior):
     """A source header, with no inherited prescriptions or historical choice constraints."""
@@ -61,7 +61,7 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
         args.extend(["--continuation-config",str(inputs["continuation_config"])])
     if inputs.get("opponent_overlay"): args.extend(["--opponent-prior",str(inputs["opponent_overlay"])])
     else: args.extend(["--opponent-policy-config",str(inputs["opponent_policy_config"])])
-    if r["opponent_policy"]["name"]!=POLICY["name"]:
+    if r["opponent_policy"]["name"] not in POLICIES:
         # The control overlay uses the existing schema-2 conditional recipe.
         args[args.index("--opponent-pseudogames")+1]=str(r["opponent_policy"]["pseudogames"])
     if r["solver"]!=("price+polish" if r["colour"]=="white" else "dp+match-distinct+polish"):

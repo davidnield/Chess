@@ -138,6 +138,10 @@ def main():
         def child_score(b):
             cp=float(keys.scores(np.array([keys.board(b)],dtype=np.int64))[0])
             return None if cp==MISSING else cp
+        # Review 2026-11-26 F6: this player term reads the LEGACY own model (raw weak counts above a
+        # min-games threshold), not the corrected weak+Maia own policy; label it so these runs are read as
+        # legacy-own-model controls until the corrected provider is wired here.
+        contract["player_own_model"]="legacy-raw-weak-counts-min-games"
         player=dict(severity_mode=a.severity,own=own.moves,own_contract=own.contract(),
                     child_score=child_score,player_min_games=FIXED["weak_min_games"])
     try:
