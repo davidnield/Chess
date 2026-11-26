@@ -1,6 +1,11 @@
 # ChessDB source-copy cleanup inventory — November 25, 2026
 
-Read-only preparation; **no source deletion or WSL compaction performed**.
+**Completed November 25:** David authorized retirement after a working archive
+lookup replacement passed verification. Both raw payload directories are now
+deleted, and Ubuntu's VHD was compacted successfully. See
+[the implementation and retirement record](chessdb-archive-lookup-retirement-2026-11-25.md).
+The inventories below record what was removed; the archive and all accepted
+menus/evaluation/pool products remain intact.
 
 ## Accepted replacement archive
 
@@ -22,18 +27,19 @@ All have raw binary `source_key`, raw binary `source_value`, string `fen`, struc
 confirm normal access, not a replacement for the completed full audit. Raw bytes
 preserve the source; derived FEN spelling and scores are not a substitute for them.
 
-## Exact obsolete-copy candidates
+## Exact retired copies
 
 | Path | Observed contents / size | Recommendation |
 | --- | --- | --- |
-| `H:/chess/chessdb/chess-20260702/data` | Regular directory, 582 files (291 payloads + 291 `.ok` sidecars), 1,188,168,027,771 bytes | First cleanup candidate after explicit source-copy retirement approval; retain parent manifests/provenance. |
-| Ubuntu `/var/lib/chessdb/chess-20260702/data` | Resolved native directory; `du -sb` 1,188,168,027,771 bytes; read-only bind at `/mnt/chessdb-ro` | Retain for now: existing native point-lookup/import tools still use this layout. Parquet scans are available, but this is not an indexed random-lookup replacement. |
-| `E:/wsl/Ubuntu/ext4.vhdx` | Host file 1,194,949,869,568 bytes | Never delete the distro/VHD as a cleanup shortcut. Removing native source files does not promise equal immediate host-space recovery; controlled trim/compaction would be separate work. |
+| `H:/chess/chessdb/chess-20260702/data` | Regular directory, 582 files (291 payloads + 291 `.ok` sidecars), 1,188,168,027,771 bytes | Deleted after parity and final inventory checks; parent manifests/provenance retained. |
+| Ubuntu `/var/lib/chessdb/chess-20260702/data` | Same 582 files / 1,188,168,027,771 bytes; two stacked read-only binds at `/mnt/chessdb-ro` | Both exact binds unmounted; payload deleted. Native tools retained, but new lookups use the archive reader. |
+| `E:/wsl/Ubuntu/ext4.vhdx` | Before compaction 1,195,016,978,432 bytes; after 6,697,254,912 bytes | Distro/VHD preserved. `fstrim` followed by WSL 3.0.5 `--manage Ubuntu --compact` reclaimed 1,188,319,723,520 bytes. |
 
-`/var/lib/chessdb/COPY.DONE` records 2026-11-21T18:00:34-08:00. No native
-`cdb_scan`, `cdb_lookup` or `cdb_archive` reader was active at inventory time.
-A legacy cache-trimming batch loop remains, unrelated to a live conversion.
-Recheck consumers, mounts and exact paths immediately before any later cleanup.
+`/var/lib/chessdb/COPY.DONE` is now `COPY.RETIRED-20261125`, preserving the old
+receipt without falsely advertising an available source. `RAW.RETIRED-20261125.json`
+points to the replacement. No native reader/open source files were found at final
+preflight. Terminating the idle Ubuntu distro also ended the obsolete cache-trim
+loop; neither Windows pool job depended on it. The distro boots after compaction.
 
 ## Preserve
 
@@ -47,8 +53,9 @@ Recheck consumers, mounts and exact paths immediately before any later cleanup.
 - Current source policies and engine-result caches; archive retirement does not
   authorize changing lookup bindings or adopting the proposed source blend.
 
-Deleting the H: payload would recover about **1.19 TB decimal / 1,106.56 GiB** while
-retaining the native WSL database and verified archive. Current pool construction has
-sufficient space without this deletion, so there is no need to combine irreversible
-cleanup with the ongoing diagnostic. Retiring the second native copy should follow
-an explicit decision about future point-lookup needs and a measured replacement path.
+Receipts, exact inventories, non-SST metadata/sidecars, native query binary and copy
+receipt are retained at `D:/chess/acceptance/chessdb-archive-query-20261125`.
+The frozen replacement is `D:/chess/bin/chessdb-archive-query-20261125-v1`.
+Approximately **2.38 TB decimal / 2.16 TiB** was reclaimed across H: and E:.
+Do not restart historical native imports, scans or archive conversion against the
+retired paths. Use the new receipted TSV adapter or a sequential Parquet scan.

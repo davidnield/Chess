@@ -130,5 +130,8 @@ and source-group/control results before proposing any next-stage adoption.
    policies in the Black pilot, including full blended child references, gate
    decisions, menu additions, selected moves and reach-weighted effects. Merely
    finishing all 512 construction buckets is not final pool acceptance.
-4. Original-copy retirement remains a separate explicit operation after reviewing
-   the cleanup inventory. Retain the native WSL database for current point lookups.
+4. **Completed later November 25:** David authorized both raw-copy retirements
+   after the Rust archive reader passed exact native parity. Both raw directories
+   are deleted and the Ubuntu VHD is compacted. Use
+   `D:/chess/bin/chessdb-archive-query-20261125-v1` for future point lookups; see
+   [the retirement record](chessdb-archive-lookup-retirement-2026-11-25.md).
