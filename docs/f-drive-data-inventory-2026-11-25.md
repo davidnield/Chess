@@ -124,6 +124,33 @@ No copy, deletion, migration or new recurring audit is armed by this report.
 
 ## Evidence
 
+### Reproduction-cost follow-up
+
+The following assumes the main PC, the retained compressed games on D:, the
+frozen tools, and a replacement archive disk with similar throughput. It does
+not include rebuilding downstream products that still survive on D:/E:/H:.
+
+| Dataset | Evidence and planning estimate |
+|---|---|
+| Current 8.03 TB monthly archive | All 163 receipts sum to **31.4269 h extraction + 22.2073 h streaming copy + 7.7265 h readback = 61.3607 h**. Allow **60–72 h** with similar hardware and contention. No merged-explorer rebuild is required merely to replace the monthly archive. |
+| Old 3.99 TB six-speed archive | All 163 provenance files sum to **33.4187 h extraction**, including the historical direct-to-F: writes. Allow roughly **36–48 h** with additional checks; that range is a planning allowance, not a timed complete recovery. |
+| Full ChessDB archive | The 3,345 shard receipts total **111.3653 worker-hours**, or an idealized **18.5609 h at six continuously occupied workers**. Actual first-shard-start to last receipt spanned **30.6352 h**, including pauses/restarts. The separate deep audit took **7.2404 h**. Plan roughly **1–2 days after reacquiring/staging the raw source**, plus download/staging time. The worker-hours division is not a guaranteed wall-clock ETA. Source preflight itself recorded 492.3 s. |
+| Legacy 754 GB pooled partials | No trustworthy full-run timing was found; the inspected Parquet footer has no timing metadata. Do not invent an ETA or assume the new mini exporter reproduces this historical recipe. These are low-priority backups for the current project because no current build needs them. |
+| Benchmarks, old partial archive roots and spill | No need to recreate the full accumulation. Relevant small tests can be rerun when needed; deleted spill is regenerated automatically by queries. Preserve the small evidence/code instead. |
+| Recycled September raw PGN | Reacquiring the 29.22 GB file depends on source availability and download throughput. At a sustained 10 MB/s it is about 49 minutes of transfer, before verification; this is arithmetic, not a measured download. |
+
+For compute-time savings alone, the current monthly archive ranks first. For
+practical backup priority, ChessDB remains first: it is much smaller and has no
+retained raw source from which to rebuild locally. Suggested order: small
+provenance/tool receipts alongside the first copy, then ChessDB, then current
+monthly archive, then the old six-speed archive if dashboard coverage is wanted.
+
+If the destination is the previously tested NAS, its observed approximately
+10–11 MB/s rate would mean roughly **2–2.5 days to copy ChessDB** and **8–9 days
+to copy the current monthly archive**, before a full read-back check. Those were
+bounded historical measurements, not a current sustained transfer test. A fresh
+speed check is necessary before treating one dataset per day as feasible.
+
 - `docs/evidence/f-drive-data-inventory-20261125/inventory.json`: complete
   directory aggregates and enumeration scope/errors.
 - `docs/evidence/f-drive-data-inventory-20261125/inventory.py`: the metadata-only
