@@ -70,4 +70,16 @@ def main():
     assert ar.unbuffered_sha(changed)!=audit['file_sha256'];tests.append('changed output checksum detected')
     unexpected=a.work/'not-an-attempt';unexpected.mkdir();rejects('unsafe cleanup rejected',lambda:ar.clean_attempt(unexpected,a.work))
     result=dict(passed=len(tests),tests=tests);(a.work/'results.json').write_text(json.dumps(result,indent=2));print(json.dumps(result))
-if __name__=='__main__':main()
+if __name__=='__main__':
+    # run_tests.py runs every _test_*.py with no arguments: then the release comes from CHESSDB_ARCHIVE_RELEASE
+    # (a release dir holding chessdb-archive.exe and these modules) and the work dir is a throwaway one.
+    if len(sys.argv)==1:
+        import shutil,tempfile
+        release=os.environ.get('CHESSDB_ARCHIVE_RELEASE')
+        if not release:
+            print('SKIP  release-pinned harness: pass --release DIR --work NEW_DIR, or set CHESSDB_ARCHIVE_RELEASE');sys.exit(0)
+        tmp=tempfile.mkdtemp(prefix='chessdb_archive_test_')
+        sys.argv+=['--release',release,'--work',str(Path(tmp)/'work')]
+        try:main()
+        finally:shutil.rmtree(tmp,ignore_errors=True)
+    else:main()

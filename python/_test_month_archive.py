@@ -1,4 +1,5 @@
-"""Integration regressions for the pilot. Set EXPLORER_EXTRACT_EXE to the built executable."""
+"""Integration regressions for the pilot. Set EXPLORER_EXTRACT_EXE to a build of this checkout (explorer_exe.py);
+without one every test skips."""
 import json
 import os
 import random
@@ -11,6 +12,7 @@ from unittest.mock import patch
 
 import chess
 import duckdb
+import explorer_exe
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -22,6 +24,12 @@ from zobrist import zobrist_int64
 
 
 class PilotTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        why = explorer_exe.unusable(explorer_exe.resolve(), {"month": ["--key128", "--term-slices"], "merge": ["--months-root"]})
+        if why:
+            raise unittest.SkipTest(why)
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -29,7 +37,7 @@ class PilotTest(unittest.TestCase):
         self.source = self.tmp / "source"
         self.stage = self.tmp / "stage"
         self.dest = self.tmp / "archive"
-        self.exe = Path(os.environ["EXPLORER_EXTRACT_EXE"])
+        self.exe = explorer_exe.resolve()
         rng = random.Random(125)
         board = chess.Board()
         self.moves = []
