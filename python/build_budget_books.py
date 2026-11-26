@@ -703,8 +703,10 @@ def main() -> int:
         ):
             ap.error("study receipts must contain all six SHA256 input bindings")
     weak_is_manifest=Path(a.weak_pool).suffix==".json"
-    if weak_is_manifest and (not a.continuation_config or not keys):
-        ap.error("compact full count pools require the corrected full-key continuation path")
+    if weak_is_manifest and not keys:
+        # The corrected path reads it through the own provider; the legacy weak stop fetches its
+        # stop positions' rows by full key (weak_stop._edges). Both need full-key consumers.
+        ap.error("compact full count pools require full-key consumers")
     if Path(a.weak_pool).is_file() and not weak_is_manifest and is_wide(a.weak_pool, "parent_hash") != bool(keys):
         ap.error("--weak-pool and --stats must use matching position-key widths")
     legacy = a.legacy_gates or a.max_eval_loss is not None

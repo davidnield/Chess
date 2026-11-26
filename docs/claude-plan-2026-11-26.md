@@ -52,6 +52,12 @@ him get there and stay effective once he does. He prefers advantages that are ea
    - Scored under **both** bindings plus fresh SF18 on the leaves carrying the most paired-difference mass. If the
      two disagree, the SF18 leaves decide.
    - Needs the adult and broad publications.
+   - **Found on 26 Nov:** the legacy weak stop read `--stats` and `--weak-pool` only as single files. The adult
+     pool is now partitioned and the weak pool compact, and the builder refused the compact pool off the
+     corrected path, so the "runnable legacy path" was not runnable on the published inputs.
+     - Fixed: `weak_stop._edges` fetches a manifest's rows by full key through `KeyedParquet`.
+     - `_test_weak_stop_manifests` holds W, R and the counters identical to the single-file run.
+     - Single-file inputs take the old query unchanged.
    - It also reports the OTB-weight distribution over the pilot graph's opponent reach (review F3) and real cost
      numbers.
 4. **F4, prototyped on that real Black graph:** unexpanded W/R children valued at their engine eval with a

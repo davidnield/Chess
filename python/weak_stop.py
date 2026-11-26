@@ -57,6 +57,25 @@ def _edges(con, path: str, keys: np.ndarray, name: str, positions=None) -> pl.Da
     """(parent, child, n) for every recorded move out of `keys`, summed over rows."""
     if not len(keys):
         return pl.DataFrame(schema={"parent": pl.Int64, "child": pl.Int64, "n": pl.Float64})
+    if path.endswith(".json"):
+        # A published manifest (partitioned adult pool, compact count pool): fetched by full key
+        # through the maintained reader, never scanned whole. Same rows as the single-file query.
+        if positions is None:
+            raise ValueError(f"{path}: a pool manifest needs full-key positions")
+        from sweep.keyed_parquet import KeyedParquet
+        requested = positions.external(pl.Series("h", np.unique(keys), dtype=pl.Int64)).to_list()
+        reader = KeyedParquet(path, "parent_hash")
+        try:
+            rows = reader.fetch(con, requested)
+        finally:
+            close = getattr(reader, "close", None)
+            if close:
+                close()
+        df = (rows.filter(pl.col("child_hash").is_not_null())
+              .group_by(pl.col("parent_hash").alias("parent"), pl.col("child_hash").alias("child"))
+              .agg(pl.col("total").sum().cast(pl.Float64).alias("n"))
+              .sort("parent", "child"))
+        return positions.encode(df, "parent", "child")
     if positions is None:
         con.register(name, pa.table({"h": pa.array(np.unique(keys), pa.int64())}))
     else:
