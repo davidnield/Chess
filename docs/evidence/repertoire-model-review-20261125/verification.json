@@ -1,0 +1,55 @@
+{
+  "schema": "repertoire-model-review-verification-v1",
+  "reviewed_commit": "7076faa149ecefa509a71854e3e81b28b1f5fbb0",
+  "reviewed_branch": "codex/takeover-hardening-20261122",
+  "date_pt": "2026-11-25",
+  "production_code_changed": false,
+  "canonical_bindings_changed": false,
+  "tests": [
+    {
+      "discovered": 20,
+      "exit_code": 0,
+      "skipped": 0,
+      "modules": [
+        "_test_policy_maia_gate",
+        "_test_sweep_execution",
+        "_test_eval_policy_overlay",
+        "_test_sweep_publications"
+      ],
+      "passed": 20
+    },
+    {
+      "exit_code": 0,
+      "skipped": 1,
+      "modules": [
+        "_test_horizon_lookahead",
+        "_test_full_key_verification",
+        "_test_full_key_book"
+      ],
+      "passed": 13,
+      "discovered": 14,
+      "skip_reason": "opt-in installed Stockfish smoke"
+    }
+  ],
+  "reproductions": {
+    "exit_code": 0,
+    "scope": "small controlled current-behavior fixtures; not population error rates",
+    "results": "results.json",
+    "script": "probe.py"
+  },
+  "overlay_check": {
+    "receipt": "full-overlay-independent.json",
+    "verified": true,
+    "positions": 16893,
+    "buckets": [
+      0,
+      255,
+      511
+    ]
+  },
+  "plan": {
+    "production_pilot": "not-started",
+    "implementation": "not-started",
+    "review": "complete"
+  }
+}

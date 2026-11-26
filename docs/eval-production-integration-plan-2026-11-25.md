@@ -111,13 +111,25 @@ gate-critical choices and practical book effects.
 - [x] Targeted White review cases prepared and checked against existing gate counts.
 - [x] Rust provider/materializer implementation and tests.
 - [x] Stronger-reference/production-path White audit and bounded lookup acceptance.
-- [ ] Full versioned overlay materialization (started 13:27 PST November 25), final receipts and pilot-ready bindings.
+- [x] Full versioned overlay materialization and bounded independent source check (512 buckets; 16,893 sampled positions passed).
+- [ ] Package pilot-ready evidence and implement explicit consumer bindings.
 - [ ] Full required pool publication and opponent-input binding.
 - [ ] Paired Black pilot and final source-policy activation.
 - [ ] Continue native optimizer experiments and main repertoire tuning matrix.
 
-The full overlay materialization is now running alongside the existing mini pool
-coordinator. Other unchecked stages are prerequisites/planned work, not background
+The full overlay materialization and its independent sampled check are complete;
+the existing mini pool coordinator continues. Other unchecked stages are prerequisites/planned work, not background
 jobs already running. See `eval-production-integration-results-2026-11-25.md` for
 the implementation, verification, White audit limitations, current job paths and
 resume commands. Active production bindings have not changed.
+
+## Consolidated model requirements before the pilot
+
+Follow [the November 25 model review and implementation plan](repertoire-model-review-and-implementation-plan-2026-11-25.md).
+It expands the earlier opponent-continuity prerequisite to include retained weak
+observations, complete probability accounting, explicit source/continuation
+horizons and endings, native referee precision and policy binding, effective
+objective auditing, and support for comparing two evaluation providers over the
+same count inputs. The paired request union currently rejects different stored
+scores at a shared parent; the new plan includes its reproduction and correction.
+No human-model fixes or production activation are claimed by this plan update.

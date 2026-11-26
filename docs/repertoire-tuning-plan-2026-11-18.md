@@ -565,3 +565,18 @@ Stricter-White false admissions remain in the deliberately adverse review set;
 independent local verification is still required. No gates or canonical bindings
 changed. Full generation acceptance, required pools/opponent bindings and the
 paired Black pilot remain ahead of the optimizer/sweep runs.
+
+November 25 consolidated review: [Repertoire model review and implementation plan](repertoire-model-review-and-implementation-plan-2026-11-25.md)
+is the current prerequisite checklist before the paired Black pilot. It preserves
+the agreed gates, source weights, opponent recipe, native optimizer study and
+budget/extension matrix, while specifying fixes for weak-player fallback,
+opponent continuity, probability/missing-value accounting, horizons/endings,
+evaluation bindings, paired verification and the native referee. Audit the
+effective eval-weight contribution before running that sensitivity: W/R replaces
+many original blended leaves, so the CLI flag is not a global 75/25 mixture.
+Proposed weak-policy calibration and utility normalization are not yet adopted.
+
+The full score334 overlay has now completed all 512 buckets and passed the
+independent three-bucket source sample. The mini BRC1800-p30 queue continues.
+New model fixes, required count access/publication and the paired pilot remain
+unfinished; completed lookup materialization is not permission to skip them.

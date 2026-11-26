@@ -1,0 +1,126 @@
+{
+  "weak19_adult1": {
+    "W": {
+      "1": 0.2
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 0,
+      "x_fallback_pool": 1,
+      "moves_engine_only": 1,
+      "x_walked": 1,
+      "y_walked": 0
+    }
+  },
+  "weak20_adult1": {
+    "W": {
+      "1": 0.8
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 1,
+      "x_fallback_pool": 0,
+      "moves_engine_only": 1,
+      "x_walked": 1,
+      "y_walked": 0
+    }
+  },
+  "weak19_adult0": {
+    "W": {
+      "1": 0.5
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 0,
+      "x_fallback_pool": 1,
+      "moves_engine_only": 0,
+      "x_walked": 0,
+      "x_engine_only": 1,
+      "y_walked": 0
+    }
+  },
+  "opponent_raw_counts": {
+    "W": {
+      "1": 0.9
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 1,
+      "x_fallback_pool": 0,
+      "moves_engine_only": 0,
+      "x_walked": 1,
+      "y_walked": 0
+    }
+  },
+  "opponent_ensemble_counterfactual": 0.18000000000000002,
+  "missing_child_renormalization": {
+    "W": {
+      "1": 0.8
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 1,
+      "x_fallback_pool": 0,
+      "moves_engine_only": 0,
+      "x_walked": 1,
+      "y_walked": 0
+    }
+  },
+  "missing_child_value_bounds": [
+    0.4,
+    0.9
+  ],
+  "tail_cutoff": {
+    "W": {
+      "1": 1.0
+    },
+    "R": {},
+    "counters": {
+      "x_weak": 1,
+      "x_fallback_pool": 0,
+      "moves_engine_only": 0,
+      "x_walked": 1,
+      "y_walked": 0
+    }
+  },
+  "tail_uncut_value": 0.991,
+  "one_target_observation_stage": [
+    0.5806451612903226,
+    0.3225806451612903,
+    0.0967741935483871
+  ],
+  "only_one_online_game_final": [
+    0.4903225806451613,
+    0.39435483870967736,
+    0.1153225806451613
+  ],
+  "legacy_no_eval_leaf": {
+    "score": 0.5,
+    "no_eval": true
+  },
+  "native_fractional_ancestor_cp": {
+    "input": 12.75,
+    "output": 12
+  },
+  "native_fractional_fallback_score": 0.511044443209752,
+  "score_conversion_2000cp": {
+    "ordinary": 0.9993668437695776,
+    "horizon": 0.9754474363414323
+  },
+  "paired_source_policy_menu_rejection": "books use different candidate counts/evidence at a shared parent",
+  "complete_stop_overlay_replaces_initial_values": {
+    "initial_node": 0.25,
+    "initial_edge": 0.75,
+    "final_node": 0.6,
+    "final_edge": 0.7
+  },
+  "source_hashes": {
+    "python/weak_stop.py": "63a6d8edd29e59386b72e80405c86dc8f10d06742d0a44c009ad2b58ff03ea97",
+    "python/sweep/policy.py": "1115e99358ce9d3c11c35262e18bb4d70a6e8de18f194ee704bdac6538a14478",
+    "python/convertibility_eval.py": "f4ecb964ee8044c022cb2c2b47f82854112ad1f5ab62aeb190106172b029727c",
+    "rust/book_builder/src/py_rollout.rs": "cfab3d0dffeb93f171c425521a2be681d3040740909b5e310011e10e944212fd",
+    "python/sweep/verify.py": "bcdd3852f8ca7c1def18cfac094083e00c74aff68791917ea8a566b813074e0b",
+    "rust/book_builder/src/core.rs": "8200cf35a7a5e70131d048e2d2c151ed183a7e7f5a067abd994c6afc9f92f74f"
+  },
+  "reproducer_sha256": "f3d443e20f8baf9d12471e14e11e18384f219d9778f7d93bf5c1d31ea26ef0db"
+}

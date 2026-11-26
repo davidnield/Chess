@@ -2,7 +2,7 @@
 
 The approved policy is implemented and has passed native tests, consumer
 regressions, a 45-position White review and a bounded real-data pilot. **The full
-candidate overlay is being materialized; no active repertoire/pool binding has
+candidate overlay has completed materialization and its independent sampled check; no active repertoire/pool binding has
 changed.** The paired Black stricter pilot and production activation still wait
 for accepted pool/opponent inputs and the acceptance checks below.
 
@@ -266,3 +266,24 @@ min-weak-games20 fallback to the adult pool. This fallback is a current modeling
 choice, not evidence that a thinly observed position is easy for a weak player.
 No code/model behavior was changed during this inventory; this integration gap
 is now an explicit pilot prerequisite.
+
+## Full generation completed and model review
+
+The full candidate finished with verified producer status: 512 buckets,
+1,998,220,987 sparse rows, 49,955,622,979 bytes, 9,727 seconds. The complete
+manifest SHA256 is `15be7323a4af4e8360bf89a6f06652fcbbaf52764c74a9685a6a6774e2ee2f0c`.
+The independent bounded check of buckets 0/255/511 passed on 16,893 positions,
+maximum score error 3.33e-16. Receipt:
+`evidence/repertoire-model-review-20261125/full-overlay-independent.json`.
+This is sampled semantic verification, alongside the producer's complete bucket
+receipts; it is not an independent arithmetic census of all rows. Do not rerun
+materialization. Pilot-ready evidence packaging and explicit consumer binding
+remain; canonical bindings have not changed.
+
+David requested a consolidated review after discussing the human models. Follow
+[the model review and implementation plan](repertoire-model-review-and-implementation-plan-2026-11-25.md)
+before the Black pilot. It confirms the weak-player threshold and opponent-policy
+gaps and adds probability-mass, horizon/ending, objective, native-referee precision,
+evaluation-binding and paired-request-union requirements. These are queued fixes,
+not changes already made. The data/model decisions and running mini queue remain
+preserved. Apply the corrected human/value contracts equally to both source arms.
