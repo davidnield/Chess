@@ -26,6 +26,22 @@ class WeakCounts:
         self.reader.close();self.db.close()
 
 
+def count_vector(board,records):
+    """Sorted legal UCI moves and their weak counts at a board, full key and child replay checked."""
+    legal=sorted(m.uci() for m in board.legal_moves)
+    if not legal:raise ValueError("terminal board has no own policy")
+    counts=dict.fromkeys(legal,0.)
+    seen=set();key=stored_key(board,True)
+    for row in records:
+        if row["parent_hash"]!=key:raise ValueError("weak count full key differs")
+        move=board.parse_san(row["move_san"]);u=move.uci()
+        if u in seen:raise ValueError("duplicate weak move")
+        seen.add(u);child=board.copy(stack=False);child.push(move)
+        if stored_key(child,True)!=row["child_hash"]:raise ValueError("weak child differs from legal replay")
+        counts[u]=row["total"]
+    return legal,_vector("weak counts",list(counts.values()),len(legal))
+
+
 class OwnProvider:
     def __init__(self,*,counts,predict,cache,recipe,identity):
         self.counts,self.predict,self.recipe=counts,predict,recipe
@@ -40,18 +56,7 @@ class OwnProvider:
         if len(rows)!=len(boards):raise ValueError("weak count batch differs")
         results=[None]*len(boards);pending=[]
         for i,(board,records) in enumerate(zip(boards,rows)):
-            legal=sorted(m.uci() for m in board.legal_moves)
-            if not legal:raise ValueError("terminal board has no own policy")
-            counts=dict.fromkeys(legal,0.)
-            seen=set();key=stored_key(board,True)
-            for row in records:
-                if row["parent_hash"]!=key:raise ValueError("weak count full key differs")
-                move=board.parse_san(row["move_san"]);u=move.uci()
-                if u in seen:raise ValueError("duplicate weak move")
-                seen.add(u);child=board.copy(stack=False);child.push(move)
-                if stored_key(child,True)!=row["child_hash"]:raise ValueError("weak child differs from legal replay")
-                counts[u]=row["total"]
-            n=_vector("weak counts",list(counts.values()),len(legal))
+            legal,n=count_vector(board,records)
             self.stats["weak_observations"]+=sum(n);self.stats["boards"]+=1
             fen=" ".join(board.fen(en_passant="fen").split()[:4])
             # Delay inference until the persistent content cache actually misses.

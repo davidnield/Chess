@@ -34,8 +34,18 @@ him get there and stay effective once he does. He prefers advantages that are ea
    - The F7 mate-0 census (evidence; the producer is unchanged).
    - Tests: `_test_review_20261126` (6) and the affected suites.
 2. **Pools.**
-   - Weak finishes; broad follows automatically.
-   - Adult sorted publication (512 buckets, about 26 h serial, ~855 GiB on E:) and the four independent gates.
+   - Weak finishes; broad follows automatically (`sweep.count_pool`, config-v2; weak was at bucket 456 of 512 at
+     10:00 on 26 Nov).
+   - Adult sorted publication, stage 1: `D:\chess\adult-publication-20261126\run_sort.bat` (release
+     `pool-input-readiness-20261125-v1`, config sha `aeb76269…`), launched 08:52 on 26 Nov. About 2.4 min and
+     1.8 GB per bucket, so ~20 h and ~920 GB on E:. Log `sort.log`; graceful stop: create `STOP` there.
+   - Stage 2, **code done** (3ef68a5): `pool_from_book_gates --partitioned` runs the four gates on the complete
+     inventory and binds each verdict to its digest; `sweep.partitioned_pool --assemble` writes the acceptance
+     document only from passing, bound verdicts. Conservation checks the mass identity in all 512 buckets and the
+     per-parent identity in the sampled ones. Driver `run_gates.bat` (release `partitioned-gates-20261126`), to be
+     launched by hand once the sort has finished, after a commit check: reimplementation loads a whole book bucket
+     (12 slices) at a time.
+   - `D:\chess\restart_jobs.bat` restarts the count pools and the sort after a reboot.
    - Capacity is rechecked before each launch.
 3. **Paired Black source pilot on the runnable legacy human path** (David accepted).
    - cdb2 against score334, stricter gates, B = 2000, p30.
@@ -55,6 +65,21 @@ him get there and stay effective once he does. He prefers advantages that are ea
    on fixed real graphs; referee only where the book changes), then the staged sweep.
 8. **Before any White activation:** the gate-adjacent SF18 checks, and the confirmation statistics recomputed with
    an opening-family cluster bootstrap.
+   - **Cluster bootstrap: done 26 Nov** (`scratch/chessdb_import/cluster_bootstrap.py` →
+     `D:/chess/acceptance/review-20261126/cluster-bootstrap.json`; 20,000 replicates).
+     - The panel has no move history, so a family is a connected component of positions that share at least T of
+       64 squares.
+     - The 299 positions are nearly unrelated: at T = 56–60 only 6 positions pair up, and the intervals equal the
+       ordinary ones.
+     - Blend minus proposal is −0.084 points:
+       - at T ≥ 56 its simultaneous interval is [−0.164, −0.005];
+       - grouping positions that share ≥ 52 squares (largest family 77) makes it [−0.156, +0.013], which includes
+         zero.
+     - Looser T chains almost everything into a few components, so no family structure is left to test.
+     - Blend minus ChessDB alone (−0.246) excludes zero under every clustering.
+     - Reading: the gain over the proposal is real but marginal, and depends on how related positions are treated.
+       That supports carrying both rules into the book-level pilot rather than treating the blend as settled.
+   - The White gate-adjacent SF18 check needs a White book under score334; it waits for White activation work.
 
 ## Standing rules carried forward
 
