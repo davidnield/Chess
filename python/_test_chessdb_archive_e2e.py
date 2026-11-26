@@ -78,4 +78,8 @@ def main():
     assert not list(a.archive.glob('*/ARCHIVE.COMPLETE.json'))
     result=dict(passed=True,records_per_archive=2000000,shards_per_archive=4,completed_shards_retained=len(old),duplicate_coordinator_rejected=True,interruption_children_exited=True,resumed_equals_uninterrupted=True,changed_settings_rejected_without_status_mutation=True,same_size_same_mtime_corruption_rejected=True,corrupted_test_file_restored=True,free_space_reserve_enforced=True,bounded_only=True)
     (a.work/'RESULTS.json').write_text(json.dumps(result,indent=2));print(json.dumps(result),flush=True)
-if __name__=='__main__':main()
+if __name__=='__main__':
+    # Destructive and on real source: only ever run with its arguments (run_tests.py passes none).
+    if len(sys.argv)==1:
+        print('SKIP  opt-in real-source test: pass --release --work --archive --source-verified');sys.exit(0)
+    main()

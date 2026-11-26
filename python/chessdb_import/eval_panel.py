@@ -1,5 +1,6 @@
 """Step-2 validation panel: how good are ChessDB's scores next to cloud and fishnet, by source group and move
-rank, against fresh deeper Stockfish (--engine: sf18, the project's engine, by default; sf19 was the first run)
+rank, against fresh deeper Stockfish 18 (engine_path.STOCKFISH, the project's engine; the first run, 2026-11-22, used
+Stockfish 19, whose cp scale is ~1.47x SF18's, so that option is gone and its files stay apart)
 (docs/move-menus-plan-2026-11-21.md; David 2026-11-21: step 2
 waits for this panel).
 
@@ -10,11 +11,11 @@ positions, 5 groups) larger, independent of the pilot that set its rules, and pe
   sample   N per group (default 250 -> 1,500) of book positions with >= 2 games FOUND in ChessDB with >= 1
            scored move, from the buckets given (seed fixed); position EPD from the eval DB, or from the book
            for gap positions
-  search   per position: SF19 at --depth on the position (MultiPV 1) and at --depth - 1 on the child after
+  search   per position: SF18 at --depth on the position (MultiPV 1) and at --depth - 1 on the child after
            each of ChessDB's moves ranked 1-3 (that move's reference score, negated to the parent's mover);
            one search per process task, fresh hash (ucinewgame); results appended to a JSONL, resumable
-  report   MAE vs SF19 per source and per 13-Nov rule within each group; per-move ChessDB error by rank; and
-           sibling order agreement (does the source rank ChessDB's moves 1 vs 2 the way SF19 does)
+  report   MAE vs SF18 per source and per 13-Nov rule within each group; per-move ChessDB error by rank; and
+           sibling order agreement (does the source rank ChessDB's moves 1 vs 2 the way SF18 does)
 
 Scales: SF and cloud/fishnet cp as is; ChessDB scores through eval_lookup_cdb.chessdb_white_cp's rule
 (|s| >= 15000 -> ±2000) for positions, and capped at ±2000 per move; everything clipped to ±2000 before
@@ -38,21 +39,23 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(1, str(Path(__file__).resolve().parent.parent))
+import engine_path  # noqa: E402
 import import_menus as im  # noqa: E402
 
 OUT = Path(os.environ.get("EVAL_PANEL_DIR", "E:/chess/eval-panel-20261122"))
 EVAL_DB = Path("D:/chess/eval-db-p51-20261115")
 MENUS = im.OUT
 KEYS = Path("E:/chess/chessdb-scan-20261121/keys")
-# Reference engines (pinned binaries, sha256 prefix). sf18 is the project's engine and is on the sources' cp
-# scale; sf19 scores ~1.47x more extreme at the same depth (2026-11-22), so its results are kept apart.
-ENGINES = {"sf18": ("D:/chess/bin/stockfish-18/stockfish-windows-x86-64-avx2.exe", "c86215fa", "Stockfish 18"),
-           "sf19": ("D:/chess/bin/stockfish-19/stockfish-windows-x86-64-universal.exe", "45bc8e49", "Stockfish 19")}
+# The reference engine: the project's one Stockfish (engine_path), pinned by sha256 prefix. It is on the sources'
+# cp scale. Stockfish 19 scores ~1.47x more extreme at the same depth (2026-11-22) and is not offered; its first
+# run's files (search_d24.jsonl, report_d24.md, panel_scored_d24.parquet) stay in OUT under the untagged names.
+ENGINES = {"sf18": (engine_path.STOCKFISH, "c86215fa", engine_path.STOCKFISH_NAME)}
 
 
 def fname(kind: str, depth: int, engine: str, ext: str) -> Path:
-    """sf19 keeps the first run's names (search_d24.jsonl, ...); every other engine is tagged."""
-    return OUT / (f"{kind}_d{depth}.{ext}" if engine == "sf19" else f"{kind}_{engine}_d{depth}.{ext}")
+    """Engine-tagged names (search_sf18_d24.jsonl, ...); the untagged names belong to the retired SF19 run."""
+    return OUT / f"{kind}_{engine}_d{depth}.{ext}"
 GROUPS = ("cloud_deep", "cloud_shallow", "nnue_once", "nnue_repeated", "pre_nnue", "gap")
 CLIP = 2000
 

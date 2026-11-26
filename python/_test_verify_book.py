@@ -34,8 +34,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 HERE = Path(__file__).resolve().parent
-EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE",
-                          "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
+sys.path.insert(0, str(HERE))
+import explorer_exe  # noqa: E402
+EXE = explorer_exe.resolve()
 YEAR = 2099
 MONTHS = (1, 2)
 
@@ -133,8 +134,9 @@ def corrupt_one_row(book: Path) -> tuple[Path, int]:
 
 
 def main() -> None:
-    if not EXE.exists():
-        print(f"  SKIP  no explorer-extract at {EXE} (set EXPLORER_EXTRACT_EXE)")
+    why = explorer_exe.unusable(EXE, {"month": ["--ply-key", "--key128"], "merge": ["--months-root"]})
+    if why:
+        print(f"  SKIP  {why}")
         print("\nALL PASS (0 checks -- exe unavailable)")
         sys.exit(0)
     tmp = Path(tempfile.mkdtemp(prefix="test_verify_book_"))

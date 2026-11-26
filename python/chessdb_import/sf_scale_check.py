@@ -1,8 +1,8 @@
 """Is Stockfish 19's centipawn scale different from Stockfish 18's? (2026-11-22)
 
 The step-2 panel found SF19 depth-24 scores ~1.3-1.5x more extreme than cloud and ChessDB (~1.1-1.2x
-fishnet). Version or depth? Re-search 50 panel positions per group with SF18 (the WinGet binary every tool
-used until 2026-11-21) at the same depth, one thread, fresh engine per position, and compare the slopes.
+fishnet). Version or depth? Re-search 50 panel positions per group with SF18 (engine_path.STOCKFISH, the binary
+every tool used until 2026-11-21 and again since 11-22) at the same depth, one thread, fresh engine per position, and compare the slopes.
 Output: E:/chess/eval-panel-20261122/scale_sf18_d24.jsonl (resumable) and a printed table.
 
 Usage: python sf_scale_check.py [--per-group 50] [--workers 4] [--depth 24]
@@ -13,9 +13,12 @@ import argparse
 import concurrent.futures as cf
 import json
 import os
+import sys
 from pathlib import Path
 
-SF18 = "C:/Users/David/AppData/Local/Microsoft/WinGet/Packages/Stockfish.Stockfish_Microsoft.Winget.Source_8wekyb3d8bbwe/stockfish/stockfish-windows-x86-64-avx2.exe"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from engine_path import STOCKFISH as SF18  # noqa: E402  (same binary, sha256 c86215fa)
+
 OUT = Path("E:/chess/eval-panel-20261122")
 
 

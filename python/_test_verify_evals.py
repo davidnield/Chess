@@ -27,8 +27,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from zobrist import zobrist_int64  # noqa: E402
 from zobrist128 import zobrist128  # noqa: E402
+import explorer_exe  # noqa: E402
 
-EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE", "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
+EXE = explorer_exe.resolve()
 FAILS: list[str] = []
 
 
@@ -62,11 +63,9 @@ def games() -> list[list[chess.Board]]:
 
 
 def main() -> int:
-    if not EXE.is_file():
-        print(f"SKIP: no exe at {EXE}")
-        return 0
-    if subprocess.run([str(EXE), "evals", "--help"], capture_output=True).returncode != 0:
-        print(f"SKIP: {EXE} has no evals subcommand")
+    why = explorer_exe.unusable(EXE, {"evals": []})
+    if why:
+        print(f"SKIP: {why}")
         return 0
     tmp = Path(tempfile.mkdtemp(prefix="ee_verify_evals_"))
     try:

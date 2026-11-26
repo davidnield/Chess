@@ -351,6 +351,11 @@ monthly. The A2 merge reads any producer's month without knowing which made it:
   1.98.1), `CARGO_TARGET_DIR` on D: (C: is nearly full), `cargo build --release --locked`, then
   `cargo test` and `python/_test_rust_extract.py`. Run `explorer-extract selftest` on any machine
   before real use; the binary is x86-64-v3 and says so if the CPU is older.
+- **Exe-dependent tests skip on a stale build, so a green suite is not a test of the exe.** They
+  run `$EXPLORER_EXTRACT_EXE`, else the default cargo target, and `python/explorer_exe.py` skips
+  them when that exe's build commit predates the crate's last change. Point the variable at a build
+  of the checkout. A fresh worktree also needs `rust/book_builder/build.ps1` (the gitignored `.pyd`).
+  The chessdb archive harnesses run under `run_tests.py` only with `CHESSDB_ARCHIVE_RELEASE` set.
 
 Tests: `_test_epd_max_ply.py` (B1 is a no-op at 16 against d79a0c7's `extract_file`),
 `_test_bucket_month.py` (bucket_month's output is the backfill's, row for row),
