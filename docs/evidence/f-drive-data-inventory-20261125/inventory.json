@@ -1,0 +1,1653 @@
+{
+  "started_utc": "2026-11-26T03:31:31.197868+00:00",
+  "seconds": 306.0250606536865,
+  "scope": "file sizes and directory metadata; no byte verification or backup verification",
+  "groups": {
+    "$RECYCLE.BIN": {
+      "files": 65,
+      "directories": 10,
+      "bytes": 35855097973,
+      "rounded_file_allocation_bytes": 35869949952,
+      "newest_mtime": 1794457636.0
+    },
+    "$RECYCLE.BIN/$R3F8UI2": {
+      "files": 63,
+      "directories": 9,
+      "bytes": 35855097766,
+      "rounded_file_allocation_bytes": 35869425664,
+      "newest_mtime": 1792962404.0
+    },
+    "$RECYCLE.BIN/$R3F8UI2/chess": {
+      "files": 5,
+      "directories": 4,
+      "bytes": 29455504920,
+      "rounded_file_allocation_bytes": 29456596992,
+      "newest_mtime": 1791952666.0
+    },
+    "$RECYCLE.BIN/$R3F8UI2/chess-share": {
+      "files": 49,
+      "directories": 2,
+      "bytes": 395370,
+      "rounded_file_allocation_bytes": 12845056,
+      "newest_mtime": 1790728696.0
+    },
+    "$RECYCLE.BIN/$R3F8UI2/chess_duckdb_tmp": {
+      "files": 8,
+      "directories": 2,
+      "bytes": 6399197184,
+      "rounded_file_allocation_bytes": 6399721472,
+      "newest_mtime": 1782971200.0
+    },
+    ".": {
+      "files": 176067,
+      "directories": 168211,
+      "bytes": 14920575764154,
+      "rounded_file_allocation_bytes": 14944683687936,
+      "newest_mtime": 1795566650.0
+    },
+    "Recovery": {
+      "files": 1,
+      "directories": 1,
+      "bytes": 5187,
+      "rounded_file_allocation_bytes": 262144,
+      "newest_mtime": 1662960982.0
+    },
+    "Seagate": {
+      "files": 1,
+      "directories": 2,
+      "bytes": 391,
+      "rounded_file_allocation_bytes": 262144,
+      "newest_mtime": 1637910723.32
+    },
+    "Seagate/Registration": {
+      "files": 1,
+      "directories": 1,
+      "bytes": 391,
+      "rounded_file_allocation_bytes": 262144,
+      "newest_mtime": 1637910723.32
+    },
+    "System Volume Information": {
+      "files": 2,
+      "directories": 3,
+      "bytes": 88,
+      "rounded_file_allocation_bytes": 524288,
+      "newest_mtime": 1657657248.0
+    },
+    "System Volume Information/EDP": {
+      "files": 0,
+      "directories": 2,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "System Volume Information/EDP/Recovery": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess": {
+      "files": 175993,
+      "directories": 168193,
+      "bytes": 14884686272257,
+      "rounded_file_allocation_bytes": 14908777299968,
+      "newest_mtime": 1795566650.0
+    },
+    "chess/chessdb-archive-20260702-v1": {
+      "files": 23,
+      "directories": 6,
+      "bytes": 9908560,
+      "rounded_file_allocation_bytes": 14680064,
+      "newest_mtime": 1795406082.0
+    },
+    "chess/chessdb-archive-20260702-v1/active": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v1/partial": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v1/provenance": {
+      "files": 18,
+      "directories": 2,
+      "bytes": 9746831,
+      "rounded_file_allocation_bytes": 13369344,
+      "newest_mtime": 1795406082.0
+    },
+    "chess/chessdb-archive-20260702-v1/receipts": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v2": {
+      "files": 106,
+      "directories": 23,
+      "bytes": 10031076,
+      "rounded_file_allocation_bytes": 36438016,
+      "newest_mtime": 1795457302.0
+    },
+    "chess/chessdb-archive-20260702-v2/active": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v2/parquet": {
+      "files": 0,
+      "directories": 9,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v2/partial": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v2/provenance": {
+      "files": 18,
+      "directories": 2,
+      "bytes": 9747228,
+      "rounded_file_allocation_bytes": 13369344,
+      "newest_mtime": 1795454490.0
+    },
+    "chess/chessdb-archive-20260702-v2/receipts": {
+      "files": 82,
+      "directories": 9,
+      "bytes": 114888,
+      "rounded_file_allocation_bytes": 21495808,
+      "newest_mtime": 1795453736.0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3": {
+      "files": 6714,
+      "directories": 565,
+      "bytes": 2093396391288,
+      "rounded_file_allocation_bytes": 2094714060800,
+      "newest_mtime": 1795566650.0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3/active": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3/parquet": {
+      "files": 3345,
+      "directories": 280,
+      "bytes": 2093381470759,
+      "rounded_file_allocation_bytes": 2093821984768,
+      "newest_mtime": 1795566608.0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3/partial": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3/provenance": {
+      "files": 18,
+      "directories": 2,
+      "bytes": 9747728,
+      "rounded_file_allocation_bytes": 13369344,
+      "newest_mtime": 1795539342.0
+    },
+    "chess/chessdb-archive-20260702-v6-zstd3/receipts": {
+      "files": 3345,
+      "directories": 280,
+      "bytes": 4666156,
+      "rounded_file_allocation_bytes": 876871680,
+      "newest_mtime": 1795566610.0
+    },
+    "chess/chessdb-archive-benchmark-20261122-v1": {
+      "files": 2,
+      "directories": 1,
+      "bytes": 1073742434,
+      "rounded_file_allocation_bytes": 1074003968,
+      "newest_mtime": 1795403214.0
+    },
+    "chess/chessdb-archive-tests-20261122-v1": {
+      "files": 33,
+      "directories": 22,
+      "bytes": 123092113,
+      "rounded_file_allocation_bytes": 130285568,
+      "newest_mtime": 1795404914.0
+    },
+    "chess/chessdb-archive-tests-20261122-v1/baseline": {
+      "files": 14,
+      "directories": 8,
+      "bytes": 61457415,
+      "rounded_file_allocation_bytes": 64487424,
+      "newest_mtime": 1795404846.0
+    },
+    "chess/chessdb-archive-tests-20261122-v1/reserve": {
+      "files": 5,
+      "directories": 5,
+      "bytes": 177281,
+      "rounded_file_allocation_bytes": 1310720,
+      "newest_mtime": 1795404914.0
+    },
+    "chess/chessdb-archive-tests-20261122-v1/resumed": {
+      "files": 14,
+      "directories": 8,
+      "bytes": 61457417,
+      "rounded_file_allocation_bytes": 64487424,
+      "newest_mtime": 1795404904.0
+    },
+    "chess/chessdb-archive-tests-20261122-v4": {
+      "files": 84,
+      "directories": 25,
+      "bytes": 152127309,
+      "rounded_file_allocation_bytes": 169607168,
+      "newest_mtime": 1795405364.0
+    },
+    "chess/chessdb-archive-tests-20261122-v4/baseline": {
+      "files": 31,
+      "directories": 9,
+      "bytes": 71135847,
+      "rounded_file_allocation_bytes": 77594624,
+      "newest_mtime": 1795405300.0
+    },
+    "chess/chessdb-archive-tests-20261122-v4/reserve": {
+      "files": 22,
+      "directories": 6,
+      "bytes": 9855613,
+      "rounded_file_allocation_bytes": 14417920,
+      "newest_mtime": 1795405364.0
+    },
+    "chess/chessdb-archive-tests-20261122-v4/resumed": {
+      "files": 31,
+      "directories": 9,
+      "bytes": 71135849,
+      "rounded_file_allocation_bytes": 77594624,
+      "newest_mtime": 1795405356.0
+    },
+    "chess/chessdb-archive-tests-20261122-v5": {
+      "files": 84,
+      "directories": 25,
+      "bytes": 152128489,
+      "rounded_file_allocation_bytes": 169607168,
+      "newest_mtime": 1795406202.0
+    },
+    "chess/chessdb-archive-tests-20261122-v5/baseline": {
+      "files": 31,
+      "directories": 9,
+      "bytes": 71136247,
+      "rounded_file_allocation_bytes": 77594624,
+      "newest_mtime": 1795406128.0
+    },
+    "chess/chessdb-archive-tests-20261122-v5/reserve": {
+      "files": 22,
+      "directories": 6,
+      "bytes": 9856010,
+      "rounded_file_allocation_bytes": 14417920,
+      "newest_mtime": 1795406202.0
+    },
+    "chess/chessdb-archive-tests-20261122-v5/resumed": {
+      "files": 31,
+      "directories": 9,
+      "bytes": 71136232,
+      "rounded_file_allocation_bytes": 77594624,
+      "newest_mtime": 1795406192.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-smoke": {
+      "files": 4,
+      "directories": 7,
+      "bytes": 438819,
+      "rounded_file_allocation_bytes": 1310720,
+      "newest_mtime": 1795454062.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-smoke/active": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-speed-benchmark-20261123-smoke/parquet": {
+      "files": 1,
+      "directories": 2,
+      "bytes": 348086,
+      "rounded_file_allocation_bytes": 524288,
+      "newest_mtime": 1795454062.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-smoke/partial": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-speed-benchmark-20261123-smoke/receipts": {
+      "files": 1,
+      "directories": 2,
+      "bytes": 1398,
+      "rounded_file_allocation_bytes": 262144,
+      "newest_mtime": 1795454062.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v1": {
+      "files": 0,
+      "directories": 5,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v1/arm00": {
+      "files": 0,
+      "directories": 4,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v3": {
+      "files": 19,
+      "directories": 22,
+      "bytes": 1229669966,
+      "rounded_file_allocation_bytes": 1233125376,
+      "newest_mtime": 1795454780.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v3/arm00": {
+      "files": 19,
+      "directories": 21,
+      "bytes": 1229669966,
+      "rounded_file_allocation_bytes": 1233125376,
+      "newest_mtime": 1795454780.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4": {
+      "files": 208,
+      "directories": 233,
+      "bytes": 15167527523,
+      "rounded_file_allocation_bytes": 15208546304,
+      "newest_mtime": 1795455844.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm00": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1827837011,
+      "rounded_file_allocation_bytes": 1832648704,
+      "newest_mtime": 1795455120.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm01": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1827837000,
+      "rounded_file_allocation_bytes": 1832648704,
+      "newest_mtime": 1795455234.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm02": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1964044880,
+      "rounded_file_allocation_bytes": 1969487872,
+      "newest_mtime": 1795455320.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm03": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1964044857,
+      "rounded_file_allocation_bytes": 1969487872,
+      "newest_mtime": 1795455424.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm04": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1964044878,
+      "rounded_file_allocation_bytes": 1969487872,
+      "newest_mtime": 1795455524.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm05": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1964044842,
+      "rounded_file_allocation_bytes": 1969487872,
+      "newest_mtime": 1795455610.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm06": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1827837033,
+      "rounded_file_allocation_bytes": 1832648704,
+      "newest_mtime": 1795455716.0
+    },
+    "chess/chessdb-speed-benchmark-20261123-v4/arm07": {
+      "files": 26,
+      "directories": 29,
+      "bytes": 1827837022,
+      "rounded_file_allocation_bytes": 1832648704,
+      "newest_mtime": 1795455844.0
+    },
+    "chess/explorer_banded": {
+      "files": 84114,
+      "directories": 83630,
+      "bytes": 3987019918443,
+      "rounded_file_allocation_bytes": 3998174674944,
+      "newest_mtime": 1790602874.0
+    },
+    "chess/explorer_banded/rust_p30k": {
+      "files": 84114,
+      "directories": 83629,
+      "bytes": 3987019918443,
+      "rounded_file_allocation_bytes": 3998174674944,
+      "newest_mtime": 1790602874.0
+    },
+    "chess/explorer_brc_p51_pilot": {
+      "files": 84275,
+      "directories": 83624,
+      "bytes": 8032782244716,
+      "rounded_file_allocation_bytes": 8044237815808,
+      "newest_mtime": 1795004136.0
+    },
+    "chess/explorer_brc_p51_pilot/_archive_receipts": {
+      "files": 163,
+      "directories": 1,
+      "bytes": 10183672,
+      "rounded_file_allocation_bytes": 42729472,
+      "newest_mtime": 1795004132.0
+    },
+    "chess/explorer_brc_p51_pilot/_manifest": {
+      "files": 163,
+      "directories": 1,
+      "bytes": 1422664,
+      "rounded_file_allocation_bytes": 42729472,
+      "newest_mtime": 1795004122.0
+    },
+    "chess/explorer_brc_p51_pilot/_provenance": {
+      "files": 163,
+      "directories": 1,
+      "bytes": 623294,
+      "rounded_file_allocation_bytes": 42729472,
+      "newest_mtime": 1795004122.0
+    },
+    "chess/explorer_brc_p51_pilot/_term": {
+      "files": 163,
+      "directories": 1,
+      "bytes": 79313674245,
+      "rounded_file_allocation_bytes": 79334998016,
+      "newest_mtime": 1795004130.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 208786654,
+      "rounded_file_allocation_bytes": 268435456,
+      "newest_mtime": 1794852784.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 685201990,
+      "rounded_file_allocation_bytes": 805044224,
+      "newest_mtime": 1794853124.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 812890548,
+      "rounded_file_allocation_bytes": 928251904,
+      "newest_mtime": 1794853176.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 953665596,
+      "rounded_file_allocation_bytes": 1071644672,
+      "newest_mtime": 1794853230.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 218844050,
+      "rounded_file_allocation_bytes": 268435456,
+      "newest_mtime": 1794852836.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 271595248,
+      "rounded_file_allocation_bytes": 376963072,
+      "newest_mtime": 1794852878.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 261232961,
+      "rounded_file_allocation_bytes": 271581184,
+      "newest_mtime": 1794852916.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 296704467,
+      "rounded_file_allocation_bytes": 402653184,
+      "newest_mtime": 1794852958.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 383345675,
+      "rounded_file_allocation_bytes": 402653184,
+      "newest_mtime": 1794852996.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 506874157,
+      "rounded_file_allocation_bytes": 536870912,
+      "newest_mtime": 1794781318.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 555389152,
+      "rounded_file_allocation_bytes": 671088640,
+      "newest_mtime": 1794853040.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2013_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 556799035,
+      "rounded_file_allocation_bytes": 671088640,
+      "newest_mtime": 1794853082.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1167888383,
+      "rounded_file_allocation_bytes": 1207959552,
+      "newest_mtime": 1794853284.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1631249157,
+      "rounded_file_allocation_bytes": 1744044032,
+      "newest_mtime": 1794853802.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1775763168,
+      "rounded_file_allocation_bytes": 1879048192,
+      "newest_mtime": 1794853860.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1958074844,
+      "rounded_file_allocation_bytes": 2013265920,
+      "newest_mtime": 1794853926.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1137838882,
+      "rounded_file_allocation_bytes": 1207959552,
+      "newest_mtime": 1794853364.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1257013580,
+      "rounded_file_allocation_bytes": 1342177280,
+      "newest_mtime": 1794853430.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1267769689,
+      "rounded_file_allocation_bytes": 1342177280,
+      "newest_mtime": 1794853520.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1335619437,
+      "rounded_file_allocation_bytes": 1364721664,
+      "newest_mtime": 1794853578.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1358096185,
+      "rounded_file_allocation_bytes": 1474822144,
+      "newest_mtime": 1794853632.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1504658288,
+      "rounded_file_allocation_bytes": 1610612736,
+      "newest_mtime": 1794781388.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1541458360,
+      "rounded_file_allocation_bytes": 1610612736,
+      "newest_mtime": 1794853688.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2014_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 1515337364,
+      "rounded_file_allocation_bytes": 1610612736,
+      "newest_mtime": 1794853746.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2134562380,
+      "rounded_file_allocation_bytes": 2156920832,
+      "newest_mtime": 1794853992.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 4045762596,
+      "rounded_file_allocation_bytes": 4153933824,
+      "newest_mtime": 1794854722.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 4276886798,
+      "rounded_file_allocation_bytes": 4308074496,
+      "newest_mtime": 1794854810.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 4982278372,
+      "rounded_file_allocation_bytes": 5089263616,
+      "newest_mtime": 1794854904.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2131234749,
+      "rounded_file_allocation_bytes": 2155347968,
+      "newest_mtime": 1794854060.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2483759787,
+      "rounded_file_allocation_bytes": 2550136832,
+      "newest_mtime": 1794854170.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2516628858,
+      "rounded_file_allocation_bytes": 2550136832,
+      "newest_mtime": 1794854258.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2711269142,
+      "rounded_file_allocation_bytes": 2818048000,
+      "newest_mtime": 1794854362.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2809998429,
+      "rounded_file_allocation_bytes": 2848194560,
+      "newest_mtime": 1794854482.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 2989111462,
+      "rounded_file_allocation_bytes": 3087007744,
+      "newest_mtime": 1794781482.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 3187120226,
+      "rounded_file_allocation_bytes": 3221487616,
+      "newest_mtime": 1794854558.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2015_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 3480830189,
+      "rounded_file_allocation_bytes": 3519021056,
+      "newest_mtime": 1794854636.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 5784361330,
+      "rounded_file_allocation_bytes": 5885394944,
+      "newest_mtime": 1794855014.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 9158013927,
+      "rounded_file_allocation_bytes": 9256566784,
+      "newest_mtime": 1794856376.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 9844721896,
+      "rounded_file_allocation_bytes": 9931849728,
+      "newest_mtime": 1794856530.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 11429337784,
+      "rounded_file_allocation_bytes": 11523325952,
+      "newest_mtime": 1794856700.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 6126967265,
+      "rounded_file_allocation_bytes": 6174015488,
+      "newest_mtime": 1794855122.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7064196633,
+      "rounded_file_allocation_bytes": 7113539584,
+      "newest_mtime": 1794855238.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7268133442,
+      "rounded_file_allocation_bytes": 7371751424,
+      "newest_mtime": 1794855466.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7827253215,
+      "rounded_file_allocation_bytes": 7918321664,
+      "newest_mtime": 1794855648.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7659291913,
+      "rounded_file_allocation_bytes": 7747665920,
+      "newest_mtime": 1794855834.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7782849270,
+      "rounded_file_allocation_bytes": 7845707776,
+      "newest_mtime": 1794781664.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 7980853290,
+      "rounded_file_allocation_bytes": 8053063680,
+      "newest_mtime": 1794856020.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2016_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 8365823701,
+      "rounded_file_allocation_bytes": 8455192576,
+      "newest_mtime": 1794856214.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 12771413557,
+      "rounded_file_allocation_bytes": 12863930368,
+      "newest_mtime": 1794856884.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 15754109380,
+      "rounded_file_allocation_bytes": 15835856896,
+      "newest_mtime": 1794859030.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 16454789447,
+      "rounded_file_allocation_bytes": 16510353408,
+      "newest_mtime": 1794859340.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 18139049239,
+      "rounded_file_allocation_bytes": 18227134464,
+      "newest_mtime": 1794859578.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 12425625102,
+      "rounded_file_allocation_bytes": 12482510848,
+      "newest_mtime": 1794857094.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 13760950161,
+      "rounded_file_allocation_bytes": 13824163840,
+      "newest_mtime": 1794857292.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 13277993342,
+      "rounded_file_allocation_bytes": 13329498112,
+      "newest_mtime": 1794857482.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 13649907165,
+      "rounded_file_allocation_bytes": 13696237568,
+      "newest_mtime": 1794857866.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 13263473148,
+      "rounded_file_allocation_bytes": 13303283712,
+      "newest_mtime": 1794858148.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 13768842266,
+      "rounded_file_allocation_bytes": 13825474560,
+      "newest_mtime": 1794781976.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 14195261541,
+      "rounded_file_allocation_bytes": 14239399936,
+      "newest_mtime": 1794858430.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2017_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 14464631521,
+      "rounded_file_allocation_bytes": 14507048960,
+      "newest_mtime": 1794858720.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 19631422106,
+      "rounded_file_allocation_bytes": 19718471680,
+      "newest_mtime": 1794859852.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 26162494602,
+      "rounded_file_allocation_bytes": 26222264320,
+      "newest_mtime": 1794887724.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 27809746320,
+      "rounded_file_allocation_bytes": 27885830144,
+      "newest_mtime": 1794888192.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 33010932020,
+      "rounded_file_allocation_bytes": 33073922048,
+      "newest_mtime": 1794888784.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 19006373636,
+      "rounded_file_allocation_bytes": 19062849536,
+      "newest_mtime": 1794860098.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 21632083887,
+      "rounded_file_allocation_bytes": 21714173952,
+      "newest_mtime": 1794860366.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 21160602556,
+      "rounded_file_allocation_bytes": 21214003200,
+      "newest_mtime": 1794860634.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 22428308781,
+      "rounded_file_allocation_bytes": 22503489536,
+      "newest_mtime": 1794860940.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 21240854326,
+      "rounded_file_allocation_bytes": 21324890112,
+      "newest_mtime": 1794861530.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 22349200473,
+      "rounded_file_allocation_bytes": 22415933440,
+      "newest_mtime": 1794782430.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 23843148554,
+      "rounded_file_allocation_bytes": 23901503488,
+      "newest_mtime": 1794861838.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2018_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 24131591497,
+      "rounded_file_allocation_bytes": 24184881152,
+      "newest_mtime": 1794887280.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 35200803195,
+      "rounded_file_allocation_bytes": 35277766656,
+      "newest_mtime": 1794889362.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 41508073567,
+      "rounded_file_allocation_bytes": 41578921984,
+      "newest_mtime": 1794893614.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 41312474194,
+      "rounded_file_allocation_bytes": 41372876800,
+      "newest_mtime": 1794894272.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 44867673250,
+      "rounded_file_allocation_bytes": 44938559488,
+      "newest_mtime": 1794894970.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 32295903273,
+      "rounded_file_allocation_bytes": 32360366080,
+      "newest_mtime": 1794889902.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 36291300098,
+      "rounded_file_allocation_bytes": 36366188544,
+      "newest_mtime": 1794890474.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 34973564905,
+      "rounded_file_allocation_bytes": 35038429184,
+      "newest_mtime": 1794890870.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 36484920588,
+      "rounded_file_allocation_bytes": 36545757184,
+      "newest_mtime": 1794891298.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 35159904980,
+      "rounded_file_allocation_bytes": 35220881408,
+      "newest_mtime": 1794891714.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 36898422767,
+      "rounded_file_allocation_bytes": 36963090432,
+      "newest_mtime": 1794783180.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 37824336628,
+      "rounded_file_allocation_bytes": 37883215872,
+      "newest_mtime": 1794892144.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2019_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 38068898723,
+      "rounded_file_allocation_bytes": 38133563392,
+      "newest_mtime": 1794892568.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 47541019007,
+      "rounded_file_allocation_bytes": 47609282560,
+      "newest_mtime": 1794895790.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 66837812413,
+      "rounded_file_allocation_bytes": 66902818816,
+      "newest_mtime": 1794902408.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 75410971388,
+      "rounded_file_allocation_bytes": 75478073344,
+      "newest_mtime": 1794903510.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 86907345347,
+      "rounded_file_allocation_bytes": 86974398464,
+      "newest_mtime": 1794904782.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 45138667561,
+      "rounded_file_allocation_bytes": 45211451392,
+      "newest_mtime": 1794896520.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 53314146369,
+      "rounded_file_allocation_bytes": 53382742016,
+      "newest_mtime": 1794897324.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 63368249189,
+      "rounded_file_allocation_bytes": 63437537280,
+      "newest_mtime": 1794769682.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 66991622823,
+      "rounded_file_allocation_bytes": 67058270208,
+      "newest_mtime": 1794898254.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 65543482525,
+      "rounded_file_allocation_bytes": 65614905344,
+      "newest_mtime": 1794898938.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 66814389884,
+      "rounded_file_allocation_bytes": 66880012288,
+      "newest_mtime": 1794784634.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 67424274311,
+      "rounded_file_allocation_bytes": 67492118528,
+      "newest_mtime": 1794899642.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2020_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 64577733821,
+      "rounded_file_allocation_bytes": 64643923968,
+      "newest_mtime": 1794901408.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93590755554,
+      "rounded_file_allocation_bytes": 93658546176,
+      "newest_mtime": 1794906340.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 85133038325,
+      "rounded_file_allocation_bytes": 85199421440,
+      "newest_mtime": 1794919490.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 84452634705,
+      "rounded_file_allocation_bytes": 84522303488,
+      "newest_mtime": 1794920728.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 92866492994,
+      "rounded_file_allocation_bytes": 92933980160,
+      "newest_mtime": 1794922262.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 87613785409,
+      "rounded_file_allocation_bytes": 87681925120,
+      "newest_mtime": 1794907224.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 96072890691,
+      "rounded_file_allocation_bytes": 96143147008,
+      "newest_mtime": 1794910362.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93312043153,
+      "rounded_file_allocation_bytes": 93378838528,
+      "newest_mtime": 1794912056.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 94506334848,
+      "rounded_file_allocation_bytes": 94572904448,
+      "newest_mtime": 1794913852.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 87017215272,
+      "rounded_file_allocation_bytes": 87084236800,
+      "newest_mtime": 1794915022.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88864908392,
+      "rounded_file_allocation_bytes": 88935497728,
+      "newest_mtime": 1794786552.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90629025739,
+      "rounded_file_allocation_bytes": 90695008256,
+      "newest_mtime": 1794915938.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2021_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 84983935750,
+      "rounded_file_allocation_bytes": 85049999360,
+      "newest_mtime": 1794918238.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 97307347815,
+      "rounded_file_allocation_bytes": 97375485952,
+      "newest_mtime": 1794923722.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 91224327667,
+      "rounded_file_allocation_bytes": 91291385856,
+      "newest_mtime": 1794935962.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88356431943,
+      "rounded_file_allocation_bytes": 88419860480,
+      "newest_mtime": 1794937088.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 92428389997,
+      "rounded_file_allocation_bytes": 92495413248,
+      "newest_mtime": 1794938052.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 83335213522,
+      "rounded_file_allocation_bytes": 83402948608,
+      "newest_mtime": 1794925970.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88895402430,
+      "rounded_file_allocation_bytes": 88963284992,
+      "newest_mtime": 1794927278.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 85197840681,
+      "rounded_file_allocation_bytes": 85267316736,
+      "newest_mtime": 1794928576.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 87404655646,
+      "rounded_file_allocation_bytes": 87471423488,
+      "newest_mtime": 1794929680.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 86143775167,
+      "rounded_file_allocation_bytes": 86214180864,
+      "newest_mtime": 1794930586.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90821960763,
+      "rounded_file_allocation_bytes": 90889256960,
+      "newest_mtime": 1794788498.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 91368218334,
+      "rounded_file_allocation_bytes": 91435827200,
+      "newest_mtime": 1794933338.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2022_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88287821388,
+      "rounded_file_allocation_bytes": 88356159488,
+      "newest_mtime": 1794934628.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 102276262118,
+      "rounded_file_allocation_bytes": 102345211904,
+      "newest_mtime": 1794941442.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93781464149,
+      "rounded_file_allocation_bytes": 93849911296,
+      "newest_mtime": 1794956890.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 91768669613,
+      "rounded_file_allocation_bytes": 91835072512,
+      "newest_mtime": 1794959694.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 95203127158,
+      "rounded_file_allocation_bytes": 95270993920,
+      "newest_mtime": 1794961810.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 97686036515,
+      "rounded_file_allocation_bytes": 97749041152,
+      "newest_mtime": 1794943210.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 105953841742,
+      "rounded_file_allocation_bytes": 106020208640,
+      "newest_mtime": 1794945550.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 99958207356,
+      "rounded_file_allocation_bytes": 100023926784,
+      "newest_mtime": 1794946982.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 101881263260,
+      "rounded_file_allocation_bytes": 101949898752,
+      "newest_mtime": 1794950382.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 94810912817,
+      "rounded_file_allocation_bytes": 94879612928,
+      "newest_mtime": 1794952098.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93973448026,
+      "rounded_file_allocation_bytes": 94038654976,
+      "newest_mtime": 1794790516.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 94987765156,
+      "rounded_file_allocation_bytes": 95053676544,
+      "newest_mtime": 1794953956.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2023_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 92287064467,
+      "rounded_file_allocation_bytes": 92353331200,
+      "newest_mtime": 1794955476.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 97203988739,
+      "rounded_file_allocation_bytes": 97272463360,
+      "newest_mtime": 1794963750.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 91873806677,
+      "rounded_file_allocation_bytes": 91942551552,
+      "newest_mtime": 1794973940.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88737471303,
+      "rounded_file_allocation_bytes": 88805736448,
+      "newest_mtime": 1794976562.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 94586852615,
+      "rounded_file_allocation_bytes": 94656004096,
+      "newest_mtime": 1794978558.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90213464646,
+      "rounded_file_allocation_bytes": 90276888576,
+      "newest_mtime": 1794965162.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 94471923521,
+      "rounded_file_allocation_bytes": 94539350016,
+      "newest_mtime": 1794966284.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90108365987,
+      "rounded_file_allocation_bytes": 90178846720,
+      "newest_mtime": 1794968858.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 92744184085,
+      "rounded_file_allocation_bytes": 92807364608,
+      "newest_mtime": 1794970388.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 87712787132,
+      "rounded_file_allocation_bytes": 87778918400,
+      "newest_mtime": 1794768226.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88641506460,
+      "rounded_file_allocation_bytes": 88708743168,
+      "newest_mtime": 1794792580.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90521473783,
+      "rounded_file_allocation_bytes": 90589364224,
+      "newest_mtime": 1794971756.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2024_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 86067688486,
+      "rounded_file_allocation_bytes": 86135275520,
+      "newest_mtime": 1794973032.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 98004709830,
+      "rounded_file_allocation_bytes": 98074361856,
+      "newest_mtime": 1794980722.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_10": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90706746042,
+      "rounded_file_allocation_bytes": 90771292160,
+      "newest_mtime": 1794993640.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_11": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 89445473951,
+      "rounded_file_allocation_bytes": 89513787392,
+      "newest_mtime": 1794995078.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_12": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93548262945,
+      "rounded_file_allocation_bytes": 93615030272,
+      "newest_mtime": 1794996616.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 87441342878,
+      "rounded_file_allocation_bytes": 87507337216,
+      "newest_mtime": 1794982270.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 95180592750,
+      "rounded_file_allocation_bytes": 95249760256,
+      "newest_mtime": 1794983626.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 89825671350,
+      "rounded_file_allocation_bytes": 89891799040,
+      "newest_mtime": 1794986142.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 91585428725,
+      "rounded_file_allocation_bytes": 91654717440,
+      "newest_mtime": 1794987586.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 88808753564,
+      "rounded_file_allocation_bytes": 88875728896,
+      "newest_mtime": 1794988986.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90819859421,
+      "rounded_file_allocation_bytes": 90888208384,
+      "newest_mtime": 1794794808.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_8": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90571785838,
+      "rounded_file_allocation_bytes": 90636550144,
+      "newest_mtime": 1794990100.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2025_9": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 85715226226,
+      "rounded_file_allocation_bytes": 85783216128,
+      "newest_mtime": 1794991096.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_1": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 93302062433,
+      "rounded_file_allocation_bytes": 93369663488,
+      "newest_mtime": 1794998250.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_2": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 83954957742,
+      "rounded_file_allocation_bytes": 84021084160,
+      "newest_mtime": 1794999244.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_3": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 89041381468,
+      "rounded_file_allocation_bytes": 89108250624,
+      "newest_mtime": 1794765142.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_4": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 89261729915,
+      "rounded_file_allocation_bytes": 89329762304,
+      "newest_mtime": 1795001778.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_5": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 90496683206,
+      "rounded_file_allocation_bytes": 90566033408,
+      "newest_mtime": 1795003066.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_6": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 86294887000,
+      "rounded_file_allocation_bytes": 86365437952,
+      "newest_mtime": 1795004122.0
+    },
+    "chess/explorer_brc_p51_pilot/month=2026_7": {
+      "files": 512,
+      "directories": 513,
+      "bytes": 89892465437,
+      "rounded_file_allocation_bytes": 89960480768,
+      "newest_mtime": 1794796904.0
+    },
+    "chess/position-stats": {
+      "files": 326,
+      "directories": 4,
+      "bytes": 753569050313,
+      "rounded_file_allocation_bytes": 753612881920,
+      "newest_mtime": 1786822482.0
+    },
+    "chess/position-stats/_pooled_partials_ge1800_2013_2026_brc": {
+      "files": 326,
+      "directories": 3,
+      "bytes": 753569050313,
+      "rounded_file_allocation_bytes": 753612881920,
+      "newest_mtime": 1786822482.0
+    },
+    "chess_duckdb_tmp": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    },
+    "msdownld.tmp": {
+      "files": 0,
+      "directories": 1,
+      "bytes": 0,
+      "rounded_file_allocation_bytes": 0,
+      "newest_mtime": 0
+    }
+  },
+  "errors": []
+}
