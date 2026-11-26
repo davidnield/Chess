@@ -60,6 +60,17 @@ class OwnCalibration(unittest.TestCase):
         legal, counts = got.legal[0], got.counts[0]
         self.assertEqual(sum(counts), 10)
         self.assertEqual(counts[legal.index("e2e4")], 7)
+        # one move under two spellings (the explorer keeps the source's SAN): the rows add up
+        both = records_for(start, {"Nf3": 5}) + [dict(records_for(start, {"Nf3": 2})[0], move_san="Ngf3")]
+        got = oc.count_stage(boards, lambda bs: [both])
+        self.assertEqual(got.counts[0][got.legal[0].index("g1f3")], 7)
+        from sweep.frontier import Counts, vectors
+        rec = {n: [] for n in Counts.names}
+        rec["adult"] = [dict(r, white_wins=r["total"], draws=0, black_wins=0) for r in both]
+        rec["aux"] = {}
+        legal, _, adult, _, _, outcomes, _ = vectors(start, rec)
+        self.assertEqual(adult[legal.index("g1f3")], 7)
+        self.assertEqual(outcomes["g1f3"], (7, 0, 0))
         wrong = records_for(start, {"e4": 7})
         wrong[0]["child_hash"] = dict(wrong[0]["child_hash"], hi=wrong[0]["child_hash"]["hi"] ^ 1)
         with self.assertRaisesRegex(ValueError, "child"):

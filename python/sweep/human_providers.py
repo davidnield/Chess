@@ -31,14 +31,15 @@ def count_vector(board,records):
     legal=sorted(m.uci() for m in board.legal_moves)
     if not legal:raise ValueError("terminal board has no own policy")
     counts=dict.fromkeys(legal,0.)
-    seen=set();key=stored_key(board,True)
+    key=stored_key(board,True)
     for row in records:
         if row["parent_hash"]!=key:raise ValueError("weak count full key differs")
         move=board.parse_san(row["move_san"]);u=move.uci()
-        if u in seen:raise ValueError("duplicate weak move")
-        seen.add(u);child=board.copy(stack=False);child.push(move)
+        child=board.copy(stack=False);child.push(move)
         if stored_key(child,True)!=row["child_hash"]:raise ValueError("weak child differs from legal replay")
-        counts[u]=row["total"]
+        # The explorer keeps SAN as the source wrote it, so one move can arrive under two
+        # spellings (Re1 and an over-disambiguated Rfe1): rows of the same legal move add up.
+        counts[u]+=row["total"]
     return legal,_vector("weak counts",list(counts.values()),len(legal))
 
 

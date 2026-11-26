@@ -73,36 +73,35 @@ def vectors(board, record):
     counts={n:{u:0 for u in legal} for n in Counts.names}
     outcomes={}
     expected=stored_key(board,True)
+    # The explorer keeps SAN as the source wrote it, so one legal move can arrive as two rows
+    # (Re1 and an over-disambiguated Rfe1, same child): their counts and outcomes add up.
+    add=lambda x,y:tuple(a+b for a,b in zip(x,y))
     for name in Counts.names:
-        seen=set()
         for row in record[name]:
             if row["parent_hash"]!=expected: raise ValueError("count lookup returned another full key")
             move=board.parse_san(row["move_san"]); u=move.uci()
-            if u in seen: raise ValueError("duplicate move in a pooled count table")
-            seen.add(u)
             n=row["total"]
             if not math.isfinite(n) or n<1 or int(n)!=n: raise ValueError("not an uncut observed-move count")
             board.push(move)
             if row["child_hash"]!=stored_key(board,True): raise ValueError("count child differs from legal replay")
             board.pop()
-            counts[name][u]=n
+            counts[name][u]+=n
             if name=="adult" and "outcome" not in record:
                 result=tuple(row[c] for c in ("white_wins","draws","black_wins"))
                 if sum(result)!=n or any(v<0 or int(v)!=v for v in result):
                     raise ValueError("invalid outcome counts")
-                outcomes[u]=result
+                outcomes[u]=add(outcomes[u],result) if u in outcomes else result
     if "outcome" in record:
         for row in record["outcome"]:
             if row["parent_hash"]!=expected:raise ValueError("outcome pool full key differs")
             move=board.parse_san(row["move_san"]);u=move.uci()
-            if u in outcomes:raise ValueError("duplicate outcome-pool move")
             child=board.copy(stack=False);child.push(move)
             if row["child_hash"]!=stored_key(child,True):raise ValueError("outcome child differs from legal replay")
             result=tuple(row[c] for c in ("white_wins","draws","black_wins"))
             if (sum(result)!=row["total"] or row["total"]<1 or
                 any(not math.isfinite(v) or v<0 or int(v)!=v for v in result)):
                 raise ValueError("invalid outcome-pool counts")
-            outcomes[u]=result
+            outcomes[u]=add(outcomes[u],result) if u in outcomes else result
     aux=record["aux"]
     if aux.get("other_total",0)!=0: raise ValueError("cutoff-generated Other mass in an uncut pool")
     nonmove=sum(aux.get(group+"_total",0) or 0 for group in ("term_normal","term_flag","term_other","horizon"))
