@@ -28,7 +28,7 @@ def combine(plans):
             if b.turn!=(plan["colour"]=="white"): raise ValueError("request side differs")
             epd=" ".join(b.fen(en_passant="fen").split()[:4])
             g=grouped.setdefault(pair,dict(key=row["key"],epd=epd,moves=set(),done=set(),
-                    menu={},previous_nodes=0,policies=[],books=set(),reasons=set()))
+                    menu={},references=[],previous_nodes=0,policies=[],books=set(),reasons=set()))
             if epd!=g["epd"]: raise ValueError("full-key request has a different board")
             for item in row["menu"]:
                 san=item["san"]
@@ -36,9 +36,11 @@ def combine(plans):
                 if item["child"]!=stored_key(child,True):
                     raise ValueError("comparison menu child does not match legal replay")
                 old=g["menu"].get(san)
-                if old and old!=item:
+                if old and {k:v for k,v in old.items() if k!="stored_cp"}!={k:v for k,v in item.items() if k!="stored_cp"}:
                     raise ValueError("books use different candidate counts/evidence at a shared parent")
-                g["menu"][san]=item
+                g["menu"].setdefault(san,item)
+            g["references"].append(dict(book=plan["book_sha256"],policy=policy,
+                    stored={item["san"]:item["stored_cp"] for item in row["menu"]}))
             g["moves"].update(row["moves"]);g["done"].update(row["done"])
             g["previous_nodes"]=max(g["previous_nodes"],row["previous_nodes"])
             if policy not in g["policies"]: g["policies"].append(policy)
@@ -90,14 +92,15 @@ def verify(plans, *, cache, out, prior=None, nodes=5_000_000, deep_nodes=20_000_
             board=checked_board(epd,h);sign=1 if board.turn else -1
             # comparison_set needs scalar local child IDs, never persisted as position keys.
             menu={san:dict(move_san=san,child_hash=i,total=e["total"]) for i,(san,e) in enumerate(sorted(g["menu"].items()))}
-            stored={menu[san]["child_hash"]:e["stored_cp"] for san,e in g["menu"].items() if e["stored_cp"] is not None}
             use=set(g["moves"])|set(g["done"])
             first=[True]
             def search(moves,unused):
                 saved=base.get(h,epd,moves,count=first[0]);first[0]=False;return saved
             while True:
                 before=set(use)
-                for policy in g["policies"]:
+                for reference in g["references"]:
+                    policy=reference["policy"]
+                    stored={menu[san]["child_hash"]:cp for san,cp in reference["stored"].items() if cp is not None}
                     extra,saved=rv.comparison_set(search,use,g["done"],menu,stored,0,
                                                   policy["limit"],sign,score_units=True)
                     use.update(extra)

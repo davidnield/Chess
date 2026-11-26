@@ -484,6 +484,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--rep", required=True, help="Unconstrained source rep parquet.")
     ap.add_argument("--stats", required=True)
+    ap.add_argument("--eval-binding", help="Pinned full-key evaluation provider; leaves count metadata unchanged")
+    ap.add_argument("--continuation-config", help="Explicit engineering contract for shared own/opponent native continuation")
     ap.add_argument("--opponent-policy-config",
                     help="Selective OTB ensemble config; queries only reached full-key opponent positions")
     ap.add_argument("--opponent-prior", help="Frozen named replies and Maia probabilities at opponent positions")
@@ -655,7 +657,13 @@ def main() -> int:
     if not budget_rs.available():
         print("FATAL: the book_builder_rs extension is not built: pwsh rust/book_builder/build.ps1")
         return 1
-    keys = ConsumerKeys.for_pool(a.stats)
+    keys = ConsumerKeys.for_pool(a.stats, eval_binding=a.eval_binding)
+    continuation_recipe=None
+    if a.continuation_config:
+        if not keys or not a.eval_binding or not a.opponent_policy_config:
+            ap.error("corrected continuation needs full keys, explicit eval binding and a live opponent provider")
+        if any((a.sampled_stop,a.sampled_other,a.dump_stop_positions,a.dump_other_positions,a.dump_engine_targets)):
+            ap.error("legacy sample/dump paths are not compatible with the corrected continuation contract")
     study_fields = (a.optimizer_study_config, a.optimizer_study_receipts, a.optimizer_study_out)
     study_config = study_receipts = None
     if any(study_fields):
@@ -915,6 +923,9 @@ def main() -> int:
         from sweep.frontier import from_config
         reply_overlay = from_config(a.opponent_policy_config, colour=a.perspective,
                                     keys=keys, pool=stats, aux=aux_path)
+        if a.continuation_config and reply_overlay.semantics!="conditional-board-v1":
+            reply_overlay.close()
+            ap.error("corrected continuation requires conditional-board-v1 opponent semantics")
         for h, moves in (proposal_moves or {}).items():
             for san,ch in moves:
                 if ch is not None:
@@ -933,13 +944,13 @@ def main() -> int:
         edf = collect_subgraph_edges_rs(con, graph_stats, root, our_white, eps,
                                      a.max_ply, a.share_floor, a.min_games, admit, proposal_moves,
                                      reply_overlay, uncut_own=bool(uncut), keys=keys, source_moves=src_all)
-        if a.opponent_policy_config:
+        if a.opponent_policy_config and not a.continuation_config:
             reply_overlay.publish(str(a.out_prefix)+".opponent.parquet")
     finally:
-        if a.opponent_policy_config:
+        if a.opponent_policy_config and not a.continuation_config:
             reply_overlay.close()
     del src_all, admit
-    if a.opponent_policy_config:
+    if a.opponent_policy_config and not a.continuation_config:
         # Reopen the frozen artifact for downstream assembly/audits.
         from opponent_prior import ReplyOverlay
         reply_overlay = ReplyOverlay(str(a.out_prefix)+".opponent.parquet",0,stats,aux_path,
@@ -1235,10 +1246,36 @@ def main() -> int:
             return 1
         from weak_stop import EvalSource, weak_stop_values
         xs, ys = rsg.stop_positions()
-        W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
-                                    evals=EvalSource(our_white, lookup=keys.scores if keys else None, overrides=verified_cp),
-                                    min_weak=a.weak_min_games,
-                                    min_share=WEAK_MIN_SHARE, log=log, positions=keys)
+        if a.continuation_config:
+            from sweep.human_providers import from_config as shared_policies
+            from sweep.continuation import values as continuation_values
+            from sweep.stages import atomic_json
+            policies=None
+            try:
+                policies,continuation_recipe=shared_policies(a.continuation_config,keys=keys,opponent=reply_overlay,
+                                                              weak_pool=a.weak_pool,candidate_cap=a.max_ply)
+                def continuation_lookup(ids):
+                    raw=keys.scores(ids)
+                    return np.array([verified_cp.get(int(h),cp) for h,cp in zip(ids,raw)],np.float64)
+                W,R,report=continuation_values(xs,ys,policies=policies,keys=keys,lookup=continuation_lookup,recipe=continuation_recipe)
+                report["recipe"]=continuation_recipe
+                report["evaluation_binding"]=keys.binding
+                report["own_identity"]=policies.own.identity
+                for row in report["bounds"]:
+                    row["key"]=keys.external(pl.Series("h",[row["key"]],dtype=pl.Int64))[0]
+                atomic_json(str(a.out_prefix)+".continuation.json",report)
+                reply_overlay.publish(str(a.out_prefix)+".opponent.parquet")
+                if report["unresolved_roots"]:
+                    raise ValueError("unresolved continuation mass; refine the recorded bounds before scalar optimization")
+                wc={k:report[k] for k in ("states","roots","unresolved_roots")}
+            finally:
+                if policies:policies.own.close()
+                reply_overlay.close()
+        else:
+            W, R, wc = weak_stop_values(con, xs, ys, pool=stats, weak_pool=a.weak_pool,
+                                        evals=EvalSource(our_white, lookup=keys.scores if keys else None, overrides=verified_cp),
+                                        min_weak=a.weak_min_games,
+                                        min_share=WEAK_MIN_SHARE, log=log, positions=keys)
         if a.dump_stop_positions or a.sampled_stop:
             info = ss.stop_positions_rs(rsg, g)
             dump_key = ss.recipe_key(a.perspective, a.max_ply + 1, stats, a.min_games, a.share_floor,
@@ -1527,6 +1564,7 @@ def main() -> int:
                 "rare_disputes_booked": sum(1 for h in g.meta.get("rare_disputes", {})
                                             if res["booked"].get(h))}
                if rare_floor is not None else {}),
+            "continuation_contract":continuation_recipe,
             **({"opponent_prior":reply_overlay.recipe, "named_opponent_replies":g.meta.get("named_opponent_replies",{})}
                if reply_overlay is not None else {}),
             # recorded either way: a meta from before 2026-10-31 lacks both keys, which
@@ -1534,7 +1572,8 @@ def main() -> int:
             "strict_source": True,
             "core": "rust",
             **({"key_bits": 128, "eval_lookup128": str(keys.evals.root.resolve()),
-                "eval_lookup_sha256": keys.sha} if keys else {}),
+                "eval_lookup_sha256": keys.sha,
+                "evaluation_binding": getattr(keys, "binding", None)} if keys else {}),
             "src_rejected": g.meta.get("src_rejected", 0),
             **({"loss_exceptions_booked": {
                 k: sum(1 for h, s in lexc.items() if s == k and res["booked"].get(h))

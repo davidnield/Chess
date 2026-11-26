@@ -39,6 +39,18 @@ class Epochs(unittest.TestCase):
             cfg=dict(schema=1,arms=[dict(arm=pilot,inputs=inputs)],artifacts=pins)
             with patch.object(ec,"SF",engine):
                 self.assertEqual(preflight(cfg)[0]["arm"]["id"],m["pilot"])
+                from sweep.scenarios import source_arm
+                alternatives=[];extra=[]
+                for n in (0,1):
+                    look=lookup if n==0 else root/"alternative-lookup"
+                    if n:look.mkdir();atomic_json(look/"lookup.json",dict(alternative=True));extra.append(look/"lookup.json")
+                    binding=root/f"binding-{n}.json"
+                    atomic_json(binding,dict(schema="eval-binding-v1",key_bits=128,lookup=str(look),lookup_sha256=file_sha(look/"lookup.json")))
+                    extra.append(binding)
+                    alternatives.append(dict(arm=source_arm(pilot,binding),inputs=dict(inputs,eval_binding=str(binding))))
+                paired=dict(cfg,schema=2,arms=alternatives,referee_eval_binding=str(root/"binding-0.json"),
+                    artifacts=pins+[dict(path=str(p),sha256=file_sha(p)) for p in extra])
+                self.assertEqual(len(preflight(paired)),2)
                 # the bound data must be what the recipe names (review 2026-11-19, finding 4)
                 wrong=dict(inputs,stats=str(root/"stats50"));Path(wrong["stats"]).write_text("x")
                 pool_meta(wrong["stats"],"brc1800-p50",eval_lookup128=str(lookup))

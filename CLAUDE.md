@@ -133,6 +133,17 @@ directory or treat small synthetic checks as production acceptance.
 
 ## Data paths — critical
 
+The corrected human-model engineering path is `build_budget_books.py --continuation-config`
+with an explicit `--eval-binding`. Contracts/adapters live in `python/sweep/model_contract.py`,
+`human_providers.py`, `continuation.py` and `referee.py`; numerical policy/continuation code is
+native. Historical commands remain controls. Never promote engineering parameters without
+calibration/cost evidence, renormalize away unknown value mass, treat source truncation as a
+board terminal, or claim source-policy comparisons while using one arm's stored references
+for both. `sweep.verify` retains per-arm score vectors and common independent evidence.
+The scalar builder currently refuses unresolved continuation intervals; the global refinement
+work is tracked in `docs/repertoire-model-implementation-2026-11-25.md`. Pilot release requires
+content-bound model checks in addition to the previous gate/quality/budget checks.
+
 | Path | Role |
 |------|------|
 | `D:/data/chess/standard-chess-games-compressed/year=Y/month=M/event=E/` | **Canonical source.** Hive-partitioned parquets (2013–present). Every extraction starts here. |

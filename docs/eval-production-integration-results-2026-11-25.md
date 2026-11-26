@@ -287,3 +287,10 @@ gaps and adds probability-mass, horizon/ending, objective, native-referee precis
 evaluation-binding and paired-request-union requirements. These are queued fixes,
 not changes already made. The data/model decisions and running mini queue remain
 preserved. Apply the corrected human/value contracts equally to both source arms.
+
+The subsequent [implementation milestone](repertoire-model-implementation-2026-11-25.md)
+adds explicit immutable evaluation bindings and per-arm stored references in the
+joint verifier, plus an opt-in shared native human/continuation path. Generation
+bindings and verification evidence are under
+`evidence/repertoire-model-implementation-20261125/`. These do not activate the
+source policy or substitute for the remaining production acceptance requirements.

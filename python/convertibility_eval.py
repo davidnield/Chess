@@ -750,7 +750,7 @@ def rollouts_py(starts, book, our_white, rep, a, seed, our_counts, opp_counts, m
 
 
 def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia, lookup,
-             exits=None, weak_edges=None):
+             exits=None, weak_edges=None, policies=None):
     """Continue every branch the exhaustive walk left under --tau by sampling --rollouts K games
     from it to --max-ply (or game over); see rollouts_py, the reference, for the streams, exits
     and leaves. The games are played in Rust (book_builder_rs.RsRollouts, rust/book_builder/src/
@@ -764,19 +764,22 @@ def rollouts(starts, book, our_white, rep, a, seed, our_counts, opp_counts, maia
     st = brs.RsRollouts(
         np.array([s[0] for s in starts], i64), [s[1] for s in starts],
         np.array([s[2] for s in starts], f64), np.array([s[3] for s in starts], i64),
-        np.array([MISSING if s[4] is None else int(s[4]) for s in starts], i64),
+        np.array([MISSING if s[4] is None else s[4] for s in starts], f64),
         np.array([s[5] for s in starts], f64), np.array([s[6] for s in starts], f64),
         bool(our_white), int(a.rollouts), int(a.max_ply), int(seed), float(getattr(a, "recall", 1.0)),
         list(book.keys()), list(book.values()), exits is not None, weak_edges is not None,
         **({"position_ids": a.position_keys.native} if getattr(a, "position_keys", None) else {}))
     while st.alive():
-        st.set_cp(np.asarray(lookup(st.hashes()), dtype=i64))
+        st.set_cp(np.asarray(lookup(st.hashes()), dtype=f64))
         oh, oe, th, te = st.needed()
         for hs, es, cnt, se, oe_, ours in ((oh, oe, our_counts, a.our_elo, a.opp_elo, True),
                                           (th, te, opp_counts, a.opp_elo, a.our_elo, False)):
             if not len(hs):
                 continue
             need = hs.tolist()
+            if policies is not None:
+                st.set_dists(ours,need,policies.native_batch(ours,need,es))
+                continue
             cs = cnt.get(need, rep)
             ms = maia.probs(es, se, oe_, need)
             st.set_dists(ours, need, [sorted(blend(c, m, a.k, a.min_p).items())

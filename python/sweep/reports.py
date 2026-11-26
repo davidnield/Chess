@@ -84,4 +84,23 @@ def pilot_acceptance(report):
     missing=[k for k in required if report.get(k) is not True]
     if report.get("distinct_prescriptions")!=2000: missing.append("distinct_prescriptions")
     if not report.get("receipt_sha256"): missing.append("receipt_sha256")
+    # New production acceptance cannot be granted by an old closure report or by
+    # descriptive booleans for the November 25 model-contract requirements.
+    from pathlib import Path
+    import json
+    from .stages import file_sha
+    if report.get("schema")!="pilot-acceptance-v2":missing.append("model_acceptance_schema")
+    contract=report.get("model_contract_sha256")
+    if not isinstance(contract,str) or len(contract)!=64:missing.append("model_contract_sha256")
+    for name in ("policy_continuity","own_calibration","uncertainty_accounting","horizon_semantics",
+                 "evaluation_binding","native_referee","effective_objective","input_cost"):
+        proof=(report.get("model_evidence") or {}).get(name)
+        try:
+            if not proof or not contract or file_sha(proof["path"])!=proof["sha256"]:
+                raise ValueError("unbound evidence")
+            record=json.loads(Path(proof["path"]).read_text(encoding="utf8"))
+            if (record.get("schema")!="model-check-v1" or record.get("check")!=name
+                or record.get("passed") is not True or record.get("model_contract_sha256")!=contract):
+                raise ValueError("wrong model evidence")
+        except (OSError,ValueError,KeyError,TypeError):missing.append(name)
     return {"ready_for_matrix":not missing,"missing":missing}

@@ -1,0 +1,6 @@
+{
+  "key_bits": 128,
+  "lookup": "D:/chess/eval-lookup-p51-score334-20261125-v1",
+  "lookup_sha256": "15be7323a4af4e8360bf89a6f06652fcbbaf52764c74a9685a6a6774e2ee2f0c",
+  "schema": "eval-binding-v1"
+}

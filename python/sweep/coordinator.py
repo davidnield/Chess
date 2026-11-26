@@ -34,6 +34,9 @@ def check_book(path, arm, overlay, *, final=False):
     if meta.get("engine_candidates_sha256")!=(file_sha(overlay) if overlay else None):
         raise ValueError("book did not consume this epoch's frozen evidence")
     if meta.get("verification_policy")!="quality": raise ValueError("book is not quality-reviewed")
+    expected=arm["recipe"].get("evaluation_binding_sha256")
+    if expected and (meta.get("evaluation_binding") or {}).get("binding_sha256")!=expected:
+        raise ValueError("book did not consume its declared evaluation binding")
     return dict(book=str(path),distinct_prescriptions=ours.height,sha256=file_sha(path))
 
 def ordered(entries):
@@ -47,10 +50,14 @@ def ordered(entries):
     return result
 
 def preflight(config):
-    if config["schema"]!=1: raise ValueError("unsupported joint build config")
+    if config["schema"] not in (1,2): raise ValueError("unsupported joint build config")
     m=manifest(); known={a["id"]:a for a in m["primary"]+m["sensitivities"]}
     entries=ordered(config["arms"])
-    for e in entries:
+    paired=config["schema"]==2
+    if paired:
+        from .scenarios import check_pair
+        referee=check_pair(config,known[m["pilot"]])
+    for e in ([] if paired else entries):
         a=e["arm"]
         if a["id"] not in known or a["recipe"]!=known[a["id"]]["recipe"]:
             raise ValueError("arm is not in the approved manifest")
@@ -72,8 +79,8 @@ def preflight(config):
     for e in entries:
         if e["inputs"].get("engine_overlay") not in (None,config.get("seed_overlay")):
             raise ValueError("use one shared seed_overlay, not per-arm engine evidence")
-        selective=e["inputs"].get("opponent_policy_config")
-        if selective:
+        for selective in [e["inputs"].get(k) for k in ("opponent_policy_config","continuation_config")]:
+            if not selective:continue
             cfg=json.loads(Path(selective).read_text(encoding="utf8"))
             for item in cfg["artifacts"]:
                 path=str(Path(item["path"]).resolve());required.add(path)
@@ -81,16 +88,23 @@ def preflight(config):
         for k in ("source","stats","aux","weak"):
             path=Path(str(e["inputs"][k])+".meta.json")
             if path.exists(): required.add(str(path.resolve()))
-        path=Path(e["inputs"]["stats"]+".meta.json")
-        meta=json.loads(path.read_text(encoding="utf8"))
-        lookup=meta.get("eval_lookup128")
+        from eval_binding import read_binding
+        if e["inputs"].get("eval_binding"):
+            binding=read_binding(e["inputs"]["eval_binding"])
+            lookup=binding["lookup"]
+        else:
+            path=Path(e["inputs"]["stats"]+".meta.json")
+            meta=json.loads(path.read_text(encoding="utf8"))
+            lookup=meta.get("eval_lookup128")
         if not lookup: raise ValueError("candidate pool has no full-key lookup receipt")
         required.add(str((Path(lookup)/"lookup.json").resolve()))
         if e["inputs"].get("opponent_overlay"):
             required.add(str(Path(e["inputs"]["opponent_overlay"]+".json").resolve()))
     if config.get("seed_overlay"): required.add(str(Path(config["seed_overlay"]).resolve()))
+    if paired:
+        required.update((referee["binding_path"],str((Path(referee["lookup"])/"lookup.json").resolve())))
     if not required<=set(pinned): raise ValueError("not all bound inputs/sidecars are pinned")
-    if [e["arm"]["id"] for e in entries]!=[m["pilot"]]:
+    if not paired and [e["arm"]["id"] for e in entries]!=[m["pilot"]]:
         report=config.get("pilot_report")
         if not report or str(Path(report).resolve()) not in pinned:
             raise ValueError("matrix needs a pinned Black pilot acceptance report")
@@ -152,6 +166,8 @@ def drive(config, out, *, max_rounds=8, source=None, build_fn=None, verify_fn=No
                      Path(str(prefix)+".quality-frontier.json")]
             if inputs.get("opponent_policy_config"):
                 outputs += [Path(str(prefix)+".opponent.parquet"),Path(str(prefix)+".opponent.parquet.json")]
+            if inputs.get("continuation_config"):
+                outputs += [Path(str(prefix)+".continuation.json")]
             if arm["recipe"]["lookahead_floor"]:
                 outputs += [Path(str(book)+s) for s in
                             (".lookahead-inputs.parquet",".lookahead.json",".lookahead-audit.json")]

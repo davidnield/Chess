@@ -125,6 +125,8 @@ def main():
     prior=from_config(a.policy_config,colour=meta["perspective"],keys=keys,pool=meta["stats"],aux=meta["aux_stats"])
     engine=Engine(a.engine_cache);contract["engine"]=engine.contract
     def reply(b):
+        if prior.semantics=="conditional-board-v1":
+            return dict(moves=prior.conditional([b])[0],stop=0.)
         h=keys.board(b);prior.origins.setdefault(h,b.fen())
         frame=prior.rows([h])
         mass=frame["move_mass"][0];nonmove=frame["nonmove"][0];total=mass+nonmove

@@ -580,3 +580,11 @@ The full score334 overlay has now completed all 512 buckets and passed the
 independent three-bucket source sample. The mini BRC1800-p30 queue continues.
 New model fixes, required count access/publication and the paired pilot remain
 unfinished; completed lookup materialization is not permission to skip them.
+
+November 25 implementation: [the engineering implementation record](repertoire-model-implementation-2026-11-25.md)
+now tracks tested explicit lookup bindings, shared native policies, bounded W/R,
+fractional rollouts, separated count depth, per-arm verification references and
+content-bound release requirements. The historical manifest remains a control;
+freeze corrected primary recipes after calibration and the real-data cost/uncertainty
+work. The new path currently refuses unresolved scalar values rather than hiding
+missing mass. Do not launch a full matrix from fixture test success.

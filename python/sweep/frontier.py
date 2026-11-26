@@ -28,17 +28,19 @@ def token(k):
 class Counts:
     """Batched keyed reads. Source pools must already be uncut, full-key, and frozen."""
     names=("broad","adult","rapid","classical","otb")
-    def __init__(self, sources, aux, threads=2):
+    def __init__(self, sources, aux, threads=2, outcome_pool=None):
         self.sources={n:str(Path(sources[n]).resolve()) for n in self.names}
         self.aux=str(Path(aux).resolve())
         self.db=duckdb.connect(config={"threads":threads,"memory_limit":"4GB"})
         self.queries=0
         self.readers={n:KeyedParquet(p,"parent_hash") for n,p in self.sources.items()}
+        if outcome_pool is not None:
+            self.readers["outcome"]=KeyedParquet(outcome_pool,"parent_hash")
         self.readers["aux"]=KeyedParquet(self.aux,"position_hash")
 
     def fetch(self, boards):
         ks=[stored_key(b,True) for b in boards]
-        out={pair(k):{n:[] for n in self.names}|{"aux":{}} for k in ks}
+        out={pair(k):{n:[] for n in self.readers if n!="aux"}|{"aux":{}} for k in ks}
         for name,reader in self.readers.items():
             self.queries+=1
             for row in reader.fetch(self.db,ks).to_dicts():
@@ -84,11 +86,23 @@ def vectors(board, record):
             if row["child_hash"]!=stored_key(board,True): raise ValueError("count child differs from legal replay")
             board.pop()
             counts[name][u]=n
-            if name=="adult":
+            if name=="adult" and "outcome" not in record:
                 result=tuple(row[c] for c in ("white_wins","draws","black_wins"))
                 if sum(result)!=n or any(v<0 or int(v)!=v for v in result):
                     raise ValueError("invalid outcome counts")
                 outcomes[u]=result
+    if "outcome" in record:
+        for row in record["outcome"]:
+            if row["parent_hash"]!=expected:raise ValueError("outcome pool full key differs")
+            move=board.parse_san(row["move_san"]);u=move.uci()
+            if u in outcomes:raise ValueError("duplicate outcome-pool move")
+            child=board.copy(stack=False);child.push(move)
+            if row["child_hash"]!=stored_key(child,True):raise ValueError("outcome child differs from legal replay")
+            result=tuple(row[c] for c in ("white_wins","draws","black_wins"))
+            if (sum(result)!=row["total"] or row["total"]<1 or
+                any(not math.isfinite(v) or v<0 or int(v)!=v for v in result)):
+                raise ValueError("invalid outcome-pool counts")
+            outcomes[u]=result
     aux=record["aux"]
     if aux.get("other_total",0)!=0: raise ValueError("cutoff-generated Other mass in an uncut pool")
     nonmove=sum(aux.get(group+"_total",0) or 0 for group in ("term_normal","term_flag","term_other","horizon"))
@@ -100,7 +114,7 @@ def vectors(board, record):
 
 class FrontierOverlay:
     def __init__(self, *, colour, keys, counts, predict, cache, recipe, input_artifacts,
-                 pool, aux, verify_artifacts=True, cache_components=None):
+                 pool, aux, verify_artifacts=True, cache_components=None, semantics="legacy-nonmove-v1"):
         if keys is None: raise ValueError("selective OTB policy requires full keys")
         if recipe!=POLICY: raise ValueError("unexpected OTB ensemble recipe")
         if verify_artifacts: artifacts(input_artifacts)
@@ -108,7 +122,10 @@ class FrontierOverlay:
         self.policy_recipe=recipe
         self.inputs=input_artifacts
         self.pool,self.aux=pool,aux
-        self.identity=digest(dict(recipe=recipe,inputs=cache_components or input_artifacts,implementation=3))
+        if semantics not in ("legacy-nonmove-v1","conditional-board-v1"):
+            raise ValueError("unknown nonmove semantics")
+        self.semantics=semantics
+        self.identity=digest(dict(recipe=recipe,inputs=cache_components or input_artifacts,implementation=4,semantics=semantics))
         Path(cache).parent.mkdir(parents=True,exist_ok=True)
         self.db=sqlite3.connect(cache,timeout=60)
         self.db.execute("CREATE TABLE IF NOT EXISTS replies(recipe TEXT, key TEXT, value TEXT, PRIMARY KEY(recipe,key))")
@@ -166,13 +183,16 @@ class FrontierOverlay:
             priors=[None]*len(missing)
             for i,prior in zip(ask,asked): priors[i]=prior
             self.stats["maia_skipped"]=self.stats.get("maia_skipped",0)+len(missing)-len(ask)
+            writes=[]
             for (_,k,b),prior,v in zip(missing,priors,vecs):
                 legal,bc,ac,rc,oc,outcomes,nonmove=v
+                observed_nonmove=nonmove
+                if self.semantics=="conditional-board-v1":nonmove=0.
                 if prior is not None and set(prior)!=set(legal): raise ValueError("Maia must cover every legal move")
                 prob=ensemble(legal,bc,ac,rc,oc,None if prior is None else [prior[u] for u in legal],
                               otb_strength=pr["otb_strength"],empirical_strength=pr["empirical_strength"],
                               maia_strength=pr["maia_strength"],**gate)
-                observed=sum(ac)
+                observed=sum(sum(v) for v in outcomes.values())
                 # Zero empirical arrivals means a model-only continuation, not a made-up result.
                 # The outcome pool can record only endings at a board other sources saw continue
                 # (review 2026-11-19): keep one pseudo-continuation there, so the ensemble's
@@ -187,16 +207,19 @@ class FrontierOverlay:
                 frame=overlay_rows(b,dict(zip(legal,prob)),empirical=outcomes,nonmove=nonmove,move_mass=mass)
                 frame=frame.with_columns(pl.lit(sum(bc)).alias("support_broad"),
                       pl.lit(sum(ac)).alias("support_adult"),pl.lit(sum(rc)).alias("support_target"),
-                      pl.lit(sum(oc)).alias("support_otb"))
+                      pl.lit(sum(oc)).alias("support_otb"),
+                      pl.lit(observed_nonmove).alias("observed_nonmove"),
+                      pl.lit(data[k]["aux"].get("horizon_total",0) or 0).alias("observed_censored"))
                 validate_overlay_rows(frame,self.colour)
                 value=frame.to_dicts()
-                with self.db:
-                    self.db.execute("INSERT OR IGNORE INTO replies VALUES(?,?,?)",
-                                    (self.identity,token(k),json.dumps(value,allow_nan=False)))
+                writes.append((self.identity,token(k),json.dumps(value,allow_nan=False)))
+                self.stats["predicted"]+=1
+            with self.db:
+                self.db.executemany("INSERT OR IGNORE INTO replies VALUES(?,?,?)",writes)
+            for _,k,_ in missing:
                 # First writer wins if two arms inferred this board concurrently.
                 found[k]=json.loads(self.db.execute("SELECT value FROM replies WHERE recipe=? AND key=?",
                                                    (self.identity,token(k))).fetchone()[0])
-                self.stats["predicted"]+=1
         result=pl.DataFrame([r for k in pairs for r in found[k]],infer_schema_length=None)
         validate_overlay_rows(result,self.colour)
         return result
@@ -220,7 +243,32 @@ class FrontierOverlay:
         untouched=untouched.filter(~pl.col("parent_hash").is_in(opponents))
         return pl.concat([untouched,rows.select(untouched.columns)],how="vertical_relaxed")
 
-    def extend_aux(self,frame,parents): return frame
+    def extend_aux(self,frame,parents):
+        if self.semantics=="legacy-nonmove-v1":return frame
+        # A board-conditional policy continues until an actual board terminal.
+        # Preserve raw flow data on disk and observed/censored diagnostics in the
+        # policy receipt. Historical resignation/flags are not board transitions.
+        cols=[c for c in frame.columns if c.startswith(("term_normal_","term_flag_","term_other_","horizon_"))]
+        return frame.with_columns([pl.lit(0).cast(frame.schema[c]).alias(c) for c in cols])
+
+    def conditional(self,boards):
+        if self.semantics!="conditional-board-v1":
+            raise ValueError("shared continuation requires conditional-board semantics")
+        ids=[]
+        for b in boards:
+            h=self.keys.board(b);ids.append(h)
+            self.origins[h]=" ".join(b.fen(en_passant="fen").split()[:4])
+        if not ids:return []
+        rows=self.rows(list(dict.fromkeys(ids)))
+        by_key={}
+        for row in rows.to_dicts():
+            k=pair(row["parent_hash"]);by_key.setdefault(k,[]).append(row)
+        result=[]
+        for b in boards:
+            records=by_key[pair(stored_key(b,True))]
+            # Duplicated query boards must not duplicate their probabilities.
+            result.append({b.parse_san(r["move_san"]).uci():r["policy_p"] for r in records})
+        return result
 
     def publish(self,path):
         rows=[]
@@ -232,10 +280,10 @@ class FrontierOverlay:
                       aux=self.aux,input_artifacts=self.inputs,recipe=self.policy_recipe,scope="selective-otb-frontier")
         self.recipe=dict(file=str(Path(path).resolve()),sha256=file_sha(path),K=0,
                          scope="selective-otb-frontier",policy_recipe=self.policy_recipe,inputs=self.inputs,
-                         cache_identity=self.identity,materialization=dict(self.stats))
+                         cache_identity=self.identity,materialization=dict(self.stats),nonmove_semantics=self.semantics)
         meta_path=Path(str(path)+".json")
         meta=json.loads(meta_path.read_text(encoding="utf8"))
-        meta.update(cache_identity=self.identity,materialization=dict(self.stats),
+        meta.update(cache_identity=self.identity,materialization=dict(self.stats),nonmove_semantics=self.semantics,
                     count_lookup=self.counts.metrics() if hasattr(self.counts,"metrics") else {})
         atomic_json(meta_path,meta)
         return self.recipe
@@ -250,26 +298,29 @@ def from_config(path,*,colour,keys,pool,aux):
     from .maia_policy import MaiaPolicy,runtime_identity
     cfg=json.loads(Path(path).read_text(encoding="utf8"))
     if cfg["schema"]!=1 or cfg["recipe"]!=POLICY: raise ValueError("unsupported selective policy config")
-    if Path(cfg["sources"]["adult"]).resolve()!=Path(pool).resolve() or Path(cfg["aux"]).resolve()!=Path(aux).resolve():
+    separate=Path(cfg["sources"]["adult"]).resolve()!=Path(pool).resolve()
+    if ((separate and cfg.get("nonmove_semantics")!="conditional-board-v1")
+        or Path(cfg["aux"]).resolve()!=Path(aux).resolve()):
         raise ValueError("outcome pool or aux differs from the ensemble's adult component")
     pinned=artifacts(cfg["artifacts"])
-    needed={str(Path(p).resolve()) for p in [*cfg["sources"].values(),aux,cfg["model"]["checkpoint"],cfg["model"]["python"]]}
+    needed={str(Path(p).resolve()) for p in [*cfg["sources"].values(),pool,aux,cfg["model"]["checkpoint"],cfg["model"]["python"]]}
     if not needed<=set(pinned): raise ValueError("selective policy sources/model are not all pinned")
     # Pin inference and preprocessing code too; checkpoint identity alone is insufficient.
     bound=list(cfg["artifacts"])
     code=Path(__file__).resolve().parents[1]
     for p in (Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),Path(__file__).with_name("keyed_parquet.py"),
-              code/"maia_server.py",code/"maia_batch.py"):
+              code/"maia_server.py",code/"maia_batch.py",code/"book_builder_rs.pyd"):
         bound.append(dict(path=str(p),sha256=file_sha(p)))
     runtime=runtime_identity(cfg["model"]["python"])
     runtime_path=Path(cfg["cache"]).parent/("runtime-"+digest(runtime)+".json")
     atomic_json(runtime_path,runtime)
     bound.append(dict(path=str(runtime_path.resolve()),sha256=file_sha(runtime_path)))
     cache_components=dict(sources={n:pinned[str(Path(p).resolve())] for n,p in cfg["sources"].items()},
-         aux=pinned[str(Path(aux).resolve())],checkpoint=pinned[str(Path(cfg["model"]["checkpoint"]).resolve())],
+         outcome=pinned[str(Path(pool).resolve())],aux=pinned[str(Path(aux).resolve())],checkpoint=pinned[str(Path(cfg["model"]["checkpoint"]).resolve())],
          runtime=runtime,code={Path(r["path"]).name:r["sha256"] for r in bound[len(cfg["artifacts"]):-1]})
-    counts=Counts(cfg["sources"],aux)
+    counts=Counts(cfg["sources"],aux,outcome_pool=pool if separate else None)
     model=MaiaPolicy(cfg["model"],POLICY)
     return FrontierOverlay(colour=colour,keys=keys,counts=counts,predict=model,cache=cfg["cache"],
                            recipe=POLICY,input_artifacts=bound,pool=pool,aux=aux,
-                           verify_artifacts=False,cache_components=cache_components)
+                           verify_artifacts=False,cache_components=cache_components,
+                           semantics=cfg.get("nonmove_semantics","legacy-nonmove-v1"))

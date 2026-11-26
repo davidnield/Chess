@@ -202,7 +202,11 @@ class JointVerification(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);out=root/"pass.parquet"
             plans=[plan("strict",["e4"]),plan("loose",["d4"],.095)]
+            # Two source arms share real counts/children but disagree on stored CP.
+            plans[1]["requests"][0]["menu"][0]["stored_cp"]=-60
             info=verify(plans,cache=root/"cache",out=out,searches_factory=Searches)
+            refs=json.loads(Path(str(out)+".requests.json").read_text())["groups"][0]["references"]
+            self.assertEqual([r["stored"]["e4"] for r in refs],[-65,-60])
             self.assertEqual(info["requested_parents"],1)
             self.assertEqual(len(searched),6) # three comparisons once at each tier
             self.assertIn("Nf3",pl.read_parquet(out)["move_san"].to_list())

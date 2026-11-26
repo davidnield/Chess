@@ -67,23 +67,33 @@ def full_column(frame, name):
 
 
 class ConsumerKeys:
-    def __init__(self, lookup, *, expected_sha=None):
+    def __init__(self, lookup, *, expected_sha=None, verify_hashes=False):
         from book_builder_rs import RsPositionIds
         self.native = RsPositionIds()
         manifest = Path(lookup) / "lookup.json"
         self.sha = hashlib.sha256(manifest.read_bytes()).hexdigest()
         if expected_sha is not None and self.sha != expected_sha:
             raise ValueError("full-key eval lookup differs from the pool recipe")
-        self.evals = WideEvalLookup(lookup)
+        self.evals = WideEvalLookup(lookup, verify_hashes=verify_hashes)
 
     @classmethod
-    def for_pool(cls, path):
+    def for_pool(cls, path, *, eval_binding=None):
         if not is_wide(path, "parent_hash"):
+            if eval_binding:
+                raise ValueError("explicit evaluation binding requires a full-key pool")
             return None
         meta = json.loads(Path(str(path) + ".meta.json").read_text(encoding="utf8"))
         if meta.get("key_bits") != 128:
             raise ValueError("wide pool lacks a 128-bit recipe")
-        return cls(meta["eval_lookup128"], expected_sha=meta["eval_lookup_sha256"])
+        if eval_binding:
+            from eval_binding import read_binding
+            binding = read_binding(eval_binding)
+            result = cls(binding["lookup"], expected_sha=binding["lookup_sha256"], verify_hashes=True)
+            result.binding = binding
+            return result
+        result = cls(meta["eval_lookup128"], expected_sha=meta["eval_lookup_sha256"])
+        result.binding = None
+        return result
 
     def board(self, board):
         return self.native.encode_one(*zobrist128(board))

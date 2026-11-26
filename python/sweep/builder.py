@@ -48,6 +48,17 @@ def command(arm, *, python, code, inputs, out_prefix, tmp):
           "--quality-rare-trust",str(r["verification"]["rare_trust"]),
           "--method","price" if r["colour"]=="white" else "dp"]
     if inputs.get("engine_overlay"): args.extend(["--engine-candidates",str(inputs["engine_overlay"])])
+    if inputs.get("eval_binding"):
+        from eval_binding import read_binding
+        binding=read_binding(inputs["eval_binding"])
+        expected=r.get("evaluation_binding_sha256")
+        if expected and binding["binding_sha256"]!=expected:
+            raise ValueError("arm evaluation binding differs from its recipe")
+        args.extend(["--eval-binding",str(inputs["eval_binding"])])
+    elif r.get("evaluation_binding_sha256"):
+        raise ValueError("arm requires an explicit evaluation binding")
+    if inputs.get("continuation_config"):
+        args.extend(["--continuation-config",str(inputs["continuation_config"])])
     if inputs.get("opponent_overlay"): args.extend(["--opponent-prior",str(inputs["opponent_overlay"])])
     else: args.extend(["--opponent-policy-config",str(inputs["opponent_policy_config"])])
     if r["opponent_policy"]["name"]!=POLICY["name"]:

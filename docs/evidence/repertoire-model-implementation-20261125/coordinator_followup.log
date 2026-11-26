@@ -1,0 +1,9 @@
+test_missing_unselected_candidate_is_not_hidden_by_gate (_test_sweep_execution.JointVerification.test_missing_unselected_candidate_is_not_hidden_by_gate) ... ok
+test_shared_requests_warm_resume_and_deep_preservation (_test_sweep_execution.JointVerification.test_shared_requests_warm_resume_and_deep_preservation) ... ok
+test_cap_resume_rebuilds_every_arm_and_names_applied_evidence (_test_sweep_coordinator.Epochs.test_cap_resume_rebuilds_every_arm_and_names_applied_evidence) ... ok
+test_preflight_requires_pinned_inputs_and_pilot_release (_test_sweep_coordinator.Epochs.test_preflight_requires_pinned_inputs_and_pilot_release) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 1.410s
+
+OK

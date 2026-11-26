@@ -19,7 +19,7 @@ use shakmaty::zobrist::{Zobrist128, Zobrist64};
 use crate::position_ids::{PositionIds, SharedIds};
 use shakmaty::{CastlingMode, Chess, Color, EnPassantMode, KnownOutcome, Position};
 
-pub const MISSING: i64 = -32768;
+pub const MISSING: f64 = -32768.;
 
 /// convertibility_eval.u01: splitmix64's mixer chained over the integers
 pub fn u01(xs: &[i64]) -> f64 {
@@ -71,7 +71,7 @@ struct Game {
     h: i64,
     w: f64,
     ply: i64,
-    cp: i64,           // MISSING = None
+    cp: f64,           // MISSING = None; source ensembles retain fractional CP
     wk: f64,
     si: usize,
     k: i64,
@@ -83,7 +83,7 @@ struct Game {
 pub struct Leaf {
     pub w: f64,
     pub h: i64,
-    pub cp: i64,
+    pub cp: f64,
     pub us: bool,
     pub exact: f64,    // NaN = None
     pub epd: String,
@@ -121,7 +121,7 @@ pub struct Start<'a> {
     pub epd: &'a str,
     pub pr: f64,
     pub ply: i64,
-    pub cp: i64,
+    pub cp: f64,
     pub ws: f64,
     pub f: f64,
 }
@@ -184,9 +184,9 @@ impl Rollouts {
         self.games.iter().map(|g| g.h).collect()
     }
 
-    pub fn set_cp(&mut self, cps: &[i64]) {
+    pub fn set_cp(&mut self, cps: &[f64]) {
         for (g, &c) in self.games.iter_mut().zip(cps) {
-            if c != MISSING {
+            if c != MISSING && c.is_finite() {
                 g.cp = c;
             }
         }

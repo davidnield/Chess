@@ -1,0 +1,120 @@
+E  sampling vs the exact walk
+  [PASS] White: mean of 200 sampled walks within 4 SE of the exact walk  0.47960 vs 0.47414 (se 0.00401)
+  [PASS] Black: mean of 200 sampled walks within 4 SE of the exact walk  0.50105 vs 0.50615 (se 0.00380)
+  [PASS] same inputs and seed -> the same result
+  [PASS] a different seed -> a different sample
+V  one position started at two plies (a knight round trip)
+  [PASS] the round trip returns the start position
+  [PASS] observed variance over 1,500 seeds / mean reported variance in [0.85, 1.18]  0.938 (the old key: ~1.47)
+  [PASS] the target is unchanged: mean within 4 SE of 0.5 x (1/2 + 1/4)  0.3835 (se 0.0059)
+  [PASS] one rollout per stratum: mc_se unavailable (None), not 0
+B  book + weak moves = our moves per game
+  [PASS] White, tau 0.0: book 1.0000 + weak 2.0000 = 3
+  [PASS] White, tau 1.01: book 1.0000 + weak 2.0000 = 3
+  [PASS] White, tau 0.05: book 1.0000 + weak 2.0000 = 3
+  [PASS] Black, tau 0.0: book 0.0000 + weak 3.0000 = 3
+  [PASS] Black, tau 1.01: book 0.0000 + weak 3.0000 = 3
+  [PASS] Black, tau 0.05: book 0.0000 + weak 3.0000 = 3
+X  book exits (stop_alignment's input)
+  [PASS] White, tau 0.0: every game exits once, at ply 2  1.000000 [2]
+  [PASS] White, tau 1.01: every game exits once, at ply 2  1.000000 [2]
+  [PASS] Black, tau 0.0: every game exits once, at ply 1  1.000000 [1]
+  [PASS] Black, tau 1.01: every game exits once, at ply 1  1.000000 [1]
+T  direct starts: terminal and horizon positions are leaves as they stand
+  [PASS] White: at the horizon: leaves at ply 30, exact None  [(30, None), (30, None), (30, None)]
+  [PASS] White: past the horizon: leaves at ply 34, exact None  [(34, None), (34, None), (34, None)]
+  [PASS] White: checkmated: leaves at ply 4, exact 0.0  [(4, 0.0), (4, 0.0), (4, 0.0)]
+  [PASS] White: stalemate: leaves at ply 20, exact 0.5  [(20, 0.5), (20, 0.5), (20, 0.5)]
+  [PASS] White: insufficient material: leaves at ply 20, exact 0.5  [(20, 0.5), (20, 0.5), (20, 0.5)]
+  [PASS] Black: at the horizon: leaves at ply 30, exact None  [(30, None), (30, None), (30, None)]
+  [PASS] Black: past the horizon: leaves at ply 34, exact None  [(34, None), (34, None), (34, None)]
+  [PASS] Black: checkmated: leaves at ply 4, exact 1.0  [(4, 1.0), (4, 1.0), (4, 1.0)]
+  [PASS] Black: stalemate: leaves at ply 20, exact 0.5  [(20, 0.5), (20, 0.5), (20, 0.5)]
+  [PASS] Black: insufficient material: leaves at ply 20, exact 0.5  [(20, 0.5), (20, 0.5), (20, 0.5)]
+  [PASS] below the horizon: games still end exactly at ply 30
+P  paired differences
+  [PASS] a book against itself: difference 0, SE 0, on 3 seeds
+F  fold contract and weights
+  [PASS] no params: refused
+  [PASS] declared 1 fold: refused
+  [PASS] an unsplit table's replicate raises
+  [PASS] 16 declared folds: accepted
+  [PASS] --use-folds 3 of 16: refused
+  [PASS] replicate 0 = the unsplit counts  {'e4': 280.0, 'd4': 7.0}
+  [PASS] use_folds 4: replicate counts = fold % 4 groups x weights
+  [PASS] normalised weights sum to F in every replicate
+  [PASS] raw weights move the total by ~1/sqrt(F)  0.251
+  [PASS] weights are a pure function of (rep, F, seed): every table shares them
+  [PASS] an all-zero draw is redrawn  rep 3: [0. 2.]
+  [PASS] comma-separated dirs that disagree on folds: refused
+S  side_explorer
+  [PASS] fold_of(g, 64) % 16 == fold_of(g, 16)
+  [PASS] fold_of(g, 1) == 0
+  [PASS] the sample keeps ~35% and is game-keyed  0.343
+  [PASS] the same settings resume
+  [PASS] other settings are refused
+  [PASS] the DuckDB month merge = the polars sum of the parts, schema included  Schema([('parent_hash', Int64), ('move_san', String), ('child_hash', Int64), ('fold', Int16), ('white_wins', Int64), ('draws', Int64), ('black_wins', Int64), ('total', Int64)]) vs Schema([('parent_hash', Int64), ('move_san', String), ('child_hash', Int64), ('fold', Int16), ('white_wins', Int64), ('draws', Int64), ('black_wins', Int64), ('total', Int64)])
+M  main: resume and fingerprints
+{"label": "A", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+{"label": "A", "colour": "white", "replicate": 0, "seed": 2, "book_moves": 1, "uniform": 0.47695697996000164, "fitted": 0.4751554235008439, "mean_cp_us": -26.12499999999998, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.01995582005424735, "mc_se_fitted": 0.021626091347715266, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+{"label": "B", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+  [PASS] a killed run leaves its rows
+resuming: 2 (replicate, book, seed) results already saved
+{"label": "A", "colour": "white", "replicate": 0, "seed": 2, "book_moves": 1, "uniform": 0.47695697996000164, "fitted": 0.4751554235008439, "mean_cp_us": -26.12499999999998, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.01995582005424735, "mc_se_fitted": 0.021626091347715263, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+{"label": "B", "colour": "white", "replicate": 0, "seed": 2, "book_moves": 1, "uniform": 0.47695697996000164, "fitted": 0.4751554235008439, "mean_cp_us": -26.12499999999998, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.01995582005424735, "mc_se_fitted": 0.021626091347715263, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+shape: (4, 10)
+┌───────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---   ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str   ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞═══════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ A     ┆ white  ┆ 1    ┆ 1          ┆ … ┆ 0.0129        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ B     ┆ white  ┆ 1    ┆ 1          ┆ … ┆ 0.0129        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ A     ┆ white  ┆ 2    ┆ 1          ┆ … ┆ 0.0200        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ B     ┆ white  ┆ 2    ┆ 1          ┆ … ┆ 0.0200        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└───────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+  [PASS] resumed: all four (book, seed) rows  [('A', 1), ('B', 1), ('A', 2), ('B', 2)]
+  [PASS] the leaves cover every row
+  [PASS] every leaf carries its start's identity
+  [PASS] the partial is gone
+{"label": "A", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "26d932d30ded97fe", "secs": 0}
+  [PASS] a table whose data changed is refused, params unchanged
+{"label": "A", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "d33c149491c77c8a", "secs": 0}
+  [PASS] another bootstrap seed is refused
+  [PASS] another option is refused
+{"label": "A", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "d33c149491c77c8a", "secs": 0}
+  [PASS] refused after the engines started
+  [PASS]   and they are released  ['maia started', 'sf', 'maia']
+  [PASS] a missing book is refused  FATAL: no such book: ['A=white=C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\test-tmp\\tmpb9imhqdd\\no_such_book.parquet']
+  [PASS]   before any engine starts  []
+resuming: 1 (replicate, book, seed) results already saved
+{"label": "A", "colour": "white", "replicate": 0, "seed": 2, "book_moves": 1, "uniform": 0.47695697996000164, "fitted": 0.4751554235008439, "mean_cp_us": -26.12499999999998, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.019955820054247352, "mc_se_fitted": 0.021626091347715263, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "d33c149491c77c8a", "secs": 0}
+{"label": "B", "colour": "white", "replicate": 0, "seed": 2, "book_moves": 1, "uniform": 0.47695697996000164, "fitted": 0.4751554235008439, "mean_cp_us": -26.12499999999998, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.01995582005424735, "mc_se_fitted": 0.021626091347715266, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "d33c149491c77c8a", "secs": 0}
+{"label": "B", "colour": "white", "replicate": 0, "seed": 1, "book_moves": 1, "uniform": 0.5099823236095319, "fitted": 0.5108697129473649, "mean_cp_us": 10.694444444444455, "mass": 1.0000000000000002, "leaves": 15, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.7500000000000001, "sampled_starts": 6, "mean_leaf_ply": 4.0, "mass_at_max_ply": 1.0000000000000002, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 1.0, "mc_se_uniform": 0.012934998422910857, "mc_se_fitted": 0.013967956440892777, "nodes": 14, "book_moves_played": 1.0, "rollouts": 2, "tau": 0.2, "recall": 1.0, "config": "d33c149491c77c8a", "secs": 0}
+shape: (4, 10)
+┌───────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---   ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str   ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞═══════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ A     ┆ white  ┆ 1    ┆ 1          ┆ … ┆ 0.0129        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ A     ┆ white  ┆ 2    ┆ 1          ┆ … ┆ 0.0200        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ B     ┆ white  ┆ 2    ┆ 1          ┆ … ┆ 0.0200        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+│ B     ┆ white  ┆ 1    ┆ 1          ┆ … ┆ 0.0129        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└───────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+  [PASS] a reordered --seed list resumes
+  [PASS] a table with an unfinished month is refused
+  [PASS] X: the move index gives the DuckDB query's counts (1 root(s), check-marked SANs merged, absent positions empty)
+  [PASS] X: the move index gives the DuckDB query's counts (2 root(s), check-marked SANs merged, absent positions empty)
+  [PASS] X: --fold-half: the half's index = the DuckDB query = the rows' own sums over that half's folds, and the two halves add up to the whole table
+  [PASS] X: --fold-half replicates weigh the kept folds only (32 weights on the odd folds)
+  [PASS] X: --fold-half is refused on tables without the fold contract
+  [PASS] X: an index whose table changed is not used
+  [PASS] X: the Maia cache returns every answer bit for bit and in the server's key order
+  [PASS] X: other Elo pairs and unknown positions miss
+  [PASS] X: a position stored twice keeps the first part's answer
+  [PASS] X: a cache from another Maia setup is refused
+  [PASS] X: a warm cache asks the server nothing and returns the same answers, as does a run without the cache
+  [PASS] R2: rollouts (Rust) plays the games rollouts_py (python-chess) plays: the same leaves (weights, hashes, evals, plies, results, EPDs), book mass and exits, both colours, with and without a book, on the knight round-trip cycle too, and their weak_edges records  360 runs, 0 differ None, weak_edges differ in 0
+
+PASS

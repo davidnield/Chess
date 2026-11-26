@@ -1,0 +1,86 @@
+{
+  "baseline": "8f9426c",
+  "branch": "codex/takeover-hardening-20261122",
+  "coordinator_followup": {
+    "command": "python -B -m unittest -v _test_sweep_execution.JointVerification _test_sweep_coordinator",
+    "passed": 4
+  },
+  "legacy_builder": {
+    "command": "python -B python/_test_book_builder_rs.py",
+    "passed": true
+  },
+  "legacy_rollout": {
+    "command": "python -B python/_test_convertibility_eval.py",
+    "passed": true
+  },
+  "limitations": [
+    "Fixtures do not establish predictive improvements or full-book cost.",
+    "Own calibration, raw/selective inputs, global uncertainty refinement, referee receipts/recall, objective audits and pilot acceptance remain outstanding.",
+    "The default historical continuation is retained; corrected path requires an engineering contract.",
+    "Checkpoint rename needed execution outside the filesystem sandbox."
+  ],
+  "logs": {
+    "coordinator_followup": {
+      "path": "coordinator_followup.log",
+      "sha256": "6ed65056ff48f3ddfbd4fcbe7c7dd6a53451fd2b2d00b71f48377cf2818c9929"
+    },
+    "legacy_builder": {
+      "path": "legacy_builder.log",
+      "sha256": "b67dc661b80bf4bc79ab92de19d6e0ad164067bf38e33bc19926f99c2f34cabb"
+    },
+    "legacy_rollout": {
+      "path": "legacy_rollout.log",
+      "sha256": "8bef2116100b85d0043773989b4153d58dbaa90010a5cc13e8daa86c65d2f435"
+    },
+    "python": {
+      "path": "python.log",
+      "sha256": "000bb0e2803a9fbb0c0df3b499baf7609fab285b89050cb075c5557a99609602"
+    },
+    "rust": {
+      "path": "rust.log",
+      "sha256": "12c29b56b53882c7ec03efeb3ef346052c81181f79d43beb2f8efd75717db484"
+    }
+  },
+  "native_sha256": "979792dff95e24e0b36b762aec526c8e9c50da5bf4d6402203dc4be1f63308b3",
+  "production_ready": false,
+  "python": {
+    "command": "python -B -m unittest _test_model_contract _test_policy_maia_gate _test_sweep_execution _test_sweep_coordinator _test_sweep_preparation _test_sweep_transpositions _test_full_key_verification _test_eval_policy_overlay _test_sweep_publications _test_book_builder_rs _test_full_key_book _test_sweep_continuations",
+    "discovered": 60,
+    "passed": 59,
+    "skip_reason": "optional installed-Stockfish smoke; engine I/O otherwise stubbed",
+    "skipped": 1
+  },
+  "rust": {
+    "command": "cargo test --release --locked --no-default-features --features optimizer --lib",
+    "passed": 29
+  },
+  "schema": "model-implementation-verification-v1",
+  "source_sha256": {
+    "python/_test_model_contract.py": "223e248fcd52a2f865341ba0432b44d3b4a3c4011f9fa3ee2cdf93ce76ab728c",
+    "python/_test_sweep_coordinator.py": "9d38277c2c10d32b38e82edf91f9af573931b7901e510795b1b12b9858537f1d",
+    "python/_test_sweep_execution.py": "b0f138ebcd7d72e17754f39ee679183b591ff7acc82d8680a2a34ccb813403fa",
+    "python/build_budget_books.py": "44760f5f6d900a7e47184a3b228167a7abc3746460cc5c8094c3c46234751cd1",
+    "python/consumer_keys.py": "82ccd4035c140874c581598c446c23af8a1936d9aabef101652dd3f8dff055cc",
+    "python/convertibility_eval.py": "ef070da0ea750b2d4ed1c4f0862d9f4ea0f46a339a65772f57fa45d30121adf6",
+    "python/eval_binding.py": "d1d0d9ae69c40d5ff09136ba87ff6a197cda6e6a21a354c385c03f400734385e",
+    "python/sweep/bindings.py": "7a916755153a0490755c66f0380dc8ee75d7dbc52d57d2dc0929cd653681acfe",
+    "python/sweep/builder.py": "5eb63edf10090f6b47aec9ef80e84fdfe78a33cf93bd3c54c26853b3db6e8362",
+    "python/sweep/continuation.py": "e635f6da28ec8c99d7f215e1f6a0ab190daaa400844522a37a63b5a8d6359674",
+    "python/sweep/coordinator.py": "76490260520caccfe79492f4866ef9c6ade07525b03e76a8a1fa7e5747662544",
+    "python/sweep/extend.py": "bb37f0c1729c32ba0976a5bd521fb250b0be185f86b0b4e89c17a3c8a71d28f2",
+    "python/sweep/frontier.py": "c0f0c704a199ce4d67fa03fe67f0a5cabfe3a3c28776b13ee3281eeb7edea415",
+    "python/sweep/human_providers.py": "5bc956f8ef163853c6a8e7de8e613ccc4e8c25c332a14e8d732eb49d41b91294",
+    "python/sweep/model_contract.py": "42d3df57e6051d399e527fcd1eda93b4d0a56778eb6ca670a9c21268553065b8",
+    "python/sweep/policy.py": "e1984a3500326f1b9ed1db22c4fe520cf44f2a0b78fe2737d6df28e56022b441",
+    "python/sweep/referee.py": "db72e6ab9497296b23455f2fe4274881dc6d35ac80dcfe7461dc30c7dc5316f9",
+    "python/sweep/reports.py": "1ecfa01df878443123158f0e6cbce7edacb3a3adc68697eceb67b472174c93f1",
+    "python/sweep/scenarios.py": "05bdf7e1d8bfcc8173ffe177b0b6be547ea9fa206f8e1dfbbc1fb1d0258c62da",
+    "python/sweep/verify.py": "516f281825ca9ff196abd405ac814f1be9167b3b65d0315fd7a451975bc9a074",
+    "rust/book_builder/src/human_policy.rs": "a51e0d7f394f2098d2b9beb40a08d9de4ebc2102eb0899d5208ca82b78094eee",
+    "rust/book_builder/src/lib.rs": "0dd3349cfcee9f5e3c060261b77d124342f3199a8d782d463ecb170e60f53a00",
+    "rust/book_builder/src/py_continuation.rs": "81f35349c26a60d5ee1a105bddee5f9a3049790343bef41c9768b04b07de90ed",
+    "rust/book_builder/src/py_human_policy.rs": "42554c2c029d4ab70d1fbec765a15289927428b61743c43b350bd4adcb84b828",
+    "rust/book_builder/src/py_rollout.rs": "4cfb0d9916c25224393e1cc94d64e358977618ece32862fe7b11a569713a8738",
+    "rust/book_builder/src/rollout.rs": "9566ca871e3c84bb44ab49bbc8b813cb73caa73c111ef0e5635973d02e08839b"
+  }
+}

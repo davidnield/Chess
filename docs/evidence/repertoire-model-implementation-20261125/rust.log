@@ -1,0 +1,69 @@
+   Compiling num-traits v0.2.19
+   Compiling quote v1.0.47
+   Compiling typenum v1.20.1
+   Compiling rawpointer v0.2.1
+   Compiling matrixmultiply v0.3.11
+   Compiling generic-array v0.14.7
+   Compiling num-complex v0.4.6
+   Compiling num-integer v0.1.47
+   Compiling syn v3.0.10
+   Compiling ndarray v0.17.2
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling serde_core v1.0.229
+   Compiling smallvec v1.16.6
+   Compiling digest v0.10.7
+   Compiling sprs v0.11.6
+   Compiling serde_derive v1.0.229
+   Compiling zmij v1.0.23
+   Compiling book_builder v0.1.0 (C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\rust\book_builder)
+   Compiling btoi v0.5.0
+   Compiling itoa v1.0.19
+   Compiling cpufeatures v0.2.17
+   Compiling memchr v2.8.3
+   Compiling bitflags v2.13.2
+   Compiling log v0.4.35
+   Compiling arrayvec v0.7.8
+   Compiling cfg-if v1.0.5
+   Compiling web-time v1.1.0
+   Compiling sha2 v0.10.9
+   Compiling microlp v0.8.0
+   Compiling shakmaty v0.30.1
+   Compiling serde_json v1.0.154
+   Compiling serde v1.0.229
+    Finished `release` profile [optimized] target(s) in 1m 17s
+     Running unittests src\lib.rs (C:/Users/David/Documents/Chess/scratch/rust-target-model-contract\release\deps\book_builder_rs-06dce52af4b40b84.exe)
+
+running 29 tests
+test eval_policy::tests::mates_caps_terminals_and_malformed_inputs ... ok
+test eval_policy::tests::mirrored_positions_complement_scores_without_integer_rounding ... ok
+test human_policy::tests::weak_support_is_continuous ... ok
+test human_policy::tests::utility_keeps_source_range ... ok
+test eval_policy::tests::missingness_and_eligibility_do_not_renormalize ... ok
+test optimizer::tests::cap_instrumentation_is_observational ... ok
+test eval_policy::tests::score_space_and_stm_orientation ... ok
+test optimizer::tests::diamond_unique_budget_and_mip_oracle_agree ... ok
+test human_policy::tests::missing_mass_and_small_replies_survive ... ok
+test optimizer::tests::cone_snapshot_records_boundary_and_remains_evaluable ... ok
+test optimizer::tests::cycle_convention_matches_and_is_not_tree_exactness ... ok
+test optimizer::tests::duplicate_replies_and_zero_mass_are_not_extra_budget ... ok
+test optimizer::tests::fixed_branch_can_release_unreachable_prescriptions ... ok
+test optimizer::tests::full_keys_snapshot_and_tamper_rejection ... ok
+test optimizer::tests::limited_oracle_does_not_claim_optimality ... ok
+test optimizer::tests::interrupted_neighborhood_resumes_at_completed_boundary ... ok
+test optimizer::tests::full_tree_tables_keep_delayed_payoff ... ok
+test optimizer::tests::native_plan_covers_both_colors_gates_and_budgets ... ok
+test optimizer::tests::neighborhood_sees_unselected_long_alternative ... ok
+test optimizer::tests::released_branch_budget_funds_a_new_continuation ... ok
+test position_ids::alias_can_itself_be_a_later_low_half ... ok
+test optimizer::tests::rare_positive_reach_cannot_drop_a_fixed_prescription ... ok
+test optimizer::tests::resource_limits_and_invalid_inputs_fail_closed ... ok
+test value::tests::aux_empty_row ... ok
+test value::tests::cp_round_trip ... ok
+test value::tests::leaf_values_flip ... ok
+test optimizer::tests::large_chain_and_real_256_package_cap_are_exercised ... ok
+test optimizer::tests::native_random_dags_against_independent_oracle ... ok
+test optimizer::tests::checkpoints_resume_and_reject_recipe_drift ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+

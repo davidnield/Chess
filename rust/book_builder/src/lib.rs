@@ -9,6 +9,11 @@ pub mod dp;
 pub mod eval_policy;
 pub mod gates;
 pub mod graph;
+pub mod human_policy;
+#[cfg(feature = "python")]
+mod py_human_policy;
+#[cfg(feature = "python")]
+mod py_continuation;
 pub mod polish;
 mod position_ids;
 pub mod price;
@@ -359,6 +364,11 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<position_ids::RsPositionIds>()?;
     m.add_function(wrap_pyfunction!(cp_to_expected_score, m)?)?;
     m.add_function(wrap_pyfunction!(eval_source_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(py_human_policy::own_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(py_human_policy::opponent_policy, m)?)?;
+    m.add_function(wrap_pyfunction!(py_human_policy::bounded_expectation, m)?)?;
+    m.add_function(wrap_pyfunction!(py_human_policy::continuation_utility, m)?)?;
+    m.add_class::<py_continuation::RsContinuation>()?;
     m.add("EVAL_SOURCE_POLICY", eval_policy::POLICY)?;
     m.add_function(wrap_pyfunction!(ws_to_cp, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_edge_values, m)?)?;

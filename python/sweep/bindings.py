@@ -46,23 +46,32 @@ def check_pool(path, pool_id, what):
 def check_arm(recipe, inputs):
     """Raise unless the arm's bound stats, weak pool and opponent policy match its recipe."""
     depth = recipe["max_ply"]
+    count_depth=depth
+    if inputs.get("continuation_config"):
+        if not inputs.get("opponent_policy_config") or not inputs.get("eval_binding"):
+            raise ValueError("corrected continuation requires live policy and explicit evaluation bindings")
+        from .model_contract import validate
+        contract=json.loads(Path(inputs["continuation_config"]).read_text(encoding="utf8"))["recipe"]
+        validate(contract)
+        if contract["candidate_cap"]!=depth:raise ValueError("continuation candidate horizon differs")
+        count_depth=contract["count_cap"]
     if not recipe["candidate_pool"].endswith(f"-p{depth}"):
         raise ValueError(f"candidate pool {recipe['candidate_pool']} does not match construction depth {depth}")
     check_pool(inputs["stats"], recipe["candidate_pool"], "candidate pool (--stats)")
     own = OWN_POLICY_POOL.get(recipe["own_policy"])
     if own is None:
         raise ValueError(f"unknown own post-book policy {recipe['own_policy']!r}")
-    check_pool(inputs["weak"], f"{own}-p{depth}", "own post-book policy (--weak-pool)")
+    check_pool(inputs["weak"], f"{own}-p{count_depth}", "own post-book policy (--weak-pool)")
     policy = recipe["opponent_policy"]
     if policy["name"] == POLICY["name"]:
         config, overlay = inputs.get("opponent_policy_config"), inputs.get("opponent_overlay")
         if config:
             sources = json.loads(Path(config).read_text(encoding="utf8"))["sources"]
             for role, base in ENSEMBLE_SOURCES.items():
-                check_pool(sources[role], f"{base}-p{depth}", f"ensemble source {role}")
+                check_pool(sources[role], f"{base}-p{count_depth}", f"ensemble source {role}")
             name = Path(sources["otb"]).name
-            if name != f"training-p{depth}.parquet":
-                raise ValueError(f"ensemble OTB source {name} is not the training-role p{depth} export")
+            if name != f"training-p{count_depth}.parquet":
+                raise ValueError(f"ensemble OTB source {name} is not the training-role p{count_depth} export")
         elif overlay:
             # a frozen (schema 3) ensemble overlay: its recipe and outcome pool must be this arm's
             meta = json.loads(Path(str(overlay) + ".json").read_text(encoding="utf8"))

@@ -133,3 +133,11 @@ objective auditing, and support for comparing two evaluation providers over the
 same count inputs. The paired request union currently rejects different stored
 scores at a shared parent; the new plan includes its reproduction and correction.
 No human-model fixes or production activation are claimed by this plan update.
+
+Subsequent authorized implementation is recorded in
+[the model implementation record](repertoire-model-implementation-2026-11-25.md).
+Explicit consumer bindings and per-arm comparison vectors are implemented and
+tested. Pilot-ready source evidence packaging is still separate unfinished work;
+the first engineering human-model path also requires calibration, uncertainty
+refinement and measured input access before the paired pilot. Frozen materializer
+and mini-job releases remain unchanged.

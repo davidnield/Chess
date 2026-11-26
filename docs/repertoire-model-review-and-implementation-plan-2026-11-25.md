@@ -8,6 +8,8 @@ This review covers construction, reply prediction, stop values, rollout evaluati
 
 Reviewed baseline: `7076faa149ecefa509a71854e3e81b28b1f5fbb0`, branch `codex/takeover-hardening-20261122`, worktree `C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation`. New reproductions and this plan do not change production behavior. Numerical examples below are controlled fixtures, not measured repertoire performance.
 
+**Implementation update, November 25:** David authorized the recommendations. The first code milestone is documented in [the implementation record](repertoire-model-implementation-2026-11-25.md). Findings below describe the reviewed baseline. Bindings, per-arm verification references, native policies, bounded shared W/R, float rollouts and stronger release checks now have implementations. Production promotion, calibration, selective input access, global uncertainty refinement and real-data audits remain outstanding.
+
 ## Decisions to preserve
 
 | Component | Current decision and recommendation |
@@ -143,14 +145,14 @@ Before launching a multi-terabyte global pool sort, compare consuming the accept
 
 ## Implementation sequence
 
-The review and plan are complete. Items below are queued recommendations, not changes already applied. Existing authorization to finish the data and source-policy work remains in force. No blanket approval prompt is needed for that work.
+The review is complete and implementation is authorized. The implementation record distinguishes engineering changes from production acceptance. Existing authorization to finish the data and source-policy work remains in force.
 
 | Stage | Work | Completion evidence | Dependencies and status |
 |---|---|---|---|
 | 0 | Freeze this review, reproductions and current state; update controlling plans | Source hashes, probe results, focused tests, explicit outstanding items | Complete with this document |
-| 1 | Define versioned policy/value/data-depth contracts; add explicit evaluation binding and paired source scenarios | Refusal tests for missing/wrong bindings; both evaluation arms see different provider values over identical count files | Next; can proceed while mini runs |
-| 2 | Implement shared native own/opponent policy kernels and batched providers; retain legacy controls | Native versus independent formula tests; all legal mass; no double Maia; nineteen/twenty and zero-count cases; cache identity tests | After stage 1; weak parameter selection remains separate |
-| 3 | Connect W/R, off-graph boards and native referee; preserve mass and fractional values; separate horizons/endings | End-to-end unequal-policy fixtures, missing/tail bounds, full-key collisions, no hidden rounding, route/cap/terminal tests, resume parity | After stage 2; first key correctness milestone |
+| 1 | Define versioned policy/value/data-depth contracts; add explicit evaluation binding and paired source scenarios | Refusal tests; per-arm stored references over shared counts | Implemented; real paired-book run pending |
+| 2 | Shared native own/opponent kernels and batched providers; retain legacy controls | Native/oracle tests; all legal mass; retained weak observations and cache tests | Engineering implementation tested; calibration and raw-input caching pending |
+| 3 | Connect W/R, off-graph boards and native referee; preserve mass/fractions; separate horizons/endings | Full builder test with real native W/R and forbidden legacy fallback; bounds, floats and terminals tested | Bounded path implemented; global refinement, full referee driver/recall, route-horizon audit and resumable continuation work remain |
 | 4 | Calibrate own policy and run targeted continuation/model audits | Locked development/confirmation protocol; Brier/log-loss/support results; short versus long endpoint audit; effective-objective report | May develop fixture/inference tooling alongside stages 2–3; requires accepted validation inputs |
 | 5 | Complete and independently publish required data access and evaluation artifacts | Full overlay receipt; accepted adult counts; verified selective or exported broad/weak counts; pinned targeted/OTB training counts; capacity benchmark | Existing jobs continue; do not wait for them to start stages 1–3 |
 | 6 | Freeze new pilot recipes and run a bounded end-to-end cost/correctness pilot | Real-board W/R/referee checks; warm/cold cost; selected Maia share; count-query amplification; no unexplained early stop/missing mass | Requires stages 1–5; does not launch six books |

@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{PyArray1, PyReadonlyArray1, PyArrayLike1, AllowTypeChange};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
@@ -21,7 +21,7 @@ impl RsRollouts {
     #[pyo3(signature = (h, epd, pr, ply, cp, ws, f, our_white, k_games, max_ply, seed, recall, book_keys, book_sans, want_exits, want_weak, position_ids=None))]
     #[allow(clippy::too_many_arguments)]
     fn new(h: PyReadonlyArray1<i64>, epd: Vec<String>, pr: PyReadonlyArray1<f64>,
-           ply: PyReadonlyArray1<i64>, cp: PyReadonlyArray1<i64>, ws: PyReadonlyArray1<f64>,
+           ply: PyReadonlyArray1<i64>, cp: PyArrayLike1<f64, AllowTypeChange>, ws: PyReadonlyArray1<f64>,
            f: PyReadonlyArray1<f64>, our_white: bool, k_games: usize, max_ply: i64, seed: i64,
            recall: f64, book_keys: Vec<i64>, book_sans: Vec<String>, want_exits: bool,
            want_weak: bool, position_ids: Option<PyRef<'_, crate::position_ids::RsPositionIds>>)
@@ -30,6 +30,7 @@ impl RsRollouts {
                                        cp.as_slice()?, ws.as_slice()?, f.as_slice()?);
         crate::same_len(h.len(), &[epd.len(), pr.len(), ply.len(), cp.len(), ws.len(), f.len()])?;
         crate::same_len(book_keys.len(), &[book_sans.len()])?;
+        if cp.iter().any(|c| !c.is_finite()) { return Err(PyValueError::new_err("nonfinite start CP; use MISSING")); }
         let starts: Vec<Start> = (0..h.len()).map(|i| Start {
             h: h[i], epd: &epd[i], pr: pr[i], ply: ply[i], cp: cp[i], ws: ws[i], f: f[i],
         }).collect();
@@ -48,7 +49,7 @@ impl RsRollouts {
         PyArray1::from_vec(py, self.r.hashes())
     }
 
-    fn set_cp(&mut self, cps: PyReadonlyArray1<i64>) -> PyResult<()> {
+    fn set_cp(&mut self, cps: PyArrayLike1<f64, AllowTypeChange>) -> PyResult<()> {
         let c = cps.as_slice()?;
         crate::same_len(c.len(), &[self.r.alive()])?;
         self.r.set_cp(c);
@@ -82,7 +83,7 @@ impl RsRollouts {
     fn results<'py>(&mut self, py: Python<'py>) -> PyResult<(Bound<'py, PyList>, f64, Bound<'py, PyList>)> {
         let out = PyList::empty(py);
         for l in self.r.leaves.drain(..) {
-            let cp: Option<i64> = if l.cp == crate::rollout::MISSING { None } else { Some(l.cp) };
+            let cp: Option<f64> = if l.cp == crate::rollout::MISSING { None } else { Some(l.cp) };
             let ex: Option<f64> = if l.exact.is_nan() { None } else { Some(l.exact) };
             out.append((l.w, l.h, cp, l.us, ex, l.epd, l.ply, l.wk, l.si, l.k))?;
         }

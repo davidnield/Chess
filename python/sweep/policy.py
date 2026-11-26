@@ -29,6 +29,17 @@ def needs_maia(broad, adult, targeted, otb, *, maia_support_gate=None, backup_di
 
 def ensemble(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
              maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None):
+    """Production arithmetic is native; ensemble_reference is the independent oracle."""
+    from book_builder_rs import opponent_policy
+    if not legal or len(set(legal))!=len(legal): raise ValueError("need unique legal moves")
+    if any(len(v)!=len(legal) for v in (broad,adult,targeted,otb)):
+        raise ValueError("count vector differs from legal moves")
+    return opponent_policy(broad,adult,targeted,otb,maia,otb_strength,empirical_strength,
+                           maia_strength,backup_discount,broad_discount,maia_support_gate)
+
+
+def ensemble_reference(legal, broad, adult, targeted, otb, maia, *, otb_strength=10., empirical_strength=30.,
+             maia_strength=3., backup_discount=.10, broad_discount=.01, maia_support_gate=None):
     """Counts are mutually nested b >= a >= r PER MOVE, and OTB is disjoint. The strengths and
     discounts are the recipe's (spec.POLICY); the defaults are its approved values.
 
@@ -110,7 +121,7 @@ class PolicyCache:
         self.recipe=digest(recipe)
         self.db=sqlite3.connect(Path(path))
         self.db.execute("CREATE TABLE IF NOT EXISTS probabilities (k TEXT PRIMARY KEY, value TEXT NOT NULL)")
-    def get_or_compute(self,fen,legal,counts,compute):
+    def get_or_compute(self,fen,legal,counts,compute,*,commit=True):
         # FEN includes EP/castling and any model-visible counters; hash collisions
         # in the legacy low half cannot alias here.
         key=digest(dict(recipe=self.recipe,fen=fen,legal=legal,counts=counts))
@@ -119,9 +130,14 @@ class PolicyCache:
             import json
             return json.loads(row[0]), True
         result=_vector("cached policy",compute(),len(legal),True)
-        with self.db:
+        if commit:
+            with self.db:
+                self.db.execute("INSERT OR IGNORE INTO probabilities VALUES (?,?)",(key,canonical(result)))
+        else:
+            if not self.db.in_transaction:raise ValueError("batched policy cache needs an active transaction")
             self.db.execute("INSERT OR IGNORE INTO probabilities VALUES (?,?)",(key,canonical(result)))
-        return result, False
+        import json
+        return json.loads(self.db.execute("SELECT value FROM probabilities WHERE k=?",(key,)).fetchone()[0]), False
     def close(self): self.db.close()
 
 
