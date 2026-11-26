@@ -1,0 +1,9 @@
+{
+  "launched": "2026-11-25T19:04:25.8908357-08:00",
+  "pid": 5396,
+  "helper": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-investigation-20261125\\mark-clean-conditional.ps1",
+  "helper_sha256": "EB57C5C1FACD4A894C67DCF713C282B2671C89B53B57B4EBFF93ACF1A766C6B4",
+  "host": "C:\\Program Files\\WindowsApps\\OpenAI.CodexPrimaryRuntime.v26-1119-907-0_26.1119.907.0_x64__3k8sg7r9htsxt\\dependencies\\native\\powershell\\pwsh.exe",
+  "authorization": "David explicitly approved conditional mark-clean and archive verification",
+  "command": "chkdsk.exe F: /markclean"
+}

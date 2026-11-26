@@ -1,0 +1,65 @@
+{
+  "scope": "complete file inventory, eight sampled full-file hashes, fixed query replay",
+  "passed": false,
+  "marker_sha256": "a19025416d8f7adbb60c16ba72b6a5899907539383533c9e1ce9553ffaebc13e",
+  "inventory_files": 3345,
+  "inventory_seconds": 39.51353309996193,
+  "sample": [
+    {
+      "file": "parquet/r000/c000000.parquet",
+      "bytes": 652300153,
+      "sha256": "8ff10d51c368bd8f2bc997380b2278873d527dbd621ecd86567d35ec34d0286f",
+      "matches": true,
+      "seconds": 3.9911158000468276
+    },
+    {
+      "file": "parquet/r039/c000008.parquet",
+      "bytes": 644104098,
+      "sha256": "ab2d3a698ad3e38f5a8d7449518d5ff5a170b55495865e3d6cda97e7afd872ed",
+      "matches": true,
+      "seconds": 4.248447099991608
+    },
+    {
+      "file": "parquet/r079/c000008.parquet",
+      "bytes": 655732865,
+      "sha256": "9376b1c0361cb7d88fcb6a86203fa5806724ade70376f85a6837cdbea30958a5",
+      "matches": true,
+      "seconds": 4.3623615999822505
+    },
+    {
+      "file": "parquet/r119/c000005.parquet",
+      "bytes": 656200203,
+      "sha256": "5ff1fd35ed798f0281a649c76955191f435aef7a63f3e60a90d776a98aab875a",
+      "matches": true,
+      "seconds": 4.293440900044516
+    },
+    {
+      "file": "parquet/r158/c000008.parquet",
+      "bytes": 648491907,
+      "sha256": "05447f73ac2809398c27b3885df7e8c08cc26ad85699c18bdfc93ad2bcb935ed",
+      "matches": true,
+      "seconds": 4.673293600033503
+    },
+    {
+      "file": "parquet/r199/c000005.parquet",
+      "bytes": 684109121,
+      "sha256": "60616e7ccf269926dfd1ad7dbae019c1ae051433f2b0f8f35b1e3665e276f7fb",
+      "matches": true,
+      "seconds": 4.9813789000036195
+    },
+    {
+      "file": "parquet/r240/c000001.parquet",
+      "bytes": 690537708,
+      "sha256": "1a3418a9b656128569cd0cde5c25d119fb568c6e858dead1b8e9ad1198da87b6",
+      "matches": true,
+      "seconds": 5.3864788000355475
+    },
+    {
+      "file": "parquet/r278/c000004.parquet",
+      "bytes": 234010217,
+      "sha256": "1a99ae8a46680e3443cc159ca0d5dc5a17225c30674600e1605537a44f1499f9",
+      "matches": true,
+      "seconds": 1.7504394999705255
+    }
+  ]
+}

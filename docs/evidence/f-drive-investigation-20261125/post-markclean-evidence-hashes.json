@@ -1,0 +1,52 @@
+[
+  {
+    "file": "mark-clean-launch.json",
+    "bytes": 631,
+    "sha256": "28180a6c0712c42d82f0e58c6e439bee34ca93ee2fbd774a2e15bf7e7112ce86"
+  },
+  {
+    "file": "mark-clean.log",
+    "bytes": 59200,
+    "sha256": "b7cd8bcd2909f1ab1fd000766b6d7511d79891986155e9aff41ac31f3bc31ac0"
+  },
+  {
+    "file": "mark-clean-result.json",
+    "bytes": 340,
+    "sha256": "d50c47588352d10cdd3ff9c9eb8003fb5d5985ad6a0ac28179d77ec8823e6f21"
+  },
+  {
+    "file": "post-markclean-volume-status.json",
+    "bytes": 516,
+    "sha256": "d685561ea8e82293781d90de18f49dcdcaf6f7e21e6bbcd314febbe264409526"
+  },
+  {
+    "file": "check_archive_post_markclean.py",
+    "bytes": 3513,
+    "sha256": "b5bdcbfcadacb1d4a9a2cc7be7d283f022c4bd8ac57bd40b782fde0af9756b59"
+  },
+  {
+    "file": "post-markclean/archive-check-progress.json",
+    "bytes": 2172,
+    "sha256": "b2aadc381767e4f4ddfdc17078590c700398bda8438fdb7c95f7a330f960d3a9"
+  },
+  {
+    "file": "post-markclean/archive-check.json",
+    "bytes": 2450,
+    "sha256": "fb89b8adb456f49c42347e4b662d3452d7168d82a73482e25c67de24028782be"
+  },
+  {
+    "file": "post-markclean/queries.jsonl",
+    "bytes": 77170,
+    "sha256": "a6cb39a2b9cd1f2f339fd40738458e1308a2bad707530cf51e7038b8a43c5a74"
+  },
+  {
+    "file": "post-markclean/query-results.json",
+    "bytes": 266134,
+    "sha256": "b3b942f7cf9fc7c9f25a0713c0d21df16597c6827270e8596162d168e26e63d1"
+  },
+  {
+    "file": "post-markclean/query.stderr.log",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+]

@@ -1,11 +1,42 @@
 # F: filesystem-warning investigation — November 25, 2026
 
 David requested an investigation after Windows reported F: as **Warning / Full
-Repair Needed**. The evidence currently points to a persistent dirty flag. No
-filesystem corruption or archive checksum discrepancy was found in the checks
-described below. This is not proof that every sector or every file on F: is sound.
+Repair Needed**. **Resolved at 19:18 PST:** after David separately approved the
+conditional mark-clean pass, F: reports **NOT Dirty / Healthy / OK**. No filesystem
+corruption or archive checksum discrepancy was found in the checks below. This
+is not proof that every sector or every file on F: is sound.
 
-## Findings
+## Authorized mark-clean and verification — completed
+
+David explicitly approved running the conditional mark-clean pass and verifying
+the archive afterward. The identity-guarded administrator helper ran exactly
+`chkdsk.exe F: /markclean`, from **19:04:28 to 19:18:25 PST**, about 14 minutes.
+It exited **0**, found no filesystem problems, and cleared the dirty flag.
+The helper's immediate check and an independent status check at **19:19:11 PST**
+both confirmed **NOT Dirty / Healthy / OK**. The physical disk remained
+**Healthy / Online**, free space remained **942.2 GiB**, and no new storage
+warning/error events were found since the operation began.
+
+The post-operation archive check then **passed**, taking **82.2 seconds**:
+
+- All **3,345** files matched the pinned sizes and timestamps, all receipt
+  hashes matched, and the completion-marker hash was unchanged.
+- All **eight** sampled whole-file SHA-256 hashes matched, covering
+  **4,865,486,272 bytes** across the archive.
+- All **971** fixed reference queries reproduced the accepted results exactly.
+
+The before-and-after evidence is separate. See `mark-clean-launch.json`,
+`mark-clean.log`, `mark-clean-result.json`, `post-markclean-volume-status.json`,
+and `post-markclean/archive-check.json` under the evidence directory below.
+`check_archive_post_markclean.py` preserves the exact verification procedure.
+The checks cover the complete metadata/receipt inventory, sampled archive bytes,
+and the fixed query panel; they are not a new full archive hash or surface scan.
+
+Both pool jobs continued to advance during the operation. No additional repair,
+scan or repeat mark-clean pass is scheduled. The monitor records this warning as
+resolved; a recurrence requires a fresh investigation, not automatic flag clearing.
+
+## Initial findings, before mark-clean
 
 F: is the 16 TB Seagate Expansion USB HDD, Disk 4, formatted exFAT. Free space is
 1,011,630,997,504 bytes (942.2 GiB). `fsutil dirty query F:` confirms **Dirty**.
@@ -54,29 +85,29 @@ PST**, after the November 22 removal event. The 971-query acceptance also passed
 at 18:08 today, before this investigation. Those earlier checks and the fresh
 ones are reassuring; none justifies calling an unchecked sector healthy.
 
-## Recommendation and approval boundary
+## Original recommendation and approval boundary (subsequently authorized)
 
-The next proportionate action is an administrator **`chkdsk F: /markclean`** pass.
+The recommended next action was an administrator **`chkdsk F: /markclean`** pass.
 Microsoft documents `/markclean` for FAT/FAT32/exFAT: it marks the volume clean
-only if no corruption is detected. It should repeat the check and clear the stale
-flag if the result remains clean. It is **not executed or scheduled** by this
-investigation; David approved read-only diagnostics, not a drive-state change.
-Expect another scan on the order of 15 minutes based on the observed run, with
-F: temporarily unavailable to other readers. Do not substitute `/f`, `/r`, `/x`,
+only if no corruption is detected. The original read-only investigation did not
+execute or schedule it; David then explicitly approved it in the next message.
+The estimate was about 15 minutes, with F: temporarily unavailable to other
+readers; actual execution and verification are recorded above. Do not substitute `/f`, `/r`, `/x`,
 a forced dismount, or a raw boot-sector edit.
 
-A reviewable, identity-guarded helper is preserved at
+The approved, identity-guarded helper is preserved at
 `docs/evidence/f-drive-investigation-20261125/mark-clean-conditional.ps1` in the
 maintained worktree. It checks the exact volume/disk and accepted archive marker, runs only
 the conditional mark-clean command, and records the exit code, dirty state and
-volume status. Obtain David's separate approval before executing it. Afterward,
-verify the warning clears and replay the fixed archive queries. If errors appear
+volume status. It now refuses to run because its result receipt already exists.
+The warning-clearance and query replay checks above passed. If errors appear
 or the dirty flag quickly returns, stop and investigate USB/power/hardware and
 backup/recovery options before repair. Do not interpret recurring problems as
 merely a cosmetic flag.
 
-The existing pool jobs use D:/E:/H: and continued throughout; no active release,
-dataset, drive policy or filesystem flag was changed. Keep the archive STOP and
+The existing pool jobs use D:/E:/H: and continued throughout. No active release,
+dataset or drive policy was changed; the approved pass cleared the filesystem
+dirty flag. Keep the archive STOP and
 the prohibition on automatic F: repair. The deleted raw copies remain retired;
 do not recreate them as part of this diagnostic. A second verified archive copy
 is still desirable for resilience, independently of this warning; no large copy

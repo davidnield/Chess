@@ -1,0 +1,12 @@
+{
+  "started": "2026-11-25T19:04:28.7515855-08:00",
+  "finished": "2026-11-25T19:18:25.9563243-08:00",
+  "command": "chkdsk.exe F: /markclean",
+  "exit_code": 0,
+  "dirty_query": "Volume - F: is NOT Dirty\r\n",
+  "volume": {
+    "HealthStatus": "Healthy",
+    "OperationalStatus": "OK",
+    "SizeRemaining": 1011630997504
+  }
+}

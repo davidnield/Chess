@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-25T19:19:11.0250863-08:00",
+  "dirty_query": "Volume - F: is NOT Dirty\r\n",
+  "volume": {
+    "FileSystemType": "exFAT",
+    "HealthStatus": "Healthy",
+    "OperationalStatus": "OK",
+    "SizeRemaining": 1011630997504,
+    "UniqueId": "\\\\?\\Volume{7c94039a-746a-4cf3-afe7-38675c616008}\\"
+  },
+  "disk": {
+    "Number": 4,
+    "FriendlyName": "Seagate Expansion HDD",
+    "HealthStatus": "Healthy",
+    "OperationalStatus": "Online"
+  },
+  "new_storage_errors": []
+}
