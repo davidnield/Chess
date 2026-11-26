@@ -66,8 +66,8 @@ sys.path.insert(0, str(HERE))
 from stage1_extract_positions import iter_san_moves  # noqa: E402
 from zobrist import zobrist_int64  # noqa: E402
 from zobrist128 import zobrist128  # noqa: E402
-EXE = Path(os.environ.get("EXPLORER_EXTRACT_EXE",
-                          "D:/rust-target/explorer_extract/release/explorer-extract.exe"))
+import explorer_exe  # noqa: E402
+EXE = explorer_exe.resolve()
 YEAR, MONTH = 2099, 1
 EVENTS = ["Rapid", "Blitz"]          # CLI order is not alphabetical on purpose
 EXPLORER = ["--min-elo", "0", "--max-ply", "30", "--chunk-games", "250000",
@@ -575,8 +575,9 @@ def compare(a: Path, b: Path, tmp: Path) -> tuple[int, str]:
 
 
 def main() -> None:
-    if not EXE.exists():
-        print(f"  SKIP  no explorer-extract at {EXE} (set EXPLORER_EXTRACT_EXE)")
+    why = explorer_exe.unusable(EXE, {"month": ["--ply-key", "--key128"], "partials": ["--epd-max-ply"]})
+    if why:
+        print(f"  SKIP  {why}")
         print("\nALL PASS (0 checks -- exe unavailable)")
         sys.exit(0)
     st = rust("selftest")
