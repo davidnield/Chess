@@ -1,0 +1,15 @@
+{
+  "copies": {
+    "D:\\chess\\explorer_brc_p51_pilot_stage\\_source_metadata\\inventory-v1.json": "710d06201b676ad725cf81289fa49191eb25c5643322e5087c6e033e68efc2b5",
+    "D:\\data\\chess\\standard-chess-games-compressed\\_source_metadata\\inventory-v1.json": "710d06201b676ad725cf81289fa49191eb25c5643322e5087c6e033e68efc2b5",
+    "F:\\chess\\explorer_brc_p51_pilot\\_source_metadata\\inventory-v1.json": "710d06201b676ad725cf81289fa49191eb25c5643322e5087c6e033e68efc2b5"
+  },
+  "existing_metadata_files_unchanged": 659,
+  "files": 4179,
+  "games": 7153458738,
+  "identity": "86fd273ae515379543aad63d4e878b1ce41d8c4dcead1aeccf113977716c05bf",
+  "inventory_bytes": 1874541,
+  "months": 163,
+  "release": "D:\\chess\\bin\\source-inventory-launcher-20261125-v1",
+  "release_sha256": "bf9924e44772eede40027c8f38909563bd1b226d3ca24fb94b3bdd38f09d35ac"
+}

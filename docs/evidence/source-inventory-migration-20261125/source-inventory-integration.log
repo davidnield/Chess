@@ -1,0 +1,32 @@
+2026-11-25 19:57:34  1 months, 0 verified in archive, 1 to do
+2026-11-25 19:57:34  2026_3: D:\chess\bin\ply51-pilot-20261115\explorer-extract.exe month --source C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmpemkp3ydp\source --months 2026_3 --events Blitz Classical Rapid --max-ply 51 --ply-key --out C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmpemkp3ydp\stage --mem-gb 1.0 --threads 1 --key128 --term-slices --passes=1
+test_copy_restart_and_hash (_test_month_archive.PilotTest.test_copy_restart_and_hash) ... explorer-extract 0.1.0 (commit b54e3a030217, built 2026-11-15, target features ) | 1 threads
+  2026/3: 3 files, 6 games, 3 chunks, 1 pass(es) of 512 buckets, budget 1.0 GB
+    pass 1/1: 202 keys, 0.00 GB tracked (106 B/key), walk 0s, write 0s
+  2026/3: 50 buckets, 202 rows, 0.0 GB, 5 term rows, 0 conflicts; 1 pass(es), 0.0 min
+2026-11-25 19:57:34  2026_3: extracted in 0s (202 rows, 1 passes, peak commit 0.0 GB)
+2026-11-25 19:57:35  ERROR 2026_3: copy failed: simulated interruption
+2026-11-25 19:57:35  STOPPED: 2026_3: copy failed: simulated interruption (relaunch the same command to resume)
+2026-11-25 19:57:36  1 months, 0 verified in archive, 1 to do
+2026-11-25 19:57:36  2026_3: already staged, moving
+2026-11-25 19:57:37  ERROR 2026_3: copy failed: interrupted after publication
+2026-11-25 19:57:37  STOPPED: 2026_3: copy failed: interrupted after publication (relaunch the same command to resume)
+2026-11-25 19:57:37  1 months, 1 verified in archive, 0 to do
+2026-11-25 19:57:37  done: 1 of 1 months in C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmpemkp3ydp\archive
+ok
+test_preflight (_test_month_archive.PilotTest.test_preflight) ... ok
+2026-11-25 19:57:37  1 months, 0 verified in archive, 1 to do
+2026-11-25 19:57:37  2026_3: D:\chess\bin\ply51-pilot-20261115\explorer-extract.exe month --source C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmp98wc4oqv\source --months 2026_3 --events Blitz Classical Rapid --max-ply 51 --ply-key --out C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmp98wc4oqv\stage --mem-gb 1.0 --threads 1 --key128 --term-slices --passes=1
+test_slice_and_horizon (_test_month_archive.PilotTest.test_slice_and_horizon) ... explorer-extract 0.1.0 (commit b54e3a030217, built 2026-11-15, target features ) | 1 threads
+  2026/3: 3 files, 6 games, 3 chunks, 1 pass(es) of 512 buckets, budget 1.0 GB
+    pass 1/1: 202 keys, 0.00 GB tracked (106 B/key), walk 0s, write 0s
+  2026/3: 50 buckets, 202 rows, 0.0 GB, 5 term rows, 0 conflicts; 1 pass(es), 0.0 min
+2026-11-25 19:57:38  2026_3: extracted in 0s (202 rows, 1 passes, peak commit 0.0 GB)
+2026-11-25 19:57:39  2026_3: archived, 0.0 GB at 0 MB/s
+2026-11-25 19:57:39  done: 1 of 1 months in C:\Users\David\Documents\Chess\scratch\worktrees\sweep-preparation\scratch\source-inventory-test-temp\tmp98wc4oqv\archive
+ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 12.973s
+
+OK

@@ -1,16 +1,18 @@
 # Run the three approved months after the existing builders and scorers release the machine.
-# Run from a pinned copy alongside run_month_extraction.py, month_archive.py, and explorer-extract.exe.
+# Run from a pinned copy alongside run_month_extraction.py, month_archive.py,
+# source_inventory.py, and explorer-extract.exe. Include all of them in pin.json.
 [CmdletBinding()]
 param(
     [string]$Python = 'C:\Users\David\Documents\Chess\.venv\Scripts\python.exe',
     [string]$Source = 'D:\data\chess\standard-chess-games-compressed',
-    [string]$Reference = 'F:\chess\explorer_banded\rust_p30k\_provenance',
+    [string]$SourceManifest = '',
     [string]$Stage = 'D:\chess\explorer_brc_p51_pilot_stage',
     [string]$Archive = 'F:\chess\explorer_brc_p51_pilot',
     [int]$Threads = 12,
     [int]$MemGB = 55
 )
 $ErrorActionPreference = 'Stop'
+if (-not $SourceManifest) { $SourceManifest = Join-Path $Source '_source_metadata\inventory-v1.json' }
 $pin = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'pin.json') | ConvertFrom-Json
 function Confirm-Pin {
     foreach ($entry in $pin.files.PSObject.Properties) {
@@ -56,7 +58,7 @@ $measurements = @()
 foreach ($month in $months) {
     Wait-Quiet
     Confirm-Pin
-    & $Python -u $launcher --exe $exe --source $Source --source-provenance $Reference --months $month --stage $Stage --dest $Archive --events Blitz Classical Rapid --max-ply 51 --key128 --term-slices --mem-gb $MemGB --threads $Threads --verify hash
+    & $Python -u $launcher --exe $exe --source $Source --source-manifest $SourceManifest --months $month --stage $Stage --dest $Archive --events Blitz Classical Rapid --max-ply 51 --key128 --term-slices --mem-gb $MemGB --threads $Threads --verify hash
     if ($LASTEXITCODE -ne 0) { throw "Month $month exited $LASTEXITCODE. The launcher can resume its stage." }
     $receipt = Get-Content -Raw -LiteralPath (Join-Path $Archive "_archive_receipts/$month.json") | ConvertFrom-Json
     $prov = Get-Content -Raw -LiteralPath (Join-Path $Archive "_provenance/month=$month.json") | ConvertFrom-Json

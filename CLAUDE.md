@@ -540,6 +540,16 @@ their data understates our loss exactly inside sequences. Never let it lower or 
 term. Engine mode is an exact no-op (identity, state and report unchanged).
 
 
+Extraction source inventories (2026-11-25): maintained launchers use the bound
+`_source_metadata/inventory-v1.json` beside the source games on D:, with matching
+copies inside the archive and stage. They no longer require the old F: six-speed
+dataset's provenance directory. Never recreate expected inputs by scanning an
+unverified current source tree. Keep source evidence distinct from each output's
+own build provenance. Existing settings and receipts are immutable; use the original
+extractor path on resume. See `docs/source-inventory-migration-2026-11-25.md` for
+the frozen launcher, migration checks, versioning and exact paths. Historical frozen
+releases remain unchanged; use the new release for future extraction/resume work.
+
 Eval verification resumes (2026-11-20): `run_ply51_evals.py` publishes `evals/verification-receipt.json`
 (`python/eval_verification.py`) only after `verify_evals.py` passes, and a restart reuses it only when
 the DB, book, source, verifier, native and settings identity is unchanged. A corrupt receipt stops the

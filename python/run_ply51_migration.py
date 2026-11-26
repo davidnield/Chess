@@ -20,7 +20,7 @@ PILOTS = ["2026_3", "2024_6", "2020_4"]
 TRAIN = [tag(ym) for ym in parse_months(["2013_1..2026_7"])]
 PIN = Path(__file__).resolve().parent
 SOURCE = Path("D:/data/chess/standard-chess-games-compressed")
-REFERENCE = Path("F:/chess/explorer_banded/rust_p30k/_provenance")
+REFERENCE = SOURCE / '_source_metadata/inventory-v1.json'
 ARCHIVE = Path("F:/chess/explorer_brc_p51_pilot")
 STAGE = Path("D:/chess/explorer_brc_p51_pilot_stage")
 OPS = Path("D:/chess/ply51-migration-20261115")
@@ -74,7 +74,7 @@ def wait_pilot(pid):
 
 def extract_command(months, *, dry=False):
     args = [sys.executable, "-u", PIN / "run_month_extraction.py", "--exe", EXE, "--source", SOURCE,
-            "--source-provenance", REFERENCE, "--months", *months, "--stage", STAGE, "--dest", ARCHIVE,
+            "--source-manifest", REFERENCE, "--months", *months, "--stage", STAGE, "--dest", ARCHIVE,
             "--events", "Blitz", "Classical", "Rapid", "--max-ply", "51", "--key128", "--term-slices",
             "--threads", "12", "--mem-gb", "55", "--verify", "hash"]
     if dry:

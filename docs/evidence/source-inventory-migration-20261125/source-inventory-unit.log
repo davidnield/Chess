@@ -1,0 +1,13 @@
+test_archive_only_resume_and_conflicting_identity (test_source_inventory.InventoryTest.test_archive_only_resume_and_conflicting_identity) ... ok
+test_changed_binding_and_embedded_provenance_rejected (test_source_inventory.InventoryTest.test_changed_binding_and_embedded_provenance_rejected) ... ok
+test_extra_and_changed_files_rejected (test_source_inventory.InventoryTest.test_extra_and_changed_files_rejected) ... ok
+test_interrupted_copy_repaired_only_from_valid_package (test_source_inventory.InventoryTest.test_interrupted_copy_repaired_only_from_valid_package) ... ok
+test_invalid_scope_path_and_duplicate_rejected (test_source_inventory.InventoryTest.test_invalid_scope_path_and_duplicate_rejected) ... ok
+test_legacy_attachment_preserves_receipt_and_rejects_drift (test_source_inventory.InventoryTest.test_legacy_attachment_preserves_receipt_and_rejects_drift) ... ok
+test_missing_speed_requires_independent_evidence (test_source_inventory.InventoryTest.test_missing_speed_requires_independent_evidence) ... ok
+test_new_runs_require_package_and_dry_run_no_writes (test_source_inventory.InventoryTest.test_new_runs_require_package_and_dry_run_no_writes) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.994s
+
+OK

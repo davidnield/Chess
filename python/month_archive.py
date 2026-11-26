@@ -84,6 +84,10 @@ def root_binding(root, settings, dry):
 
 
 def inventory(source, ym, events, reference=None):
+    pinned = None
+    if isinstance(reference, dict):
+        from source_inventory import select
+        pinned = select(reference, ym, events)
     y, m = ym
     dirs = [p for p in (source / f"year={y}").glob("month=*")
             if p.name[6:].isdigit() and int(p.name[6:]) == m]
@@ -93,7 +97,11 @@ def inventory(source, ym, events, reference=None):
                    for f in e.glob("*.parquet") if f.is_file())
     present = {p.parent.name[6:] for p in paths}
     missing = sorted(set(events) - present)
-    if reference:
+    if pinned is not None:
+        expected = {Path(f['file']).parent.name + '/' + Path(f['file']).name for f in pinned['files']}
+        if expected != {f'{p.parent.name}/{p.name}' for p in paths}:
+            raise ValueError(f'{y}_{m}: source inventory files changed')
+    elif reference:
         provenance = read_json(reference / f"month={y}_{m}.json")
         if provenance.get("month") != f"{y}_{m}" or not set(events) <= set(provenance["flags"]["events"]):
             raise ValueError(f"{y}_{m}: independent provenance does not cover the requested population")
@@ -115,7 +123,10 @@ def inventory(source, ym, events, reference=None):
             raise ValueError(f"{p}: empty input partition")
         entries.append({"file": p.relative_to(source).as_posix(), "rows": rows,
                         "bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns})
-    return {"files": entries, "absent_events": missing}
+    result = {"files": entries, "absent_events": missing}
+    if pinned is not None and result != pinned:
+        raise ValueError(f'{y}_{m}: source inventory metadata changed')
+    return result
 
 
 def check_root_params(root, a):

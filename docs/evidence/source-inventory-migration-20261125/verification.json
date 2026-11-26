@@ -1,0 +1,9 @@
+{
+  "existing_payload_rehashed": false,
+  "frozen_release_verified": true,
+  "identity": "86fd273ae515379543aad63d4e878b1ce41d8c4dcead1aeccf113977716c05bf",
+  "legacy_provenance_reads": 0,
+  "metadata_reads": 349,
+  "months_verified": 163,
+  "source_check": "all BRC file lists, footers, sizes and mtimes; no full source-byte hash"
+}

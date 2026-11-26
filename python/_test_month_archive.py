@@ -17,6 +17,7 @@ import pyarrow.parquet as pq
 import month_archive as archive
 import pool_from_book as pool
 import run_month_extraction as launcher
+import source_inventory
 from zobrist import zobrist_int64
 
 
@@ -53,6 +54,13 @@ class PilotTest(unittest.TestCase):
                 "white_score": [r[2] for r in rows], "termination": [r[3] for r in rows],
                 "white_title": [""] * len(rows), "black_title": [""] * len(rows),
             }), dest / "part-0.parquet")
+        self.reference = self.tmp / 'reference'
+        self.reference.mkdir()
+        archive.write_json(self.reference/'month=2026_3.json', {
+            'month': '2026_3', 'flags': {'events': ['Blitz', 'Classical', 'Rapid']},
+            'files': [str(p) for p in self.source.rglob('*.parquet')], 'games_in_footers': 6})
+        source_inventory.publish(self.source/source_inventory.RELATIVE,
+            source_inventory.create(self.source, self.reference, [(2026, 3)]))
         self.args = ["--exe", str(self.exe), "--source", str(self.source), "--stage", str(self.stage),
                      "--dest", str(self.dest), "--months", "2026_3", "--events", "Blitz", "Classical", "Rapid",
                      "--max-ply", "51", "--key128", "--term-slices", "--threads", "1", "--mem-gb", "1",
@@ -74,9 +82,9 @@ class PilotTest(unittest.TestCase):
         self.assertFalse(self.stage.exists())
         missing = self.source / "year=2026/month=3/event=Rapid/part-0.parquet"
         missing.rename(missing.with_suffix(".missing"))
-        with self.assertRaisesRegex(ValueError, "missing speeds"):
+        with self.assertRaisesRegex(ValueError, "source inventory files changed"):
             self.drive()
-        ref = self.tmp / "reference"
+        ref = self.tmp / "preflight-reference"
         ref.mkdir()
         rp = ref / "month=2026_3.json"
         archive.write_json(rp, {"month": "2026_3", "flags": {"events": ["Blitz", "Classical", "Rapid"]}, "files": [str(p) for p in self.source.rglob("*.parquet")] + [str(missing)]})
@@ -105,6 +113,12 @@ class PilotTest(unittest.TestCase):
         archive.write_json(cfgpath, cfg)
         with patch.object(archive, "release", side_effect=OSError("interrupted after publication")):
             self.assertEqual(self.drive(), launcher.EXIT_FAIL)
+        # Both independent historical reference and source-owned copy may be
+        # unavailable on resume; the embedded archive inventory is sufficient.
+        (self.reference/'month=2026_3.json').unlink()
+        manifest = self.source/source_inventory.RELATIVE
+        manifest.unlink()
+        manifest.with_suffix('.binding.json').unlink()
         with patch.object(launcher.subprocess, "run", side_effect=AssertionError("unnecessary re-extraction")):
             self.assertEqual(self.drive(), 0)
         self.assertFalse((self.stage / "month=2026_3").exists())

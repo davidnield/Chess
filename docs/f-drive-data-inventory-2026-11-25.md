@@ -42,18 +42,22 @@ superseded by the richer 128-bit archive. Two dependencies prevent blanket delet
    reads this archive; `python/gate_stage_a.py:27` reads its manifests. Existing
    dashboard outputs on E: survive a failure, but fresh extraction or expanded
    historical queries would need migration or re-extraction.
-2. The current migration launcher still reads its **`_provenance`** directory
-   to check source partition inventories and distinguish legitimately absent
-   historical speeds from missing data. See `python/run_ply51_migration.py:23`
-   and `python/month_archive.py:86`. The 163 provenance files total only
+2. At audit time the migration launcher still read its **`_provenance`** directory.
+   **Resolved later November 25:** the maintained launcher now uses a source-owned,
+   independently validated inventory on D:, with bound copies in the new archive
+   and stage. The full old evidence is embedded in that inventory. Historical frozen
+   launchers remain unchanged; use the new release documented in
+   [the migration report](source-inventory-migration-2026-11-25.md).
+   The 163 original provenance files total only
    **811,990 bytes**. The 163 monthly manifest files total **1,422,664 bytes**.
    Preserve these, the extraction parameters and month completion markers even
    if the bulk Parquet data is retired later.
 
 Recommendation: treat the 3.99 TB as a **conditional retirement candidate**.
 First decide whether to preserve the dashboard's six-speed scope, migrate its
-readers if appropriate, and retain the small independent provenance. No migration
-or scope change was made in this audit. The dashboard also retains some stale
+readers if appropriate, and retain the small independent provenance. The subsequent
+metadata migration removes the extraction launcher's dependency, but makes no
+dashboard or population-scope change. The dashboard also retains some stale
 E: paths to the deleted old merged book; an old path reference alone does not
 establish that the entire historical rebuild currently runs successfully.
 

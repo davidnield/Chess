@@ -1,7 +1,7 @@
 """Extract ply-keyed months on NVMe and publish verified copies to an archive.
 Each root is bound to the request and extractor binary before a month is skipped.
-Use --source-provenance for historical months missing a requested speed. Supply
-the independent per-month provenance directory of the earlier six-speed extraction.
+Use a bound source inventory beside the source games or embedded in this archive.
+--source-provenance is an explicit legacy import, never the production default.
 The default --verify hash re-reads each archived file before releasing its stage.
 """
 from __future__ import annotations
@@ -12,6 +12,7 @@ import datetime
 import re
 
 import month_archive as archive
+import source_inventory
 import hashlib
 import json
 import os
@@ -212,7 +213,8 @@ def drive(a) -> int:
     settings = {"version": 1, "exe": {x: sha256(Path(x)) for x in a.exe}, "source": str(a.source),
                 "stage": str(a.stage), "archive": str(a.dest), "events": a.events, "key128": a.key128,
                 "term_slices": a.term_slices, "max_ply": a.max_ply, "extra": a.month_arg, "verify": a.verify}
-    a.inventories = {ym: archive.inventory(a.source, ym, a.events, a.source_provenance) for ym in months}
+    a.inventory_reference = source_inventory.resolve(a, months)
+    a.inventories = {ym: archive.inventory(a.source, ym, a.events, a.inventory_reference) for ym in months}
     if a.not_before and not a.dry_run:
         start = datetime.datetime.fromisoformat(a.not_before)
         while (remaining := (start - datetime.datetime.now()).total_seconds()) > 0:
@@ -225,6 +227,8 @@ def drive(a) -> int:
             archive.root_binding(root, settings, a.dry_run)
             if (root / "_extract_params.json").exists():
                 archive.check_root_params(root, a)
+            if (root / '_launcher_settings.json').exists():
+                source_inventory.attach(a.inventory_reference, root, dry=a.dry_run)
         todo = []
         for ym, source in a.inventories.items():
             s = month_parts(a.stage, ym)
@@ -313,7 +317,7 @@ def run_pending(a, months, todo):
             if rc or not s["sentinel"].exists():
                 state["error"] = f"{tag(ym)}: `month` exited {rc}" + ("" if rc else " without its sentinel")
                 break
-            if archive.inventory(a.source, ym, a.events, a.source_provenance) != a.inventories[ym]:
+            if archive.inventory(a.source, ym, a.events, a.inventory_reference) != a.inventories[ym]:
                 raise ValueError(f"{tag(ym)}: source inventory changed during extraction")
             prov = json.loads(s["provenance"].read_text(encoding="utf-8"))
             rec = {"month": tag(ym), "extract_seconds": round(secs, 1), "rows": prov.get("rows"),
@@ -347,6 +351,7 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--key128", action="store_true")
     ap.add_argument("--term-slices", action="store_true")
     ap.add_argument("--source-provenance", type=Path, help="independent six-speed monthly provenance directory")
+    ap.add_argument("--source-manifest", type=Path, help="bound source inventory; default: archive/stage copy, then source/_source_metadata/inventory-v1.json")
     ap.add_argument("--mem-gb", type=float, default=55.0)
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--month-arg", action="append", default=[], metavar="ARG",
