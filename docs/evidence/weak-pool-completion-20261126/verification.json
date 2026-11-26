@@ -1,0 +1,21 @@
+{
+  "verified_utc": "2026-11-26T19:55:16.135662+00:00",
+  "manifest": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\pool.json",
+  "manifest_sha256": "f08b894687646fd89d93891538fa880f9d3e573bd94bf475a347dc2227758d1f",
+  "config_sha256": "5962ddd95e67e47e1e2d4ade355225a62b87155e6cd80cb361cf91236aa52b7e",
+  "producer_files_checked": 167,
+  "complete_buckets": 512,
+  "complete_ranges": 4096,
+  "manifest_receipt_identity_size_and_footer_checks": "passed",
+  "totals": {
+    "rows": 32607828391,
+    "bytes": 625454897158,
+    "white_wins": 42128076091,
+    "draws": 3455549684,
+    "black_wins": 39229433538,
+    "total": 84813059313
+  },
+  "independent_payload_rehash": false,
+  "payload_hash_evidence": "Frozen producer check_receipt SHA-256 verifies every payload before publishing pool.json; this review checks its receipts and full inventory, not a second payload hash pass.",
+  "limitations": "Does not repeat source aggregation or a full semantic row census. Prior regression and real-range parity evidence remain separate. Pool completion does not accept a model or repertoire."
+}
