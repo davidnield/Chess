@@ -15,8 +15,14 @@ class KeyedParquet:
         self.path=str(Path(path).resolve());self.column=column
         self.partitioned=None
         if Path(path).suffix==".json":
-            from .count_pool_reader import CountPoolReader
-            self.partitioned=CountPoolReader(path,column)
+            import json
+            from .partitioned_pool import SCHEMA
+            if json.loads(Path(path).read_text()).get("schema")==SCHEMA:
+                from .partitioned_pool_reader import PartitionedPoolReader
+                self.partitioned=PartitionedPoolReader(path,column)
+            else:
+                from .count_pool_reader import CountPoolReader
+                self.partitioned=CountPoolReader(path,column)
             self.stats=self.partitioned.stats
             return
         self.reader=pq.ParquetFile(self.path)

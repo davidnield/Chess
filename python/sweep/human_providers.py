@@ -130,8 +130,11 @@ def from_config(path,*,keys,opponent,weak_pool,candidate_cap):
     identity=dict(inputs=pinned,runtime=runtime,code={p.name:file_sha(p) for p in
         [Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),
          Path(__file__).with_name("keyed_parquet.py"),Path(__file__).with_name("count_pool_reader.py"),
-         Path(__file__).with_name("count_pool.py"),
+         Path(__file__).with_name("count_pool.py"),Path(__file__).with_name("prediction_cache.py"),
+         Path(__file__).with_name("partitioned_pool.py"),Path(__file__).with_name("partitioned_pool_reader.py"),
          code/"book_builder_rs.pyd",code/"maia_server.py",code/"maia_batch.py"]})
-    own=OwnProvider(counts=WeakCounts(weak_pool),predict=MaiaPolicy(cfg["model"],recipe["own"]),
+    model=dict(cfg["model"])
+    model.setdefault("raw_cache",str(Path(cfg["cache"]).parent/"maia-raw-v1.sqlite"))
+    own=OwnProvider(counts=WeakCounts(weak_pool),predict=MaiaPolicy(model,recipe["own"],runtime=runtime),
                     cache=cfg["cache"],recipe=recipe["own"],identity=identity)
     return SharedPolicies(own,opponent,keys),recipe

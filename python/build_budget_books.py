@@ -384,6 +384,11 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
     prior (reply_overlay) each level's rows are replaced as in collect_subgraph_edges, and the
     walk reads their reach_share."""
     import book_builder_rs as rs
+    source_reader = None
+    if Path(stats).suffix == ".json":
+        if keys is None:raise ValueError("partitioned pool requires full-key consumer")
+        from sweep.keyed_parquet import KeyedParquet
+        source_reader=KeyedParquet(stats,"parent_hash")
     floor = f"s.total >= {int(min_games)}"
     if uncut_own:
         our_turn = "w" if our_white else "b"
@@ -428,7 +433,15 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
             _set_frontier(con, frontier.tolist())
         else:
             keys.register(con, "frontier", frontier)
-        df = duck_pl(con, f"""
+        if source_reader is not None:
+            requested=keys.external(pl.Series("h",frontier,dtype=pl.Int64)).to_list()
+            df=source_reader.fetch(con,requested)
+            keep=pl.col("total")>=min_games
+            if uncut_own:keep=keep | (pl.col("parent_epd").str.split(" ").list.get(1)==our_turn)
+            df=df.filter(keep).select("parent_hash","move_san","child_hash","parent_epd",
+                                    "total","white_wins","draws","black_wins","white_score_avg")
+        else:
+            df = duck_pl(con, f"""
             SELECT s.parent_hash, s.move_san, s.child_hash, s.parent_epd,
                    s.total, s.white_wins, s.draws, s.black_wins,
                    s.white_score_avg
@@ -476,6 +489,7 @@ def collect_subgraph_edges_rs(con, stats: str, root: int, our_white: bool,
     if col.reopened:
         log(f"  reach re-propagation reopened {col.reopened:,} node-visits "
             f"(each one a subtree the old collector would have pruned)")
+    if source_reader is not None:source_reader.close()
     return pl.concat([f for f in frames if f.height]) if frames else pl.DataFrame()
 
 
@@ -834,7 +848,13 @@ def main() -> int:
         if keys:
             keys.register(con, "root_position", [root])
         root_sql = "(SELECT h FROM root_position)" if keys else str(root)
-        slice_prior = con.execute(f"""
+        if Path(stats).suffix==".json":
+            from sweep.partitioned_pool_reader import fetch_positions
+            root_rows=fetch_positions(con,stats,keys.external(pl.Series([root],dtype=pl.Int64)).to_list())
+            mass=root_rows["total"].sum()
+            slice_prior=(root_rows["white_wins"].sum()+.5*root_rows["draws"].sum())/mass if mass else None
+        else:
+            slice_prior = con.execute(f"""
             SELECT SUM(white_score_avg * total) / SUM(total)
             FROM read_parquet('{stats}') WHERE parent_hash = {root_sql}
         """).fetchone()[0]
@@ -1022,7 +1042,11 @@ def main() -> int:
         wanted = pl.Series("position_hash", parents, dtype=pl.Int64)
         if keys:
             wanted = keys.external(wanted)
-        aux_frame = pl.scan_parquet(graph_aux).filter(pl.col("position_hash").is_in(wanted.implode())).collect()
+        if Path(graph_aux).suffix==".json":
+            from sweep.partitioned_pool_reader import fetch_positions
+            aux_frame=fetch_positions(con,graph_aux,wanted.to_list(),"position_hash")
+        else:
+            aux_frame = pl.scan_parquet(graph_aux).filter(pl.col("position_hash").is_in(wanted.implode())).collect()
         if keys:
             aux_frame = keys.encode(aux_frame, "position_hash")
         if reply_overlay is not None:

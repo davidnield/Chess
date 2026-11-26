@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["python"]
-python = ["dep:pyo3", "dep:numpy"]
+python = ["dep:pyo3", "dep:numpy", "dep:sha2"]
 optimizer = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:microlp"]
 # On for the extension build (build.ps1); off for `cargo test`, which links libpython.
 extension-module = ["python", "pyo3/extension-module"]

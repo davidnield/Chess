@@ -14,6 +14,8 @@ pub mod human_policy;
 mod py_human_policy;
 #[cfg(feature = "python")]
 mod py_continuation;
+#[cfg(feature = "python")]
+mod py_input_tools;
 pub mod polish;
 mod position_ids;
 pub mod price;
@@ -369,6 +371,8 @@ fn book_builder_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_human_policy::bounded_expectation, m)?)?;
     m.add_function(wrap_pyfunction!(py_human_policy::continuation_utility, m)?)?;
     m.add_class::<py_continuation::RsContinuation>()?;
+    m.add_class::<py_input_tools::RsPoolAudit>()?;
+    m.add_function(wrap_pyfunction!(py_input_tools::prediction_temperature, m)?)?;
     m.add("EVAL_SOURCE_POLICY", eval_policy::POLICY)?;
     m.add_function(wrap_pyfunction!(ws_to_cp, m)?)?;
     m.add_function(wrap_pyfunction!(leaf_edge_values, m)?)?;

@@ -285,6 +285,7 @@ class FrontierOverlay:
         meta=json.loads(meta_path.read_text(encoding="utf8"))
         meta.update(cache_identity=self.identity,materialization=dict(self.stats),nonmove_semantics=self.semantics,
                     count_lookup=self.counts.metrics() if hasattr(self.counts,"metrics") else {})
+        meta['raw_predictions']=self.predict.cache_metrics() if hasattr(self.predict,'cache_metrics') else {}
         atomic_json(meta_path,meta)
         return self.recipe
 
@@ -309,7 +310,8 @@ def from_config(path,*,colour,keys,pool,aux):
     bound=list(cfg["artifacts"])
     code=Path(__file__).resolve().parents[1]
     for p in (Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),Path(__file__).with_name("keyed_parquet.py"),
-              Path(__file__).with_name("count_pool_reader.py"),Path(__file__).with_name("count_pool.py"),
+              Path(__file__).with_name("count_pool_reader.py"),Path(__file__).with_name("count_pool.py"),Path(__file__).with_name("prediction_cache.py"),
+              Path(__file__).with_name("partitioned_pool.py"),Path(__file__).with_name("partitioned_pool_reader.py"),
               code/"maia_server.py",code/"maia_batch.py",code/"book_builder_rs.pyd"):
         bound.append(dict(path=str(p),sha256=file_sha(p)))
     runtime=runtime_identity(cfg["model"]["python"])
@@ -320,7 +322,9 @@ def from_config(path,*,colour,keys,pool,aux):
          outcome=pinned[str(Path(pool).resolve())],aux=pinned[str(Path(aux).resolve())],checkpoint=pinned[str(Path(cfg["model"]["checkpoint"]).resolve())],
          runtime=runtime,code={Path(r["path"]).name:r["sha256"] for r in bound[len(cfg["artifacts"]):-1]})
     counts=Counts(cfg["sources"],aux,outcome_pool=pool if separate else None)
-    model=MaiaPolicy(cfg["model"],POLICY)
+    model_config=dict(cfg["model"])
+    model_config.setdefault("raw_cache",str(Path(cfg["cache"]).parent/"maia-raw-v1.sqlite"))
+    model=MaiaPolicy(model_config,POLICY,runtime=runtime)
     return FrontierOverlay(colour=colour,keys=keys,counts=counts,predict=model,cache=cfg["cache"],
                            recipe=POLICY,input_artifacts=bound,pool=pool,aux=aux,
                            verify_artifacts=False,cache_components=cache_components,

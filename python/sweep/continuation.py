@@ -36,4 +36,6 @@ def values(xs,ys,*,policies,keys,lookup,recipe):
     W={r["key"]:r["lower"] for r in known if r["side"]=="x"}
     R={r["key"]:r["lower"] for r in known if r["side"]=="y"}
     return W,R,dict(schema="continuation-result-v1",states=states,roots=len(roots),
-                   unresolved_roots=len(rows)-len(known),bounds=rows,own=dict(policies.own.stats))
+                   unresolved_roots=len(rows)-len(known),bounds=rows,own=dict(policies.own.stats),
+                   raw_predictions=policies.own.predict.cache_metrics()
+                       if hasattr(getattr(policies.own,'predict',None),'cache_metrics') else {})

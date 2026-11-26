@@ -129,7 +129,7 @@ class SelectivePolicy(unittest.TestCase):
                 pos=kw["positions"]
                 early={pos.board(board(x)) for x in ("","e4","d4")}
                 return {h:(.1 if h in early else .5) for h in xs},{h:.5 for h in ys},{}
-            with patch("sweep.maia_policy.MaiaPolicy",side_effect=lambda *a:Model()), \
+            with patch("sweep.maia_policy.MaiaPolicy",side_effect=lambda *a,**kw:Model()), \
                     patch("sweep.maia_policy.runtime_identity",return_value=dict(fixture=True)), \
                     patch("weak_stop.weak_stop_values",new=weak_fixture):
                 for colour,budget in (("black",2),("white",1)):
@@ -157,6 +157,7 @@ class SelectivePolicy(unittest.TestCase):
             ckpt=Path(td)/"model";ckpt.write_bytes(b"fixture")
             client=MaiaPolicy(dict(checkpoint=str(ckpt),python="unused"),POLICY)
             b=board();p={b.san(m):1. for m in b.legal_moves};p["e4"]=16.
+            total=sum(p.values());p={k:v/total for k,v in p.items()}
             class Worker:
                 stdin=io.StringIO()
                 stdout=io.StringIO(json.dumps(dict(probs=[p]))+"\n")

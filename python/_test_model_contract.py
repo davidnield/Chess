@@ -84,7 +84,10 @@ class Continuation(unittest.TestCase):
     def test_builder_consumes_complete_compact_broad_and_weak_pools(self):
         self._builder_fixture(True)
 
-    def _builder_fixture(self,compact):
+    def test_builder_consumes_partitioned_adult_and_compact_count_pools(self):
+        self._builder_fixture(True,partitioned=True)
+
+    def _builder_fixture(self,compact,partitioned=False):
         import sys
         import io
         from contextlib import redirect_stdout
@@ -134,13 +137,21 @@ class Continuation(unittest.TestCase):
                 inputs += [dict(path=str(p),sha256=file_sha(p)) for p in (broad,Path(str(broad)+".meta.json"))]
                 atomic_json(cfg,dict(schema=1,recipe=POLICY,sources=sources,aux=str(aux),cache=str(root/"op.sqlite"),
                     artifacts=inputs,model=dict(checkpoint=str(checkpoint),python=sys.executable),nonmove_semantics="conditional-board-v1"))
+            if partitioned:
+                from _test_partitioned_inputs import published_fixture
+                stats,aux,_,_=published_fixture(root/"adult-full",adult.to_dicts(),
+                    json.loads(Path(sources["adult"]+".meta.json").read_text()))
+                sources["adult"]=str(stats)
+                inputs += [dict(path=str(p),sha256=file_sha(p)) for p in (stats,aux,Path(str(stats)+".meta.json"))]
+                atomic_json(cfg,dict(schema=1,recipe=POLICY,sources=sources,aux=str(aux),cache=str(root/"op.sqlite"),
+                    artifacts=inputs,model=dict(checkpoint=str(checkpoint),python=sys.executable),nonmove_semantics="conditional-board-v1"))
             owncfg=root/"own.json";contract=recipe()|dict(candidate_cap=2,count_cap=2,max_states=500000)
             atomic_json(owncfg,dict(recipe=contract,weak=str(weak),cache=str(root/"own.sqlite"),
                 model=dict(checkpoint=str(checkpoint),python=sys.executable),artifacts=inputs+
                 [dict(path=str(p),sha256=file_sha(p)) for p in (weak,weakmeta)]))
             binding=root/"eval.json"
             atomic_json(binding,dict(schema="eval-binding-v1",key_bits=128,lookup=str(lookup),lookup_sha256=file_sha(lookup/"lookup.json")))
-            with patch("sweep.maia_policy.MaiaPolicy",side_effect=lambda *a:Model()), \
+            with patch("sweep.maia_policy.MaiaPolicy",side_effect=lambda *a,**kw:Model()), \
                  patch("sweep.maia_policy.runtime_identity",return_value=dict(fixture=True)), \
                  patch("weak_stop.weak_stop_values",side_effect=AssertionError("legacy continuation called")), \
                  patch.object(ConsumerKeys,"scores",lambda self,ids:np.full(len(ids),12.75)),redirect_stdout(io.StringIO()):

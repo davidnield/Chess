@@ -15,6 +15,11 @@ PAIR = pl.Struct({"lo": pl.Int64, "hi": pl.Int64})
 
 
 def is_wide(path, column):
+    if Path(path).suffix == ".json":
+        from sweep.keyed_parquet import KeyedParquet
+        reader=KeyedParquet(path,column)
+        reader.close()
+        return True
     schema = pl.read_parquet_schema(path)
     return schema[column] == PAIR or column + "_hi" in schema
 
