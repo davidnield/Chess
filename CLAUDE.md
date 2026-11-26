@@ -13,6 +13,14 @@ here last days, and a compaction that drops them turns a status check into a re-
 
 ## Project purpose
 
+Complete policy-count populations can be exported with `python/sweep/count_pool.py`.
+These explicitly typed manifests preserve every observed move at the declared cap
+but omit candidate EPDs, endings and evaluation sidecars. They are consumed through
+`sweep/keyed_parquet.py` by the corrected human-policy path, never as candidate pools
+or legacy weak-stop inputs. All 512 buckets/ranges must be present before publication;
+missing partitions are errors. Operational details live in
+`docs/full-policy-pools-2026-11-25.md`.
+
 The experiment order is in `docs/lifetime-repertoire-plan.md`. Tag `archive-2026-11-11` holds
 every driver and search prototype retired on that date (the uncut sweep coordinators, the
 multi-depth / root-search / shared-budget prototypes); check it out to rerun one.

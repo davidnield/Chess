@@ -1,0 +1,27 @@
+test_every_observed_move_128bit_transpositions_and_exact_cap (_test_sweep_count_pool.FullCounts.test_every_observed_move_128bit_transpositions_and_exact_cap) ... ok
+test_input_inventory_and_resume_receipt_fail_closed (_test_sweep_count_pool.FullCounts.test_input_inventory_and_resume_receipt_fail_closed) ... ok
+test_invalid_child_count_and_bucket_fail (_test_sweep_count_pool.FullCounts.test_invalid_child_count_and_bucket_fail) ... ok
+test_published_lookup_missing_files_and_hash_checks (_test_sweep_count_pool.FullCounts.test_published_lookup_missing_files_and_hash_checks) ... ok
+{"pool": "test", "bucket": 0, "part": 0, "rows": 2, "mass": {"white_wins": 3, "draws": 2, "black_wins": 2, "total": 7}, "low": -9223372036854775808, "high": -1}
+{"pool": "test", "bucket": 0, "part": 1, "rows": 2, "mass": {"white_wins": 1, "draws": 3, "black_wins": 0, "total": 4}, "low": 0, "high": 9223372036854775807}
+test_resume_keeps_checked_ranges_stop_and_space_guards (_test_sweep_count_pool.FullCounts.test_resume_keeps_checked_ranges_stop_and_space_guards) ... ok
+test_group_pruning_matches_full_join_with_collisions_and_missing_statistics (_test_sweep_keyed_parquet.Lookup.test_group_pruning_matches_full_join_with_collisions_and_missing_statistics) ... ok
+test_explicit_provider_does_not_rewrite_count_metadata (_test_model_contract.Bindings.test_explicit_provider_does_not_rewrite_count_metadata) ... ok
+test_paired_scenario_cannot_change_counts_or_solver (_test_model_contract.Bindings.test_paired_scenario_cannot_change_counts_or_solver) ... ok
+test_release_requires_content_bound_model_evidence (_test_model_contract.Bindings.test_release_requires_content_bound_model_evidence) ... ok
+test_shared_counts_with_distinct_stored_scores_are_preserved (_test_model_contract.Bindings.test_shared_counts_with_distinct_stored_scores_are_preserved) ... ok
+test_actual_mate_and_data_horizon_are_different (_test_model_contract.Continuation.test_actual_mate_and_data_horizon_are_different) ... ok
+test_both_colours_same_opponent_in_w_r_and_native_referee (_test_model_contract.Continuation.test_both_colours_same_opponent_in_w_r_and_native_referee) ... ok
+test_builder_consumes_complete_compact_broad_and_weak_pools (_test_model_contract.Continuation.test_builder_consumes_complete_compact_broad_and_weak_pools) ... ok
+test_builder_uses_real_shared_continuation_without_legacy_fallback (_test_model_contract.Continuation.test_builder_uses_real_shared_continuation_without_legacy_fallback) ... ok
+test_deeper_policy_counts_do_not_replace_candidate_outcome_counts (_test_model_contract.Continuation.test_deeper_policy_counts_do_not_replace_candidate_outcome_counts) ... ok
+test_live_frontier_conditional_drops_no_legal_reply_at_censored_board (_test_model_contract.Continuation.test_live_frontier_conditional_drops_no_legal_reply_at_censored_board) ... ok
+test_missing_eval_and_expansion_cap_have_bounds_not_neutral_values (_test_model_contract.Continuation.test_missing_eval_and_expansion_cap_have_bounds_not_neutral_values) ... ok
+test_formula_randomized_parity_and_support_boundary (_test_model_contract.NativePolicies.test_formula_randomized_parity_and_support_boundary) ... ok
+test_no_probability_loss (_test_model_contract.NativePolicies.test_no_probability_loss) ... ok
+test_own_provider_keeps_19_observations_and_reuses_content_cache (_test_model_contract.NativePolicies.test_own_provider_keeps_19_observations_and_reuses_content_cache) ... ok
+
+----------------------------------------------------------------------
+Ran 20 tests in 91.580s
+
+OK

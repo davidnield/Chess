@@ -588,3 +588,11 @@ content-bound release requirements. The historical manifest remains a control;
 freeze corrected primary recipes after calibration and the real-data cost/uncertainty
 work. The new path currently refuses unresolved scalar values rather than hiding
 missing mass. Do not launch a full matrix from fixture test success.
+
+November 25 input decision: David chose **complete pools instead of selective
+explorer count lookup**. Materialize all observed moves for the missing weak
+1000–1799 and all-ratings BRC populations at p30 using the compact policy-count
+publication; preserve the mini BRC1800 run and reuse the accepted targeted pools.
+See [execution, reserves and verification](full-policy-pools-2026-11-25.md).
+Keep p50/BRC2200 deferred. Model inference caching and selective continuation-value
+refinement remain separate required work; no calibration parameter changes here.

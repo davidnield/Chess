@@ -309,6 +309,7 @@ def from_config(path,*,colour,keys,pool,aux):
     bound=list(cfg["artifacts"])
     code=Path(__file__).resolve().parents[1]
     for p in (Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),Path(__file__).with_name("keyed_parquet.py"),
+              Path(__file__).with_name("count_pool_reader.py"),Path(__file__).with_name("count_pool.py"),
               code/"maia_server.py",code/"maia_batch.py",code/"book_builder_rs.pyd"):
         bound.append(dict(path=str(p),sha256=file_sha(p)))
     runtime=runtime_identity(cfg["model"]["python"])

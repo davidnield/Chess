@@ -8,7 +8,7 @@ This review covers construction, reply prediction, stop values, rollout evaluati
 
 Reviewed baseline: `7076faa149ecefa509a71854e3e81b28b1f5fbb0`, branch `codex/takeover-hardening-20261122`, worktree `C:/Users/David/Documents/Chess/scratch/worktrees/sweep-preparation`. New reproductions and this plan do not change production behavior. Numerical examples below are controlled fixtures, not measured repertoire performance.
 
-**Implementation update, November 25:** David authorized the recommendations. The first code milestone is documented in [the implementation record](repertoire-model-implementation-2026-11-25.md). Findings below describe the reviewed baseline. Bindings, per-arm verification references, native policies, bounded shared W/R, float rollouts and stronger release checks now have implementations. Production promotion, calibration, selective input access, global uncertainty refinement and real-data audits remain outstanding.
+**Implementation update, November 25:** David authorized the recommendations. The first code milestone is documented in [the implementation record](repertoire-model-implementation-2026-11-25.md). Findings below describe the reviewed baseline. Bindings, per-arm verification references, native policies, bounded shared W/R, float rollouts and stronger release checks now have implementations. Production promotion, calibration, complete count-pool publication, global uncertainty refinement and real-data audits remain outstanding. David's later full-pool decision supersedes selective explorer count materialization; see R10's update.
 
 ## Decisions to preserve
 
@@ -136,6 +136,8 @@ Use model-matched rollouts for construction consistency and separately frozen ex
 Require evidence-backed receipts for the new contracts, including tests that intentionally make raw and ensemble distributions disagree. Add missing-mass, source-binding, full-key sampling, float-fallback, runtime and cache-hit/miss comparisons. Actual canonical publication must remain separate from pilot readiness. Keep existing safeguards instead of replacing their requirements with a single broad boolean.
 
 ### R10 Avoid unnecessary data rebuilding while preserving provenance
+
+**Later decision, November 25:** David chose full pools instead of selective explorer count lookup. Follow [the full-pool execution plan](full-policy-pools-2026-11-25.md) for the missing broad/weak inputs. The baseline finding below is retained as review history; selective explorer materialization is no longer the execution plan. Partitioned complete-pool publication and capacity checks still apply.
 
 **P2 performance and capacity decision before another large export or global sort.** The mini is building only BRC1800-p30. Rapid2200-p30, Classical1800-p30 and the accepted OTB training counts already exist. Full all-rating and weak exports do not. The current policy adapter requires them as pool Parquets, but the approved plan already permits selective broad reads from the explorer. `BookOwnMoves` supplies a starting point for full-key reads, though it is a single-board/all-plies extension helper, not a complete batched production adapter.
 

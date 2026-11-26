@@ -79,6 +79,12 @@ class NativePolicies(unittest.TestCase):
 
 class Continuation(unittest.TestCase):
     def test_builder_uses_real_shared_continuation_without_legacy_fallback(self):
+        self._builder_fixture(False)
+
+    def test_builder_consumes_complete_compact_broad_and_weak_pools(self):
+        self._builder_fixture(True)
+
+    def _builder_fixture(self,compact):
         import sys
         import io
         from contextlib import redirect_stdout
@@ -118,6 +124,16 @@ class Continuation(unittest.TestCase):
             weakmeta=Path(str(weak)+".meta.json")
             atomic_json(weakmeta,dict(key_bits=128,min_games=1,max_ply=2,
                 population=dict(elo_bands=[1000,1200,1400,1600],events=["Blitz","Rapid","Classical"])))
+            if compact:
+                from _test_sweep_count_pool import compact_fixture
+                weak=compact_fixture(root/"weak-full",adult,json.loads(weakmeta.read_text()))
+                weakmeta=Path(str(weak)+".meta.json")
+                broad=compact_fixture(root/"broad-full",pl.read_parquet(sources["broad"]),
+                    json.loads(Path(sources["broad"]+".meta.json").read_text()))
+                sources["broad"]=str(broad)
+                inputs += [dict(path=str(p),sha256=file_sha(p)) for p in (broad,Path(str(broad)+".meta.json"))]
+                atomic_json(cfg,dict(schema=1,recipe=POLICY,sources=sources,aux=str(aux),cache=str(root/"op.sqlite"),
+                    artifacts=inputs,model=dict(checkpoint=str(checkpoint),python=sys.executable),nonmove_semantics="conditional-board-v1"))
             owncfg=root/"own.json";contract=recipe()|dict(candidate_cap=2,count_cap=2,max_states=500000)
             atomic_json(owncfg,dict(recipe=contract,weak=str(weak),cache=str(root/"own.sqlite"),
                 model=dict(checkpoint=str(checkpoint),python=sys.executable),artifacts=inputs+

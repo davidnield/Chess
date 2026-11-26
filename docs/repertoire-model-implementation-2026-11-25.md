@@ -21,12 +21,12 @@ This records the first implementation milestone authorized after the [model revi
 - The scalar optimizer currently requires exact W/R intervals. Reach-weighted adaptive refinement and a global uncertainty budget are not implemented yet. Exhaustively evaluating every legal continuation is not the intended full-scale strategy. This is a major remaining implementation task, not a production-ready missing-data solution.
 - Complete the receipted multi-book referee/calibration driver, recall-model integration beyond the existing scalar interface, and the long-versus-short audit. Root-start rollouts retain actual history; endpoint studies know only history since the endpoint and must be labeled accordingly.
 - Measure utility ranking effects, resignation/flag treatment, route-mixed horizon counts, value-origin/reach attribution and eval-weight sensitivity. Shared policy functions do not make short continuation identical to long play.
-- Complete the selective broad/weak reader, persistent raw inputs, partitioned adult-publication benchmark, and cold/warm real-data cost pilot. No missing population has been replaced with a different pool.
+- Build the complete broad/weak pools selected by David, retain reusable prediction caches, complete the partitioned adult-publication benchmark and cold/warm real-data cost pilot. The [full-pool execution decision](full-policy-pools-2026-11-25.md) supersedes selective explorer count materialization. No population is replaced by another.
 - Finish source-policy acceptance packaging, final independent move verification and the paired Black pilot. No final engine confirmation labels were reused for tuning.
 
 ## Next execution order
 
-1. Implement selective count access/raw-input caching and benchmark partitioned pool consumption; require missing-partition refusal and independent count parity.
+1. Complete and publish full broad/weak count pools; benchmark partitioned pool consumption with missing-partition refusal and independent parity. Reuse those counts across recipes and retain persistent raw prediction caching. See [the full-pool execution decision](full-policy-pools-2026-11-25.md).
 2. Lock weak-policy development/confirmation inputs and exposure status. Reuse six raw rating-pair prediction sets for 36 transforms. Select using planned online mover-band validation, not fixtures.
 3. Add selective value refinement and root-weighted uncertainty accounting; persist completed continuation work with content identities.
 4. Finish fixed-referee run receipts and objective/long-continuation audits. Benchmark a bounded real panel before estimating a full build.

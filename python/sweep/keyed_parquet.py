@@ -13,6 +13,12 @@ from consumer_keys import PAIR
 class KeyedParquet:
     def __init__(self,path,column):
         self.path=str(Path(path).resolve());self.column=column
+        self.partitioned=None
+        if Path(path).suffix==".json":
+            from .count_pool_reader import CountPoolReader
+            self.partitioned=CountPoolReader(path,column)
+            self.stats=self.partitioned.stats
+            return
         self.reader=pq.ParquetFile(self.path)
         if pl.read_parquet_schema(self.path)[column]!=PAIR:
             self.reader.close();raise ValueError(f"expected full struct keys: {self.path}")
@@ -43,6 +49,7 @@ class KeyedParquet:
         return result
 
     def fetch(self,db,keys):
+        if self.partitioned is not None:return self.partitioned.fetch(db,keys)
         keys=list(keys);groups=self.select_groups(keys)
         self.stats["queries"]+=1;self.stats["total_groups"]+=len(self.groups)
         self.stats["selected_groups"]+=len(groups)
@@ -69,4 +76,6 @@ class KeyedParquet:
             if batch is not None:db.unregister("selective_rows");batch.close()
             db.unregister("selective_keys")
 
-    def close(self):self.reader.close()
+    def close(self):
+        if self.partitioned is not None:self.partitioned.close()
+        else:self.reader.close()

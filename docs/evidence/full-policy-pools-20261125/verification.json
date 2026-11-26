@@ -1,0 +1,98 @@
+{
+  "base_commit": "4caa71fa6eb06e4581352f00f8a219f7f9852d36",
+  "tests": {
+    "passed": 20,
+    "seconds": 91.58,
+    "command": "python -B -m unittest _test_sweep_count_pool _test_sweep_keyed_parquet _test_model_contract -v",
+    "log_sha256": "08733a9f27dd0f31a473a94f383582beb694bc60bb76402a4d7a26b4f9014d9f"
+  },
+  "source": {
+    "python/sweep/count_pool.py": "86595b31594821f483968f33bf41d951cc390b15c49ccbd4ba8e5187049ce4ad",
+    "python/sweep/count_pool_reader.py": "82bf432efbd9009212e08b4cba5bd7dbfd1845d90d6f647a6b808cd95783cc28",
+    "python/sweep/keyed_parquet.py": "39a4bdef5df24fc553297ac5bb10bbfe51fdc61e8cdbd90d6c50f7e56e9e9e68",
+    "python/sweep/human_providers.py": "e616713689b4a2f846340d18153790747e1d982cfac34946cda98c3689eb8b5f",
+    "python/sweep/frontier.py": "d6943ff42d9d10e361f1b99d009e470ad1014534f0203fba8f77d43d954e9552",
+    "python/build_budget_books.py": "41dc62674edf47f3b596ab5740d02a085bf7afe8ff7ec9a27fb91ba1004da332",
+    "python/_test_sweep_count_pool.py": "8069013e757c5992c0263011161aafac14625621aba62b4f3465ebd579f2d5ed",
+    "python/_test_model_contract.py": "da5aeca2de118b07ad26a76235338b57950700d5cd1d2bef37f37b162d71c523"
+  },
+  "control": {
+    "rows": 2986084,
+    "differences": [
+      0,
+      0
+    ],
+    "sha256": "0d65b91b62985a24949b7de661f6604b8a11ff922b1a79e5c526a9d18e59dc29"
+  },
+  "run": {
+    "config": "D:\\chess\\full-policy-pools-20261125\\config-v2.json",
+    "config_sha256": "5962ddd95e67e47e1e2d4ade355225a62b87155e6cd80cb361cf91236aa52b7e",
+    "placement": {
+      "config_sha256": "5962ddd95e67e47e1e2d4ade355225a62b87155e6cd80cb361cf91236aa52b7e",
+      "reason": "larger all-ratings pool on roomier H; weak on E; same counts/code/source, existing reserves retained",
+      "copied": [
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r00.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r00.parquet.receipt.json",
+          "sha256": "a86284e6334ba790d16de8853c38956926d6a9036fb22f4c953ab076cdf6a768",
+          "bytes": 152748037
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r01.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r01.parquet.receipt.json",
+          "sha256": "52a78cb0744b0c5fcad327521944520709c9355bc7cbf14b27a98ce400c00a91",
+          "bytes": 152636103
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r02.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r02.parquet.receipt.json",
+          "sha256": "a13500c2e6b3363c6e4eca1cc21c5ed4fa06f3f36d66efb52d16ec18b70c518d",
+          "bytes": 152537717
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r03.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r03.parquet.receipt.json",
+          "sha256": "198ef36b48ac85571bbb8446fabc4e16ed018f4093cb17ba0089591d1a4e542d",
+          "bytes": 152651210
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r04.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r04.parquet.receipt.json",
+          "sha256": "c5efa4d9d1f54205ca970793498b04a7f66b661135756b5f09c86dd09e463809",
+          "bytes": 152789769
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r05.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r05.parquet.receipt.json",
+          "sha256": "9e0faa91dd897c1749917283a8b0451e8281137b7aed834a5ec11a6b3ed58a54",
+          "bytes": 152711130
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r06.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r06.parquet.receipt.json",
+          "sha256": "688b203519f7012cc535d37ef5fea2cc947fd225629d0bc1e1d8f21eab60ab67",
+          "bytes": 152796997
+        },
+        {
+          "old_receipt": "H:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r07.parquet.receipt.json",
+          "new_receipt": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\b005-r07.parquet.receipt.json",
+          "sha256": "29856d52bafa5e7c6056d3bcfb1dbb7f6701a5de189936afde689fae0af09da3",
+          "bytes": 152734021
+        },
+        {
+          "old_receipt": "E:\\chess\\policy-pools\\brc-all-p30-20261125\\b005-r00.parquet.receipt.json",
+          "new_receipt": "H:\\chess\\policy-pools\\brc-all-p30-20261125\\b005-r00.parquet.receipt.json",
+          "sha256": "06a710f9858bda8f5e34f4109f17226c95bf41d1db3dd283e1ab7c32fe6c99ac",
+          "bytes": 212085580
+        }
+      ],
+      "deleted": []
+    },
+    "launch": {
+      "pid": 43804,
+      "started": "2026-11-25T17:37:26.3944261-08:00",
+      "config": "D:\\chess\\full-policy-pools-20261125\\config-v2.json",
+      "release": "D:\\chess\\bin\\full-policy-pools-20261125-v1"
+    }
+  }
+}

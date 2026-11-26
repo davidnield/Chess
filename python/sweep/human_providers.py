@@ -129,6 +129,8 @@ def from_config(path,*,keys,opponent,weak_pool,candidate_cap):
     code=Path(__file__).resolve().parents[1]
     identity=dict(inputs=pinned,runtime=runtime,code={p.name:file_sha(p) for p in
         [Path(__file__),Path(__file__).with_name("maia_policy.py"),Path(__file__).with_name("policy.py"),
+         Path(__file__).with_name("keyed_parquet.py"),Path(__file__).with_name("count_pool_reader.py"),
+         Path(__file__).with_name("count_pool.py"),
          code/"book_builder_rs.pyd",code/"maia_server.py",code/"maia_batch.py"]})
     own=OwnProvider(counts=WeakCounts(weak_pool),predict=MaiaPolicy(cfg["model"],recipe["own"]),
                     cache=cfg["cache"],recipe=recipe["own"],identity=identity)

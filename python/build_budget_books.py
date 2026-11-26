@@ -688,7 +688,10 @@ def main() -> int:
             or any(c not in "0123456789abcdefABCDEF" for c in study_receipts[k]) for k in required
         ):
             ap.error("study receipts must contain all six SHA256 input bindings")
-    if Path(a.weak_pool).is_file() and is_wide(a.weak_pool, "parent_hash") != bool(keys):
+    weak_is_manifest=Path(a.weak_pool).suffix==".json"
+    if weak_is_manifest and (not a.continuation_config or not keys):
+        ap.error("compact full count pools require the corrected full-key continuation path")
+    if Path(a.weak_pool).is_file() and not weak_is_manifest and is_wide(a.weak_pool, "parent_hash") != bool(keys):
         ap.error("--weak-pool and --stats must use matching position-key widths")
     legacy = a.legacy_gates or a.max_eval_loss is not None
     if not legacy and (a.gate_rel_floor is not None or a.gate_rel_own_margin is not None):

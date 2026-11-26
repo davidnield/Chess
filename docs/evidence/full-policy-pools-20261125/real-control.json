@@ -1,0 +1,15 @@
+{
+  "differences": [
+    0,
+    0
+  ],
+  "rows": 2986084,
+  "reference": {
+    "reference": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.edges.parquet",
+    "sha256": "aba3176137c182abc3c13f3bc19782a884e4867127eebb4923260bc8098915e8",
+    "bucket": 5,
+    "output": "D:\\chess\\full-policy-pools-20261125\\control\\adult-b005-r00.parquet"
+  },
+  "source_identity": "78697fd79e7fbd4ff1971d93e3ed99344079ff4ad461c51403b495fef6fca035",
+  "sha256": "610c177a9473c3dfc1459015c68e306a7002895605b02ffc817e4ad056d35f7d"
+}
