@@ -1,0 +1,8 @@
+{
+  "bounded": true,
+  "new_completed": 4,
+  "pid": 25628,
+  "records": 2000000,
+  "shards": 4,
+  "state": "complete"
+}

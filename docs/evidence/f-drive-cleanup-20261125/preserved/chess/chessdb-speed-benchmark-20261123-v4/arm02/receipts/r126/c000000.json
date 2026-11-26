@@ -1,0 +1,29 @@
+{
+  "audit": {
+    "bytes": 164503769,
+    "file_sha256": "3f7687f5b681ac83f18965394a4f4ccd958861c45fa195e3cae120f870a58cd6",
+    "first_key_hex": "6826296833705e2231a3a33a0a04840ac1f0ad0c1b1009",
+    "last_key_hex": "68262980a03038238131840c1c0a0a52a0a82f0109",
+    "records": 5000000,
+    "seconds": 7.8640006,
+    "source_logical_sha256": "2f28422e03c81327f50783d54fbece1fa67a313db329d322f356ee73066ff29b",
+    "stream_sha256": "c5b65f3a2e7b4a5e68b2bfd46e90d1deffd84b20d924b2399b75bcda9a349e2e"
+  },
+  "end": "6826609003371300540530331480a0b3802aaba00a0c0aca2eddf01090",
+  "file": "parquet/r126/c000000.parquet",
+  "identity": "benchmark-only-56a1f416fa4132724a417e1a77b493217e7f764941d4049d3e8aff77ba5d3f1a",
+  "index": 0,
+  "range": 126,
+  "seconds": 45.32900000002701,
+  "source": {
+    "first_key_hex": "6826296833705e2231a3a33a0a04840ac1f0ad0c1b1009",
+    "last_key_hex": "68262980a03038238131840c1c0a0a52a0a82f0109",
+    "next_key_hex": "68262980a0303823815181a0a80a0a00380c081f1009",
+    "range_done": false,
+    "records": 5000000,
+    "source_logical_sha256": "2f28422e03c81327f50783d54fbece1fa67a313db329d322f356ee73066ff29b",
+    "stream_sha256": "c5b65f3a2e7b4a5e68b2bfd46e90d1deffd84b20d924b2399b75bcda9a349e2e"
+  },
+  "start": "6826296833705e2231a3a33a0a04840ac1f0ad0c1b1009",
+  "verified_at": "2026-11-23T17:34:38.369115+00:00"
+}

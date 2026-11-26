@@ -1,0 +1,25 @@
+{
+  "schema": "chessdb-archive-release-v1",
+  "files": {
+    "build_archive.sh": "8123470088316a631fd9fd155d1267d426c0f49d2b35234d4dd54e65ce9c141e",
+    "Cargo.lock": "d01fe99dd76cfc7c60f1fee2d3c280ceae1a8c788d6a242e69c255504d710932",
+    "Cargo.toml": "08146e4c5937db3b2cf743b9f8bd92a2913384fd5e7742cf50c717bf70793c13",
+    "cdb_archive": "0f3d1f6b8e3bc4dd6a9d03f250b7bad7ab644c3b36c0826312c8eccddf542429",
+    "cdb_archive.cpp": "440042261d9f17ba9111c0c4ffb0a94f744aaf2dbfab4ee5fad1c4845745d8aa",
+    "chessdb-archive.exe": "60dbc42906853544ac13490e5ad5ba2ccea63a81c855da317938bc817bf3b597",
+    "chessdb_archive.py": "80c2966e50dcea1943fd9789162752c20606513ed80a43be508d52d03d2b467d",
+    "chessdb_archive_source.py": "58c4863b8df5432ef6871fcc893efe5e53ac1b55cb18fcf95a2ac47e3c10533c",
+    "chessdb_archive_verify.py": "d655dbd52cab5d774e2044d1f49e97d6b543cd32e670bf7d09db808a5d34a3ae",
+    "chessdb_archive_windows.py": "f3db8a098f5a533d17aec31e690e304728b9a9ed9e4660a63aa70a86768671fb",
+    "decoder-source.tar.gz": "dc00d34f70380e1f58d5a7b62a0210b09e8442eeec27f3fd00f18d944aa44c16",
+    "month_archive.py": "77c1c4633cba63690023d49478327939e1cf6f39a8ae4d5f7780c7bbe74f4bcb",
+    "mount_archive.sh": "ee23c7f957286318f8d21642d80b2efde811dabcfad7a0e280f6061c64d824da",
+    "package_decoder.sh": "b0db803d0c438781154d4b3f6146c14a249b7026d9d04d90d5ebd6bae411fc3f",
+    "reader-provenance.txt": "e5a53e5dd5a0bea7e18800260066a8113e7db5fe220e5267ac3d113919c637d4",
+    "README.md": "8a0f5af00ce2f2ae2f072d0284810db1614bc9cd5fce05b7096b31701fd3685b",
+    "release-source.zip": "17ab836915e91aec5f2a8161be62cf480be6a33565b364f3c87df9fa2c96edb4",
+    "writer_main.rs": "b8c2b4c0fb40138cb7088b68d8ac51f9c47298d1f95c18360e8fc4ce0ea43bc3",
+    "_test_chessdb_archive.py": "8674605ce98b8c7d5b4a84470d9b48620eef3306fd7f24fbbac6d8faaba88d6a",
+    "_test_chessdb_archive_e2e.py": "42fcf6de6cc200662c727f86e837ce809f2e31564a88450a1c3458e2e76457db"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "bounded": true,
+  "identity": "a5fbd3d7a3ea059e6aa61a73368038c2285cd61ba300b7d6b6088a6391209f3a",
+  "parquet_bytes": 61273889,
+  "provenance_manifest_sha256": "1317fc8215f2f0fc22e3bc6ccc51bdfc58e27d26f4164b0d252af1ca6e377db5",
+  "receipts": {
+    "receipts/r000/c000000.json": "3e126e7cb8a2ac94214329f3dfc9efcb96a787ae525e1f04135fd9b37d0a4e38",
+    "receipts/r000/c000001.json": "0223c7e7fd6091c91c5ce47438355ef9d9ef46f536fd05556389c00c25a90ee5",
+    "receipts/r000/c000002.json": "cd9e40f39e336e7bd8780cd414808d2f6a438521a6290461331eb3b7b410fe39",
+    "receipts/r000/c000003.json": "10a1ab2587b5f5c35066514046d6cb703967379e9f26710b26eae04e2d1dd669"
+  },
+  "records": 2000000,
+  "shards": 4,
+  "sources_deleted": false
+}

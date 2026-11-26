@@ -3,6 +3,21 @@
 Read-only audit on November 25, 2026, following the successful conditional
 mark-clean pass. **No files were deleted, moved or rewritten on F:.**
 
+**Subsequent authorized cleanup, November 25 at 20:37 PST:** deleted the legacy
+1800+ monthly partials, the eight listed superseded ChessDB test/benchmark folders,
+and the contents of F:'s Recycle Bin. Reclaimed **807,561,330,688 bytes (807.56 GB)**;
+F: now has **1,819,189,706,752 bytes (1.82 TB / 1.65 TiB) free**. The tables below
+retain the pre-cleanup inventory for historical context. The small old archive
+v1/v2 roots were outside the requested test/benchmark scope and remain.
+
+Small test receipts/manifests were copied and hash-verified before deletion;
+see `docs/evidence/f-drive-cleanup-20261125/`. Both pool queues continued running.
+The current ChessDB archive and both monthly explorer archives remain untouched.
+Windows recursive removal returned nonempty-directory errors while deleting
+children; explicit file removal followed by deepest-first empty-directory removal
+completed successfully. All eleven target paths are absent; the Recycle Bin holds
+only its Windows `desktop.ini`. F: still reports Healthy.
+
 The inventory enumerated **176,067 files and 168,211 directories**, with no
 enumeration errors, in 306 seconds. It found **14,920,575,764,154 bytes** of file
 contents. Sizes below are decimal TB/GB; Windows usually displays binary units.

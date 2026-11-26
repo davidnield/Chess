@@ -1,0 +1,19 @@
+{
+  "chessdb-archive.exe": "60dbc42906853544ac13490e5ad5ba2ccea63a81c855da317938bc817bf3b597",
+  "decoder-source.tar.gz": "dc00d34f70380e1f58d5a7b62a0210b09e8442eeec27f3fd00f18d944aa44c16",
+  "release-source.zip": "b089eddf6df0a67dec235e7352bb2475255f5c0862b3fe6f0d17c2fa08d74dee",
+  "release.json": "b2c0de4693696926178b35b7bfaca93e8616280c2b6f9da5f86290980e3c1766",
+  "source-manifest.tsv": "5f857194fbc1fdd34d49f14cf13325bca396f593a96f7b8bcd3b52eba104a11e",
+  "source-metadata/CURRENT": "5571127335ba37c8e6ee69b5be9a9f870228853134ab6c1e241b74cacab68404",
+  "source-metadata/IDENTITY": "b81a865605e3f2ce6253fd1cb30da0f397a0cd324f04207da14b4d3848804774",
+  "source-metadata/LOCK": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "source-metadata/LOG": "a22687afcc0d97fd8f0f2b6f69b820cca267bf1029d0a717325a69bcf0f25246",
+  "source-metadata/LOG.old.1783173978595316": "6413b34754b1290de4d3c5ba8ca22a27b2f01e34bd79db42fc7ce0ee26b23f40",
+  "source-metadata/LOG.old.1783175179458551": "9d7d23e9c65d5bdf6c8f2ef4706746494d5c676d5fcc5e2f7f338bdba25a774f",
+  "source-metadata/LOG.old.1783175592054080": "e10ffe2019e24fffe36ba69848c0366351d922497987178d2bbcf671763c92d8",
+  "source-metadata/LOG.old.1783175600909054": "a85b507f487cb9cc5a248367c865e29d2eab81ec1216820b45186b1890e7f36f",
+  "source-metadata/LOG.old.1783175730399045": "15c69b371ac50368ae0ceb2eba1ededbb59870baf999ea0ce2d7bfedaae4518d",
+  "source-metadata/LOG.old.1783175946149933": "ca1a7318ccca73ff36f514df33a07d0e2e5aecd732f12cf236e3a177cdf9d55f",
+  "source-metadata/LOG.old.1783175963790172": "d6b99c66fac8317c1b69f0017a894a747574df29a982a0ed1e7aec852bff3e13",
+  "source-metadata/MANIFEST-153075": "a9b899056f00ed6f5d0d34d3b93daae6e9eb3bead114d9108f3c840155d0c686"
+}

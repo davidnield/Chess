@@ -1,0 +1,16 @@
+{
+  "destination": "F:\\chess\\chessdb-archive-benchmark-20261122-v1",
+  "free_bytes_before": 3124627505152,
+  "bytes": 1073741824,
+  "write_flush_seconds": 9.17743040001369,
+  "read_verify_seconds": 2.6537983999878634,
+  "write_MB_s": 116.99808957400519,
+  "read_MB_s": 404.6056490217609,
+  "sha256": "ce8c4feb7fb127dbee42976c41f50336790db2d6b3372531b1028b77ef1daa53",
+  "verified": true,
+  "notes": [
+    "Bounded sequential test with flush; read may be cached.",
+    "Repeated already-compressed source bytes, not a unique archive.",
+    "Not a sustained multi-TB throughput guarantee."
+  ]
+}

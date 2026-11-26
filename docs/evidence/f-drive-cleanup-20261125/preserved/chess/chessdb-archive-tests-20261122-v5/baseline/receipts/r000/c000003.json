@@ -1,0 +1,29 @@
+{
+  "audit": {
+    "bytes": 15615105,
+    "file_sha256": "2b2542cb86d1034f42e8a6489a026bbf2afbf970265cddc94c9634d4f0a02cc5",
+    "first_key_hex": "6804050690270330138033232a3e0c1a81ba00a1aa11d2f01090",
+    "last_key_hex": "680405091614033003131383a0d8216bcca080aa12df2109",
+    "records": 500000,
+    "seconds": 0.5758698,
+    "source_logical_sha256": "c522b29fac24259e07aea718b439c57cc0df8e2132fd674142d04495b44b7fe8",
+    "stream_sha256": "dc7a620adf3c85ef36f95c6e7d33a45dca73d86e5b8cc6d23ab7012ed4b321a2"
+  },
+  "end": "680405091614033003131383a0d8216bcca080aaf00d820090",
+  "file": "parquet/r000/c000003.parquet",
+  "identity": "a5fbd3d7a3ea059e6aa61a73368038c2285cd61ba300b7d6b6088a6391209f3a",
+  "index": 3,
+  "range": 0,
+  "seconds": 4.969000000011874,
+  "source": {
+    "first_key_hex": "6804050690270330138033232a3e0c1a81ba00a1aa11d2f01090",
+    "last_key_hex": "680405091614033003131383a0d8216bcca080aa12df2109",
+    "next_key_hex": null,
+    "range_done": true,
+    "records": 500000,
+    "source_logical_sha256": "c522b29fac24259e07aea718b439c57cc0df8e2132fd674142d04495b44b7fe8",
+    "stream_sha256": "dc7a620adf3c85ef36f95c6e7d33a45dca73d86e5b8cc6d23ab7012ed4b321a2"
+  },
+  "start": "6804050690270330138033232a3e0c1a81ba00a1aa11d2f01090",
+  "verified_at": "2026-11-23T03:55:26.730389+00:00"
+}

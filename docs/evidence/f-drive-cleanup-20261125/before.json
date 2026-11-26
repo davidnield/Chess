@@ -1,0 +1,1096 @@
+{
+  "targets": [
+    {
+      "files": 326,
+      "path": "F:\\chess\\position-stats\\_pooled_partials_ge1800_2013_2026_brc",
+      "preserved": [],
+      "bytes": 753569050313.0
+    },
+    {
+      "files": 2,
+      "path": "F:\\chess\\chessdb-archive-benchmark-20261122-v1",
+      "preserved": [
+        {
+          "sha256": "AD882379932C2B319A58FF830AD41947562CD48590FDA831EF7DDE282F3FA9EF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-benchmark-20261122-v1\\BENCHMARK-NOT-ARCHIVE.json",
+          "source": "F:\\chess\\chessdb-archive-benchmark-20261122-v1\\BENCHMARK-NOT-ARCHIVE.json"
+        }
+      ],
+      "bytes": 1073742434.0
+    },
+    {
+      "files": 33,
+      "path": "F:\\chess\\chessdb-archive-tests-20261122-v1",
+      "preserved": [
+        {
+          "sha256": "E3092124A95BCF86F946E53FD73675A9DE0195B2279B4BC3385CB307F963D8B1",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "CE07757F55C5CAB795E0800733ADBDD7DA9C1DA2ED083504EDD157D93555A12C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\source-verified.json"
+        },
+        {
+          "sha256": "54CF1E4FCF2C3853A96B0E921FB6FABB99360439C74B0EA48F9FB331DFD1672A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\status.json"
+        },
+        {
+          "sha256": "76A5BF6A5E33E2B46B0C531DB246950041E95177F7DAE09A29C78972278A5288",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "323CC93E1B3C088322F86A99C5288FFBEFB2B36E206F09FA850F23864D0D703D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "DB8F47E7C4C5555E23A01A71CDD2E7081785F9ADC16F5CF2D12EBBCF6A20DCD4",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "82475F1E636546937C9C716DDD4CB53A8E65A5AA0572A35CB1B3E30977A8D956",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\baseline\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "356098DA549A82C964300531DD86B249AE0AAF9539137657573C89EB88B7AEFD",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "CE07757F55C5CAB795E0800733ADBDD7DA9C1DA2ED083504EDD157D93555A12C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\source-verified.json"
+        },
+        {
+          "sha256": "97A864E9A51F40B9C89B3F6B39980C24140FDB1E9A7F3CE39A880908E349646D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\status.json"
+        },
+        {
+          "sha256": "7EFF8B9B247E96C0F984C60A30671E16D643207503656618EB88A89318470422",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "0A00ABEB5E2450A96C02B525228D0B195EAFC792106E9F9CEC724089A91A17D0",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "96B848A184F0759BF19A4ECA241E9600783115DACEABB245175EBF73706012B9",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "D4CD20254670352F989569D6F6CB38D4E1546017A40A401B32E927F41D1B1DB8",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\resumed\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "CE07757F55C5CAB795E0800733ADBDD7DA9C1DA2ED083504EDD157D93555A12C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\source-verified.json"
+        },
+        {
+          "sha256": "825BD7EF54CE2CC2725074052D9BBF21640596ADB40B27F8820909018489BDB9",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v1\\reserve\\status.json"
+        }
+      ],
+      "bytes": 123092113.0
+    },
+    {
+      "files": 84,
+      "path": "F:\\chess\\chessdb-archive-tests-20261122-v4",
+      "preserved": [
+        {
+          "sha256": "4F6595BA8BF410AB16680F099A1A58C7F11509AC95B33D0F62A6EC2FD1F7E2C9",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "32173D96119C06A2B537B5B35F2533887901603913D5011771C6B735ACFA6F05",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\source-verified.json"
+        },
+        {
+          "sha256": "25DC062C6D09B78DFBFA3CF71D0C3986C19A88451C7CC101A22A68D1482FC1D1",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\status.json"
+        },
+        {
+          "sha256": "9296CAB8F7F527CE9C75CF0B9EF1895295B9936F8253260F01D3C02D7744BB58",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "38EF8F910D1ADE786CB8DF58F16A715D79FF9628B2928F94FD9482B7ACF0AFA4",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "9EFD40A6B88B784532EDEC9CAA80746A9AA1AAFD5D810E4469F16766D660413F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "E66E5023AEA1E04574F758880DECB593292FB0CD126231F77320396644EBA754",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "3A7BA07D348ECA24652E1BE7531CBC3A32250F2236378C35CDD279028B133FAB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "9EFEFCEE4D55D028FBCB544D73196D4AC03A4D06D05E358D5332605E95B60869",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\baseline\\provenance\\release.json"
+        },
+        {
+          "sha256": "BBDE7214D6B32C7B911ACF5897AAD209558719E39527474004610DE372DDF675",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "32173D96119C06A2B537B5B35F2533887901603913D5011771C6B735ACFA6F05",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\source-verified.json"
+        },
+        {
+          "sha256": "D9DF5CC197B4C5979D2EF43ED6706EA601751F3F100FBC68FD0D932759061D3C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\status.json"
+        },
+        {
+          "sha256": "54B352173E4E19B8E2CA113B691651D9887E6C2024D8D1E19E8C9C894253B79D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "77F36CBACE0D9A987F272CAEBA6C2CC75CD719C9CE81EB8C2DC1E77216D24628",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "072CB556FC9B9BB84E47397C5C6F4EA545C08B419C9EFC92A509A7FAB95B1E23",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "169C9013CE9D02F595F25DAE1AD088038EAB45A88E9FD1102C4D73687CBEB265",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "3A7BA07D348ECA24652E1BE7531CBC3A32250F2236378C35CDD279028B133FAB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "9EFEFCEE4D55D028FBCB544D73196D4AC03A4D06D05E358D5332605E95B60869",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\resumed\\provenance\\release.json"
+        },
+        {
+          "sha256": "32173D96119C06A2B537B5B35F2533887901603913D5011771C6B735ACFA6F05",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\identity.json"
+        },
+        {
+          "sha256": "F0EE0CD118ED0485A72C0B88F4C57AB97CD8D681F53A7CE64F075516D4C55111",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\source-verified.json"
+        },
+        {
+          "sha256": "35A7A9DAD61B26B1AAE842E50232B1667B25B4FA52A2967898F70F307367F527",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\status.json"
+        },
+        {
+          "sha256": "3A7BA07D348ECA24652E1BE7531CBC3A32250F2236378C35CDD279028B133FAB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "9EFEFCEE4D55D028FBCB544D73196D4AC03A4D06D05E358D5332605E95B60869",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v4\\reserve\\provenance\\release.json"
+        }
+      ],
+      "bytes": 152127309.0
+    },
+    {
+      "files": 84,
+      "path": "F:\\chess\\chessdb-archive-tests-20261122-v5",
+      "preserved": [
+        {
+          "sha256": "1B72644B7E7D2B5C0C948960B577AE638207A26F3A10DE76B3D810CE470396C0",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "A5FBD3D7A3EA059E6AA61A73368038C2285CD61BA300B7D6B6088A6391209F3A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\identity.json"
+        },
+        {
+          "sha256": "B1409735CA2824A41079EF613F2030B8E3423A02F149168895222810ABAAF0F7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\source-verified.json"
+        },
+        {
+          "sha256": "F309DF04FD2DB81037C546530F2B3CCC174A1399E79F53A4448F012297611A83",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\status.json"
+        },
+        {
+          "sha256": "83216DB2253481FAA8798E998625DDBABC3DEB6FEE066A88835207F97D56CA17",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "0DC243FC3F9AD758B62BF25EDAAE570628020D7D3C7AB4373D25D4246AEAE54A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "4FC766BCDDB91F850C4233EDA32494DBBF16A434783648523A94A28CDC9A1695",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "D9E01629BD29D15575E4A4331E174AEEAF2FEB2AE77F8CB76716ADAF9A051632",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "1317FC8215F2F0FC22E3BC6CCC51BDFC58E27D26F4164B0D252AF1CA6E377DB5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "B2C0DE4693696926178B35B7BFACA93E8616280C2B6F9DA5F86290980E3C1766",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\baseline\\provenance\\release.json"
+        },
+        {
+          "sha256": "0D3344757BF96662334EDD7B379875558CCD3D552F6482BFF6F2CCCC590664A2",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\BOUNDED.TEST.COMPLETE.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\BOUNDED.TEST.COMPLETE.json"
+        },
+        {
+          "sha256": "A5FBD3D7A3EA059E6AA61A73368038C2285CD61BA300B7D6B6088A6391209F3A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\identity.json"
+        },
+        {
+          "sha256": "B1409735CA2824A41079EF613F2030B8E3423A02F149168895222810ABAAF0F7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\source-verified.json"
+        },
+        {
+          "sha256": "1C0217275067C15F0AB2B9DBACE06DE1356B4CD055BC9C588AC4595686187CD4",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\status.json"
+        },
+        {
+          "sha256": "3E126E7CB8A2AC94214329F3DFC9EFCB96A787AE525E1F04135FD9B37D0A4E38",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "0223C7E7FD6091C91C5CE47438355EF9D9EF46F536FD05556389C00C25A90EE5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000001.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000001.json"
+        },
+        {
+          "sha256": "CD9E40F39E336E7BD8780CD414808D2F6A438521A6290461331EB3B7B410FE39",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000002.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000002.json"
+        },
+        {
+          "sha256": "10A1AB2587B5F5C35066514046D6CB703967379E9F26710B26EAE04E2D1DD669",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000003.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\receipts\\r000\\c000003.json"
+        },
+        {
+          "sha256": "1317FC8215F2F0FC22E3BC6CCC51BDFC58E27D26F4164B0D252AF1CA6E377DB5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "B2C0DE4693696926178B35B7BFACA93E8616280C2B6F9DA5F86290980E3C1766",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\resumed\\provenance\\release.json"
+        },
+        {
+          "sha256": "A5FBD3D7A3EA059E6AA61A73368038C2285CD61BA300B7D6B6088A6391209F3A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\identity.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\identity.json"
+        },
+        {
+          "sha256": "B1409735CA2824A41079EF613F2030B8E3423A02F149168895222810ABAAF0F7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\source-verified.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\source-verified.json"
+        },
+        {
+          "sha256": "A751C1F14FC74119C26860C61BC5D590937B74F73A5B02166766DD514C5E85E0",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\status.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\status.json"
+        },
+        {
+          "sha256": "1317FC8215F2F0FC22E3BC6CCC51BDFC58E27D26F4164B0D252AF1CA6E377DB5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\provenance\\manifest.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\provenance\\manifest.json"
+        },
+        {
+          "sha256": "B2C0DE4693696926178B35B7BFACA93E8616280C2B6F9DA5F86290980E3C1766",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\provenance\\release.json",
+          "source": "F:\\chess\\chessdb-archive-tests-20261122-v5\\reserve\\provenance\\release.json"
+        }
+      ],
+      "bytes": 152128489.0
+    },
+    {
+      "files": 4,
+      "path": "F:\\chess\\chessdb-speed-benchmark-20261123-smoke",
+      "preserved": [
+        {
+          "sha256": "6CD22C8D3B881436282248967277DFFEA20774BB5778BF477097B5947C6BD4F6",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-smoke\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-smoke\\source-verified.json"
+        },
+        {
+          "sha256": "914D29A224ED2ECA577A75DE4A1E68D71EE70CA68164465043F960A86E64EBFF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-smoke\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-smoke\\status.json"
+        },
+        {
+          "sha256": "36246E9A3897AB083E7D2BCBC91185AC3CF6210B77EBC51E366C159932CBFF41",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-smoke\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-smoke\\receipts\\r000\\c000000.json"
+        }
+      ],
+      "bytes": 438819.0
+    },
+    {
+      "files": 0,
+      "path": "F:\\chess\\chessdb-speed-benchmark-20261123-v1",
+      "preserved": [],
+      "bytes": null
+    },
+    {
+      "files": 19,
+      "path": "F:\\chess\\chessdb-speed-benchmark-20261123-v3",
+      "preserved": [
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\source-verified.json"
+        },
+        {
+          "sha256": "6C9A822B805122300DD16AD135AE10BC8D62B0EA94ACB83833C46A26537DCBDB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\status.json"
+        },
+        {
+          "sha256": "58791CFFAF887942BD4050A2D7B64774FF81F77B933D936F83494DC4264C8551",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\active\\r101.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\active\\r101.json"
+        },
+        {
+          "sha256": "38AECB63AD8D98402C1744F7FB6295BD9981F2254C7B093BE6EDAA67E221D7DB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "9256B3E0E2618F827B6330D02065BA30D1B80CB743ED7FA779B848C3ABE002FC",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "C13FC679DFD135D660D31B4567475D33FFEE06A4D39B5DAF77CFFEF6511E4F84",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "330E05F8DC9CA9A8F1589CCB0BBCBFA0FB6AFFAEF251535FF01E4807E1F0653E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "2C929661D568D13E220C696F2601AAE279C39D7032C430E566E80B2E828F8461",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "581E017765E3C1EE36E2F1FE102DDC99D8C894F3560446AF3BA24FEFEA91831C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "8AF9096BE964BDCA52FD6CEB82738D22E505815E1DAFEB10005AFECDA8087F4A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "93031E2E3399EC4E5631FC41778C686BCFA21291153B76744AB47CBF578D5C3D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v3\\arm00\\receipts\\r202\\c000000.json"
+        }
+      ],
+      "bytes": 1229669966.0
+    },
+    {
+      "files": 208,
+      "path": "F:\\chess\\chessdb-speed-benchmark-20261123-v4",
+      "preserved": [
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\status.json"
+        },
+        {
+          "sha256": "23EBB59854C72A0BBA93239862FD481C133CE95A3F6D7C8DA7BB5E9FE9C5B598",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "4DC12F73179F79945468DE4800BB05B84E14C6F2B5FBA35ED4D5545D272EA46C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "8CEBE7A42D2306276338129D3612B6589E0AC4F7CE58166B59C79305AF77B12A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "70FBD99056E6FC9C33621D059B3CD7F2A93CD12F449E953AB6775A4635DD487B",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "862414AE0034ED352B639BE310AFD0314AA115171D1623AC340F39A5CB0F2DE5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "E4F20E7540BC1FB22B9316746C56D4E15CEA6C0E8A127F34648D2EF911F0E49A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "D74EE1E41038CA13CDC96B2A87CFC33F42873B7582CA18DF561F01A8337001DF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "B8ECD9B9298D4661CBEB7A0D6B16C0054156066DBB5A1FA20310D95FE277A80A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "08B90479B715CFFFE96B43648240131412CB8960383A76B9ADB1070AA274D234",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "8EAC3FAF283998A463DE8CFD76515852FF270776FC2504CF6499C1600F9EC5A6",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "54AF2F705BD139C668156859C31288740642CCB2D3666E5AB7723CBFB020FA61",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "A19A6739B32843179762099BF969BDEBF9799F638A10B50C15FB3FF9740F9FBE",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm00\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\status.json"
+        },
+        {
+          "sha256": "D35913E113D00F9A761B6A17143E61B7EF52012F15C7093D570E27435959041A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "1B67CB4DDD59BEEACA1827B9756F5B1C022F02567A6F5795AE356FFAEBF9E802",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "219F6CC36C71551277E762F0453E429C5C319B4E2C1FD9EAED581F4BF8F4CAE8",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "EB9E8D07E9C58BE333C6F159E759843B693A938CCC51283769DCAA8C0D11F39E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "EEBA7F0F5D97667D95475B4C159588F37847323A111C26A044301562285C1B31",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "283486B27A530ED87FAAC1D4AB8F837085F8BEDC070128C796E04207EF8A213E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "267BC8E9FBB77A36F4DF477F9A42F919EE63D70FA815C2B4A3A6B3449F173BD7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "2ECF27264D60D25864DCD2FAC13DF10478C43BFE2E39C674EB8CB4608EADFE7A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "5D9046FC1D534C93407715CA6A2CE49295DF0B24B6EDABB551164C34CE0F965E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "01A5C98C7E64D0EA8F263CBE83B93220DA647EFB7D7EEA3DA48B62148AE89A4D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "36A8991D7865C73FC6E4AC6A89D0777299FAFA6C009E447909CA7D388ECDAE8D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "42BD1B7D77DC39250FA88BACAF5416059AE6476932335FAECB3B085D26123958",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm01\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\status.json"
+        },
+        {
+          "sha256": "CA198B06267370E3BE95B4A36D9B297E1AEE3D1E5D57998315D59EB95330E9FD",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "CB7942C4D52D0AA13A711E63891CF03393B3EEBC3C3C815CD21A67B7CF7D8164",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "6EF3E3262544FBB6BE9C85746774D775619B3E53BF1B537E7A39A35BD345E9E1",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "BF8E056AAA5DF58471E49C24DC44F32E2049C03733A890E7928F6975178FF9C7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "04FA8232ADD4D105A48A3034961180FE1CA7E75E817BB0ED876D37C8D1DEE601",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "556CD379FD0F08F2DD9DE2EC0D3642EC282DD79DAD4AE152A34FE047658F5938",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "42B3133D7C7DCBDDF9DC4F1DE46738F64CF065CC338BA9A20F3ACA58EFB6A1B2",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "D3463BA3DC96BC4D0A2616681D0A68D104A02A01C3ED51667EE1B684D84956D4",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "4A1BEAB2A76F4D0D129CC4CBEB690F7A6B965999E85BB109EA1ABBCF76D88781",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "71422AB50D6500F4A34363F8FC271C6E7AE4F04E3F0E99AF99511F7DEA16FE67",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "E0A04BEC94C711297329F78EC7065140D68EF74BFE2C6A7FA9ED36A464D065EF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "BAC0EF21DF164A2AB1A9500B275ABF07E5A9465790F3932A49A90C0347672CF7",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm02\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\status.json"
+        },
+        {
+          "sha256": "E6E808CC09887D3E174284290B4F353F50277414C905454317F9A989EDF23A4F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "8E88D94CCDE0C4C4293176D063C5E0C9300600757255FA508E61819EBE42243D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "6D32ED830BDC45AB3B80DC5169C03334C9D4EC20B58891D33CD8000771EAA34E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "FC09FF50479455BD0691809AD7C342AE5F6A0C0EABF7E7EF61EAC04BC280EAB5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "02042B42C80768E9AFC23F5968EEA3024591E5083C9515E752B529BCFE299C39",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "81E31AF5CB19BE203656703FF0E65BC701868303E1C60EBD57E43F31CFBC82A3",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "75321B8335CE71A5DB0F85ED319F8D02BD8398C8A77A542FED07BD848568EEAD",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "AA903CBC0448B7B4A9059990463C13E67A7FF05A8807C433503CD8545D6C1E38",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "5486A12F60B5C81A69F97A0A91C9B1E187CFA0D408B71F8EECB0B10C1964ACE1",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "474B94ACF6F958126C4EA0A49E4DEFE56350E4B195B2C513F53C373461A24231",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "B5164B6A8BDD7DB24307E016E1A8023A1C76C27F36223C24012783B511406027",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "AF0B673F5E90CAB19BA2F35EC87D4A8CD283995EEC3EA9A65969FFCC6C5C76E8",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm03\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\status.json"
+        },
+        {
+          "sha256": "EA0F8BC455AE2D7DF979FAF29759A5524946DDE8DB4DE02C4605633FE24A8F7C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "6A6450BE9C5FFC3ED12E88BBA4E7C27596EEDF8E9706378097B1329C7B7481D6",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "4651B98B7FB7EC580A5F7E162698D8AF9E80A2A87D558E78DDF80FEA491E87A0",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "F7F6EBB15EB74DC9DBC5CB62169D5EF37B4847D2217DFF29CA2A188969673355",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "4971957A3F314146FB71E180AEBFC632F8D794237CA8DCA7E15B348E009638C0",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "4E60CB792FE3AB9723B42244679A1C40072ED9C0E41C98633CCC9774CF4DFF8E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "76A4CAFFD0F2CA64D3D5AC58A210DD4959081F1284E374F058500E1E4D87C8EC",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "0110A86DB04BDA8B7D491176F905DE7D636D40F9C3563EEF7C0F146266601705",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "F4E305B45D0E258DA6A1DACF79211C2C19574C9A371EEC6303F81337C78BB187",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "322FC267C552BAB4869572CB8651562709A78AE71989014F53B060F72AA95B01",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "EFA4DF8393346472625E445F9E6F4D9250DAFAC0F04E5BA28E1F1D2D97F54D4D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "B24BBE49F057AC2D75502C860104D4C507BA91BC149475EBA1AE6991849B8490",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm04\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\status.json"
+        },
+        {
+          "sha256": "86B5539EE7F1E7EFC40AC7840F51DA59D4B41DE1AB051BC223BAFCD558E89EB6",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "2A6ED0BDD3BB8941D761E5E8B2035A94F10519775713AD480763EF9CE570D118",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "0CF954AE0C9293AC81D5FD0F98153B2531D8C203EC0D0FE5ADAACC06EF8F5D2A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "D56ECE019FEFE1A7E368271282AA76813419B2A002F988D30641435A3FA2886A",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "E4BE17A829A435A023D77DCACBCAA0C528D8C9532A8D5165BBB8AF76180B1ECF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "EB48A737386BDF5D441C856582D2185517D0D4BB6F99F88BB759DB3D3E89833C",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "AC3B72FAB34C48DA881681996377416E9890333A86DD93747491F7EE136407BA",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "A433C23F0AE2E106CF90CCC58E4B851462D1BDAE9805F01A2C6ADE2AEC0A2960",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "3FEF1138B03ADA34C62A635A2A33D05ED2B8386D2F93468B7C7B68335BE28D2D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "8DB7D30FFBACC9FEB5BAB35D6F3F339359D84C6CB7853E94BA30DD01F522F852",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "132B1AA0E0DE21217BD1F7B94C6931FBE09E286BB154B1B9FC5F2A50AF7B7327",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "79856FBC9BF5DE2E57446CD602100B50D255B10877ED9197A86ED012ECF9C676",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm05\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\status.json"
+        },
+        {
+          "sha256": "4CFC69A49EAF86EE14EE554654B9F2BC76617FADA8E02FC9E9F4FAA1E4836B06",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "0A48580A55C82B5004ECCAD14632B78D627D56E6BDBE9B27FAD6F825DD262B35",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "44BC68B16B5C1FCDEFF1B07A4B22E6EC0F9541A56AEBB1FF10D16BF6E5F43671",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "75EDE8CD3FA3CD26D2A889026D77CFF7B62F0752A14BCB8DFDACF7143F02D9F5",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "FCE7FB846B815C8AE1F15947B50934D576B753E499FA9847B3602668A1C5852E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "33BAA8432794A1AA64067B9009F867551311A44480A402F90AA5F332DC7975F9",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "A990E3C63C7DDF75A98B3DA05D26BC33DDA4BAE8644F4775D41F6F886D533384",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "608C0598A2BDF4A4E0EC7D0500587572F93F8163DDEE57CF77529854E7262D9D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "9F21A420775C31D5E8CA81D7345E543F406F6861E38EFF505311E87B6071ADD2",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "10FB3C72E8286E041C0BC2397A6D641C61CEDAD26C800889B0730F858268650E",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "72D1CE894330FEF54CA469D721DBCD30F0510CD6A38EC5347742B95A3D19505F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "7FEBD372FDC368510CE259A02801BE9794806DC4B53D472C9A888910ACCE5D70",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm06\\receipts\\r253\\c000000.json"
+        },
+        {
+          "sha256": "5D60285CAEE46AE10CAEAD268BE79B70A1C21013A83457734F15AE8126558A60",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\source-verified.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\source-verified.json"
+        },
+        {
+          "sha256": "3C75D3BE8240C0800539AFFB105E89C3E314433D04B6673C2B4B815DC7A17E5F",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\status.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\status.json"
+        },
+        {
+          "sha256": "BD21F7CB1B07DC80AD7F703ADC5057BE81231748D5C98A96D7A9329FB06313BC",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r000\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r000\\c000000.json"
+        },
+        {
+          "sha256": "462801318E6201ED5B052FC5DED228F061010DF73E469DF774682311C75344EF",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r025\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r025\\c000000.json"
+        },
+        {
+          "sha256": "ADDC592D8F770B92775333065E9B19F6663DAD347FB423F5F9FDD1970FAF95EE",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r076\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r076\\c000000.json"
+        },
+        {
+          "sha256": "5CBCF5F2191C59DF9E7EB8830B148F29605D795C20EEA2EAD2431A70F526A785",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r051\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r051\\c000000.json"
+        },
+        {
+          "sha256": "BAFA8410B61D0C0A0D9F43829C65B93FDCC8396D938B5FEA33AACD1926FCD086",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r101\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r101\\c000000.json"
+        },
+        {
+          "sha256": "79BB1B212E390036B8CCBC5683E9904C4339B65F657B2F14DE268DB2E9273600",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r126\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r126\\c000000.json"
+        },
+        {
+          "sha256": "C80693C97B33EF00D924163E7E76A8B26BA1C5BFB875EDC0E722ADF5FE5453BB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r152\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r152\\c000000.json"
+        },
+        {
+          "sha256": "231DA34C1574F35811172C3E52F334BF89BFBAF748905AEF77654AB607BAE4CB",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r177\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r177\\c000000.json"
+        },
+        {
+          "sha256": "EAA99BCA2207AA9101989937EFF08530DDB67F5F49EAB80E9DE32729624FF2EC",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r202\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r202\\c000000.json"
+        },
+        {
+          "sha256": "74E25644399EE7AEF51D1523FEEC08CFD9784328F45E3494E9C032786EE2C222",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r227\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r227\\c000000.json"
+        },
+        {
+          "sha256": "A1D6AB13EFF4D588FEE9175DD7A8E899E43CE7A8A0B0609039BB714E9AA1976D",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r278\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r278\\c000000.json"
+        },
+        {
+          "sha256": "CD5F9E205A71DEF04F905EF94BF9BA965E4272523B5A8652DC5269EABA903604",
+          "copy": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\docs\\evidence\\f-drive-cleanup-20261125\\preserved\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r253\\c000000.json",
+          "source": "F:\\chess\\chessdb-speed-benchmark-20261123-v4\\arm07\\receipts\\r253\\c000000.json"
+        }
+      ],
+      "bytes": 15167527523.0
+    },
+    {
+      "files": 63,
+      "path": "F:\\$RECYCLE.BIN\\$R3F8UI2",
+      "preserved": [],
+      "bytes": 35855097766.0
+    },
+    {
+      "files": 1,
+      "path": "F:\\$RECYCLE.BIN\\$I3F8UI2",
+      "preserved": [],
+      "bytes": 78.0
+    }
+  ],
+  "utc": "2026-11-26T04:36:29.5361221Z",
+  "processes": [
+    {
+      "ProcessId": 13504,
+      "Name": "explorer.exe",
+      "CommandLine": "C:\\WINDOWS\\Explorer.EXE"
+    },
+    {
+      "ProcessId": 24564,
+      "Name": "python.exe",
+      "CommandLine": "\"C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe\" -B -u D:\\chess\\bin\\mini-pool-queue-20261124-v3\\mini_pool_queue.py D:\\chess\\bin\\mini-pool-optimized-20261123-v1\\policy.json"
+    },
+    {
+      "ProcessId": 20540,
+      "Name": "python.exe",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -B -u D:\\chess\\bin\\mini-pool-queue-20261124-v3\\mini_pool_queue.py D:\\chess\\bin\\mini-pool-optimized-20261123-v1\\policy.json"
+    },
+    {
+      "ProcessId": 43804,
+      "Name": "python.exe",
+      "CommandLine": "\"C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe\" -B -u -m sweep.count_pool --config D:\\chess\\full-policy-pools-20261125\\config-v2.json"
+    },
+    {
+      "ProcessId": 26804,
+      "Name": "python.exe",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -B -u -m sweep.count_pool --config D:\\chess\\full-policy-pools-20261125\\config-v2.json"
+    },
+    {
+      "ProcessId": 44516,
+      "Name": "python.exe",
+      "CommandLine": "C:\\Users\\David\\Documents\\Chess\\.venv\\Scripts\\python.exe -B -u -m sweep.count_pool --config D:\\chess\\full-policy-pools-20261125\\config-v2.json --bucket 75 --pool weak1000-1799-p30"
+    },
+    {
+      "ProcessId": 15572,
+      "Name": "python.exe",
+      "CommandLine": "\"C:\\Users\\David\\AppData\\Roaming\\uv\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe\" -B -u -m sweep.count_pool --config D:\\chess\\full-policy-pools-20261125\\config-v2.json --bucket 75 --pool weak1000-1799-p30"
+    }
+  ],
+  "free_bytes": 1011628376064
+}

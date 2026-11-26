@@ -1,0 +1,14 @@
+{
+  "reclaimed_bytes": 807561330688,
+  "deleted_targets": 11,
+  "health": "Healthy",
+  "deleted_file_bytes": 807322874810.0,
+  "utc": "2026-11-26T04:37:21.3531588Z",
+  "recycle_empty": true,
+  "protected_paths_present": [
+    "F:\\chess\\chessdb-archive-20260702-v6-zstd3",
+    "F:\\chess\\explorer_brc_p51_pilot",
+    "F:\\chess\\explorer_banded\\rust_p30k"
+  ],
+  "free_bytes": 1819189706752
+}
