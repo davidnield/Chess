@@ -1,0 +1,5 @@
+{
+  "python": "D:\\chess\\maia\\.venv\\Scripts\\python.exe",
+  "checkpoint": "D:\\chess\\maia\\hf_cache\\hub\\models--UofTCSSLab--Maia3-79M\\snapshots\\a107d6ceb7b298cb04ae1da4edffe2939858b894\\maia3-79m.pt",
+  "raw_cache": "C:\\Users\\David\\Documents\\Chess\\scratch\\worktrees\\sweep-preparation\\scratch\\input-readiness-20261125\\maia-raw-v1.sqlite"
+}

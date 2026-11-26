@@ -1,0 +1,59 @@
+{
+  "code_commit": "cf1068296d97b84567f406297c258f8e7cdac53f",
+  "branch": "codex/takeover-hardening-20261122",
+  "source_sha256": {
+    "python/_test_model_contract.py": "6fa37879f4176331da705e77b27d78841bea26474ff05929d7de085eb0edd2d2",
+    "python/_test_partitioned_inputs.py": "64900c87965fbe5ee88de7dab5c09797950d0d6a1ab1d3bde6cf754877b86eda",
+    "python/_test_sweep_execution.py": "dacb939038487b8429e2893ed9cd51b2c37462fdf6952d0cd7a8b97be5b4de89",
+    "python/build_budget_books.py": "f0dbef0724a0d6900793036e380c4a769d24fec06538de6f01335d0b3455799e",
+    "python/consumer_keys.py": "492c750b845b44df30082fb1b34ce39b305a05afd73eac21a26b6d862b5cc960",
+    "python/sweep/continuation.py": "648deabc39ab62ddcbc341481b9411bb78403eb465b6cfc247ed99b3cc578a02",
+    "python/sweep/frontier.py": "511ec5eb008f9910c10da415cf358565afd5592e6aab9273f79d67dce9df86fe",
+    "python/sweep/human_providers.py": "b2296117aad0fd2cfb1a2a96cb7e7ab2881a325a9404999419ded218e3ffcc08",
+    "python/sweep/input_probe.py": "b340ce1b476ff473e517321068245e10d1360ee1926acca279e55811aa03ee84",
+    "python/sweep/keyed_parquet.py": "6da7600b21e88343fe32633943a52184257bb70ea510ea71007ce1013fa73132",
+    "python/sweep/maia_policy.py": "aa9cea1a0eb3b2752e5b1823f668087a7ea3e33fa296917eb760459f8c472e1b",
+    "python/sweep/partitioned_pool.py": "e48a4f2cf9b4ebd171f9601c3dc97e2a991a729e203176aa7ec1c7ae8f35e6d6",
+    "python/sweep/partitioned_pool_reader.py": "4f68236caa57109a6fe2b8a1fe374ab6769daf5b71048ba732af62272cf61630",
+    "python/sweep/prediction_cache.py": "8e2d2afd9beb66d9ff9bb265b7b65d4a36e18ecde3f26ea806eeb30552ffb56b",
+    "rust/book_builder/Cargo.toml": "af0f66b0a12c4d4f5681648b48e334717e480e0502a14a1c291002c9b1ada1e7",
+    "rust/book_builder/src/lib.rs": "c827de1f15210130273b75166f914b84bb2d37443af491bf00ba5548a7e8cb5c",
+    "rust/book_builder/src/py_input_tools.rs": "a7c116687c4cb8667bca56df628dd157365c67cedb3ad129fde92c12572620b8"
+  },
+  "native_sha256": "fbf9f25c4fe28a7fd34dbd255c05e1e6ae767d0faa52723534cb62678bffe4ed",
+  "release": {
+    "path": "D:\\chess\\bin\\pool-input-readiness-20261125-v1\\release.json",
+    "sha256": "d96ed4c324398e9aa6b08e3f554637d709f03f3874bb3b8d52a2abe08befe131"
+  },
+  "tests": {
+    "python": {
+      "command": "python -m unittest _test_partitioned_inputs _test_sweep_execution _test_model_contract _test_sweep_count_pool _test_pool_stream_export _test_full_key_book",
+      "passed": 36,
+      "seconds": 216.778,
+      "log": "tests.log",
+      "sha256": "28d3f626d2cfc4eb44dbe1a2d990218c71bb286064fa33b6c5554f3fff384513"
+    },
+    "native": {
+      "command": "rust/book_builder/build.ps1 -Optimizer -Test -TargetDir D:/rust-target/sweep-preparation -Jobs 2",
+      "rust_tests_passed": 30,
+      "randomized_builder_differential_passed": true,
+      "optimizer_interface_tests_passed": 3
+    }
+  },
+  "evidence": {
+    "archive-volume-status.json": "e60ffa39e955d6832ad6d54fff2bbc605e3b353c50454ae38f888690bf158caa",
+    "bucket-config.json": "a58689e569df5ab8f3cac4e533b879b20b3e21808188ed1c489cecea569325d0",
+    "bucket-result.json": "7a49da81285325591334593902bbed134b9872c8adaf7054567eb7f455c7ee80",
+    "frozen-smoke.json": "0500d52983fbccc5edd068c97280ad4c735a6a0cc552f7440837e96ff49322bb",
+    "model-config.json": "97e805fb02ff6ea9fbad14a7ff993994d94d9431d21838cb1c1e579fd9fa0ec0",
+    "model-result.json": "fd9eb3e9b1945e10a1f5f18fbe65c489098da8a2d2e4d9d9bc6ad3678d22defa",
+    "tests.log": "28d3f626d2cfc4eb44dbe1a2d990218c71bb286064fa33b6c5554f3fff384513"
+  },
+  "limitations": [
+    "One full bucket structural audit and 16-position semantic read sample; no full pool publication.",
+    "Real Maia probe checks cache behavior, not predictive calibration.",
+    "Repeated production-reader bucket hashing needs full-input cost measurement before sweep.",
+    "No raw source deletion or active producer changes.",
+    "F filesystem reports Full Repair Needed; repair not attempted."
+  ]
+}

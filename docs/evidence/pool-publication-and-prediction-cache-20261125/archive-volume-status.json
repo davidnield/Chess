@@ -1,0 +1,19 @@
+{
+  "disk": {
+    "Number": 4,
+    "FriendlyName": "Seagate Expansion HDD",
+    "HealthStatus": "Healthy",
+    "OperationalStatus": "Online"
+  },
+  "volume": {
+    "DriveLetter": "F",
+    "FileSystemType": "exFAT",
+    "HealthStatus": "Warning",
+    "OperationalStatus": "Full Repair Needed",
+    "SizeRemaining": 1011630997504,
+    "Size": 16000420413440
+  },
+  "observed_at": "2026-11-25T18:34:12.9773610-08:00",
+  "action": "read-only observation; no repair attempted; no F pool writes",
+  "archive": "F:\\chess\\chessdb-archive-20260702-v6-zstd3"
+}

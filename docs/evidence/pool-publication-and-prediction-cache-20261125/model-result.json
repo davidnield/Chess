@@ -1,0 +1,90 @@
+{
+  "scope": "engineering cache probe, not calibration",
+  "boards": 64,
+  "runtime": {
+    "hardware": {
+      "cuda": "12.8",
+      "cudnn": 91900,
+      "devices": [
+        {
+          "capability": [
+            8,
+            6
+          ],
+          "name": "NVIDIA GeForce RTX 3070 Ti"
+        }
+      ]
+    },
+    "maia_sources": {
+      "__init__.py": "aa1d30d6afef8666c7c193f271d80eba0f48b7ba6c057283f5cc69b6244ff450",
+      "__main__.py": "b07fec1b7b7f5d01094365ae77439f5dfee05f1f3f6ec12960a229ff5f3b566d",
+      "cache.py": "58dbc27ce1243b3e0b9af9e15931a27ee9c3d460fc9dcf3e5ccea80c3790e95e",
+      "dataset.py": "f147aa3ff6e93ee0a328d5674f22e6903224772305fd134f7655653934b49a5a",
+      "model_registry.py": "4037d3ba5d7f17996f4a28b61b2cf59a9e66382a77e42e331500549fa665a172",
+      "models.py": "469dd2163860b8f2a2eba79ac10913acabba5f2298a182db8d1524ce1d438057",
+      "presets.py": "3358fda064b54b8a0c2d08c52bb852290ac6e80d8e6bd59168c09f8b6d6195b6",
+      "uci.py": "f3495fb7cec68fc5fdc8add02f627d4ed3d3b11e03c02d17917e1a09b37a4ccc",
+      "utils.py": "fa0fa0c5570793bfd9f8d24266394d56b86523fe24063cfeea3a0bfdec9bb85c"
+    },
+    "python": "3.11.15 (main, Apr 14 2026, 14:31:26) [MSC v.1944 64 bit (AMD64)]",
+    "versions": {
+      "chess": "1.11.2",
+      "einops": null,
+      "maia3": "0.1.0",
+      "numpy": "2.4.6",
+      "torch": "2.11.0+cu128"
+    }
+  },
+  "checkpoint_sha256": "3fc6181d5db789b45a15305732148757ae74efa3e0028e81ba335b462dac45c2",
+  "cache_bytes": 196608,
+  "measurements": [
+    {
+      "ratings": [
+        1450,
+        2200
+      ],
+      "cold_seconds": 7.141189299989492,
+      "warm_seconds": 0.023877200030256063,
+      "cold_stats": {
+        "requested": 64,
+        "hits": 0,
+        "unique_inferred": 63,
+        "committed_batches": 1
+      },
+      "warm_stats": {
+        "requested": 64,
+        "hits": 64,
+        "unique_inferred": 0,
+        "committed_batches": 0
+      },
+      "warm_model_started": false,
+      "temperature_formula_equal": true
+    },
+    {
+      "ratings": [
+        2600,
+        2600
+      ],
+      "cold_seconds": 6.081296499993186,
+      "warm_seconds": 0.016085100010968745,
+      "cold_stats": {
+        "requested": 64,
+        "hits": 0,
+        "unique_inferred": 63,
+        "committed_batches": 1
+      },
+      "warm_stats": {
+        "requested": 64,
+        "hits": 64,
+        "unique_inferred": 0,
+        "committed_batches": 0
+      },
+      "warm_model_started": false,
+      "temperature_formula_equal": true
+    }
+  ],
+  "sampled_peak_tree_rss_bytes": 1714556928,
+  "sampled_peak_tree_private_bytes": 3930058752,
+  "seconds": 30.024573900038376,
+  "config_sha256": "97e805fb02ff6ea9fbad14a7ff993994d94d9431d21838cb1c1e579fd9fa0ec0"
+}

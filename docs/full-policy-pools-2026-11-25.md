@@ -49,3 +49,14 @@ The combined regression run passed **20 tests** in 91.58 seconds, including actu
 The real adult parity check passed **2,986,084 rows, zero differences in either direction** against the retained full-schema bucket. The first complete weak bucket contains about 63.7 million distinct moves and roughly 1.14 GiB of compact output. These are pilot measurements, not a completed pool or final runtime estimate.
 
 After that first bucket, the larger all-ratings pilot range measured about 202 MiB versus 146 MiB for weak. The queue paused at its existing range boundary to place the larger population on H: and weak on E:. All nine completed ranges were copied, SHA-256 checked, and given explicit relocation provenance; originals were retained. No numerical or logical recipe changed. `placement-v2.json` records this, the old `queue.STOP` remains in place, and **only config-v2 is active**. The frozen producer was unchanged. Resume launched at 17:37 PST, wrapper PID 43804; check the actual process tree rather than assuming that PID survives indefinitely.
+
+## Later input-consumption milestone
+
+The [November 25 publication/cache implementation](pool-publication-and-prediction-cache-2026-11-25.md)
+adds a separate adult edge/aux publisher and production reader, integrated with
+the native builder and shared human policies. Raw mini buckets are unsorted, so
+adult finalization sorts each bucket independently; it needs a new final copy.
+This does not change the compact weak/broad format or either frozen producer.
+Full publication still requires all buckets and independent gates. Recheck the
+combined final-copy, remaining-pool and spill capacity before launching that
+stage; the bounded diagnostic's D: destination is not a full-pool destination.

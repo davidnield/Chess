@@ -1,0 +1,273 @@
+  level 1: fetched 1 nodes, frontier 2, edges so far 2
+  level 2: fetched 3 nodes, frontier 2, edges so far 4
+  level 3: fetched 5 nodes, frontier 0, edges so far 4
+  level 1: fetched 1 nodes, frontier 2, edges so far 2
+  level 2: fetched 3 nodes, frontier 2, edges so far 4
+  level 3: fetched 5 nodes, frontier 0, edges so far 4
+  level 1: fetched 1 nodes, frontier 2, edges so far 2
+  level 2: fetched 3 nodes, frontier 2, edges so far 4
+  level 3: fetched 5 nodes, frontier 0, edges so far 4
+  level 1: fetched 1 nodes, frontier 2, edges so far 2
+  level 2: fetched 3 nodes, frontier 2, edges so far 4
+  level 3: fetched 5 nodes, frontier 0, edges so far 4
+eval weight 0.75 (source meta)
+slice prior 0.5196; eps 0.001; budgets [2]; method dp
+0 source decisions loaded for collection
+collecting subgraph edges...
+  level 1: fetched 1 nodes, frontier 20, edges so far 20
+  level 2: fetched 21 nodes, frontier 2, edges so far 22
+  level 3: fetched 23 nodes, frontier 0, edges so far 78
+  78 edges, 5 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Pooled' elo_band=0
+  0 source decisions in slice
+evals (mmap)...
+  5 of 79 positions eval-covered
+  aux rows for 3 subgraph nodes
+building graph...
+  model-only opponent replies: 74 edges, 74 without a child eval
+  2 our nodes, 3 opponent nodes (seconds: {'convert_in': 0.008006095886230469, 'rust': 0.0, 'convert_out': 0.001001119613647461})
+  weak stop model: {'applied_our_l': 2, 'applied_cand_leaf': 0, 'applied_opp_leaf': 74, 'applied_opp_floor': 0}  (1s)
+building curves...
+  stranded cycle nodes 0  (1s)
+  root capacity 2 (path-sum)
+  quality requests: 0 parents (reach 0.000), 0 deferred, 0 positions below reach 0.0005 not examined; reasons {}
+b=2: booked 2 distinct (2 path-charged), root value 0.5000
+       curve 0.5000 -> black_b2.parquet
+
+done in 1s; peak commit 1.1 GB
+eval weight 0.75 (source meta)
+slice prior 0.5196; eps 0.001; budgets [1]; method dp
+0 source decisions loaded for collection
+collecting subgraph edges...
+  level 1: fetched 1 nodes, frontier 2, edges so far 2
+  level 2: fetched 3 nodes, frontier 40, edges so far 42
+  level 3: fetched 43 nodes, frontier 0, edges so far 42
+  42 edges, 3 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Pooled' elo_band=0
+  0 source decisions in slice
+evals (mmap)...
+  5 of 43 positions eval-covered
+  aux rows for 3 subgraph nodes
+building graph...
+  model-only opponent replies: 38 edges, 38 without a child eval
+  1 our nodes, 2 opponent nodes (seconds: {'convert_in': 0.009521961212158203, 'rust': 0.0010006427764892578, 'convert_out': 0.0})
+  weak stop model: {'applied_our_l': 1, 'applied_cand_leaf': 0, 'applied_opp_leaf': 40, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 1 (path-sum)
+  quality requests: 0 parents (reach 0.000), 0 deferred, 0 positions below reach 0.0005 not examined; reasons {}
+b=1: booked 1 distinct (1 path-charged), root value 0.5000
+       curve 0.5000 -> white_b1.parquet
+
+done in 0s; peak commit 1.1 GB
+  level 1: fetched 1 nodes, frontier 20, edges so far 20
+  level 2: fetched 21 nodes, frontier 2, edges so far 22
+  level 3: fetched 23 nodes, frontier 0, edges so far 78
+  level 1: fetched 1 nodes, frontier 20, edges so far 20
+  level 2: fetched 21 nodes, frontier 2, edges so far 22
+  level 3: fetched 23 nodes, frontier 0, edges so far 78
+  level 1: fetched 1 nodes, frontier 20, edges so far 20
+  level 2: fetched 21 nodes, frontier 2, edges so far 22
+  level 3: fetched 23 nodes, frontier 0, edges so far 78
+{"pool": "test", "bucket": 0, "part": 0, "rows": 2, "mass": {"white_wins": 3, "draws": 2, "black_wins": 2, "total": 7}, "low": -9223372036854775808, "high": -1}
+{"pool": "test", "bucket": 0, "part": 1, "rows": 2, "mass": {"white_wins": 1, "draws": 3, "black_wins": 0, "total": 4}, "low": 0, "high": 9223372036854775807}
+arrivals: 2 groups of 1 source buckets, 2 to build -> C:\Users\David\Documents\Chess\scratch\test-tmp\tmpwxgtg7t1\poolwork\arrivals
+buckets: 2 requested, 2 to build (0 collision hashes dropped as parents)
+  position_stats_pooled_e2e.parquet: 7 rows
+  position_stats_aux_pooled_e2e.parquet: 5 rows
+finalize: metas written, C:\Users\David\Documents\Chess\scratch\test-tmp\tmpwxgtg7t1\poolwork\_POOL.DONE
+Prepared 1/2 source parts (0s)
+Prepared 2/2 source parts (0s)
+eval weight 1 (default)
+slice prior 0.5581; eps 0.0001; budgets [2]; method dp
+2 source decisions loaded for collection
+min-games 5 (the pool's floor)
+collecting subgraph edges...
+uncut own moves: black, recipe 28ff3a32c4ac96ac43cc83aed6726328a39902c236f73e9e72318945a7af2612
+  level 1: fetched 1 nodes, frontier 3, edges so far 3
+  level 2: fetched 4 nodes, frontier 2, edges so far 8
+  level 3: fetched 6 nodes, frontier 0, edges so far 10
+  10 edges, 6 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Rapid' elo_band=1800
+  2 source decisions in slice
+evals (mmap)...
+  9 of 11 positions eval-covered
+  aux rows for 6 subgraph nodes
+building graph...
+  3 our nodes, 3 opponent nodes (seconds: {'convert_in': 0.006577253341674805, 'rust': 0.0010001659393310547, 'convert_out': 0.0})
+  weak stop: 5 our-turn and 0 opponent-turn positions
+  weak stop model: {'x_weak': 2, 'x_fallback_pool': 3, 'moves_engine_only': 2, 'x_walked': 2, 'x_engine_only': 2, 'x_none': 1, 'y_walked': 0, 'applied_our_l': 2, 'applied_cand_leaf': 0, 'applied_opp_leaf': 2, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 2 (path-sum)
+b=2: booked 2 distinct (2 path-charged), root value 0.5747
+       curve 0.5747 -> black_b2.parquet
+
+done in 0s; peak commit 1.4 GB
+stockfish cache: 2 positions at depth 10
+{"label": "both-0", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 2, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.0, "sampled_starts": 0, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": null, "mc_se_fitted": null, "nodes": 61, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.0, "recall": 1.0, "config": "0dbf093f641640ab", "secs": 0}
+shape: (1, 10)
+┌────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label  ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---    ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str    ┆ str    ┆ i64  ┆ i64        ┆   ┆ null          ┆ f64               ┆ f64            ┆ i64  │
+╞════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ both-0 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ null          ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "altered-0", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.5054880476591225, "fitted": 0.5030945119524932, "mean_cp_us": 0.0, "mass": 1.0, "leaves": 2, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.0, "sampled_starts": 0, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.25, "mc_se_uniform": null, "mc_se_fitted": null, "nodes": 61, "book_moves_played": 0.75, "rollouts": 4, "tau": 0.0, "recall": 1.0, "config": "2a0216f73774d510", "secs": 0}
+shape: (1, 10)
+┌───────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label     ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---       ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str       ┆ str    ┆ i64  ┆ i64        ┆   ┆ null          ┆ f64               ┆ f64            ┆ i64  │
+╞═══════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ altered-0 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ null          ┆ 0.7500            ┆ 0.0000         ┆ 0    │
+└───────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "both-0.9", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "a53d8ad26a7da9ac", "secs": 0}
+shape: (1, 10)
+┌──────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label    ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---      ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str      ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞══════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ both-0.9 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└──────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "altered-0.9", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.5054880476591225, "fitted": 0.5030945119524932, "mean_cp_us": 0.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.25, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 0.75, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "867a2858032b91e8", "secs": 0}
+shape: (1, 10)
+┌─────────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label       ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---         ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str         ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞═════════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ altered-0.9 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 0.7500            ┆ 0.0000         ┆ 0    │
+└─────────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "legacy-score", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "4a76daaad83295a8", "secs": 0}
+shape: (1, 10)
+┌──────────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label        ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---          ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str          ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞══════════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ legacy-score ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└──────────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+arrivals: 2 groups of 1 source buckets, 2 to build -> C:\Users\David\Documents\Chess\scratch\test-tmp\tmp_uy12yph\poolwork\arrivals
+buckets: 2 requested, 2 to build (0 collision hashes dropped as parents)
+  position_stats_pooled_e2e.parquet: 7 rows
+  position_stats_aux_pooled_e2e.parquet: 5 rows
+finalize: metas written, C:\Users\David\Documents\Chess\scratch\test-tmp\tmp_uy12yph\poolwork\_POOL.DONE
+Prepared 1/2 source parts (0s)
+Prepared 2/2 source parts (0s)
+eval weight 1 (source meta)
+slice prior 0.5196; eps 0.0001; budgets [2]; method dp
+0 source decisions loaded for collection
+min-games 5 (the pool's floor)
+collecting subgraph edges...
+uncut own moves: black, recipe e2d9434cad2eeac8265296d4d6acbe6dfb6b3b1da40f66b60dcc3c7ce81b417d
+  level 1: fetched 1 nodes, frontier 3, edges so far 3
+  level 2: fetched 4 nodes, frontier 2, edges so far 8
+  level 3: fetched 6 nodes, frontier 0, edges so far 10
+  10 edges, 6 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Pooled' elo_band=0
+  0 source decisions in slice
+evals (mmap)...
+  9 of 11 positions eval-covered
+  aux rows for 6 subgraph nodes
+building graph...
+lookahead: 0 moves removed from final candidate menus, 0 decisions with no passing alternative
+  3 our nodes, 3 opponent nodes (seconds: {'convert_in': 0.006997346878051758, 'rust': 0.03004002571105957, 'convert_out': 0.0009989738464355469})
+  weak stop: 5 our-turn and 0 opponent-turn positions
+  weak stop model: {'x_weak': 2, 'x_fallback_pool': 3, 'moves_engine_only': 2, 'x_walked': 2, 'x_engine_only': 2, 'x_none': 1, 'y_walked': 0, 'applied_our_l': 2, 'applied_cand_leaf': 0, 'applied_opp_leaf': 2, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 2 (path-sum)
+  quality requests: 3 parents (reach 0.848), 0 deferred, 0 positions below reach 0.0005 not examined; reasons {'inconsistent-parent-child': 2, 'unverified-rare-reference': 2, 'missing-candidate-evidence': 1}
+b=2: booked 2 distinct (2 path-charged), root value 0.5806
+       curve 0.5806 -> black_b2.parquet
+
+done in 0s; peak commit 1.4 GB
+eval weight 1 (source meta)
+slice prior 0.5196; eps 0.0001; budgets [1]; method dp
+0 source decisions loaded for collection
+min-games 5 (the pool's floor)
+collecting subgraph edges...
+  level 1: fetched 1 nodes, frontier 3, edges so far 3
+  level 2: fetched 4 nodes, frontier 2, edges so far 5
+  level 3: fetched 6 nodes, frontier 0, edges so far 7
+  7 edges, 5 parent nodes (0s)
+loading source rep (subgraph slice)...
+slice: event='Pooled' elo_band=0
+  0 source decisions in slice
+evals (mmap)...
+  7 of 8 positions eval-covered
+  aux rows for 5 subgraph nodes
+building graph...
+lookahead: 0 moves removed from final candidate menus, 0 decisions with no passing alternative
+  2 our nodes, 2 opponent nodes (seconds: {'convert_in': 0.00551295280456543, 'rust': 0.018520116806030273, 'convert_out': 0.0010023117065429688})
+  weak stop: 4 our-turn and 0 opponent-turn positions
+  weak stop model: {'x_weak': 2, 'x_fallback_pool': 2, 'moves_engine_only': 2, 'x_walked': 2, 'x_none': 1, 'x_engine_only': 1, 'y_walked': 0, 'applied_our_l': 2, 'applied_cand_leaf': 0, 'applied_opp_leaf': 1, 'applied_opp_floor': 0}  (0s)
+building curves...
+  stranded cycle nodes 0  (0s)
+  root capacity 1 (path-sum)
+b=1: booked 1 distinct (1 path-charged), root value 0.4860
+       curve 0.4860 -> reduced_b1.parquet
+
+done in 0s; peak commit 1.4 GB
+eval weight 1 (source meta)
+slice prior 0.5196; eps 0.0001; budgets [1]; method dp
+0 source decisions loaded for collection
+FATAL: --max-ply 6 is above the pool's recorded cap 5
+stockfish cache: 2 positions at depth 10
+{"label": "both-0", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 2, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.0, "sampled_starts": 0, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": null, "mc_se_fitted": null, "nodes": 61, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.0, "recall": 1.0, "config": "9824a69011755945", "secs": 0}
+shape: (1, 10)
+┌────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label  ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---    ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str    ┆ str    ┆ i64  ┆ i64        ┆   ┆ null          ┆ f64               ┆ f64            ┆ i64  │
+╞════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ both-0 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ null          ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "altered-0", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.5054880476591225, "fitted": 0.5030945119524932, "mean_cp_us": 0.0, "mass": 1.0, "leaves": 2, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 0.0, "sampled_starts": 0, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.25, "mc_se_uniform": null, "mc_se_fitted": null, "nodes": 61, "book_moves_played": 0.75, "rollouts": 4, "tau": 0.0, "recall": 1.0, "config": "2f3f81fa77c5ff96", "secs": 0}
+shape: (1, 10)
+┌───────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label     ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---       ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str       ┆ str    ┆ i64  ┆ i64        ┆   ┆ null          ┆ f64               ┆ f64            ┆ i64  │
+╞═══════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ altered-0 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ null          ┆ 0.7500            ┆ 0.0000         ┆ 0    │
+└───────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "both-0.9", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "cea0e51097946c82", "secs": 0}
+shape: (1, 10)
+┌──────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label    ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---      ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str      ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞══════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ both-0.9 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└──────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "altered-0.9", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.5054880476591225, "fitted": 0.5030945119524932, "mean_cp_us": 0.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.25, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 0.75, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "77f518201ec7164e", "secs": 0}
+shape: (1, 10)
+┌─────────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label       ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---         ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str         ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞═════════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ altered-0.9 ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 0.7500            ┆ 0.0000         ┆ 0    │
+└─────────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘
+{"label": "legacy-score", "colour": "black", "replicate": 0, "seed": 1, "book_moves": 2, "uniform": 0.6123223322649731, "fitted": 0.592245964165193, "mean_cp_us": 125.0, "mass": 1.0, "leaves": 8, "eval_missing_mass": 0.0, "stockfish_mass": 0.0, "no_eval_mass": 0.0, "game_over_mass": 0.0, "sampled_mass": 1.0, "sampled_starts": 2, "mean_leaf_ply": 30.0, "mass_at_max_ply": 1.0, "early_nonterminal_mass": 0.0, "weak_moves_per_game": 14.0, "mc_se_uniform": 0.0, "mc_se_fitted": 0.0, "nodes": 3, "book_moves_played": 1.0, "rollouts": 4, "tau": 0.9, "recall": 1.0, "config": "54107145f071c13f", "secs": 0}
+....................................
+----------------------------------------------------------------------
+Ran 36 tests in 216.778s
+
+OK
+shape: (1, 10)
+┌──────────────┬────────┬──────┬────────────┬───┬───────────────┬───────────────────┬────────────────┬──────┐
+│ label        ┆ colour ┆ seed ┆ book_moves ┆ … ┆ mc_se_uniform ┆ book_moves_played ┆ stockfish_mass ┆ secs │
+│ ---          ┆ ---    ┆ ---  ┆ ---        ┆   ┆ ---           ┆ ---               ┆ ---            ┆ ---  │
+│ str          ┆ str    ┆ i64  ┆ i64        ┆   ┆ f64           ┆ f64               ┆ f64            ┆ i64  │
+╞══════════════╪════════╪══════╪════════════╪═══╪═══════════════╪═══════════════════╪════════════════╪══════╡
+│ legacy-score ┆ black  ┆ 1    ┆ 2          ┆ … ┆ 0.0000        ┆ 1.0000            ┆ 0.0000         ┆ 0    │
+└──────────────┴────────┴──────┴────────────┴───┴───────────────┴───────────────────┴────────────────┴──────┘

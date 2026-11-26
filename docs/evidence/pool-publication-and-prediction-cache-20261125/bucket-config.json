@@ -1,0 +1,34 @@
+{
+  "sources": {
+    "5": {
+      "edges": {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.edges.parquet",
+        "sha256": "aba3176137c182abc3c13f3bc19782a884e4867127eebb4923260bc8098915e8"
+      },
+      "stats": {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.stats.json",
+        "sha256": "4ff47168c054a0f0c185ec986f1b7eaab55a6eb0d7277943937fe8d79428edfc"
+      },
+      "acceptance": [
+        {
+          "path": "D:\\chess\\mini-pool-20261123\\pilot-accepted.json",
+          "sha256": "9cdbcd84dc05998d060fd41f12c3067005e27ee8f47c74a85b70e73dca8427a7"
+        }
+      ],
+      "aux": {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.aux.parquet",
+        "sha256": "2c9432ef3b4f42720a4e069b145e4296e2c14d7fc98f56e80ff141825b0ec2c8"
+      }
+    }
+  },
+  "threads": 2,
+  "reserve_bytes": 268435456000,
+  "output": "D:\\chess\\acceptance\\pool-input-readiness-20261125\\bucket005",
+  "memory": "4GB",
+  "term_reasons": "split",
+  "tmp": "D:\\chess\\acceptance\\pool-input-readiness-20261125\\spill",
+  "params": {
+    "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\_params.json",
+    "sha256": "3e8eaf78e5131adba3bdebcb16359a47dff2b061b665ce85fa770dd249a3ec41"
+  }
+}

@@ -1,0 +1,149 @@
+{
+  "scope": "one-bucket diagnostic; not a published pool",
+  "bucket": 5,
+  "prepare_seconds": 184.027117599966,
+  "resume_seconds": 10.201200999959838,
+  "receipt": {
+    "schema": "partitioned-outcome-pool-128-v1",
+    "bucket": 5,
+    "identity": "98568cbc6d1e3e44ca8baaa46b75240f4b62b4b4dcd57d7115813d8032a2c085",
+    "params_sha256": "3e8eaf78e5131adba3bdebcb16359a47dff2b061b665ce85fa770dd249a3ec41",
+    "inputs": [
+      {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.edges.parquet",
+        "sha256": "aba3176137c182abc3c13f3bc19782a884e4867127eebb4923260bc8098915e8"
+      },
+      {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.aux.parquet",
+        "sha256": "2c9432ef3b4f42720a4e069b145e4296e2c14d7fc98f56e80ff141825b0ec2c8"
+      },
+      {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\buckets\\b005.stats.json",
+        "sha256": "4ff47168c054a0f0c185ec986f1b7eaab55a6eb0d7277943937fe8d79428edfc"
+      },
+      {
+        "path": "D:\\chess\\mini-pool-20261123\\pilot-accepted.json",
+        "sha256": "9cdbcd84dc05998d060fd41f12c3067005e27ee8f47c74a85b70e73dca8427a7"
+      },
+      {
+        "path": "D:\\chess\\sweep-inputs\\brc1800-p30\\work\\_params.json",
+        "sha256": "3e8eaf78e5131adba3bdebcb16359a47dff2b061b665ce85fa770dd249a3ec41"
+      }
+    ],
+    "implementation": {
+      "partitioned_pool.py": "e48a4f2cf9b4ebd171f9601c3dc97e2a991a729e203176aa7ec1c7ae8f35e6d6",
+      "pool_from_book.py": "dd610c9ab3f4eb382c8d73ed718b529e24db440ebb4c902300d9c4642f347ce2",
+      "book_builder_rs.pyd": "fbf9f25c4fe28a7fd34dbd255c05e1e6ae767d0faa52723534cb62678bffe4ed"
+    },
+    "files": {
+      "edges": {
+        "file": "buckets/b005.edges.parquet",
+        "bytes": 1406076681,
+        "sha256": "aa743d11db4415602e93f8eefa7b5e07e91265bbbbc7b22926d977014e218782",
+        "audit": {
+          "rows": 23877125,
+          "parents": 20371938,
+          "totals": {
+            "white_wins": 34278459,
+            "draws": 3748873,
+            "black_wins": 31944176,
+            "total": 69971508
+          },
+          "parent_keys_sha256": "f3d367864379d9078abab1521c4d6927eae57560374cffa09ec0551d4992f090"
+        }
+      },
+      "aux": {
+        "file": "buckets/b005.aux.parquet",
+        "bytes": 386307340,
+        "sha256": "05bdefb18298ebbaad99f2a1c3e0c04066373a7859bcbae547973437babc9915",
+        "audit": {
+          "rows": 20371938,
+          "parents": 20371938,
+          "totals": {
+            "term_normal_white_wins": 24065,
+            "term_normal_draws": 1221,
+            "term_normal_black_wins": 15187,
+            "term_normal_total": 40473,
+            "term_flag_white_wins": 5834,
+            "term_flag_draws": 193,
+            "term_flag_black_wins": 5971,
+            "term_flag_total": 11998,
+            "term_other_white_wins": 0,
+            "term_other_draws": 0,
+            "term_other_black_wins": 0,
+            "term_other_total": 0,
+            "horizon_white_wins": 22847,
+            "horizon_draws": 3696,
+            "horizon_black_wins": 21742,
+            "horizon_total": 48285,
+            "other_white_wins": 0,
+            "other_draws": 0,
+            "other_black_wins": 0,
+            "other_total": 0
+          },
+          "parent_keys_sha256": "f3d367864379d9078abab1521c4d6927eae57560374cffa09ec0551d4992f090"
+        }
+      }
+    },
+    "seconds": 179.57531179999933
+  },
+  "queries": {
+    "edges": {
+      "raw": {
+        "seconds": 3.390924300008919,
+        "rows": 22,
+        "queries": 1,
+        "total_groups": 195,
+        "selected_groups": 195,
+        "selected_rows": 23877125,
+        "selected_compressed_bytes": 1311208067,
+        "total_compressed_bytes": 1311208067,
+        "unpruned_queries": 1
+      },
+      "sorted": {
+        "seconds": 0.3424044999992475,
+        "rows": 22,
+        "queries": 1,
+        "total_groups": 365,
+        "selected_groups": 18,
+        "selected_rows": 1136133,
+        "selected_compressed_bytes": 66848442,
+        "total_compressed_bytes": 1405430080,
+        "unpruned_queries": 0
+      },
+      "exact_equal": true
+    },
+    "aux": {
+      "raw": {
+        "seconds": 0.6511113999877125,
+        "rows": 16,
+        "queries": 1,
+        "total_groups": 165,
+        "selected_groups": 165,
+        "selected_rows": 20371938,
+        "selected_compressed_bytes": 317093614,
+        "total_compressed_bytes": 317093614,
+        "unpruned_queries": 1
+      },
+      "sorted": {
+        "seconds": 0.10674080002354458,
+        "rows": 16,
+        "queries": 1,
+        "total_groups": 311,
+        "selected_groups": 16,
+        "selected_rows": 1038818,
+        "selected_compressed_bytes": 19645140,
+        "total_compressed_bytes": 385274295,
+        "unpruned_queries": 0
+      },
+      "exact_equal": true
+    }
+  },
+  "sample_legal_children": 16,
+  "raw_bytes": 1629790063,
+  "sorted_bytes": 1792384021,
+  "sampled_peak_tree_rss_bytes": 4209836032,
+  "sampled_peak_tree_private_bytes": 4642820096,
+  "seconds": 199.1737032000092,
+  "config_sha256": "a58689e569df5ab8f3cac4e533b879b20b3e21808188ed1c489cecea569325d0"
+}

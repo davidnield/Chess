@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "seconds": 13.035587900027167,
+  "bucket_identity": "98568cbc6d1e3e44ca8baaa46b75240f4b62b4b4dcd57d7115813d8032a2c085",
+  "raw_cache": {
+    "requested": 1,
+    "hits": 1,
+    "unique_inferred": 0,
+    "committed_batches": 0
+  },
+  "worker_started": false,
+  "release_sha256": "d96ed4c324398e9aa6b08e3f554637d709f03f3874bb3b8d52a2abe08befe131"
+}
