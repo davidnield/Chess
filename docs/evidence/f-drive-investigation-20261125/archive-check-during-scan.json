@@ -1,0 +1,6 @@
+{
+  "scope": "complete file inventory, eight sampled full-file hashes, fixed query replay",
+  "passed": false,
+  "error": "PermissionError(13, 'Permission denied')",
+  "seconds": 0.1635674000135623
+}

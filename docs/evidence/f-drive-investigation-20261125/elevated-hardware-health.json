@@ -1,0 +1,25 @@
+{
+  "observed_at": "2026-11-25T18:59:24.4230217-08:00",
+  "read_only": true,
+  "elevated": true,
+  "disk": {
+    "Number": 4,
+    "FriendlyName": "Seagate Expansion HDD",
+    "BusType": "USB",
+    "HealthStatus": "Healthy",
+    "OperationalStatus": "Online"
+  },
+  "reliability": {
+    "Temperature": 46,
+    "TemperatureMax": 0,
+    "PowerOnHours": 22199,
+    "ReadErrorsTotal": 0,
+    "ReadErrorsUncorrected": 0,
+    "WriteErrorsTotal": null,
+    "WriteErrorsUncorrected": null,
+    "ReadLatencyMax": 3796,
+    "WriteLatencyMax": 4381,
+    "Wear": 0
+  },
+  "smart_error": "Not supported "
+}

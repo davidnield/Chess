@@ -1,0 +1,12 @@
+{
+  "read_only_chkdsk_command": "C:\\Windows\\System32\\chkdsk.exe F:",
+  "read_only_chkdsk_exit_code": 0,
+  "started_local": "2026-11-25T18:42:48.884-08:00",
+  "finished_local_approx": "2026-11-25T18:56:46-08:00",
+  "conclusion": "No filesystem problems found",
+  "surface_scan": false,
+  "drive_state_modified": false,
+  "markclean_status": "Prepared only; separate user approval required",
+  "archive_check": "archive-check.json",
+  "hardware_check": "elevated-hardware-health.json"
+}

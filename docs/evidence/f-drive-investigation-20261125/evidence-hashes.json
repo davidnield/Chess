@@ -1,0 +1,66 @@
+[
+  {
+    "name": "archive-check-during-scan.json",
+    "Hash": "1FFCFFB2F14747BED3EAF6FD7A88AFFFE69B8AFB08B586C9AF969CC6A70CB4CA"
+  },
+  {
+    "name": "archive-check-progress.json",
+    "Hash": "9768D40F2F57B434F947506A5D65414D132FB5DD42739F3580CBB9B32C5B0A0A"
+  },
+  {
+    "name": "archive-check.json",
+    "Hash": "AF7794ADFA2501FD2B14FD3B8CCA048131CCE4CD92822E51C20DE20B8C936AF4"
+  },
+  {
+    "name": "check_archive.py",
+    "Hash": "568DF6C00426010AEA33224D7313EA2E9D671FA964D2A452DB9D1D6AC4DABA49"
+  },
+  {
+    "name": "chkdsk-readonly-initial.log",
+    "Hash": "C1617080D554D4A12DAC2BED6C04483E4935AC9A2ECE11A115E7E3850E094B97"
+  },
+  {
+    "name": "diagnostic-summary.json",
+    "Hash": "7876237F660D4679ECACBFF2E66B19C7A489E309E109D44A98728238F17EEF8A"
+  },
+  {
+    "name": "disk-removal.xml",
+    "Hash": "03048B15A2E99C7FF17C167B2198C51C43842E80DAE630F6361334BFA7D10950"
+  },
+  {
+    "name": "elevated-hardware-health.json",
+    "Hash": "D70F8E513AD8AA9E5F6C30C41CA1036424D7347875891734902881C7AC73CD64"
+  },
+  {
+    "name": "initial-status.json",
+    "Hash": "D4F4011DF4BA21B83F79C8D81B1E614A0757BEB397677DBD11AA2D2A39A23E48"
+  },
+  {
+    "name": "mark-clean-conditional.ps1",
+    "Hash": "EB57C5C1FACD4A894C67DCF713C282B2671C89B53B57B4EBFF93ACF1A766C6B4"
+  },
+  {
+    "name": "queries.jsonl",
+    "Hash": "A6CB39A2B9CD1F2F339FD40738458E1308A2BAD707530CF51E7038B8A43C5A74"
+  },
+  {
+    "name": "query-results.json",
+    "Hash": "BE285257A8FDB04BF0A51305F29F63F2ABE57E058A2490410011AD6A6E0813C2"
+  },
+  {
+    "name": "query.stderr.log",
+    "Hash": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+  },
+  {
+    "name": "read-hardware-health.ps1",
+    "Hash": "3850559355071122BA97FFEA3595CDE4A5AD5320DABB376649C36700FE673C94"
+  },
+  {
+    "name": "storage-events-near-removal.json",
+    "Hash": "A5338D955B09046EC0B16F3A9625B7955C763AAE07DC722E474E6078745F932F"
+  },
+  {
+    "name": "system-events.json",
+    "Hash": "9BE19D417DC2C0111199BBFE65AB2E44F9FF8D20180873DAC3DF909998EF1AA4"
+  }
+]

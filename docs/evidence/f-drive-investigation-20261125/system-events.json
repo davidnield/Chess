@@ -1,0 +1,121 @@
+[
+  {
+    "TimeCreated": "2026-11-22T15:25:22.98104-08:00",
+    "Id": 157,
+    "ProviderName": "disk",
+    "LevelDisplayName": "Warning",
+    "Message": "Disk 4 has been surprise removed."
+  },
+  {
+    "TimeCreated": "2026-11-20T08:36:46.4335411-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-20T08:36:42.7545161-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_3329&PID_4B19&Col03\\6&2d53b0a8&0&0002\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-16T09:22:24.438113-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-15T08:59:10.4512072-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-13T07:05:32.4485756-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-12T21:10:55.4173401-08:00",
+    "Id": 32,
+    "ProviderName": "disk",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver detected that the device \\Device\\Harddisk3\\DR5 has its write cache enabled. Data corruption may occur."
+  },
+  {
+    "TimeCreated": "2026-11-12T09:27:50.5046538-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-11T07:49:04.5015399-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-10T08:46:18.1218784-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-09T08:11:02.1658518-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-08T07:48:14.9931959-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-07T07:10:02.8406053-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-06T20:52:01.9694335-08:00",
+    "Id": 153,
+    "ProviderName": "disk",
+    "LevelDisplayName": "Warning",
+    "Message": "The IO operation at logical block address 0x0 for Disk 4 (PDO name: \\Device\\000001b9) was retried."
+  },
+  {
+    "TimeCreated": "2026-11-06T08:01:40.147532-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-05T22:53:12.2623717-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  },
+  {
+    "TimeCreated": "2026-11-05T22:51:31.4818559-08:00",
+    "Id": 219,
+    "ProviderName": "Microsoft-Windows-Kernel-PnP",
+    "LevelDisplayName": "Warning",
+    "Message": "The driver \\Driver\\WUDFRd failed to load.\r\nDevice: HID\\VID_046D&PID_0AAA&MI_03&Col02\\7&2332974c&0&0001\r\nStatus: 0xC0000365"
+  }
+]
