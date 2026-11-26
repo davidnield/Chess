@@ -172,6 +172,37 @@ def inventory(out, params_sha):
     return entries
 
 
+def assemble(config, gates_dir, out=None):
+    """Write the acceptance document from pool_from_book_gates --partitioned verdicts.
+
+    Only passing verdicts count, and each must carry this output's inventory digest
+    and recipe: a verdict measured on a partial sort or on another recipe is refused.
+    Each gate's own verdict file is pinned by path and SHA-256 as its evidence."""
+    checked_params(config['params'])
+    params_sha = config['params']['sha256']
+    output = Path(config['output']).resolve()
+    inv = digest(inventory(output, params_sha))
+    gates_dir = Path(gates_dir)
+    checks, evidence = {}, {}
+    for gate in sorted(GATES):
+        path = gates_dir/f'gate-{gate}.json'
+        verdict = json.loads(path.read_text(encoding='utf8'))
+        if (verdict.get('inventory_sha256') != inv or verdict.get('params_sha256') != params_sha
+                or Path(verdict.get('partitioned', '')).resolve() != output):
+            raise ValueError(f'{gate}: verdict does not bind this pool inventory')
+        if verdict.get('pass') is not True:
+            raise ValueError(f'{gate}: gate did not pass')
+        checks[gate] = True
+        evidence[gate] = [dict(path=str(path.resolve()), sha256=file_sha(path))]
+    document = dict(schema='partitioned-pool-acceptance-v1', params_sha256=params_sha,
+                    inventory_sha256=inv, checks=checks, evidence=evidence)
+    out = Path(out) if out else gates_dir/'acceptance.json'
+    if out.exists() and json.loads(out.read_text(encoding='utf8')) != document:
+        raise ValueError(f'{out} exists with different content; write a new document')
+    atomic_json(out, document)
+    return document
+
+
 def publish(config, acceptance):
     params = checked_params(config['params']); out = Path(config['output']).resolve()
     if config.get('term_reasons') not in ('split', 'pooled'):
@@ -226,9 +257,14 @@ def main():
     p.add_argument('--config',type=Path,required=True)
     p.add_argument('--bucket',type=int)
     p.add_argument('--acceptance',type=Path)
+    p.add_argument('--assemble',type=Path,metavar='GATES_DIR',
+                   help='write GATES_DIR/acceptance.json from the partitioned gate verdicts there')
     a=p.parse_args(); cfg=json.loads(a.config.read_text())
-    if (a.bucket is None)==(a.acceptance is None):p.error('choose one bucket or final acceptance')
-    result=prepare_bucket(cfg,a.bucket) if a.bucket is not None else publish(cfg,a.acceptance)
+    if sum(x is not None for x in (a.bucket,a.acceptance,a.assemble))!=1:
+        p.error('choose one of --bucket, --assemble or --acceptance')
+    if a.bucket is not None:result=prepare_bucket(cfg,a.bucket)
+    elif a.assemble is not None:result=assemble(cfg,a.assemble)
+    else:result=publish(cfg,a.acceptance)
     print(json.dumps(result,indent=2))
 
 

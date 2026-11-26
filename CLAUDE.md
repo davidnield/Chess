@@ -218,6 +218,11 @@ with its exact CLI — **read it before running; don't trust remembered flags.**
 # pool_from_book_gates.py). Its aux pools termination reasons: term_flag_* is 0, the meta says
 # term_reasons='pooled', and Stage 3 / budget_core refuse to exclude flags on it.
 .venv\Scripts\python.exe python\pool_from_book.py --events ... --elo-bands ... --max-ply C --min-games N --tag T --work H:\chess\pool_work\T
+# An uncut 128-bit pool is published as 512 sorted pairs (sweep.partitioned_pool --bucket). Its four
+# gates run per bucket on the complete inventory and bind each verdict to its digest; the
+# assembler writes the acceptance document only from passing, bound verdicts:
+.venv\Scripts\python.exe python\pool_from_book_gates.py <gate> --work W --partitioned OUT --gates-dir G [--buckets ...]
+.venv\Scripts\python.exe -m sweep.partitioned_pool --config CFG --assemble G      # from python\; then --acceptance G\acceptance.json
 
 # Sharp repertoires from pooled stats
 .venv\Scripts\python.exe python\build_sharp_reps.py

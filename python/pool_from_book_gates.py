@@ -64,13 +64,26 @@ def _p(path) -> str:
     return str(path).replace("\\", "/")
 
 
+# Set by main() for --partitioned: every verdict is bound to the inventory it read.
+_BINDING: dict = {}
+
+
 def record(work: Path, key: str, result: dict) -> None:
-    p = work / "_gates.json"
+    home = Path(_BINDING.get("gates_dir") or work)
+    if _BINDING:
+        result = dict(result, **{k: v for k, v in _BINDING.items() if k != "gates_dir"})
+    p = home / "_gates.json"
     g = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
     g[key] = result
     tmp = p.with_name(p.name + ".tmp")
     tmp.write_text(json.dumps(g, indent=2), encoding="utf-8")
     tmp.replace(p)
+    if _BINDING:
+        # One file per gate, so an acceptance document can pin each verdict on its own.
+        one = home / f"gate-{key}.json"
+        tmp = one.with_name(one.name + ".tmp")
+        tmp.write_text(json.dumps(result, indent=2), encoding="utf-8")
+        tmp.replace(one)
 
 
 def load_params(work: Path) -> dict:
@@ -78,9 +91,43 @@ def load_params(work: Path) -> dict:
 
 
 def out_files(work: Path, out_dir: Path) -> tuple[Path, Path]:
+    if _BINDING:
+        # The 512 sorted pairs of sweep.partitioned_pool, read as one glob each.
+        part = Path(_BINDING["partitioned"])
+        return part / "buckets" / "b*.edges.parquet", part / "buckets" / "b*.aux.parquet"
     tag = load_params(work)["tag"]
     return (out_dir / f"position_stats_pooled_{tag}.parquet",
             out_dir / f"position_stats_aux_pooled_{tag}.parquet")
+
+
+def bucket_files(i: int) -> tuple[Path, Path] | None:
+    """A partitioned pool's pair for output bucket i (None for a single-file pool)."""
+    if not _BINDING:
+        return None
+    part = Path(_BINDING["partitioned"]) / "buckets"
+    return part / f"b{i:03d}.edges.parquet", part / f"b{i:03d}.aux.parquet"
+
+
+def gates_home(a) -> Path:
+    return Path(_BINDING.get("gates_dir") or a.work)
+
+
+def bind_partitioned(a) -> dict:
+    """Refuse anything but a complete inventory built from --work's recipe, and bind
+    every verdict written afterwards to that inventory (sweep.partitioned_pool's
+    acceptance document requires the binding)."""
+    from sweep.partitioned_pool import inventory
+    from sweep.spec import digest
+    from sweep.stages import file_sha
+    if a.gates_dir is None:
+        raise SystemExit("--partitioned needs --gates-dir (verdicts never go into the build's work dir)")
+    params_sha = file_sha(Path(a.work) / "_params.json")
+    entries = inventory(a.partitioned, params_sha)  # all 512 receipts, same recipe
+    Path(a.gates_dir).mkdir(parents=True, exist_ok=True)
+    _BINDING.clear()
+    _BINDING.update(partitioned=str(Path(a.partitioned).resolve()), params_sha256=params_sha,
+                    inventory_sha256=digest(entries), gates_dir=str(Path(a.gates_dir).resolve()))
+    return _BINDING
 
 
 def _duck(a):
@@ -148,7 +195,7 @@ def gate_term_vs_book(a) -> bool:
     work = Path(a.work)
     prm = load_params(work)
     max_ply = int(prm["max_ply"])
-    gdir = work / "gate1"
+    gdir = gates_home(a) / "gate1"
     adir = gdir / "arrivals"
     ns = SimpleNamespace(book=Path(prm["book"]), events=ALL_EVENTS, elo_bands=ALL_BANDS,
                          eval_lookup128=prm.get("eval_lookup128"),
@@ -279,6 +326,13 @@ def gate_reimpl(a) -> bool:
         mm_h, mm_c = open_eval_arrays(Path(prm["eval_arrays"]))
     pool_all = pl.scan_parquet(pool_f)
     aux_all = pl.scan_parquet(aux_f)
+
+    def mine(i, role):
+        own = bucket_files(i)
+        if own is None:
+            frame, name = (pool_all, "parent_hash") if role == "pool" else (aux_all, "position_hash")
+            return frame.filter(bucket(name) == i)
+        return pl.scan_parquet(own[0] if role == "pool" else own[1])
     bad = []
     stats = []
     for i in a.buckets:
@@ -300,8 +354,8 @@ def gate_reimpl(a) -> bool:
                                                      for c in ("parent_hash", "child_hash"))
                     frames.append(source)
         if not frames:
-            n_pool = pool_all.filter(bucket("parent_hash") == i).select(pl.len()).collect().item()
-            n_aux = aux_all.filter(bucket("position_hash") == i).select(pl.len()).collect().item()
+            n_pool = mine(i, "pool").select(pl.len()).collect().item()
+            n_aux = mine(i, "aux").select(pl.len()).collect().item()
             if n_pool or n_aux:
                 bad.append(f"b{i}: output for empty source bucket")
             stats.append({"bucket": i, "pool_rows": n_pool, "aux_rows": n_aux,
@@ -324,8 +378,7 @@ def gate_reimpl(a) -> bool:
                         pl.col("ply").cast(pl.Int32), *SUMS, "event", "elo_band",
                         "white_score_avg")
                 .sort("parent_hash", "move_san"))
-        mine_pool = (pool_all.filter(bucket("parent_hash") == i)
-                     .sort("parent_hash", "move_san").collect())
+        mine_pool = mine(i, "pool").sort("parent_hash", "move_san").collect()
         pool_eq = surv.equals(mine_pool)
 
         # other_*: own vectorised search into the arrays (not lookup_evals).
@@ -399,8 +452,7 @@ def gate_reimpl(a) -> bool:
                .with_columns(pl.col("other_edges").cast(pl.Int32),
                              pl.col("other_eval_cov").cast(pl.Float64))
                .select(cols).sort("position_hash"))
-        mine_aux = (aux_all.filter(bucket("position_hash") == i)
-                    .sort("position_hash").collect())
+        mine_aux = mine(i, "aux").sort("position_hash").collect()
         aux_ok = aux.height == mine_aux.height and \
             (aux["position_hash"] == mine_aux["position_hash"]).all()
         if not aux_ok:
@@ -440,6 +492,8 @@ def gate_reimpl(a) -> bool:
 # ── gate 3: conservation ──────────────────────────────────────────────────────
 
 def gate_conservation(a) -> bool:
+    if _BINDING:
+        return gate_conservation_partitioned(a)
     import chess
     from stage1_extract_positions import zobrist_int64
     work = Path(a.work)
@@ -546,6 +600,190 @@ def gate_conservation(a) -> bool:
     return ok
 
 
+def _isolated_run(fn, tasks, workers: int, fmt) -> list:
+    """Each task in its own single-use process, at most `workers` at once. A failed task
+    raises as soon as it is collected, with at most workers-1 others still running:
+    neither as_completed over a full queue nor max_tasks_per_child (CLAUDE.md)."""
+    from concurrent.futures import FIRST_COMPLETED, wait
+    out, live, queue = [], {}, list(tasks)
+    try:
+        while queue or live:
+            while queue and len(live) < max(1, workers):
+                ex = ProcessPoolExecutor(max_workers=1)
+                live[ex.submit(fn, queue.pop(0))] = ex
+            done, _ = wait(list(live), return_when=FIRST_COMPLETED)
+            for fut in done:
+                live.pop(fut).shutdown(wait=True)
+                r = fut.result()
+                out.append(r)
+                print(f"[{len(out)}/{len(tasks)}] " + fmt(r), flush=True)
+    finally:
+        for fut, ex in live.items():
+            fut.cancel()
+            ex.shutdown(wait=True)
+    return out
+
+
+def _conservation_bucket(task: tuple) -> dict:
+    """Mass identity for one output bucket against the same book bucket: the book and
+    the pool are both bucketed by parent key, so every term is local to the bucket."""
+    import pool_from_book as P
+    i, book, events, bands, cap, pool_f, aux_f, threads, mem, tmp = task
+    t0 = time.time()
+    files = P.slice_files(Path(book), events, bands, i)
+    con = P._duck(threads, mem, Path(tmp))
+    try:
+        pool_t, rows = con.execute(f"SELECT SUM(total), COUNT(*) FROM read_parquet('{_p(pool_f)}')").fetchone()
+        con.execute(f"""CREATE TEMP TABLE pp AS SELECT DISTINCT parent_hash AS x
+                        FROM read_parquet('{_p(pool_f)}')""")
+        con.execute(f"""CREATE TEMP TABLE ax AS SELECT position_hash AS x, other_total
+                        FROM read_parquet('{_p(aux_f)}')""")
+        oth_t, aux_rows, aux_dup = con.execute(
+            "SELECT SUM(other_total), COUNT(*), COUNT(*) - COUNT(DISTINCT x) FROM ax").fetchone()
+        n_pp = con.execute("SELECT COUNT(*) FROM pp").fetchone()[0]
+        # The aux has exactly one row per pool parent (merge_aux_stats' scope).
+        aux_not_pool = con.execute("SELECT COUNT(*) FROM ax WHERE x NOT IN (SELECT x FROM pp)").fetchone()[0]
+        pop_t = outside = 0
+        if files:
+            pop_t, outside = con.execute(f"""
+                SELECT SUM(total), SUM(total) FILTER (WHERE parent_hash NOT IN (SELECT x FROM pp))
+                FROM {moves_with_keys(files, True)} WHERE ply <= {cap}""").fetchone()
+    finally:
+        con.close()
+    pool_t, oth_t, pop_t, outside = (int(v or 0) for v in (pool_t, oth_t, pop_t, outside))
+    return {"bucket": i, "pool_total": pool_t, "pool_rows": int(rows), "pool_parents": int(n_pp),
+            "other_total": oth_t, "aux_rows": int(aux_rows), "aux_duplicate_keys": int(aux_dup),
+            "aux_not_pool_parent": int(aux_not_pool), "population_le_cap": pop_t,
+            "outside_mass_non_pool_parents": outside, "book_files": len(files),
+            "mass_ok": pool_t + oth_t + outside == pop_t,
+            "aux_ok": aux_rows == n_pp and aux_dup == 0 and aux_not_pool == 0,
+            "secs": round(time.time() - t0, 1)}
+
+
+def gate_conservation_partitioned(a) -> bool:
+    """Gate 3 on a partitioned (128-bit) pool, whose ~1 TB never fits one query.
+    - Mass identity in EVERY bucket against that book bucket alone (one read of the
+      book in all; resumable per bucket under <gates-dir>/conservation/).
+    - The per-parent identity needs each parent's arrivals, which come from every
+      book bucket: one plain population scan restricted to the children in --buckets
+      and the root's bucket (as gate 2), then the identity for every parent there.
+    - The root's ply-1 games, as in the single-file gate."""
+    import chess
+    import pool_from_book as P
+    from pool_from_book import N_BUCKETS
+    from zobrist128 import zobrist128
+    work = Path(a.work)
+    prm = load_params(work)
+    if prm.get("key_bits", 64) != 128:
+        raise SystemExit("a partitioned pool is 128-bit; --work's recipe is not")
+    book, cap = Path(prm["book"]), int(prm["max_ply"])
+    events, bands = prm["events"], prm["elo_bands"]
+    lo, hi = zobrist128(chess.Board())
+    root = f"struct_pack(lo := {lo}::BIGINT, hi := {hi}::BIGINT)"
+    root_b = lo % N_BUCKETS
+
+    # 1. Mass identity per bucket.
+    rdir = gates_home(a) / "conservation"
+    rdir.mkdir(parents=True, exist_ok=True)
+    tasks = [(i, str(book), events, bands, cap, *map(str, bucket_files(i)), a.threads, a.mem,
+              str(a.tmp_dir)) for i in range(N_BUCKETS) if not (rdir / f"b{i:03d}.json").exists()]
+    t0 = time.time()
+    for r in _isolated_run(_conservation_bucket, tasks, a.workers,
+                           lambda r: f"bucket {r['bucket']}: pool {r['pool_total']:,} + other "
+                                     f"{r['other_total']:,} + outside {r['outside_mass_non_pool_parents']:,}"
+                                     f" vs {r['population_le_cap']:,} "
+                                     f"{'OK' if r['mass_ok'] and r['aux_ok'] else 'MISMATCH'} ({r['secs']:.0f}s)"):
+        f = rdir / f"b{r['bucket']:03d}.json"
+        tmp = f.with_name(f.name + ".tmp")
+        tmp.write_text(json.dumps(r, indent=1), encoding="utf-8")
+        tmp.replace(f)
+    per = [json.loads((rdir / f"b{i:03d}.json").read_text(encoding="utf-8")) for i in range(N_BUCKETS)]
+    tot = {k: sum(r[k] for r in per) for k in ("pool_total", "other_total", "population_le_cap",
+                                               "outside_mass_non_pool_parents", "pool_parents", "aux_rows")}
+    bad_mass = [r["bucket"] for r in per if not r["mass_ok"]]
+    bad_aux = [r["bucket"] for r in per if not r["aux_ok"]]
+    mass_ok = not bad_mass and not bad_aux
+    print(f"  mass: {N_BUCKETS - len(bad_mass)} of {N_BUCKETS} buckets balance; aux one row per pool "
+          f"parent in {N_BUCKETS - len(bad_aux)}; pool {tot['pool_total']:,} + other {tot['other_total']:,}"
+          f" + outside {tot['outside_mass_non_pool_parents']:,} vs population "
+          f"{tot['population_le_cap']:,} ({time.time()-t0:.0f}s)", flush=True)
+
+    # 2. Per-parent identity in the sampled buckets.
+    sample = sorted(set(a.buckets) | {root_b})
+    t1 = time.time()
+    s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
+    con = _duck(a)
+    pop = moves_with_keys(_slice_globs(book, events, bands), True)
+    con.execute(f"""CREATE TEMP TABLE arr AS SELECT child_hash AS x, {s} FROM {pop}
+        WHERE ply <= {cap} AND ((child_hash.lo % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}
+              IN ({', '.join(map(str, sample))})
+        GROUP BY child_hash""")
+    print(f"  arrivals scan for buckets {sample} ({time.time()-t1:.0f}s)", flush=True)
+    rhs = lambda c: (f"COALESCE(pe.{c}, 0) + ax.other_{c} + ax.term_other_{c} "
+                     f"+ ax.term_normal_{c} + ax.term_flag_{c} + ax.horizon_{c}")
+    mism = n_par = a_tot = 0
+    samples, per_parent = [], []
+    for i in sample:
+        pool_f, aux_f = map(_p, bucket_files(i))
+        con.execute(f"""CREATE OR REPLACE TEMP TABLE pe AS SELECT parent_hash AS x, {s}
+                        FROM read_parquet('{pool_f}') GROUP BY parent_hash""")
+        m_i, n_i, a_i = con.execute(f"""
+            SELECT COUNT(*) FILTER (WHERE {' OR '.join(f'COALESCE(arr.{c}, 0) <> {rhs(c)}' for c in SUMS)}),
+                   COUNT(*), SUM(arr.total)
+            FROM read_parquet('{aux_f}') ax
+            LEFT JOIN pe ON pe.x = ax.position_hash LEFT JOIN arr ON arr.x = ax.position_hash
+            WHERE ax.position_hash <> {root}""").fetchone()
+        if m_i:
+            samples += con.execute(f"""
+                SELECT ax.position_hash, arr.total, {rhs('total')} FROM read_parquet('{aux_f}') ax
+                LEFT JOIN pe ON pe.x = ax.position_hash LEFT JOIN arr ON arr.x = ax.position_hash
+                WHERE ax.position_hash <> {root} AND COALESCE(arr.total, 0) <> {rhs('total')}
+                LIMIT 5""").fetchall()
+        mism, n_par, a_tot = mism + int(m_i), n_par + int(n_i), a_tot + int(a_i or 0)
+        per_parent.append({"bucket": i, "parents": int(n_i), "mismatches": int(m_i)})
+    print(f"  per-parent: {mism:,} of {n_par:,} non-root pool parents in {sample} mismatch "
+          f"({time.time()-t1:.0f}s) {samples[:5]}", flush=True)
+
+    # 3. The root: ply-1 games.
+    rfiles = moves_with_keys(P.slice_files(book, events, bands, root_b), True)
+    pool_r, aux_r = map(_p, bucket_files(root_b))
+    ply1_book, root_dep = con.execute(f"""SELECT SUM(total) FILTER (WHERE ply = 1), SUM(total)
+        FROM {rfiles} WHERE parent_hash = {root} AND ply <= {cap}""").fetchone()
+    sl = con.execute(f"""SELECT SUM(ply1_games) FROM read_parquet('{_p(book / '_slices.parquet')}')
+        WHERE event IN ({', '.join(f"'{e}'" for e in events)})
+          AND elo_band IN ({', '.join(map(str, bands))})""").fetchone()[0]
+    root_pool = con.execute(f"""SELECT
+        (SELECT SUM(total) FROM read_parquet('{pool_r}') WHERE parent_hash = {root}),
+        (SELECT other_total FROM read_parquet('{aux_r}') WHERE position_hash = {root}),
+        (SELECT SUM(total) FROM read_parquet('{pool_r}') WHERE parent_hash = {root} AND ply = 1)
+        """).fetchone()
+    con.close()
+    ply1_book, root_dep, sl = (int(v or 0) for v in (ply1_book, root_dep, sl))
+    root_e, root_o, root_p1 = (int(v or 0) for v in root_pool)
+    root_ok = ply1_book == sl and root_e + root_o == root_dep
+    print(f"  root: book ply-1 games {ply1_book:,} vs _slices ply1_games {sl:,}; pool root edges "
+          f"{root_e:,} + other {root_o:,} vs book departures at ply <= {cap} {root_dep:,}", flush=True)
+    ok = mass_ok and mism == 0 and root_ok
+    record(work, "conservation", {
+        "pass": ok, "scope": "mass identity and one-aux-row-per-pool-parent in all buckets; "
+                             "per-parent identity in the sampled buckets",
+        "pool_total": tot["pool_total"], "other_total": tot["other_total"],
+        "population_le_cap_excl_collisions": tot["population_le_cap"],
+        "outside_mass_non_pool_parents": tot["outside_mass_non_pool_parents"],
+        "pool_parents": tot["pool_parents"], "aux_rows": tot["aux_rows"],
+        "mass_identity": not bad_mass, "mass_mismatch_buckets": bad_mass,
+        "aux_mismatch_buckets": bad_aux, "per_parent_buckets": sample,
+        "non_root_parents": n_par, "per_parent_mismatches": mism, "per_parent": per_parent,
+        "per_parent_samples": [list(map(str, x)) for x in samples[:5]],
+        "arrivals_into_pool_parents": a_tot,
+        "root_ply1_games_book": ply1_book, "root_ply1_games_slices": sl,
+        "root_pool_edges_total": root_e, "root_pool_other_total": root_o,
+        "root_pool_ply1_edges_total": root_p1, "root_departures_le_cap": root_dep,
+        "root_ok": root_ok})
+    print(f"\nGATE 3 conservation (partitioned): {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
 # ── gate 4: evals ──────────────────────────────────────────────────────────────
 
 def gate_evals(a) -> bool:
@@ -557,25 +795,39 @@ def gate_evals(a) -> bool:
     prm = load_params(work)
     book, cap, floor = Path(prm["book"]), int(prm["max_ply"]), int(prm["min_games"])
     pool_f, aux_f = out_files(work, Path(a.out_dir))
-    aux = pl.read_parquet(aux_f)
-
-    # Whole-sidecar invariants.
-    m = aux.filter(pl.col("other_eval_mean").is_not_null())
-    inv = {
-        "cov_out_of_range": aux.filter((pl.col("other_eval_cov") < 0)
-                                       | (pl.col("other_eval_cov") > 1)).height,
-        "min_gt_mean": m.filter(pl.col("other_eval_min") > pl.col("other_eval_mean") + 1e-15).height,
-        "mean_gt_max": m.filter(pl.col("other_eval_mean") > pl.col("other_eval_max") + 1e-15).height,
-        "null_mean_but_cov": aux.filter(pl.col("other_eval_mean").is_null()
-                                        & (pl.col("other_eval_cov") != 0)).height,
-        "mean_but_zero_cov": m.filter(pl.col("other_eval_cov") == 0).height,
-    }
-    print(f"  invariants over {aux.height:,} rows: {inv}", flush=True)
-
     # 10,000 random below-floor edges of pool parents, from a few random buckets.
     rng = random.Random(a.seed)
     from pool_from_book import N_BUCKETS
     bks = sorted(rng.sample(range(N_BUCKETS), a.sample_buckets))
+
+    def invariants(aux):
+        m = aux.filter(pl.col("other_eval_mean").is_not_null())
+        return {
+            "cov_out_of_range": aux.filter((pl.col("other_eval_cov") < 0)
+                                           | (pl.col("other_eval_cov") > 1)).height,
+            "min_gt_mean": m.filter(pl.col("other_eval_min") > pl.col("other_eval_mean") + 1e-15).height,
+            "mean_gt_max": m.filter(pl.col("other_eval_mean") > pl.col("other_eval_max") + 1e-15).height,
+            "null_mean_but_cov": aux.filter(pl.col("other_eval_mean").is_null()
+                                            & (pl.col("other_eval_cov") != 0)).height,
+            "mean_but_zero_cov": m.filter(pl.col("other_eval_cov") == 0).height,
+        }
+
+    # Whole-sidecar invariants. A partitioned sidecar is far too big to load, so its
+    # invariants are summed file by file and only the sampled buckets are kept.
+    if _BINDING:
+        cols = ["other_eval_mean", "other_eval_min", "other_eval_max", "other_eval_cov"]
+        inv, n_rows = None, 0
+        for i in range(N_BUCKETS):
+            part = pl.read_parquet(bucket_files(i)[1], columns=cols)
+            got_i = invariants(part)
+            inv = got_i if inv is None else {k: inv[k] + v for k, v in got_i.items()}
+            n_rows += part.height
+        keep = ["position_hash", "other_total", "other_edges", *cols]
+        aux = pl.concat([pl.read_parquet(bucket_files(i)[1], columns=keep) for i in bks])
+    else:
+        aux = pl.read_parquet(aux_f)
+        inv, n_rows = invariants(aux), aux.height
+    print(f"  invariants over {n_rows:,} rows: {inv}", flush=True)
     wide = prm.get("key_bits", 64) == 128
     con = _duck(a)
     below = []
@@ -756,7 +1008,14 @@ def main() -> int:
     ap.add_argument("--mem", default="8GB")
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--tmp-dir", type=Path, default=Path("D:/chess_duckdb_tmp"))
+    ap.add_argument("--partitioned", type=Path, default=None,
+                    help="Gate a sweep.partitioned_pool output dir (all 512 bucket pairs, "
+                         "recipe = --work's _params.json) instead of the single files")
+    ap.add_argument("--gates-dir", type=Path, default=None,
+                    help="With --partitioned: where verdicts and gate scratch go (required)")
     a = ap.parse_args()
+    if a.partitioned is not None:
+        bind_partitioned(a)
     if a.random_bucket:
         rest = [b for b in range(512) if b not in a.buckets]
         a.buckets = a.buckets + [random.Random(a.seed).choice(rest)]
