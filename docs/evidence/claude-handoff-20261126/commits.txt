@@ -1,0 +1,53 @@
+History through a46ed86078d0ba9a0f6ba2b5c3ec9241ae51b2be; generated for the November 26 handoff.
+Includes inherited Claude commits where present in this branch history.
+
+a46ed86078d0ba9a0f6ba2b5c3ec9241ae51b2be 2026-11-26T05:58:01-08:00 Record completed mini pool buckets and receipt review
+3f176701270fb3c2a5f75ece73bd6e4c7cca6dc7 2026-11-25T20:37:45-08:00 Record authorized F drive legacy and recycle cleanup
+a710ecd17af8bb4dc991e5e3289e1bdf04ecf838 2026-11-25T20:01:28-08:00 Make extraction source inventories self-contained and migrate metadata
+94da6450554595a38d4d4b0bab497b370cd24a8d 2026-11-25T19:44:58-08:00 Record measured rebuild costs and backup priorities for F archives
+25954945e57df29e54215ce79f3085a82061bd30 2026-11-25T19:39:19-08:00 Inventory F data dependencies and distinguish legacy cleanup candidates
+b02b736096d9a1007caadd0c6663f7b069143ef6 2026-11-25T19:21:01-08:00 Record successful F mark-clean and post-operation archive verification
+92e575eb69d9cfee59606a229d716e48f00a61eb 2026-11-25T19:03:42-08:00 Document read-only F drive investigation and guarded next step
+cd755f4bf4eae9a02df9c97467bbcafcf670e7c9 2026-11-25T18:38:12-08:00 Record pool input and raw prediction cache validation and handoff
+cf1068296d97b84567f406297c258f8e7cdac53f 2026-11-25T18:35:34-08:00 Add verified partitioned pool inputs and reusable raw Maia cache
+0486ee1592bb9ee480f36809336f5cb775c0286e 2026-11-25T18:09:34-08:00 Record verified ChessDB raw retirement and WSL space reclamation
+ca364461d0a20640895c33ab4554492249852253 2026-11-25T18:04:09-08:00 Add verified Rust lookup for lossless ChessDB archive
+2851d78d8513f944760c6b84194bf81408b81ee4 2026-11-25T17:38:32-08:00 Build complete compact human-policy count pools with verified publication
+4caa71fa6eb06e4581352f00f8a219f7f9852d36 2026-11-25T17:16:05-08:00 Add shared native human-model contracts and bounded continuation path
+8f9426c3f2f89014e22c4a8398153231360d36ed 2026-11-25T16:36:49-08:00 Document model integration review and staged pilot repair plan
+7076faa149ecefa509a71854e3e81b28b1f5fbb0 2026-11-25T14:43:34-08:00 Track opponent-policy continuity prerequisite for the pilot
+61b5f05d2e7455e7a69b7c60760c7bad021447e8 2026-11-25T14:13:55-08:00 Correct pilot input inventory and identify missing broad and weak pools
+aaa34c1f9068be68250712946238b10be0f5c499 2026-11-25T13:34:55-08:00 Implement native score-space evaluation overlay and verify acceptance inputs
+d6dab659d559d8c4e1777502a4f197d38ede1a59 2026-11-25T13:09:19-08:00 Freeze approved evaluation policy and prepare production acceptance
+b6c0f3463204aca9371e3748708ab9bf19bd7307 2026-11-25T13:01:06-08:00 Evaluate Fishnet contribution across source-coverage scenarios
+66b677bbd1cb8aeaea1074d469830c739ecc03fc 2026-11-25T12:52:43-08:00 Record independent ensemble confirmation and fallback limitations
+7c9c5dd5ca3b1b8d428a86fc4c5b89183e079d3c 2026-11-25T12:28:47-08:00 Record pooled ensemble review and blinded contender selection
+66f8a9a6bbd638ddfa8092b976b5804b36f94ed8 2026-11-25T10:59:32-08:00 Pool old and fresh ensemble evidence before blinded confirmation
+f8b10e4f6808fed597d97e0f56389d36aa84e76a 2026-11-25T10:11:48-08:00 Add blinded 300-position ensemble confirmation with locked contender
+efdcfbba0c97b5e6032b2d3ff068b70fb4d419a5 2026-11-25T09:59:18-08:00 Add frozen evaluation ensemble study with independent held-out references
+a26917c3843b15726a035366ac46b497706f0288 2026-11-25T09:43:27-08:00 Add checkpointed ChessDB policy validation and document resumed jobs
+f62a3b34430469fefbf8821dad74a49bd9c233eb 2026-11-25T09:19:14-08:00 feat: add native optimizer calibration and resumable comparison
+416732f345b7fa8fc3513196be10562495d8498c 2026-11-25T08:34:43-08:00 docs: plan Rust optimizer calibration and comparison
+c8474c83b0db43ffa8d97ad052fdd94830e48fbd 2026-11-24T23:48:08-08:00 Record completed ChessDB audit and overnight pool and monitor pause
+eedb739a16dd679e07cf9adc696536972380188e 2026-11-24T10:52:29-08:00 Retry transient read-only mini sharing violations with bounded backoff
+445d2868418e190fb2a8153fac013c6b04b81530 2026-11-24T08:48:03-08:00 Document morning resume and hourly progress monitor
+9cc4551629a4455f1486312ba96b469ad4925bd1 2026-11-24T00:36:49-08:00 Record clean overnight stop and checkpoint resume instructions
+c3f1353683f59a533f7160210898e7d51aa646be 2026-11-24T00:18:14-08:00 Remove SSH stdin delivery and reconcile second submission timeout
+594e9938b55bd3507711b2a9e5903a5b5a394870 2026-11-24T00:07:44-08:00 Bound mini transport process trees and recover stalled submission
+a15ebe8cbf5cc2f3ca67360a015f0f246df31e1b 2026-11-23T16:21:11-08:00 Record accepted 10x pool benchmark and sustained production speedup
+9baac43d5146a978574d1ea4064df70a74adb594 2026-11-23T14:29:58-08:00 Record pool optimization benchmarks and verified automatic resumption
+f182abf00d5965feb4eee97316e8ece5ee95d9be 2026-11-23T14:25:24-08:00 Add exact-preserving range-batched pool aggregation experiments
+8b3edfa02adb34d800822b8d8081acb77a74a177 2026-11-23T14:12:55-08:00 Add exact-tested opt-in bucket memory and terminal query optimizations
+8cffc7f2865ce530b37b9f519088d72d60ad78ca 2026-11-23T09:52:48-08:00 Record archive speedup results and persistent mini pool queue
+18a9b5f357bc5230e63cc18a9f4fe5923be2bb4b 2026-11-23T09:30:44-08:00 Handle staging directories disappearing during concurrent archive scans
+402b4409ba4256649331bf91ef510299d4f4492d 2026-11-23T09:10:00-08:00 Parallelize independent ChessDB verification with bounded sequential staging
+225f3cf11e9d54edecae584f368f41dcab58c29e 2026-11-23T08:52:18-08:00 Record mini pool pilot, exact validation and dedicated memory limits
+10a926b882d0a01b3b18abfe1bfc49f7c907cd40 2026-11-23T08:25:17-08:00 Record Monday archive resume, mini engine benchmark and next-stage readiness
+98006d1f080a9f9915c147e1a187d74114b65a47 2026-11-23T08:08:37-08:00 Record mini worker acceptance and verified real-data audit pilot
+b781b0206cf70815341e352d0fdd37d0870d69fe 2026-11-22T20:09:44-08:00 Record verified archive head start and next-day resume instructions
+1cb15dcbc16c2b3ef0e74fed53dc2d07d89e39c9 2026-11-22T19:57:14-08:00 Handle concurrent archive spool cleanup without aborting export
+6c9843e6869e43f94faed702d22492811abc99bc 2026-11-22T19:48:22-08:00 Add resumable lossless ChessDB Parquet archive with verified checkpoints
+61ab2e538cb52ce349e10100c76c3e34aa76a9f3 2026-11-22T16:09:53-08:00 Record takeover execution and verified rebuild resume points
+fd3867f08a8b9812933d7871246a8d540fb33e71 2026-11-22T16:07:10-08:00 Preserve takeover evidence and audit lookup completion and policy diagnostics
+eb05705f3705072e4814c728487a972cf3c0164f 2026-11-22T15:46:27-08:00 Verify ChessDB menu publication and bind lookup resume to source bytes
+2218129c4402a31af81be3a6bdbda7f7efb038c9 2026-11-22T10:17:06-08:00 Back to Stockfish 18 everywhere: Stockfish 19's cp scale is ~1.47x

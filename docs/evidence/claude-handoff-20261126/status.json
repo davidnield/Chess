@@ -1,0 +1,37 @@
+{
+  "observed_utc": "2026-11-26T15:39:24.479571+00:00",
+  "weak": {
+    "complete_buckets": 414,
+    "ranges": 3317,
+    "recent_seconds_per_bucket": 112.00759895642598,
+    "estimated_remaining_hours": 3.049095749369374,
+    "pilot_bucket_summed_seconds": [],
+    "published": false
+  },
+  "broad": {
+    "complete_buckets": 3,
+    "ranges": 24,
+    "recent_seconds_per_bucket": null,
+    "estimated_remaining_hours": null,
+    "pilot_bucket_summed_seconds": [
+      281.31099999998696,
+      287.39000000001397,
+      316.673000000068
+    ],
+    "published": false
+  },
+  "main_status": {
+    "utc": "2026-11-26T15:37:58.546499+00:00",
+    "state": "running",
+    "pool": "weak1000-1799-p30",
+    "bucket": 413
+  },
+  "mini_status": {
+    "state": "bucket-phase-collected",
+    "utc": "2026-11-26T13:32:26.218152+00:00",
+    "completed": 504,
+    "original_buckets": 8,
+    "full_pool_published": false
+  },
+  "config_sha256": "5962ddd95e67e47e1e2d4ade355225a62b87155e6cd80cb361cf91236aa52b7e"
+}

@@ -1,0 +1,8 @@
+{
+  "checked_links": 55,
+  "missing_links": [],
+  "handoff_words": 5915,
+  "handoff_lines": 763,
+  "historical_test_results_not_rerun": true,
+  "no_jobs_or_data_mutated_by_handoff": true
+}
