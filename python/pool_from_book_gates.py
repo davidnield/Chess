@@ -291,6 +291,36 @@ def audit_wide_cp(children, lookup, _verify=False):
     return cp
 
 
+def _split_arrivals(con, book, events, bands, cap, buckets, stage, wide):
+    """One streaming pass over the population writes the arrivals into `buckets`, split by the
+    child's bucket, under `stage`. Each bucket is then aggregated on its own by _bucket_arrivals.
+    A single GROUP BY over several buckets' children (hundreds of millions of keys on the adult
+    book) sat at the memory limit and decayed to a few MB/s (27 Nov 2026)."""
+    from pool_from_book import N_BUCKETS
+    shutil.rmtree(stage, ignore_errors=True)
+    bkt = f"((child_hash % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}"
+    key = ("CASE WHEN child_hash IS NULL OR child_hash_hi IS NULL "
+           "THEN error('incomplete 128-bit child_hash') ELSE child_hash END AS lo, child_hash_hi AS hi"
+           if wide else "child_hash AS lo")
+    con.execute(f"""COPY (SELECT {bkt} AS b, {key}, {', '.join(SUMS)}
+        FROM {relation(_slice_globs(book, events, bands))}
+        WHERE ply <= {cap} AND {bkt} IN ({', '.join(map(str, buckets))}))
+        TO '{_p(stage)}' (FORMAT parquet, PARTITION_BY (b))""")
+
+
+def _bucket_arrivals(con, stage, i, wide, name="x"):
+    """Bucket i's arrivals from _split_arrivals as a temp-table-ready SELECT: the child key as
+    `name` (the 128-bit struct, or the plain hash) and the summed outcome columns."""
+    key = "struct_pack(lo := lo, hi := hi)" if wide else "lo"
+    sums = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
+    part = Path(stage) / f"b={i}"
+    if any(part.glob("*.parquet")):
+        grp = "lo, hi" if wide else "lo"
+        return f"SELECT {key} AS {name}, {sums} FROM read_parquet('{_p(part)}/*.parquet') GROUP BY {grp}"
+    empty = "struct_pack(lo := 0::BIGINT, hi := 0::BIGINT)" if wide else "0::BIGINT"
+    return f"SELECT {empty} AS {name}, {', '.join(f'0::BIGINT AS {c}' for c in SUMS)} WHERE false"
+
+
 def gate_reimpl(a) -> bool:
     import polars as pl
     import pyarrow.parquet as pq
@@ -312,16 +342,9 @@ def gate_reimpl(a) -> bool:
 
     # Arrivals for the gate's buckets: ONE plain scan of the population.
     con = _duck(a)
-    pop = moves_with_keys(_slice_globs(book, events, bands), wide)
-    lo = "child_hash.lo" if wide else "child_hash"
-    bl = ", ".join(map(str, a.buckets))
-    arr = pl.from_arrow(duck_arrow(con, f"""
-        SELECT child_hash, SUM(white_wins) w, SUM(draws) d, SUM(black_wins) b, SUM(total) t
-        FROM {pop}
-        WHERE ply <= {cap} AND (({lo} % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS} IN ({bl})
-        GROUP BY child_hash"""))
-    con.close()
-    print(f"  arrivals scan: {arr.height:,} children ({time.time()-t0:.0f}s)", flush=True)
+    stage = gates_home(a) / "reimpl-arrivals"
+    _split_arrivals(con, book, events, bands, cap, a.buckets, stage, wide)
+    print(f"  arrivals scan for buckets {list(a.buckets)} ({time.time()-t0:.0f}s)", flush=True)
 
     if not wide:
         mm_h, mm_c = open_eval_arrays(Path(prm["eval_arrays"]))
@@ -417,9 +440,8 @@ def gate_reimpl(a) -> bool:
             *[pl.col(c).sum().alias("d_" + c) for c in SUMS])
         hor = rows.filter(pl.col("ply") == cap + 1).group_by("parent_hash").agg(
             *[pl.col(c).sum().alias("horizon_" + c) for c in SUMS])
-        ab = arr.filter(bucket("child_hash") == i).rename(
-            {"child_hash": "parent_hash", "w": "a_white_wins", "d": "a_draws",
-             "b": "a_black_wins", "t": "a_total"})
+        ab = pl.from_arrow(duck_arrow(con, _bucket_arrivals(con, stage, i, wide, "parent_hash"))).rename(
+            {c: "a_" + c for c in SUMS})
         keys_df = surv.select("parent_hash").unique()
         aux = (keys_df.join(ab, on="parent_hash", how="left")
                .join(dep, on="parent_hash", how="left")
@@ -483,6 +505,8 @@ def gate_reimpl(a) -> bool:
         print(f"  bucket {i}: pool {surv.height:,} {'==' if pool_eq else '!='}, aux "
               f"{aux.height:,} {'==' if aux_ok else '!='} (max double diff {worst:.2e}) "
               f"({time.time()-tb:.0f}s)", flush=True)
+    con.close()
+    shutil.rmtree(stage, ignore_errors=True)
     ok = not bad
     record(work, "reimpl", {"pass": ok, "buckets": a.buckets, "problems": bad,
                             "per_bucket": stats})
@@ -714,19 +738,8 @@ def gate_conservation_partitioned(a) -> bool:
     t1 = time.time()
     s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
     con = _duck(a)
-    # One streaming pass over the book writes the sampled buckets' arrivals, split by bucket; each
-    # bucket is then aggregated on its own. A single GROUP BY over all sampled buckets' children
-    # (hundreds of millions of keys) sat at the memory limit and decayed to a few MB/s (27 Nov).
     stage = gates_home(a) / "conservation" / "arrivals"
-    shutil.rmtree(stage, ignore_errors=True)
-    bkt = f"((child_hash % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}"
-    con.execute(f"""COPY (SELECT {bkt} AS b,
-            CASE WHEN child_hash IS NULL OR child_hash_hi IS NULL
-                 THEN error('incomplete 128-bit child_hash') ELSE child_hash END AS lo,
-            child_hash_hi AS hi, {', '.join(SUMS)}
-        FROM {relation(_slice_globs(book, events, bands))}
-        WHERE ply <= {cap} AND {bkt} IN ({', '.join(map(str, sample))}))
-        TO '{_p(stage)}' (FORMAT parquet, PARTITION_BY (b))""")
+    _split_arrivals(con, book, events, bands, cap, sample, stage, True)
     print(f"  arrivals scan for buckets {sample} ({time.time()-t1:.0f}s)", flush=True)
     rhs = lambda c: (f"COALESCE(pe.{c}, 0) + ax.other_{c} + ax.term_other_{c} "
                      f"+ ax.term_normal_{c} + ax.term_flag_{c} + ax.horizon_{c}")
@@ -734,13 +747,7 @@ def gate_conservation_partitioned(a) -> bool:
     samples, per_parent = [], []
     for i in sample:
         pool_f, aux_f = map(_p, bucket_files(i))
-        part = stage / f"b={i}"
-        if any(part.glob("*.parquet")):
-            con.execute(f"""CREATE OR REPLACE TEMP TABLE arr AS SELECT struct_pack(lo := lo, hi := hi) AS x, {s}
-                            FROM read_parquet('{_p(part)}/*.parquet') GROUP BY lo, hi""")
-        else:       # no arrivals into this bucket at all
-            con.execute(f"""CREATE OR REPLACE TEMP TABLE arr AS SELECT struct_pack(lo := 0::BIGINT, hi := 0::BIGINT) AS x,
-                            {', '.join(f'0::BIGINT AS {c}' for c in SUMS)} WHERE false""")
+        con.execute(f"CREATE OR REPLACE TEMP TABLE arr AS {_bucket_arrivals(con, stage, i, True)}")
         con.execute(f"""CREATE OR REPLACE TEMP TABLE pe AS SELECT parent_hash AS x, {s}
                         FROM read_parquet('{pool_f}') GROUP BY parent_hash""")
         m_i, n_i, a_i = con.execute(f"""
