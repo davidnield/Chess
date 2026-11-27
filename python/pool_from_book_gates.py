@@ -43,6 +43,7 @@ import argparse
 import json
 import math
 import random
+import shutil
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -713,11 +714,19 @@ def gate_conservation_partitioned(a) -> bool:
     t1 = time.time()
     s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
     con = _duck(a)
-    pop = moves_with_keys(_slice_globs(book, events, bands), True)
-    con.execute(f"""CREATE TEMP TABLE arr AS SELECT child_hash AS x, {s} FROM {pop}
-        WHERE ply <= {cap} AND ((child_hash.lo % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}
-              IN ({', '.join(map(str, sample))})
-        GROUP BY child_hash""")
+    # One streaming pass over the book writes the sampled buckets' arrivals, split by bucket; each
+    # bucket is then aggregated on its own. A single GROUP BY over all sampled buckets' children
+    # (hundreds of millions of keys) sat at the memory limit and decayed to a few MB/s (27 Nov).
+    stage = gates_home(a) / "conservation" / "arrivals"
+    shutil.rmtree(stage, ignore_errors=True)
+    bkt = f"((child_hash % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}"
+    con.execute(f"""COPY (SELECT {bkt} AS b,
+            CASE WHEN child_hash IS NULL OR child_hash_hi IS NULL
+                 THEN error('incomplete 128-bit child_hash') ELSE child_hash END AS lo,
+            child_hash_hi AS hi, {', '.join(SUMS)}
+        FROM {relation(_slice_globs(book, events, bands))}
+        WHERE ply <= {cap} AND {bkt} IN ({', '.join(map(str, sample))}))
+        TO '{_p(stage)}' (FORMAT parquet, PARTITION_BY (b))""")
     print(f"  arrivals scan for buckets {sample} ({time.time()-t1:.0f}s)", flush=True)
     rhs = lambda c: (f"COALESCE(pe.{c}, 0) + ax.other_{c} + ax.term_other_{c} "
                      f"+ ax.term_normal_{c} + ax.term_flag_{c} + ax.horizon_{c}")
@@ -725,6 +734,13 @@ def gate_conservation_partitioned(a) -> bool:
     samples, per_parent = [], []
     for i in sample:
         pool_f, aux_f = map(_p, bucket_files(i))
+        part = stage / f"b={i}"
+        if any(part.glob("*.parquet")):
+            con.execute(f"""CREATE OR REPLACE TEMP TABLE arr AS SELECT struct_pack(lo := lo, hi := hi) AS x, {s}
+                            FROM read_parquet('{_p(part)}/*.parquet') GROUP BY lo, hi""")
+        else:       # no arrivals into this bucket at all
+            con.execute(f"""CREATE OR REPLACE TEMP TABLE arr AS SELECT struct_pack(lo := 0::BIGINT, hi := 0::BIGINT) AS x,
+                            {', '.join(f'0::BIGINT AS {c}' for c in SUMS)} WHERE false""")
         con.execute(f"""CREATE OR REPLACE TEMP TABLE pe AS SELECT parent_hash AS x, {s}
                         FROM read_parquet('{pool_f}') GROUP BY parent_hash""")
         m_i, n_i, a_i = con.execute(f"""
@@ -741,6 +757,7 @@ def gate_conservation_partitioned(a) -> bool:
                 LIMIT 5""").fetchall()
         mism, n_par, a_tot = mism + int(m_i), n_par + int(n_i), a_tot + int(a_i or 0)
         per_parent.append({"bucket": i, "parents": int(n_i), "mismatches": int(m_i)})
+    shutil.rmtree(stage, ignore_errors=True)
     print(f"  per-parent: {mism:,} of {n_par:,} non-root pool parents in {sample} mismatch "
           f"({time.time()-t1:.0f}s) {samples[:5]}", flush=True)
 

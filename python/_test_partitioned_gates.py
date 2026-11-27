@@ -133,6 +133,8 @@ class PartitionedGates(unittest.TestCase):
                              cons["population_le_cap_excl_collisions"])
             self.assertGreater(cons["non_root_parents"], 0)
             self.assertEqual(cons["per_parent_buckets"], SAMPLE)
+            self.assertEqual(cons["per_parent_mismatches"], 0)
+            self.assertFalse((gd / "conservation" / "arrivals").exists())   # the split arrivals are removed
             self.assertFalse((work / "_gates.json").exists())  # verdicts stay out of the build's work dir
 
             # The assembler refuses failed and unbound verdicts.
@@ -161,6 +163,20 @@ class PartitionedGates(unittest.TestCase):
             verdict = json.loads((folder / "gates-damaged" / "gate-conservation.json").read_text())
             self.assertEqual(verdict["mass_mismatch_buckets"], [ROOT_B])
             self.assertFalse(verdict["root_ok"])
+
+            # One parent's aux row off by a game in a sampled non-root bucket: the per-parent identity,
+            # read from the split arrivals, names exactly that parent.
+            off = folder / "damaged-aux"
+            shutil.copytree(part, off, ignore=shutil.ignore_patterns("*.lock"))
+            f = off / "buckets" / "b495.aux.parquet"
+            frame = pl.read_parquet(f)
+            frame.with_columns(pl.when(pl.int_range(frame.height) == 0).then(pl.col("other_total") + 1)
+                               .otherwise(pl.col("other_total")).alias("other_total")).write_parquet(f)
+            self.assertEqual(run("conservation", *buckets, partitioned=off, gates_dir=folder / "gates-aux"), 1)
+            gates._BINDING.clear()
+            verdict = json.loads((folder / "gates-aux" / "gate-conservation.json").read_text())
+            self.assertEqual(verdict["per_parent_mismatches"], 1)
+            self.assertEqual(verdict["mass_mismatch_buckets"], [495])
 
 
 if __name__ == "__main__":
