@@ -134,7 +134,7 @@ class PartitionedGates(unittest.TestCase):
             self.assertGreater(cons["non_root_parents"], 0)
             self.assertEqual(cons["per_parent_buckets"], SAMPLE)
             self.assertEqual(cons["per_parent_mismatches"], 0)
-            self.assertFalse((gd / "conservation" / "arrivals").exists())   # the split arrivals are removed
+            self.assertFalse((gd / "conservation-arrivals").exists() or (gd / "reimpl-arrivals").exists())   # the split arrivals are removed
             self.assertFalse((work / "_gates.json").exists())  # verdicts stay out of the build's work dir
 
             # The assembler refuses failed and unbound verdicts.

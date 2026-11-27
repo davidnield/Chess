@@ -291,32 +291,66 @@ def audit_wide_cp(children, lookup, _verify=False):
     return cp
 
 
-def _split_arrivals(con, book, events, bands, cap, buckets, stage, wide):
-    """One streaming pass over the population writes the arrivals into `buckets`, split by the
-    child's bucket, under `stage`. Each bucket is then aggregated on its own by _bucket_arrivals.
-    A single GROUP BY over several buckets' children (hundreds of millions of keys on the adult
-    book) sat at the memory limit and decayed to a few MB/s (27 Nov 2026)."""
-    from pool_from_book import N_BUCKETS
-    shutil.rmtree(stage, ignore_errors=True)
-    bkt = f"((child_hash % {N_BUCKETS}) + {N_BUCKETS}) % {N_BUCKETS}"
+def _arrivals_part(task: tuple) -> dict:
+    """One book file name's arrivals (all slices) into `buckets`, sorted by the child's bucket so that a
+    later read of one bucket skips the other row groups. One fresh process per book bucket."""
+    import pool_from_book as P
+    j, files, cap, buckets, n_buckets, out, wide, threads, mem, tmp = task
+    t0, out = time.time(), Path(out)
+    bkt = f"((child_hash % {n_buckets}) + {n_buckets}) % {n_buckets}"
     key = ("CASE WHEN child_hash IS NULL OR child_hash_hi IS NULL "
            "THEN error('incomplete 128-bit child_hash') ELSE child_hash END AS lo, child_hash_hi AS hi"
            if wide else "child_hash AS lo")
-    con.execute(f"""COPY (SELECT {bkt} AS b, {key}, {', '.join(SUMS)}
-        FROM {relation(_slice_globs(book, events, bands))}
-        WHERE ply <= {cap} AND {bkt} IN ({', '.join(map(str, buckets))}))
-        TO '{_p(stage)}' (FORMAT parquet, PARTITION_BY (b))""")
+    tmp_out = out.with_name(out.name + ".tmp")
+    con = P._duck(threads, mem, Path(tmp))
+    try:
+        con.execute(f"""COPY (SELECT {bkt} AS b, {key}, {', '.join(SUMS)} FROM {relation(files)}
+            WHERE ply <= {cap} AND {bkt} IN ({', '.join(map(str, buckets))}) ORDER BY b)
+            TO '{_p(tmp_out)}' (FORMAT parquet)""")
+        rows = con.execute(f"SELECT COUNT(*) FROM read_parquet('{_p(tmp_out)}')").fetchone()[0]
+    finally:
+        con.close()
+    tmp_out.replace(out)
+    return {"book_bucket": j, "files": len(files), "rows": int(rows), "secs": round(time.time() - t0, 1)}
 
 
-def _bucket_arrivals(con, stage, i, wide, name="x"):
-    """Bucket i's arrivals from _split_arrivals as a temp-table-ready SELECT: the child key as
-    `name` (the 128-bit struct, or the plain hash) and the summed outcome columns."""
+def _split_arrivals(a, book, events, bands, cap, buckets, stage, wide):
+    """The arrivals into `buckets` from the whole population, one fresh process per book bucket
+    (512 small parts under `stage`, resumable). One long scan of all book files in a single
+    DuckDB process, aggregated or streamed, decayed to ~27 MB/s with its memory at the limit on
+    the adult book (27 Nov 2026), while the per-bucket mass check read the whole book in 35 min."""
+    from glob import glob
+    from pool_from_book import N_BUCKETS     # read here, in the parent: a test may have patched it
+    stage = Path(stage)
+    # The book's own files, whatever its bucket count: one task per file name across the slices.
+    by_name: dict = {}
+    for g in _slice_globs(Path(book), events, bands):
+        for f in sorted(glob(g)):
+            by_name.setdefault(Path(f).name, []).append(_p(f))
+    ident = {"book": str(book), "events": list(events), "bands": list(bands), "cap": int(cap),
+             "buckets": sorted(int(x) for x in buckets), "n_buckets": int(N_BUCKETS),
+             "wide": bool(wide)}
+    man = stage / "_stage.json"
+    if not man.exists() or json.loads(man.read_text(encoding="utf-8")) != ident:
+        shutil.rmtree(stage, ignore_errors=True)
+        stage.mkdir(parents=True)
+        man.write_text(json.dumps(ident), encoding="utf-8")
+    tasks = [(name, files, int(cap), ident["buckets"], int(N_BUCKETS), str(stage / f"p-{Path(name).stem}.parquet"), wide,
+              a.threads, a.mem, str(a.tmp_dir)) for name, files in sorted(by_name.items())
+             if not (stage / f"p-{Path(name).stem}.parquet").exists()]
+    _isolated_run(_arrivals_part, tasks, a.workers,
+                  lambda r: f"arrivals from book {r['book_bucket']}: {r['rows']:,} rows ({r['secs']:.0f}s)")
+
+
+def _bucket_arrivals(stage, i, wide, name="x"):
+    """Bucket i's arrivals from _split_arrivals as a SELECT: the child key as `name` (the 128-bit
+    struct, or the plain hash) and the summed outcome columns."""
     key = "struct_pack(lo := lo, hi := hi)" if wide else "lo"
     sums = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
-    part = Path(stage) / f"b={i}"
-    if any(part.glob("*.parquet")):
+    if any(Path(stage).glob("p*.parquet")):
         grp = "lo, hi" if wide else "lo"
-        return f"SELECT {key} AS {name}, {sums} FROM read_parquet('{_p(part)}/*.parquet') GROUP BY {grp}"
+        return (f"SELECT {key} AS {name}, {sums} FROM read_parquet('{_p(stage)}/p*.parquet') "
+                f"WHERE b = {int(i)} GROUP BY {grp}")
     empty = "struct_pack(lo := 0::BIGINT, hi := 0::BIGINT)" if wide else "0::BIGINT"
     return f"SELECT {empty} AS {name}, {', '.join(f'0::BIGINT AS {c}' for c in SUMS)} WHERE false"
 
@@ -341,9 +375,9 @@ def gate_reimpl(a) -> bool:
     t0 = time.time()
 
     # Arrivals for the gate's buckets: ONE plain scan of the population.
-    con = _duck(a)
     stage = gates_home(a) / "reimpl-arrivals"
-    _split_arrivals(con, book, events, bands, cap, a.buckets, stage, wide)
+    _split_arrivals(a, book, events, bands, cap, a.buckets, stage, wide)
+    con = _duck(a)
     print(f"  arrivals scan for buckets {list(a.buckets)} ({time.time()-t0:.0f}s)", flush=True)
 
     if not wide:
@@ -440,7 +474,7 @@ def gate_reimpl(a) -> bool:
             *[pl.col(c).sum().alias("d_" + c) for c in SUMS])
         hor = rows.filter(pl.col("ply") == cap + 1).group_by("parent_hash").agg(
             *[pl.col(c).sum().alias("horizon_" + c) for c in SUMS])
-        ab = pl.from_arrow(duck_arrow(con, _bucket_arrivals(con, stage, i, wide, "parent_hash"))).rename(
+        ab = pl.from_arrow(duck_arrow(con, _bucket_arrivals(stage, i, wide, "parent_hash"))).rename(
             {c: "a_" + c for c in SUMS})
         keys_df = surv.select("parent_hash").unique()
         aux = (keys_df.join(ab, on="parent_hash", how="left")
@@ -737,9 +771,9 @@ def gate_conservation_partitioned(a) -> bool:
     sample = sorted(set(a.buckets) | {root_b})
     t1 = time.time()
     s = ", ".join(f"SUM({c})::BIGINT AS {c}" for c in SUMS)
+    stage = gates_home(a) / "conservation-arrivals"
+    _split_arrivals(a, book, events, bands, cap, sample, stage, True)
     con = _duck(a)
-    stage = gates_home(a) / "conservation" / "arrivals"
-    _split_arrivals(con, book, events, bands, cap, sample, stage, True)
     print(f"  arrivals scan for buckets {sample} ({time.time()-t1:.0f}s)", flush=True)
     rhs = lambda c: (f"COALESCE(pe.{c}, 0) + ax.other_{c} + ax.term_other_{c} "
                      f"+ ax.term_normal_{c} + ax.term_flag_{c} + ax.horizon_{c}")
@@ -747,7 +781,7 @@ def gate_conservation_partitioned(a) -> bool:
     samples, per_parent = [], []
     for i in sample:
         pool_f, aux_f = map(_p, bucket_files(i))
-        con.execute(f"CREATE OR REPLACE TEMP TABLE arr AS {_bucket_arrivals(con, stage, i, True)}")
+        con.execute(f"CREATE OR REPLACE TEMP TABLE arr AS {_bucket_arrivals(stage, i, True)}")
         con.execute(f"""CREATE OR REPLACE TEMP TABLE pe AS SELECT parent_hash AS x, {s}
                         FROM read_parquet('{pool_f}') GROUP BY parent_hash""")
         m_i, n_i, a_i = con.execute(f"""
