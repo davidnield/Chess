@@ -74,6 +74,20 @@ him get there and stay effective once he does. He prefers advantages that are ea
    margin.
 7. **Corrected-path Black pilot** (`pilot-acceptance-v2`), then the trimmed optimizer comparison (in-model objective
    on fixed real graphs; referee only where the book changes), then the staged sweep.
+   - **Screening for the extension comparison** (David, 27 Nov; idea from the SiegeChess race). Today every one of
+     the 36 queued variants (4 anchors × 9) gets 4 paired seeds: 144 referee runs, ~48 h at ~20 min per
+     2,000-move book and seed.
+     - **Screen:** seeds 1–2 for every variant, compared within its anchor's family. A variant is dropped when it
+       trails the family leader by more than 2.33 × its 2-seed paired SE (~0.0005) plus a 0.001 tie margin.
+     - **Confirm:** the survivors and the anchor's default-calibration run get fresh seeds 3–6. The reported
+       paired scores use those seeds only, so nothing selected on seeds 1–2 is scored on them.
+     - **Dropped variants** keep everything that comes from the build (distinct prescriptions, disagreement,
+       unbooked risk, coverage, runtime), and their score is labelled as a screening result.
+     - **Expected saving:** 8–16 h (96–120 runs instead of 144), depending on how many survive. It only cuts
+       referee time; every variant is still built. Not used for the λ rescoring, where 4 arms save nothing.
+     - **Rules:** fixed before any seed-1–2 result is read. Behind a default-off flag that is an exact no-op;
+       a new manifest version (v6), because the v5 `evaluation` field is bound into its digest. Tests: the drop
+       rule on synthetic families, confirm seeds disjoint from screening seeds, and the flag-off report unchanged.
 8. **Before any White activation:** the gate-adjacent SF18 checks, and the confirmation statistics recomputed with
    an opening-family cluster bootstrap.
    - **Cluster bootstrap: done 26 Nov** (`scratch/chessdb_import/cluster_bootstrap.py` →
