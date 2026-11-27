@@ -1,0 +1,24 @@
+{
+  "stage": "score",
+  "identity": "d5688469274fc341d619bbe89d07f7b8fe8443a15e4140032755e5168ab9c1d2",
+  "settings": {
+    "maia": {
+      "maia-1200-1800.parquet": "b38187289015c45486b7b544603513489f70b46124ac30158dd598edf2529137",
+      "maia-1200-2200.parquet": "ac6af0fdf95371b193066315c48b7a36cba8ab3fc655b9b7c3bf5f38ba99f0c8",
+      "maia-1450-1800.parquet": "2c7fa14b3de807faa56f8c08923ca0c3b80b5536f7a94918d010ada432f0cb29",
+      "maia-1450-2200.parquet": "dee6eaf88b96013cf67d47c426b7d8d9f4aa3ce307be65a8ed62163307899b56",
+      "maia-1700-1800.parquet": "194e883dc5833503782d1a0048e6d2528f916c556d8f21c8fa8a9edd3b3fab5b",
+      "maia-1700-2200.parquet": "00850ecb1886867458939a6b787ab7fab44e02bb4c00b837df2190742ecbf415"
+    },
+    "counts": {
+      "counts.parquet": "bd16b8b7601929ad33cb3b391d7c9e20cec4c4f5a60d97cefc8f789f4587a20f"
+    },
+    "grid": "4b844ac459c3564a522f99b3cb766a9e9a3a0bc6b87b76148213c8535b051404"
+  },
+  "seconds": 226.7,
+  "files": {
+    "transforms.csv": "0499fbb2962e6bbd8529f76447ef5fb7ec1d26f63ef4e6d5fca90a65bee1bca9",
+    "report.json": "e98d7743da0b438a61e1420f16a00279a47d8cd84aac16b7aaa51b0c72262643"
+  },
+  "chosen": 42
+}

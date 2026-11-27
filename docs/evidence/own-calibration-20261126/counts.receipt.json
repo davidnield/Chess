@@ -1,0 +1,18 @@
+{
+  "stage": "counts",
+  "identity": "580ed7c7d155318c8ba666eb56e05ebc155d3c285c153c416e334ae778650809",
+  "settings": {
+    "panel": {
+      "panel.parquet": "73fa21cf87da69418eef0790dc66a12f47859e4fdc8051d7c255d74a0c2f1a6c",
+      "boards.parquet": "e6c5323bcd9504591950a6c320b6f3a787153e6bb15193d9e1157d4c76411d5c"
+    },
+    "weak_pool": "E:\\chess\\policy-pools\\weak1000-1799-p30-20261125\\pool.json",
+    "weak_pool_sha256": "f08b894687646fd89d93891538fa880f9d3e573bd94bf475a347dc2227758d1f"
+  },
+  "seconds": 9530.1,
+  "files": {
+    "counts.parquet": "bd16b8b7601929ad33cb3b391d7c9e20cec4c4f5a60d97cefc8f789f4587a20f"
+  },
+  "boards": 833013,
+  "unseen": 369997
+}

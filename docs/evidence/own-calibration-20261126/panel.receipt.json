@@ -1,0 +1,58 @@
+{
+  "stage": "panel",
+  "identity": "e8a306b1067e00ebdea03e0047ebd27a166a7fcc928450cfede5b2439a1d6172",
+  "settings": {
+    "months": [
+      [
+        2026,
+        8
+      ],
+      [
+        2026,
+        9
+      ]
+    ],
+    "per_event": 10000,
+    "cap": 30,
+    "mover_elo": [
+      1000,
+      1800
+    ],
+    "source": "D:\\data\\chess\\standard-chess-games-compressed",
+    "code": "5f3b615a6e9e18fec07c136521146acbc5a51092943910b826058db71608ca63"
+  },
+  "seconds": 983.9,
+  "files": {
+    "panel.parquet": "73fa21cf87da69418eef0790dc66a12f47859e4fdc8051d7c255d74a0c2f1a6c",
+    "boards.parquet": "e6c5323bcd9504591950a6c320b6f3a787153e6bb15193d9e1157d4c76411d5c"
+  },
+  "games": 58937,
+  "malformed_games": 0,
+  "rows": 1193778,
+  "fractions": {
+    "2026-08 Blitz": {
+      "rows": 38440225,
+      "fraction": 0.00026014415888564647
+    },
+    "2026-08 Rapid": {
+      "rows": 14550744,
+      "fraction": 0.0006872500815078596
+    },
+    "2026-08 Classical": {
+      "rows": 544192,
+      "fraction": 0.018375867340938493
+    },
+    "2026-09 Blitz": {
+      "rows": 37724275,
+      "fraction": 0.00026508130374937626
+    },
+    "2026-09 Rapid": {
+      "rows": 14083239,
+      "fraction": 0.0007100639277654807
+    },
+    "2026-09 Classical": {
+      "rows": 515893,
+      "fraction": 0.019383864483526622
+    }
+  }
+}

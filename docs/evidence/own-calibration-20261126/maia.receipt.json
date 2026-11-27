@@ -1,0 +1,79 @@
+{
+  "stage": "maia",
+  "identity": "3c6a60c700a057fe60e11bf2c961602bd0fa06ab16e56d41d29df3079d4c4e8f",
+  "settings": {
+    "counts": {
+      "counts.parquet": "bd16b8b7601929ad33cb3b391d7c9e20cec4c4f5a60d97cefc8f789f4587a20f"
+    },
+    "checkpoint_sha256": "3fc6181d5db789b45a15305732148757ae74efa3e0028e81ba335b462dac45c2",
+    "pairs": [
+      [
+        1200,
+        1800
+      ],
+      [
+        1200,
+        2200
+      ],
+      [
+        1450,
+        1800
+      ],
+      [
+        1450,
+        2200
+      ],
+      [
+        1700,
+        1800
+      ],
+      [
+        1700,
+        2200
+      ]
+    ]
+  },
+  "seconds": 10422.0,
+  "files": {
+    "maia-1200-1800.parquet": "b38187289015c45486b7b544603513489f70b46124ac30158dd598edf2529137",
+    "maia-1200-2200.parquet": "ac6af0fdf95371b193066315c48b7a36cba8ab3fc655b9b7c3bf5f38ba99f0c8",
+    "maia-1450-1800.parquet": "2c7fa14b3de807faa56f8c08923ca0c3b80b5536f7a94918d010ada432f0cb29",
+    "maia-1450-2200.parquet": "dee6eaf88b96013cf67d47c426b7d8d9f4aa3ce307be65a8ed62163307899b56",
+    "maia-1700-1800.parquet": "194e883dc5833503782d1a0048e6d2528f916c556d8f21c8fa8a9edd3b3fab5b",
+    "maia-1700-2200.parquet": "00850ecb1886867458939a6b787ab7fab44e02bb4c00b837df2190742ecbf415"
+  },
+  "runtime": {
+    "hardware": {
+      "cuda": "12.8",
+      "cudnn": 91900,
+      "devices": [
+        {
+          "capability": [
+            8,
+            6
+          ],
+          "name": "NVIDIA GeForce RTX 3070 Ti"
+        }
+      ]
+    },
+    "maia_sources": {
+      "__init__.py": "aa1d30d6afef8666c7c193f271d80eba0f48b7ba6c057283f5cc69b6244ff450",
+      "__main__.py": "b07fec1b7b7f5d01094365ae77439f5dfee05f1f3f6ec12960a229ff5f3b566d",
+      "cache.py": "58dbc27ce1243b3e0b9af9e15931a27ee9c3d460fc9dcf3e5ccea80c3790e95e",
+      "dataset.py": "f147aa3ff6e93ee0a328d5674f22e6903224772305fd134f7655653934b49a5a",
+      "model_registry.py": "4037d3ba5d7f17996f4a28b61b2cf59a9e66382a77e42e331500549fa665a172",
+      "models.py": "469dd2163860b8f2a2eba79ac10913acabba5f2298a182db8d1524ce1d438057",
+      "presets.py": "3358fda064b54b8a0c2d08c52bb852290ac6e80d8e6bd59168c09f8b6d6195b6",
+      "uci.py": "f3495fb7cec68fc5fdc8add02f627d4ed3d3b11e03c02d17917e1a09b37a4ccc",
+      "utils.py": "fa0fa0c5570793bfd9f8d24266394d56b86523fe24063cfeea3a0bfdec9bb85c"
+    },
+    "python": "3.11.15 (main, Apr 14 2026, 14:31:26) [MSC v.1944 64 bit (AMD64)]",
+    "versions": {
+      "chess": "1.11.2",
+      "einops": null,
+      "maia3": "0.1.0",
+      "numpy": "2.4.6",
+      "torch": "2.11.0+cu128"
+    }
+  }
+}

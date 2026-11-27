@@ -64,7 +64,12 @@ him get there and stay effective once he does. He prefers advantages that are ea
    calibrated error band ([0, 1] only with no eval), and paired difference bounds for top candidates. Measure the
    unresolved mass before building the global budget in Rust.
 5. **Own-policy calibration** (108 transforms over six raw inference sets, mover-level validation) and the
-   **in-book contamination study**.
+   **in-book contamination study**. **Done 26 Nov** ([results](own-calibration-2026-11-26.md)).
+   - Maia-3 1450/1800, temperature 1.0, K = 100 fits held-out 1000–1799 movers best, beating own 1700 and 1200 by
+     about 0.02 nats per move.
+   - Contamination is real but small: off-book movers drift from the counts toward Maia at heavily played
+     positions.
+   - Recommended own policy: that transform with observation cap 1000.
 6. **λ rescoring:** the pilot graph under v2 and v3 at λ ∈ {0.3, 0.5, 0.7}, then David sets λ and the robustness
    margin.
 7. **Corrected-path Black pilot** (`pilot-acceptance-v2`), then the trimmed optimizer comparison (in-model objective

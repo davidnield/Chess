@@ -1,0 +1,147 @@
+{
+  "chosen": 42,
+  "recipe": {
+    "name": "weak-maia-v1",
+    "model": "maia3-79m-position",
+    "ratings": [
+      1450,
+      1800
+    ],
+    "temperature": 1.0,
+    "strength": 100.0
+  },
+  "development_selection_nll": 1.54553781394621,
+  "confirmation_nll": 1.546872862260286,
+  "confirmation_moves": 328805,
+  "chosen_minus_alternative": {
+    "best 1700": {
+      "transform": 96,
+      "recipe": {
+        "name": "weak-maia-v1",
+        "model": "maia3-79m-position",
+        "ratings": [
+          1700,
+          2200
+        ],
+        "temperature": 1.0,
+        "strength": 100.0
+      },
+      "mean": -0.02094053490900433,
+      "ci95": [
+        -0.025859316651850574,
+        -0.01669566029623483
+      ],
+      "families": 126,
+      "moves": 328805
+    },
+    "best overall": "same as chosen",
+    "best 1200": {
+      "transform": 22,
+      "recipe": {
+        "name": "weak-maia-v1",
+        "model": "maia3-79m-position",
+        "ratings": [
+          1200,
+          2200
+        ],
+        "temperature": 1.0,
+        "strength": 30.0,
+        "observation_cap": 100.0
+      },
+      "mean": -0.0189690663758843,
+      "ci95": [
+        -0.021122327235686803,
+        -0.01683592608037296
+      ],
+      "families": 126,
+      "moves": 328805
+    },
+    "cap 100.0": {
+      "transform": 43,
+      "recipe": {
+        "name": "weak-maia-v1",
+        "model": "maia3-79m-position",
+        "ratings": [
+          1450,
+          1800
+        ],
+        "temperature": 1.0,
+        "strength": 100.0,
+        "observation_cap": 100.0
+      },
+      "mean": -0.0005416689411376853,
+      "ci95": [
+        -0.0007413536210088426,
+        -0.0003471927441843864
+      ],
+      "families": 126,
+      "moves": 328805
+    },
+    "cap 1000.0": {
+      "transform": 44,
+      "recipe": {
+        "name": "weak-maia-v1",
+        "model": "maia3-79m-position",
+        "ratings": [
+          1450,
+          1800
+        ],
+        "temperature": 1.0,
+        "strength": 100.0,
+        "observation_cap": 1000.0
+      },
+      "mean": 0.0,
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "families": 126,
+      "moves": 328805
+    }
+  },
+  "contamination": {
+    "rows": 1193778,
+    "off_book_rows": 662802,
+    "matched_positions": 7028,
+    "matched_rows": 113104,
+    "modal_hit": {
+      "on_book": 0.5010386075496025,
+      "off_book": 0.4609481693438252,
+      "matched_off_minus_on": {
+        "mean": -0.010683220955439887,
+        "ci95": [
+          -0.09068313592912716,
+          0.059537291177202786
+        ],
+        "families": 96,
+        "moves": 113104
+      }
+    },
+    "count_nll": {
+      "on_book": 1.5201132302803788,
+      "off_book": 1.6927667340962587,
+      "matched_off_minus_on": {
+        "mean": 0.16147839471484993,
+        "ci95": [
+          -0.06264390819295705,
+          0.4320799319943262
+        ],
+        "families": 96,
+        "moves": 113104
+      }
+    },
+    "nll": {
+      "on_book": 1.5200349938765225,
+      "off_book": 1.6924365129380188,
+      "matched_off_minus_on": {
+        "mean": 0.16153208963310503,
+        "ci95": [
+          -0.06260832907307164,
+          0.4321527716676879
+        ],
+        "families": 96,
+        "moves": 113104
+      }
+    }
+  }
+}

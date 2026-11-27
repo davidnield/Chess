@@ -1,0 +1,223 @@
+{
+ "chosen": 42,
+ "recipe": {
+  "name": "weak-maia-v1",
+  "model": "maia3-79m-position",
+  "ratings": [
+   1450,
+   1800
+  ],
+  "temperature": 1.0,
+  "strength": 100.0
+ },
+ "comparisons": [
+  {
+   "split": "development",
+   "support": "100-999",
+   "off_book": false,
+   "cap": 100.0,
+   "mean": 0.006789433236053087,
+   "ci95": [
+    0.004965665013600979,
+    0.008740831432116677
+   ],
+   "families": 119,
+   "moves": 20268
+  },
+  {
+   "split": "development",
+   "support": "100-999",
+   "off_book": false,
+   "cap": 1000.0,
+   "mean": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ],
+   "families": 119,
+   "moves": 20268
+  },
+  {
+   "split": "development",
+   "support": "100-999",
+   "off_book": true,
+   "cap": 100.0,
+   "mean": 0.0031301537372225917,
+   "ci95": [
+    0.0015507127372927237,
+    0.0051489787227241976
+   ],
+   "families": 125,
+   "moves": 24508
+  },
+  {
+   "split": "development",
+   "support": "100-999",
+   "off_book": true,
+   "cap": 1000.0,
+   "mean": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ],
+   "families": 125,
+   "moves": 24508
+  },
+  {
+   "split": "development",
+   "support": "1000-",
+   "off_book": false,
+   "cap": 100.0,
+   "mean": 0.012969710607665679,
+   "ci95": [
+    0.004610950367198579,
+    0.019918412100674483
+   ],
+   "families": 127,
+   "moves": 208267
+  },
+  {
+   "split": "development",
+   "support": "1000-",
+   "off_book": false,
+   "cap": 1000.0,
+   "mean": 5.2109846261176754e-05,
+   "ci95": [
+    -0.0017294154552774503,
+    0.0014647864872624813
+   ],
+   "families": 127,
+   "moves": 208267
+  },
+  {
+   "split": "development",
+   "support": "1000-",
+   "off_book": true,
+   "cap": 100.0,
+   "mean": 0.009685995905534319,
+   "ci95": [
+    0.007398594113191467,
+    0.012240422889410097
+   ],
+   "families": 125,
+   "moves": 59455
+  },
+  {
+   "split": "development",
+   "support": "1000-",
+   "off_book": true,
+   "cap": 1000.0,
+   "mean": -0.0011173446570771186,
+   "ci95": [
+    -0.0016699062712835268,
+    -0.0005860633844333921
+   ],
+   "families": 125,
+   "moves": 59455
+  },
+  {
+   "split": "confirmation",
+   "support": "100-999",
+   "off_book": false,
+   "cap": 100.0,
+   "mean": 0.005495088913039287,
+   "ci95": [
+    0.0038579799231915706,
+    0.007178911382521506
+   ],
+   "families": 117,
+   "moves": 20030
+  },
+  {
+   "split": "confirmation",
+   "support": "100-999",
+   "off_book": false,
+   "cap": 1000.0,
+   "mean": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ],
+   "families": 117,
+   "moves": 20030
+  },
+  {
+   "split": "confirmation",
+   "support": "100-999",
+   "off_book": true,
+   "cap": 100.0,
+   "mean": 0.0028205300249813316,
+   "ci95": [
+    0.0009753970802784336,
+    0.004562479565895906
+   ],
+   "families": 123,
+   "moves": 24122
+  },
+  {
+   "split": "confirmation",
+   "support": "100-999",
+   "off_book": true,
+   "cap": 1000.0,
+   "mean": 0.0,
+   "ci95": [
+    0.0,
+    0.0
+   ],
+   "families": 123,
+   "moves": 24122
+  },
+  {
+   "split": "confirmation",
+   "support": "1000-",
+   "off_book": false,
+   "cap": 100.0,
+   "mean": 0.01319104619157399,
+   "ci95": [
+    0.0044804240832012725,
+    0.020707657035162256
+   ],
+   "families": 126,
+   "moves": 206293
+  },
+  {
+   "split": "confirmation",
+   "support": "1000-",
+   "off_book": false,
+   "cap": 1000.0,
+   "mean": 0.0001142529339318105,
+   "ci95": [
+    -0.0017292194773269464,
+    0.0016315490058716703
+   ],
+   "families": 126,
+   "moves": 206293
+  },
+  {
+   "split": "confirmation",
+   "support": "1000-",
+   "off_book": true,
+   "cap": 100.0,
+   "mean": 0.008453796482544776,
+   "ci95": [
+    0.006142105095153058,
+    0.01076239398904154
+   ],
+   "families": 125,
+   "moves": 58209
+  },
+  {
+   "split": "confirmation",
+   "support": "1000-",
+   "off_book": true,
+   "cap": 1000.0,
+   "mean": -0.001196851443812414,
+   "ci95": [
+    -0.0016461143872334126,
+    -0.0007952917354321674
+   ],
+   "families": 125,
+   "moves": 58209
+  }
+ ]
+}
