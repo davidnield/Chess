@@ -94,6 +94,12 @@ The default metric is remaining-maximum, approved November 19. --metric covered-
 
 `--severity engine-or-player` (2026-11-21) scores each analysed own position as max(engine gaps, our players' expected loss). The player counts come from the candidate pool's explorer book, read by full key (`sweep/own_moves.py`: the recipe's `own_policy` population, every ply, at least `weak_min_games` games). Moves the engine ranked keep its 20M scores, other moves are scored from the eval lookup, and unevaluated moves count as no loss. The player term can only raise severity: the data understates our loss inside a sequence, because players there mostly chose the tactic themselves. The default `engine` is an exact no-op. The v5 manifest queues the variant at the default metric on the four anchors and three thresholds (12 runs, role `player-severity`); its control is the matching `default-calibration` run. The report's `player_severity` block counts positions analysed, positions with enough games and positions the term raised.
 
+Screening (approved 27 Nov, off by default). `python -m sweep.spec --screening --out ../docs/sweep-manifest-v6.json` writes a v6 manifest whose only difference from v5 is `extension_comparison.evaluation`: the screen-then-confirm rule in `sweep/screening.py`. Score every variant on seeds 1 and 2, write one row per (run, seed, trajectory, score) to a parquet with trajectories 0..n-1 on the shared paired streams, then:
+
+    C:/Users/David/Documents/Chess/.venv/Scripts/python.exe -m sweep.screening --manifest V6.json --scores SCREEN.parquet --out SCREEN.json
+
+It drops a variant that trails its family's leader (same base arm) by more than 2.33 paired SE plus 0.001, never drops the leader or the family's default-metric, default-threshold control, and refuses scores on any seed but 1 and 2. The decision is written once. Survivors are scored on seeds 3-6 and only those seeds are reported; dropped variants keep their build outputs with the score labelled as a screening result.
+
 Both entrypoints are ready for controlled pilots, not an instruction to launch the production matrix now.
 
 

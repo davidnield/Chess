@@ -540,6 +540,12 @@ crosses both metrics, all three thresholds and four 2,000-position anchors (24 v
 12 player-severity runs at the default metric (36 in all).
 Separate checkpoints by metric/threshold/severity; share frozen engine/policy evidence. Wait for the
 listed pilot/input prerequisites. See the progress log for production cost limitations.
+Screening (David, 2026-11-27) is off by default: `sweep.spec --screening` writes manifest v6, whose
+extension_comparison.evaluation is `sweep.screening.SCREENING` (v5 is unchanged and still validates).
+`python -m sweep.screening --manifest V6 --scores S.parquet --out O.json` decides once, from seeds 1-2
+only, which variants the referee scores on the disjoint confirmation seeds 3-6; the family leader and
+its default-metric/default-threshold control are never dropped. Reported scores use the confirmation
+seeds only. Tests: `_test_screening.py`.
 
 Extension severity is engine gaps by default. `sweep.extend --severity engine-or-player` (David,
 2026-11-21) takes max(engine gaps, our players' expected loss), with our players' counts read by

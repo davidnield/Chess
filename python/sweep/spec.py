@@ -97,8 +97,12 @@ def pool_recipes():
                  training_months=["2013-01","2026-07"])
             for cap in (30,50) for name,speeds,bands in definitions]
 
-def extension_comparison(main):
-    """Deferred calibration queue: four existing masters, shared evidence, both metrics."""
+def extension_comparison(main, screening=False):
+    """Deferred calibration queue: four existing masters, shared evidence, both metrics.
+
+    ``screening`` (default off; manifest v6) replaces the evaluation label with the
+    screen-then-confirm rule of ``sweep.screening``. The runs are identical either way.
+    """
     anchors=[a for a in main if a["recipe"]["mode"]=="independent" and a["recipe"]["budget"]==2000]
     runs=[]
     for anchor in anchors:
@@ -127,14 +131,19 @@ def extension_comparison(main):
                 shared_inputs=["base-book","engine-cache","opponent-policy-cache"],
                 comparison_evidence="common-frozen-union-of-explored-continuations",
                 separate_checkpoints=True,
-                evaluation="paired-seeds-and-common-horizon",
+                evaluation=screening_rule() if screening else "paired-seeds-and-common-horizon",
                 report=["additional-distinct-prescriptions","selected-move-disagreement",
                         "later-unbooked-risk","reach-weighted-coverage","paired-score",
                         "player-term-coverage-and-raised-positions",
                         "runtime-and-cache-reuse","unresolved-exposure-bounds"],runs=runs)
 
 
-def manifest():
+def screening_rule():
+    from copy import deepcopy
+    from .screening import SCREENING
+    return deepcopy(SCREENING)
+
+def manifest(screening=False):
     main = []
     for colour in ("white","black"):
         for gate in GATES:
@@ -169,7 +178,7 @@ def manifest():
                                           candidate_pool="brc1800-p50"),"horizon",[horizon_anchor["id"]]))
     result = dict(schema=1, primary=main, sensitivities=sensitivity, inputs=pool_recipes(),
                   required_bindings=REQUIRED_BINDINGS, extensions=deepcopy(EXTENSIONS),
-                  extension_comparison=extension_comparison(main),
+                  extension_comparison=extension_comparison(main, screening),
                   evaluation=EVALUATION, pilot=next(a["id"] for a in main if
                   a["recipe"]["colour"]=="black" and a["recipe"]["gate"]=="stricter"
                   and a["recipe"]["budget"]==2000 and a["recipe"]["mode"]=="independent"),
@@ -217,7 +226,8 @@ def validate(m):
             raise ValueError("horizon sensitivity must match its independent 2,000-position ply-30 control")
     # Historical manifests without this stage remain readable for reproducibility.
     if "extension_comparison" in m:
-        if m["extensions"]!=EXTENSIONS or m["extension_comparison"]!=extension_comparison(m["primary"]):
+        screened=isinstance(m["extension_comparison"].get("evaluation"),dict)
+        if m["extensions"]!=EXTENSIONS or m["extension_comparison"]!=extension_comparison(m["primary"],screened):
             raise ValueError("extension default or comparison queue drifted")
     # Fail closed on cyclic dependencies.
     pending={a["id"]:set(a["depends_on"]) for a in all_arms}
@@ -234,8 +244,10 @@ def evaluation_horizon(deepest_ply):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--out",type=Path,required=True)
+    p.add_argument("--screening",action="store_true",
+                   help="v6: screen the extension comparison on seeds 1-2, confirm survivors on 3-6 (sweep.screening)")
     a=p.parse_args()
-    m=manifest()
+    m=manifest(a.screening)
     a.out.parent.mkdir(parents=True,exist_ok=True)
     if a.out.exists() and json.loads(a.out.read_text(encoding="utf8"))!=m:
         raise ValueError("manifest exists with a different recipe; use a new path")

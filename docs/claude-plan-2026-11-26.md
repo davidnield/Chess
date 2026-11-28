@@ -91,7 +91,8 @@ him get there and stay effective once he does. He prefers advantages that are ea
    margin.
 7. **Corrected-path Black pilot** (`pilot-acceptance-v2`), then the trimmed optimizer comparison (in-model objective
    on fixed real graphs; referee only where the book changes), then the staged sweep.
-   - **Screening for the extension comparison** (David, 27 Nov; idea from the SiegeChess race). Today every one of
+   - **Screening for the extension comparison** (David, 27 Nov; idea from the SiegeChess race). **Code done 27 Nov**
+     (`sweep/screening.py`, `sweep.spec --screening` for manifest v6, `_test_screening.py`). Today every one of
      the 36 queued variants (4 anchors × 9) gets 4 paired seeds: 144 referee runs, ~48 h at ~20 min per
      2,000-move book and seed.
      - **Screen:** seeds 1–2 for every variant, compared within its anchor's family. A variant is dropped when it
