@@ -10,6 +10,15 @@ import pyarrow.parquet as pq
 import polars as pl
 from consumer_keys import PAIR
 
+def _owned(table):
+    """Copy a DuckDB result into buffers it owns. Without this a few fetched rows keep alive the whole
+    input batches they were scanned from (DuckDB references their strings without copying): ~100 MB
+    per pool bucket, which took a pilot build's collection to 157 GB of commit (27 Nov 2026)."""
+    import numpy as np
+    import pyarrow as pa
+    return table.take(pa.array(np.arange(table.num_rows, dtype=np.int64)))
+
+
 class KeyedParquet:
     def __init__(self,path,column):
         self.path=str(Path(path).resolve());self.column=column
@@ -70,14 +79,14 @@ class KeyedParquet:
             if len(groups)==len(self.groups):
                 # For tiny files or broad requests the native reader avoids Arrow overhead.
                 self.stats["unpruned_queries"]+=1
-                return pl.from_arrow(db.execute(f"SELECT s.* FROM read_parquet(?) s "
-                     f"SEMI JOIN selective_keys k ON s.{self.column}=k.h",[self.path]).to_arrow_table())
+                return pl.from_arrow(_owned(db.execute(f"SELECT s.* FROM read_parquet(?) s "
+                     f"SEMI JOIN selective_keys k ON s.{self.column}=k.h",[self.path]).to_arrow_table()))
             import pyarrow as pa
             batch=pa.RecordBatchReader.from_batches(self.reader.schema_arrow,
                      self.reader.iter_batches(batch_size=65536,row_groups=groups,use_threads=False))
             db.register("selective_rows",batch)
-            return pl.from_arrow(db.execute(f"SELECT s.* FROM selective_rows s "
-                     f"SEMI JOIN selective_keys k ON s.{self.column}=k.h").to_arrow_table())
+            return pl.from_arrow(_owned(db.execute(f"SELECT s.* FROM selective_rows s "
+                     f"SEMI JOIN selective_keys k ON s.{self.column}=k.h").to_arrow_table()))
         finally:
             if batch is not None:db.unregister("selective_rows");batch.close()
             db.unregister("selective_keys")
