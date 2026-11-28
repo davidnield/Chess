@@ -69,5 +69,29 @@ class WideLookupTest(unittest.TestCase):
             self.assertEqual(src.tolist(),[CLOUD,TERMINAL,0])
 
 
+class SparseSearchTest(unittest.TestCase):
+    """left_index equals np.searchsorted on the (lo, hi) view, whatever the array and queries."""
+    def test_equals_searchsorted(self):
+        import numpy as np
+        from eval_lookup128 import ROW, sparse_index, left_index
+        rng = np.random.default_rng(20261127)
+        for trial in range(300):
+            n = int(rng.integers(0, 400))
+            step = int(rng.integers(1, 40))
+            span = int(rng.choice([3, 50, 2**62]))          # small spans force many equal low halves
+            arr = np.zeros(n, dtype=ROW)
+            arr["lo"] = rng.integers(-span, span, n)
+            arr["hi"] = rng.integers(-5, 5, n) if span < 100 else rng.integers(-2**62, 2**62, n)
+            arr.sort(order=["lo", "hi"])
+            m = int(rng.integers(1, 60))
+            q = np.zeros(m, dtype=arr[["lo", "hi"]].dtype)
+            pick = rng.integers(0, max(n, 1), m)
+            q["lo"] = np.where(rng.random(m) < .5, arr["lo"][pick] if n else 0, rng.integers(-span - 2, span + 2, m))
+            q["hi"] = np.where(rng.random(m) < .5, arr["hi"][pick] if n else 0, rng.integers(-6, 6, m))
+            want = np.searchsorted(arr[["lo", "hi"]], q)
+            got = left_index(arr, sparse_index(arr, step), q, step)
+            self.assertEqual(got.tolist(), want.tolist(), (trial, n, step))
+
+
 if __name__ == "__main__":
     unittest.main()

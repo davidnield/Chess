@@ -25,6 +25,41 @@ POLICY = "cloud-nnue-chessdb-score-334-v1"
 CLOUD, FISHNET, TERMINAL = 1, 2, 3
 
 
+SPARSE_STEP = 4096
+
+
+def sparse_index(arr, step=SPARSE_STEP):
+    """Every ``step``-th low half of a (lo, hi)-sorted bucket, contiguous: ~6,000 int64 per bucket."""
+    return np.array(arr["lo"][::step], dtype=np.int64, copy=True)   # a copy: never a view that pins the mmap
+
+
+def left_index(arr, sparse, q, step=SPARSE_STEP):
+    """``np.searchsorted(arr[["lo", "hi"]], q)`` (side left) without touching the whole bucket.
+
+    The direct call is slow on these arrays: numpy walks or copies the memory-mapped two-field view
+    each time (77% of a pilot build's collection time, 27 Nov 2026). The sparse index narrows each
+    query to one block of ``step`` rows; equal low halves (rare) are resolved on the high half. The
+    result equals searchsorted's for any (lo, hi)-sorted array (``_test_eval_lookup128``)."""
+    n = len(arr)
+    out = np.empty(len(q), dtype=np.int64)
+    if n == 0:
+        out[:] = 0
+        return out
+    lo_col, hi_col = arr["lo"], arr["hi"]
+    qlo, qhi = q["lo"], q["hi"]
+    k = np.searchsorted(sparse, qlo, side="left")       # sparse[k-1] < qlo <= sparse[k]
+    for j in range(len(q)):
+        kj = int(k[j])
+        start = 0 if kj == 0 else (kj - 1) * step + 1
+        end = min(kj * step + 1, n)
+        i = start + int(np.searchsorted(lo_col[start:end], qlo[j], side="left"))
+        lo_j, hi_j = qlo[j], qhi[j]
+        while i < n and lo_col[i] == lo_j and hi_col[i] < hi_j:
+            i += 1
+        out[j] = i
+    return out
+
+
 def keys(lo, hi):
     lo, hi = np.broadcast_arrays(np.asarray(lo, dtype=np.int64), np.asarray(hi, dtype=np.int64))
     out = np.empty(lo.shape, dtype=KEY)
@@ -61,6 +96,7 @@ class WideEvalLookup:
             raise ValueError(f"unexpected lookup schema in {self.root}")
         self.files = meta["buckets"]
         self.mapped = {}
+        self.sparse = {}
 
     def _verify(self, names):
         if not names:
@@ -101,7 +137,9 @@ class WideEvalLookup:
             arr = self.mapped[name]
             selected = np.flatnonzero(buckets == b)
             both = arr[["lo", "hi"]]
-            index = np.searchsorted(both, q[selected])
+            if name not in self.sparse:
+                self.sparse[name] = sparse_index(arr)
+            index = left_index(arr, self.sparse[name], q[selected])
             valid = index < len(both)
             index, selected = index[valid], selected[valid]
             equal = both[index] == q[selected]
