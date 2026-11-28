@@ -45,6 +45,23 @@ him get there and stay effective once he does. He prefers advantages that are ea
      per-parent identity in the sampled ones. Driver `run_gates.bat` (release `partitioned-gates-20261126`), to be
      launched by hand once the sort has finished, after a commit check: reimplementation loads a whole book bucket
      (12 slices) at a time.
+   - **Adult publication done 27 Nov 18:21** (`D:\chess\adult-publication-20261126\gates\acceptance.json`).
+     - The sort finished at 04:21.
+     - The first gate run stalled: any single DuckDB scan of all 6,144 book files in one process decayed to
+       ~27 MB/s with its memory at the limit, whether it aggregated or streamed. Splitting the GROUP BY did not
+       help.
+     - The fix (2a8d823) reads arrivals with one fresh process per book file (~3 s each, 13 min in all), the same
+       way the per-bucket mass check already worked. Release `partitioned-gates-20261127-v3`, driver
+       `run_gates_v3.ps1`.
+     - Results:
+       - Conservation: all 512 buckets balance at 39,217,224,723 games, 0 of 162,981,823 sampled parents
+         mismatch, and the root is exact.
+       - Reimplementation: 8 buckets identical.
+       - Term-vs-book: residual 0 over 7,969,488 endings.
+       - Evals: invariants hold. It checked 0 parents by construction, because an uncut pool has no
+         below-floor edges.
+     - The old `run_gates.bat` misread a killed process (exit −1) as a pass; the new driver checks
+       `ExitCode -ne 0`.
    - `D:\chess\restart_jobs.bat` restarts the count pools and the sort after a reboot.
    - Capacity is rechecked before each launch.
 3. **Paired Black source pilot on the runnable legacy human path** (David accepted).
