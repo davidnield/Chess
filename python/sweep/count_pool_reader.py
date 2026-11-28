@@ -21,9 +21,10 @@ def _children(db, frame):
     # DuckDB applies the same signed bitwise XOR as the explorer reader.
     db.register("compact_counts",frame.to_arrow())
     try:
-        return pl.from_arrow(db.execute("SELECT * EXCLUDE(move_xor_lo,move_xor_hi), "
+        from .keyed_parquet import _owned
+        return pl.from_arrow(_owned(db.execute("SELECT * EXCLUDE(move_xor_lo,move_xor_hi), "
             "struct_pack(lo:=xor(parent_hash.lo,move_xor_lo),hi:=xor(parent_hash.hi,move_xor_hi)) "
-            "AS child_hash FROM compact_counts").to_arrow_table())
+            "AS child_hash FROM compact_counts").to_arrow_table()))
     finally:db.unregister("compact_counts")
 
 
