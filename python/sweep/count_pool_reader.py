@@ -7,6 +7,14 @@ import polars as pl
 from consumer_keys import PAIR
 from .count_pool import SCHEMA, SUMS
 from .stages import file_sha
+from .verified_files import is_verified, verify_many
+
+
+def _verify(items):
+    try:
+        verify_many(items)
+    except ValueError as exc:
+        raise ValueError("count range hash changed") from exc
 
 
 class CountPoolReader:
@@ -40,12 +48,19 @@ class CountPoolReader:
             key=(k["lo"]%512,(k["lo"]+(1<<63))//width)
             grouped.setdefault(key,[]).append(k)
         frames=[]
+        # Hash the ranges this fetch needs together, once per process (sweep.verified_files).
+        need=[]
+        for key in grouped:
+            f=self.files[key];path=self.path.parent/f["file"];stat=path.stat()
+            if stat.st_size!=f["bytes"]:raise ValueError("count range changed")
+            if self.verified.get(key)!=(stat.st_size,stat.st_mtime_ns):need.append((path,f["sha256"]))
+        _verify(need)
         for key,ks in grouped.items():
             f=self.files[key];path=self.path.parent/f["file"]
             stat=path.stat();fingerprint=(stat.st_size,stat.st_mtime_ns)
             if stat.st_size!=f["bytes"]:raise ValueError("count range changed")
             if self.verified.get(key)!=fingerprint:
-                if file_sha(path)!=f["sha256"]:raise ValueError("count range hash changed")
+                if not is_verified(path,f["sha256"]):_verify([(path,f["sha256"])])
                 self.verified[key]=fingerprint
             if key not in self.open:
                 if len(self.open)>=8:self.open.popitem(last=False)[1].close()

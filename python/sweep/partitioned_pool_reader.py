@@ -5,6 +5,14 @@ from pathlib import Path
 import polars as pl
 from .partitioned_pool import SCHEMA
 from .stages import file_sha
+from .verified_files import is_verified, verify_many
+
+
+def _verify(items, message):
+    try:
+        verify_many(items)
+    except ValueError as exc:
+        raise ValueError(message) from exc
 
 
 class PartitionedPoolReader:
@@ -73,11 +81,18 @@ class PartitionedPoolReader:
                 raise ValueError('invalid full position key')
             grouped.setdefault(k['lo']%512,[]).append(k)
         frames=[]
+        # Hash the buckets this fetch needs together, once per process (sweep.verified_files).
+        need=[]
+        for b in grouped:
+            f=self.files[b]; p=self.root/f['file']; st=p.stat()
+            if st.st_size!=f['bytes']:raise ValueError('outcome bucket changed')
+            if self.verified.get(b)!=(st.st_size,st.st_mtime_ns):need.append((p,f['sha256']))
+        _verify(need,'outcome bucket hash differs')
         for b,ks in grouped.items():
             f=self.files[b]; p=self.root/f['file']; st=p.stat(); stamp=st.st_size,st.st_mtime_ns
             if st.st_size!=f['bytes']:raise ValueError('outcome bucket changed')
             if self.verified.get(b)!=stamp:
-                if file_sha(p)!=f['sha256']:raise ValueError('outcome bucket hash differs')
+                if not is_verified(p,f['sha256']):_verify([(p,f['sha256'])],'outcome bucket hash differs')
                 self.verified[b]=stamp
                 if b in self.open:self.open.pop(b).close()
             if b not in self.open:

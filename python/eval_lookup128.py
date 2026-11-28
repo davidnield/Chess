@@ -62,6 +62,16 @@ class WideEvalLookup:
         self.files = meta["buckets"]
         self.mapped = {}
 
+    def _verify(self, names):
+        if not names:
+            return
+        from sweep.verified_files import verify_many
+        try:
+            verify_many([(self.root / n, self.files[n]["sha256"]) for n in names])
+        except ValueError as exc:
+            bad = Path(str(exc).split(": ")[0]).name      # verify_many names the file first
+            raise ValueError(f"lookup content differs from receipt: {bad}") from exc
+
     def lookup(self, lo, hi):
         """Return White-POV cp and source. Missing pairs return (MISSING, 0)."""
         queries = keys(lo, hi)
@@ -73,13 +83,17 @@ class WideEvalLookup:
             cp, sources = self.base.lookup(q["lo"], q["hi"])
             cp = cp.astype(np.float64)
         buckets = q["lo"] % 512
+        if self.verify_hashes:
+            # Hash the arrays this lookup opens together, once per process (sweep.verified_files).
+            self._verify([f"bkt{b:03d}.npy" for b in np.unique(buckets)
+                          if f"bkt{b:03d}.npy" in self.files and f"bkt{b:03d}.npy" not in self.mapped])
         for b in np.unique(buckets):
             name = f"bkt{b:03d}.npy"
             if name not in self.files:
                 continue
             if name not in self.mapped:
-                if self.verify_hashes and sha(self.root / name) != self.files[name]["sha256"]:
-                    raise ValueError(f"lookup content differs from receipt: {name}")
+                if self.verify_hashes:
+                    self._verify([name])
                 arr = np.load(self.root / name, mmap_mode="r", allow_pickle=False)
                 if arr.dtype != self.row or len(arr) != self.files[name]["rows"]:
                     raise ValueError(f"unexpected array layout in {name}")

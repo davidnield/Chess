@@ -585,6 +585,14 @@ or merge to repair verification. Shared-pool preparation requires completed matc
 publication receipts; `_BOOK.DONE` alone is insufficient. ChessDB has a successful offline
 probe but is not integrated into the queued Cloud/Fishnet eval rebuild.
 Selective count reads prune Parquet row groups conservatively and always compare full keys.
+Input files (pool buckets, bound eval-lookup arrays, pinned artifacts) are checked against their
+manifests' SHA-256 through `sweep/verified_files.py`: once per process in the default
+`CHESS_VERIFY_MODE=full`, on up to 8 threads. `CHESS_VERIFY_MODE=receipt` (David, 2026-11-27; for
+sweeps that build dozens of books) hashes a file once, records size/mtime/file-ID receipts under
+`CHESS_VERIFY_RECEIPTS` (never inside a publication), accepts later by receipt and re-hashes a random
+1%; `--warm MANIFEST...` hashes ahead, `--check DIR...` re-hashes every receipt and must run before a
+pilot acceptance report, a final promotion, or after a drive was disconnected. Receipts never replace
+the full hash that accepted a file; a failed file loses its record. Tests: `_test_verified_files.py`.
 The completed Allie Rust-backend tests passed quality margins. Modal-history equivalence
 is still unproven because its atlas almost always fell back to actual histories; retain
 actual histories and the calibrated Maia construction ensemble. See the third-pass notes.

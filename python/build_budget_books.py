@@ -1670,6 +1670,9 @@ def main() -> int:
                 temp.replace(proof)
             meta["lookahead_floor"] = dict(lookahead, evidence_file=proof.name,
                 veto_sha256=lookahead_policy.write_veto(out, lookahead_vetoes, veto_reach, keys=keys))
+        from sweep.verified_files import provenance as _input_verification
+        if _input_verification() is not None:   # receipt mode only; the default full mode adds nothing
+            meta["input_verification"] = _input_verification()
         Path(str(out) + ".meta.json").write_text(json.dumps(meta, indent=2))
         if rare_floor is not None:
             # every decision where an unverified rare move would have excluded a rival had it

@@ -21,12 +21,21 @@ def atomic_json(path,value):
 
 def artifacts(items):
     """Path+SHA, not existence or a batch DONE marker, is the identity."""
-    result={}
+    from .verified_files import mode, verify_many
+    result={};checks=[]
     for item in items:
         path=Path(item["path"]).resolve(strict=True)
-        if not path.is_file() or file_sha(path)!=item["sha256"]:
+        if not path.is_file():
             raise ValueError(f"artifact changed: {path}")
+        if mode()=="full" and file_sha(path)!=item["sha256"]:
+            raise ValueError(f"artifact changed: {path}")
+        checks.append((path,item["sha256"]))
         result[str(path)]=item["sha256"]
+    if mode()=="receipt":
+        # once per receipt (sweep.verified_files); the default full mode re-hashes every call
+        try:verify_many(checks)
+        except ValueError as exc:
+            raise ValueError(f"artifact changed: {str(exc).split(': ')[0]}") from exc
     return result
 
 def stage(spec, root, *, execute=False):

@@ -145,6 +145,11 @@ cost and evaluate safe shared verification for immutable inputs; do not assume
 row-group pruning alone makes the entire build equally fast. Neither a persistent
 verification cache nor a persistent count-query-result cache is claimed here.
 
+**Update, 27 Nov 2026 (Claude).** Measured on the real Black pilot inputs: a budget-book build hashed
+each bucket once per reader, one file at a time (0.42 GB/s), ~2 h per build. `sweep/verified_files.py`
+now hashes once per process on 8 threads (2.2-2.5 GB/s), and an opt-in receipt mode (David's decision)
+hashes each file once across processes; see its header for the trust rule and the `--check` milestones.
+
 The real Maia-3 79M checkpoint (`3fc6181d...dac45c2`) was tested on 64 legal board
 requests, 63 distinct positions, for rating pairs 1450/2200 and 2600/2600. Each
 cold pass took **6.1–7.1 seconds including worker startup**. Reopening the cache
