@@ -17,6 +17,16 @@ def _verify(items):
         raise ValueError("count range hash changed") from exc
 
 
+def _children(db, frame):
+    # DuckDB applies the same signed bitwise XOR as the explorer reader.
+    db.register("compact_counts",frame.to_arrow())
+    try:
+        return pl.from_arrow(db.execute("SELECT * EXCLUDE(move_xor_lo,move_xor_hi), "
+            "struct_pack(lo:=xor(parent_hash.lo,move_xor_lo),hi:=xor(parent_hash.hi,move_xor_hi)) "
+            "AS child_hash FROM compact_counts").to_arrow_table())
+    finally:db.unregister("compact_counts")
+
+
 class CountPoolReader:
     def __init__(self,path,column):
         if column!="parent_hash":raise ValueError("policy-count pools have parent keys only")
@@ -42,7 +52,7 @@ class CountPoolReader:
             selected_compressed_bytes=0,total_compressed_bytes=0,unpruned_queries=0)
 
     def fetch(self,db,keys):
-        from .keyed_parquet import KeyedParquet
+        from .keyed_parquet import KeyedParquet, run_parallel, FETCH_THREADS
         grouped={};width=(1<<64)//self.parts
         for k in keys:
             key=(k["lo"]%512,(k["lo"]+(1<<63))//width)
@@ -55,6 +65,7 @@ class CountPoolReader:
             if stat.st_size!=f["bytes"]:raise ValueError("count range changed")
             if self.verified.get(key)!=(stat.st_size,stat.st_mtime_ns):need.append((path,f["sha256"]))
         _verify(need)
+        items=[]
         for key,ks in grouped.items():
             f=self.files[key];path=self.path.parent/f["file"]
             stat=path.stat();fingerprint=(stat.st_size,stat.st_mtime_ns)
@@ -62,19 +73,28 @@ class CountPoolReader:
             if self.verified.get(key)!=fingerprint:
                 if not is_verified(path,f["sha256"]):_verify([(path,f["sha256"])])
                 self.verified[key]=fingerprint
-            if key not in self.open:
-                if len(self.open)>=8:self.open.popitem(last=False)[1].close()
-                self.open[key]=KeyedParquet(path,self.column)
-            reader=self.open[key];self.open.move_to_end(key)
-            before=dict(reader.stats);frame=reader.fetch(db,ks)
-            for n,v in reader.stats.items():self.stats[n]+=v-before[n]
-            # DuckDB applies the same signed bitwise XOR as the explorer reader.
-            db.register("compact_counts",frame.to_arrow())
-            try:
-                frame=pl.from_arrow(db.execute("SELECT * EXCLUDE(move_xor_lo,move_xor_hi), "
-                    "struct_pack(lo:=xor(parent_hash.lo,move_xor_lo),hi:=xor(parent_hash.hi,move_xor_hi)) "
-                    "AS child_hash FROM compact_counts").to_arrow_table())
-            finally:db.unregister("compact_counts")
+            items.append((key,ks,path))
+        if len(items)>1 and FETCH_THREADS>1:
+            # independent ranges, one reader and cursor each; joined in range order as below
+            def job(item):
+                key,ks,path=item
+                def run(cursor):
+                    reader=KeyedParquet(path,self.column)
+                    try:return _children(cursor,reader.fetch(cursor,ks)),dict(reader.stats)
+                    finally:reader.close()
+                return run
+            results=run_parallel(db,[job(i) for i in items])
+        else:
+            results=[]
+            for key,ks,path in items:
+                if key not in self.open:
+                    if len(self.open)>=8:self.open.popitem(last=False)[1].close()
+                    self.open[key]=KeyedParquet(path,self.column)
+                reader=self.open[key];self.open.move_to_end(key)
+                before=dict(reader.stats);frame=reader.fetch(db,ks)
+                results.append((_children(db,frame),{n:v-before[n] for n,v in reader.stats.items()}))
+        for frame,delta in results:
+            for n,v in delta.items():self.stats[n]+=v
             frames.append(frame)
         if frames:return pl.concat(frames)
         return pl.DataFrame(schema=dict(parent_hash=PAIR,move_san=pl.String,ply=pl.Int32,

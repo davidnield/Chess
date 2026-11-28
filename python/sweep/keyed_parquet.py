@@ -10,6 +10,29 @@ import pyarrow.parquet as pq
 import polars as pl
 from consumer_keys import PAIR
 
+FETCH_THREADS = int(__import__("os").environ.get("CHESS_FETCH_THREADS", "8"))
+
+
+def run_parallel(db, jobs, threads=None):
+    """Run ``job(cursor)`` for each job on up to ``CHESS_FETCH_THREADS`` threads, each on its own DuckDB
+    cursor (same database and settings), and return the results in job order. A pool reader fetches its
+    buckets this way: each bucket's read is independent, and joining them in bucket order makes the
+    result identical to the one-at-a-time loop (27 Nov 2026: a pilot level read ~200 of 365 row groups in
+    every one of 512 buckets, ~30 min per source per level on one core)."""
+    from concurrent.futures import ThreadPoolExecutor
+    n = max(1, min(threads or FETCH_THREADS, len(jobs)))
+    def one(job):
+        cursor = db.cursor()
+        try:
+            return job(cursor)
+        finally:
+            cursor.close()
+    if n == 1:
+        return [job(db) for job in jobs]
+    with ThreadPoolExecutor(n) as ex:
+        return list(ex.map(one, jobs))
+
+
 def _owned(table):
     """Copy a DuckDB result into buffers it owns. Without this a few fetched rows keep alive the whole
     input batches they were scanned from (DuckDB references their strings without copying): ~100 MB

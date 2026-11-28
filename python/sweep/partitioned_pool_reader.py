@@ -72,7 +72,7 @@ class PartitionedPoolReader:
                        selected_compressed_bytes=0,total_compressed_bytes=0,unpruned_queries=0)
 
     def fetch(self, db, keys):
-        from .keyed_parquet import KeyedParquet
+        from .keyed_parquet import KeyedParquet, run_parallel, FETCH_THREADS
         if file_sha(self.root/'publication.json') != self.publication_sha or file_sha(self.path) != self.manifest_sha:
             raise ValueError('outcome publication changed while open')
         grouped={}
@@ -88,6 +88,7 @@ class PartitionedPoolReader:
             if st.st_size!=f['bytes']:raise ValueError('outcome bucket changed')
             if self.verified.get(b)!=(st.st_size,st.st_mtime_ns):need.append((p,f['sha256']))
         _verify(need,'outcome bucket hash differs')
+        items=[]
         for b,ks in grouped.items():
             f=self.files[b]; p=self.root/f['file']; st=p.stat(); stamp=st.st_size,st.st_mtime_ns
             if st.st_size!=f['bytes']:raise ValueError('outcome bucket changed')
@@ -95,12 +96,29 @@ class PartitionedPoolReader:
                 if not is_verified(p,f['sha256']):_verify([(p,f['sha256'])],'outcome bucket hash differs')
                 self.verified[b]=stamp
                 if b in self.open:self.open.pop(b).close()
-            if b not in self.open:
-                if len(self.open)>=8:self.open.popitem(last=False)[1].close()
-                self.open[b]=KeyedParquet(p,self.column)
-            reader=self.open[b]; self.open.move_to_end(b)
-            before=dict(reader.stats); frames.append(reader.fetch(db,ks))
-            for name,v in reader.stats.items():self.stats[name]+=v-before[name]
+            items.append((b,ks,p,stamp))
+        if len(items)>1 and FETCH_THREADS>1:
+            # independent buckets, one reader and cursor each; joined in bucket order as below
+            def job(item):
+                b,ks,p,_=item
+                def run(cursor):
+                    reader=KeyedParquet(p,self.column)
+                    try:return reader.fetch(cursor,ks),dict(reader.stats)
+                    finally:reader.close()
+                return run
+            results=run_parallel(db,[job(i) for i in items])
+        else:
+            results=[]
+            for b,ks,p,_ in items:
+                if b not in self.open:
+                    if len(self.open)>=8:self.open.popitem(last=False)[1].close()
+                    self.open[b]=KeyedParquet(p,self.column)
+                reader=self.open[b]; self.open.move_to_end(b)
+                before=dict(reader.stats); frame=reader.fetch(db,ks)
+                results.append((frame,{n:v-before[n] for n,v in reader.stats.items()}))
+        for (b,ks,p,stamp),(frame,delta) in zip(items,results):
+            frames.append(frame)
+            for name,v in delta.items():self.stats[name]+=v
             after=p.stat()
             if (after.st_size,after.st_mtime_ns)!=stamp:raise ValueError('outcome bucket changed during read')
         if frames:return pl.concat(frames)
